@@ -10,7 +10,9 @@
 // ranges, saved for offline use) with the colours of coverage-v2-colours.md: five bands, No reply, Heard no direct signal,
 // Faint = under 3 pings, and the hatched Predicted swatch. Without v2 the old Best-SNR steps show (one colour metric: the
 // colour-by modes are gone).
-import 'layers/observer_layer.dart' show MobileObserverPainter;
+import '../../core/map_definition_v2.dart';
+import 'active_map_definition.dart';
+import 'node_symbol.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -455,29 +457,25 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
   ];
 
   List<Widget> _observers(BuildContext context, MeshSonarColors mc) {
-    final t = Theme.of(context);
+    // The one symbol set (MAP slice 3): the same eye-on-a-mast and phone badges the maps draw, wording from the definition.
+    final set = ActiveMapDefinition.current.nodeSymbols;
     return [
       LegendRow(
         id: 'observer-online',
-        swatch: ExcludeSemantics(child: _Triangle(color: t.colorScheme.primary, filled: true, halo: t.colorScheme.surface)),
-        title: 'Filled triangle: observer online',
+        swatch: ExcludeSemantics(child: NodeSymbol(role: 'observer', size: 22, scaled: false)),
+        title: 'Eye on a mast, solid ring: observer online',
         detail: 'A listening station that shares its position and is reporting now.',
       ),
       LegendRow(
         id: 'observer-offline',
-        swatch: ExcludeSemantics(child: _Triangle(color: mc.silent, filled: false, halo: t.colorScheme.surface)),
-        title: 'Hollow grey triangle: offline',
+        swatch: ExcludeSemantics(child: NodeSymbol(role: 'observer', freshness: 'stale', size: 22, scaled: false)),
+        title: 'Eye on a mast, faded, no ring: offline',
+        detail: set.fresh('stale')?.label,
       ),
       LegendRow(
         id: 'observer-mobile',
-        swatch: ExcludeSemantics(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CustomPaint(painter: MobileObserverPainter(fill: t.colorScheme.primary, glyph: t.colorScheme.onPrimary, halo: t.colorScheme.surface)),
-          ),
-        ),
-        title: 'Circle with a phone: MeshSonar phone on the move',
+        swatch: ExcludeSemantics(child: NodeSymbol(role: 'phone', size: 22, scaled: false)),
+        title: 'Phone outline: MeshSonar phone on the move',
         detail: 'A phone listening as an observer right now, shown at the middle of its ~5 km area (never its exact place). '
             'It fades out over 10 minutes after it was last heard from.',
       ),
@@ -601,39 +599,4 @@ class LinkSamplePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(LinkSamplePainter o) => o.line != line || o.casing != casing || o.dashed != dashed;
-}
-
-/// The observer marker as the map draws it: a filled triangle when online, an outline when offline.
-class _Triangle extends StatelessWidget {
-  final Color color, halo;
-  final bool filled;
-  const _Triangle({required this.color, required this.filled, required this.halo});
-  @override
-  Widget build(BuildContext context) => CustomPaint(size: const Size(24, 22), painter: _TriPainter(color, filled, halo));
-}
-
-class _TriPainter extends CustomPainter {
-  final Color color, halo;
-  final bool filled;
-  _TriPainter(this.color, this.filled, this.halo);
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(size.width / 2, 2)
-      ..lineTo(size.width - 2, size.height - 2)
-      ..lineTo(2, size.height - 2)
-      ..close();
-    if (filled) canvas.drawPath(path, Paint()..color = color);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2
-        ..strokeJoin = StrokeJoin.round
-        ..color = filled ? halo : color,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_TriPainter o) => o.color != color || o.filled != filled || o.halo != halo;
 }

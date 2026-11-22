@@ -81,7 +81,7 @@ void main() {
       without('coverage'),
       jsonEncode({...j, 'layers': []}),
       jsonEncode({...j, 'layers': [{'name': 'no id'}]}),
-      withVersion('x', schema: 2),
+      withVersion('x', schema: 3),
     ]) {
       expect(() => MapDefinition.parse(bad), throwsFormatException, reason: bad.length > 40 ? bad.substring(0, 40) : bad);
     }
@@ -120,7 +120,7 @@ void main() {
     final changed = <String>[];
     s.changes.listen(changed.add);
     final c = await s.refreshIfStale('CMH');
-    expect(asks.single.url.toString(), 'https://meshsonar.com/api/map/definition?scope=cmh');
+    expect(asks.single.url.toString(), 'https://meshsonar.com/api/map/definition?scope=cmh&v=2');
     expect(c.origin, MapDefinitionOrigin.server);
     expect(c.definition.version, 'aaaa1111');
     await Future<void>.delayed(Duration.zero);
@@ -141,7 +141,7 @@ void main() {
     // other scopes are separate
     expect((await offline.current('day')).origin, MapDefinitionOrigin.bundled);
     // the hub: no scope parameter
-    expect(s.urlFor(null).toString(), 'https://meshsonar.com/api/map/definition');
+    expect(s.urlFor(null).toString(), 'https://meshsonar.com/api/map/definition?v=2');
   });
 
   test('never replace a good copy with one that failed to parse (broken JSON, a newer schema, an empty layer list)', () async {
@@ -150,7 +150,7 @@ void main() {
     final s = store(MockClient((_) async => http.Response.bytes(utf8.encode(body), 200, headers: {'etag': '"e"'})), clock: () => now);
     expect((await s.refreshIfStale('cmh')).definition.version, 'good0001');
     final broken = jsonDecode(withVersion('bad00002')) as Map<String, dynamic>..['layers'] = [];
-    for (final bad in ['{"v":1,', withVersion('bad00001', schema: 2), jsonEncode(broken)]) {
+    for (final bad in ['{"v":1,', withVersion('bad00001', schema: 3), jsonEncode(broken)]) {
       now = now.add(const Duration(hours: 2));
       body = bad;
       final c = await s.refreshIfStale('cmh');

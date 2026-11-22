@@ -12,6 +12,7 @@ import '../../radio/session.dart' show LinkState;
 import '../../radio/tools/radio_tools.dart';
 import '../theme.dart';
 import 'tools_host.dart';
+import '../map/node_symbol.dart';
 
 /// Smallest tap target (logical px).
 const double kToolTarget = 48;
@@ -463,9 +464,9 @@ class ToolMap extends StatelessWidget {
                 for (final p in pins)
                   Marker(
                     point: p.point,
-                    width: 32,
-                    height: 32,
-                    child: p.child ?? Icon(p.icon, color: p.color ?? m.beacon, size: 28),
+                    width: 40,
+                    height: 40,
+                    child: p.child ?? (p.icon == Icons.cell_tower && p.color == null ? const Center(child: NodeSymbol(role: 'repeater')) : Icon(p.icon, color: p.color ?? m.beacon, size: 28)),
                   ),
               ]),
             ],

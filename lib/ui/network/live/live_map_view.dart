@@ -25,11 +25,12 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/power_profile.dart';
 import '../../../core/region_lookup.dart';
+import '../../../core/map_styles.dart' show BaseMapStyle;
 import '../../../core/v1/live_api.dart';
 import '../../../core/v1/live_geometry.dart';
 import '../../../core/v1/live_replay.dart';
 import '../../../core/v1/network_api.dart' show NetworkReadSource;
-import '../../../core/v1/nodes_api.dart' show nodesApiFactory;
+import '../../../core/v1/nodes_api.dart' show NodeQuery, NodeRow, nodesApiFactory;
 import '../../../core/v1/packets_api.dart' show packetsApiFactory, packetTypeLabel, packetTypeWireName;
 import '../../app.dart';
 import '../../design/app_surfaces.dart' show showAppSheet;
@@ -42,6 +43,7 @@ import '../network_context.dart';
 import '../packets/packet_detail_screen.dart';
 import '../packets/packet_ui.dart' show ageText, snrText;
 import 'live_map_controller.dart';
+import 'live_nodes_layer.dart';
 import 'packet_type_colors.dart';
 
 /// The middle of a region's box; null without one.
@@ -87,6 +89,9 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
   bool _foreground = true, _visible = true, _saverOverride = false;
   NetworkFavouritesStore? _favs;
   final Map<String, GeoPoint> _observerPos = {};
+
+  /// The region's repeaters and room servers (the `nodes` layer), drawn dim and named under the packets.
+  List<NodeRow> _nodes = const [];
   String? _focusError;
 
   /// One open panel on this map; the Live panel's resting height (the drawn packet sits on top of it).
@@ -106,6 +111,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
     PowerProfile.addListener(_powerChanged);
     _c.start();
     unawaited(_loadObservers());
+    unawaited(_loadNodes());
     final r = widget.request;
     if (r?.packetHash != null) unawaited(_loadFocus(r!.packetHash!, r.mapTime));
   }
@@ -183,6 +189,46 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       }
     }
     _c.setPositions(LivePositions(node: (k) => nodes[k], observer: (id) => _observerPos[id] ?? _observerPos[id.toLowerCase()] ?? nodes[id.toLowerCase()]));
+  }
+
+  /// The region's nodes with a position, a few pages of `GET /v1/nodes` (else today's roster). A failure leaves the map as it was:
+  /// the packets still draw.
+  Future<void> _loadNodes() async {
+    final api = nodesApiFactory(widget.region.url);
+    try {
+      final rows = <NodeRow>[];
+      String? cursor;
+      for (var page = 0; page < 8; page++) {
+        final p = await api.nodes(const NodeQuery(roles: {'repeater', 'room'}, hasLocation: true), cursor: cursor, limit: 200);
+        rows.addAll(p.rows);
+        cursor = p.next;
+        if (cursor == null) break;
+      }
+      if (mounted) setState(() => _nodes = liveDrawableNodes(rows));
+    } catch (_) {
+      // no nodes drawn; the feed and the packets are unaffected
+    } finally {
+      api.close();
+    }
+  }
+
+  /// Keys of the nodes a drawn packet is crossing now (the focused packet and the ones animating): drawn solid and named from
+  /// zoom 9 (the label spec's "relaying in Live").
+  Set<String> _nodesInUse() {
+    final keys = <String>{};
+    void add(LiveDrawing? d) {
+      if (d == null) return;
+      for (final m in d.marks) {
+        final id = m.id;
+        if (id != null && id.isNotEmpty) keys.add(id.toLowerCase());
+      }
+    }
+
+    add(_c.focusDrawing);
+    for (final a in _c.animations) {
+      add(a.drawing);
+    }
+    return keys;
   }
 
   Future<void> _loadObservers() async {
@@ -297,6 +343,8 @@ class _NetworkLiveMapState extends State<NetworkLiveMap> with SingleTickerProvid
       draw(a.drawing, packetTypeColor(context, a.packet.type), prog, alpha);
     }
     return [
+      // The nodes and their names go under the packets (MAP slices 2 and 3); the lines and dots stay the picture.
+      ...liveNodeLayers(nodes: _nodes, inUse: _nodesInUse(), style: BaseMapStyle.chart, brightness: Theme.of(context).brightness),
       PolylineLayer(key: const Key('live-map-lines'), polylines: lines),
       CircleLayer(key: const Key('live-map-marks'), circles: circles),
     ];

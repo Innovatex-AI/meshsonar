@@ -13,6 +13,7 @@ import 'package:flutter/rendering.dart' show SemanticsProperties;
 import 'package:flutter_map/flutter_map.dart';
 
 import '../../../core/cluster_index.dart';
+import '../../../core/map_prefs.dart' show MapPrefs;
 import '../../../core/repeater_points.dart' show RepeaterPoints;
 import '../../design/tokens.dart' show AppColors;
 import 'clustered_points_layer.dart' show clusterLod, clusterSemanticsLabel, visibleSlice;
@@ -88,6 +89,9 @@ class RepeaterItem {
   final int sourceIndex;
   final int pointIndex;
   final RepeaterBadge? badge;
+
+  /// The person's Icon size (0.85 / 1 / 1.25) the sprite is drawn at.
+  final double iconScale;
   const RepeaterItem({
     required this.key,
     required this.name,
@@ -105,9 +109,10 @@ class RepeaterItem {
     required this.sourceIndex,
     required this.pointIndex,
     required this.badge,
+    this.iconScale = 1,
   });
 
-  double get radius => variant.radius;
+  double get radius => variant.radius * iconScale;
 }
 
 class RepeaterClusterItem {
@@ -140,7 +145,9 @@ RepeaterScene buildRepeaterScene({
   required String? selectedKey,
   List<int>? selectedPoint,
   double margin = 40,
+  double? iconScale,
 }) {
+  final iconScale0 = iconScale ?? MapPrefs.shared.iconScale;
   final scale = worldPixels(camera.zoom);
   final o = camera.pixelOrigin;
   final zoom = camera.zoom;
@@ -189,6 +196,7 @@ RepeaterScene buildRepeaterScene({
         sourceIndex: s,
         pointIndex: pi,
         badge: null,
+        iconScale: iconScale0,
       ));
     }
   }
@@ -213,6 +221,7 @@ RepeaterScene buildRepeaterScene({
       sourceIndex: -1,
       pointIndex: -1,
       badge: b,
+      iconScale: iconScale0,
     ));
   }
   if (selected != null) singles.add(selected!);
@@ -275,7 +284,7 @@ class _RepeaterPainterLayerState extends State<RepeaterPainterLayer> {
   Widget build(BuildContext context) {
     final sources = [for (final (s, _) in widget.sources) s];
     return ListenableBuilder(
-      listenable: Listenable.merge([...sources, RepeaterSprites.instance]),
+      listenable: Listenable.merge([...sources, RepeaterSprites.instance, MapPrefs.shared]),
       builder: (context, _) {
         final camera = MapCamera.of(context);
         final colors = AppColors.of(context);
@@ -286,7 +295,7 @@ class _RepeaterPainterLayerState extends State<RepeaterPainterLayer> {
           highContrast: MediaQuery.highContrastOf(context),
         );
         final dpr = MediaQuery.devicePixelRatioOf(context);
-        final atlas = RepeaterSprites.instance.atlasFor(RepeaterSpriteKey(theme, dpr));
+        final atlas = RepeaterSprites.instance.atlasFor(RepeaterSpriteKey(theme, dpr, MapPrefs.shared.iconScale));
         final scene = <RepeaterSceneSource>[];
         final sel = <int>[];
         // Network under roster: reverse of the priority order.
@@ -376,7 +385,7 @@ class RepeaterPainter extends CustomPainter {
         a.draw(canvas, c, idx, singles.length);
       } else {
         for (final it in singles) {
-          paintRepeaterSprite(canvas, it.at, RepeaterSpriteSpec(it.freshness, it.room, it.variant), theme);
+          paintRepeaterSprite(canvas, it.at, RepeaterSpriteSpec(it.freshness, it.room, it.variant), theme, scale: it.iconScale);
         }
       }
     }

@@ -5,13 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../design/app_symbols.dart';
 import '../theme.dart';
+import '../map/node_symbol.dart';
 
 typedef ContactMapBuilder = Widget Function(BuildContext context, double lat, double lon);
 
 Widget defaultContactMap(BuildContext context, double lat, double lon) {
-  final m = MeshSonarColors.of(context);
   final at = LatLng(lat, lon);
   return ClipRRect(
     key: const Key('contact-map'),
@@ -24,7 +23,7 @@ Widget defaultContactMap(BuildContext context, double lat, double lon) {
         coverage: kPreviewCoverage,
         openAt: at,
         overlays: [
-          MarkerLayer(markers: [Marker(point: at, width: 28, height: 28, child: AppSymbolIcon(AppSymbols.locationFill, color: m.beacon, size: 28, scaleWithText: false))]),
+          MarkerLayer(markers: [Marker(point: at, width: 40, height: 40, child: const Center(child: NodeSymbol(role: 'companion')))]),
         ],
       ),
     ),

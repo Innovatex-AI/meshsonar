@@ -15,6 +15,22 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show ChangeNotifier, immutable, mapEquals;
 
+/// How big the person wants things on every map (Andy, Nov 22 2026, app-next-pass item 7: "a way to make each bigger or smaller,
+/// nothing too elaborate"). One choice for Label size (names) and one for Icon size (node badges, observer and phone markers).
+enum MapSizeChoice {
+  small('small', 'Small', 0.85),
+  normal('normal', 'Normal', 1.0),
+  large('large', 'Large', 1.25);
+
+  final String id, label;
+
+  /// What sizes are multiplied by.
+  final double scale;
+  const MapSizeChoice(this.id, this.label, this.scale);
+
+  static MapSizeChoice parse(Object? id) => values.firstWhere((c) => c.id == id, orElse: () => normal);
+}
+
 /// The page-config ids [MapPrefs.layerPrefs] is kept under.
 const String kDriveLayerPage = 'drive';
 
@@ -122,6 +138,8 @@ class MapPrefs extends ChangeNotifier {
   bool _headingUp = false;
   bool _zoomBySpeed = false;
   bool _healthOverlay = false;
+  MapSizeChoice _labelSize = MapSizeChoice.normal, _iconSize = MapSizeChoice.normal;
+  String? _colourBy;
   int _basemapCachePurged = 0;
   final Map<String, LayerPrefs> _layers = {};
   bool _loaded = false;
@@ -130,6 +148,18 @@ class MapPrefs extends ChangeNotifier {
   bool get headingUp => _headingUp;
   bool get zoomBySpeed => _zoomBySpeed;
   bool get healthOverlay => _healthOverlay;
+
+  /// Label size and Icon size, Small / Normal / Large, on every map; saved on the device (default Normal).
+  MapSizeChoice get labelSize => _labelSize;
+  MapSizeChoice get iconSize => _iconSize;
+  set labelSize(MapSizeChoice v) => _set(() => _labelSize = v, _labelSize != v);
+  set iconSize(MapSizeChoice v) => _set(() => _iconSize = v, _iconSize != v);
+  double get labelScale => _labelSize.scale;
+
+  /// "Colour nodes by" (Map Definition `variables.colourBy`: `none`, `status`, `hash`, `role`); null = the definition's default.
+  String? get colourBy => _colourBy;
+  set colourBy(String? v) => _set(() => _colourBy = v, _colourBy != v);
+  double get iconScale => _iconSize.scale;
 
   /// The basemap render version whose old disk renders were already deleted (ui/map/basemap_cache.dart); 0 = never.
   int get basemapCachePurged => _basemapCachePurged;
@@ -176,6 +206,9 @@ class MapPrefs extends ChangeNotifier {
     'heading_up': _headingUp,
     'zoom_by_speed': _zoomBySpeed,
     'health_overlay': _healthOverlay,
+    if (_labelSize != MapSizeChoice.normal) 'label_size': _labelSize.id,
+    if (_iconSize != MapSizeChoice.normal) 'icon_size': _iconSize.id,
+    if (_colourBy != null) 'colour_by': _colourBy,
     if (_basemapCachePurged != 0) 'basemap_cache_purged': _basemapCachePurged,
     if (_layers.isNotEmpty) 'layers': {for (final e in _layers.entries) e.key: e.value.toJson()},
   };
@@ -185,6 +218,9 @@ class MapPrefs extends ChangeNotifier {
     if (j['heading_up'] is bool) _headingUp = j['heading_up'] as bool;
     if (j['zoom_by_speed'] is bool) _zoomBySpeed = j['zoom_by_speed'] as bool;
     if (j['health_overlay'] is bool) _healthOverlay = j['health_overlay'] as bool;
+    _labelSize = MapSizeChoice.parse(j['label_size']);
+    _iconSize = MapSizeChoice.parse(j['icon_size']);
+    _colourBy = j['colour_by'] is String ? j['colour_by'] as String : null;
     if (j['basemap_cache_purged'] is int) _basemapCachePurged = j['basemap_cache_purged'] as int;
     final ls = j['layers'];
     if (ls is Map) {

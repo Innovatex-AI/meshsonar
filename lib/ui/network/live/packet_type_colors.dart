@@ -4,6 +4,9 @@
 // else "Other". Light and dark values copied exactly, so a packet is the same colour on the site and in the app.
 import 'package:flutter/material.dart';
 
+import '../../../core/map_definition_v2.dart';
+import '../../map/active_map_definition.dart';
+
 const List<Color> _catLight = [
   Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100), //
   Color(0xFFE87BA4), Color(0xFF008300), Color(0xFF6250D6), Color(0xFFE34948),
@@ -29,7 +32,16 @@ int? packetTypeSlot(int type) => switch (type) {
     };
 
 /// The colour of packet type [type] for [brightness].
+///
+/// MAP slice 3: the colours come from the Map Definition's `packetTypes` (one list for Live, the feed, the packets table and the
+/// charts on the site and in the app); the built-in list below is what that list said on Nov 22 2026 and is used when the
+/// definition in use has none. A test pins the two equal.
 Color packetTypeColorFor(int type, Brightness brightness) {
+  final def = ActiveMapDefinition.current.packetTypes;
+  if (def != null) {
+    final c = def.of(type);
+    return Color(brightness == Brightness.dark ? c.dark : c.light);
+  }
   final slot = packetTypeSlot(type);
   final dark = brightness == Brightness.dark;
   if (slot == null) return dark ? _otherDark : _otherLight;

@@ -196,13 +196,16 @@ class RepeaterSpriteTheme {
 class RepeaterSpriteKey {
   final RepeaterSpriteTheme theme;
   final double dpr;
-  const RepeaterSpriteKey(this.theme, this.dpr);
+
+  /// The person's Icon size (0.85 / 1 / 1.25, [MapSizeChoice]): every sprite is drawn this much bigger or smaller.
+  final double scale;
+  const RepeaterSpriteKey(this.theme, this.dpr, [this.scale = 1]);
   @override
-  bool operator ==(Object other) => other is RepeaterSpriteKey && other.theme == theme && other.dpr == dpr;
+  bool operator ==(Object other) => other is RepeaterSpriteKey && other.theme == theme && other.dpr == dpr && other.scale == scale;
   @override
-  int get hashCode => Object.hash(theme, dpr);
+  int get hashCode => Object.hash(theme, dpr, scale);
   @override
-  String toString() => 'RepeaterSpriteKey(${theme.brightness.name}, hc=${theme.highContrast}, dpr=$dpr)';
+  String toString() => 'RepeaterSpriteKey(${theme.brightness.name}, hc=${theme.highContrast}, dpr=$dpr, scale=$scale)';
 }
 
 /// Cell edge (logical points) of the atlas grid: the biggest sprite (34 pt + 3 pt halo + keyline) with air around it.
@@ -238,8 +241,16 @@ void _glyph(Canvas canvas, Offset c, double d, Color color) {
   canvas.drawLine(Offset(c.dx - gs * 0.22, c.dy + gs * 0.08), Offset(c.dx + gs * 0.22, c.dy + gs * 0.08), p);
 }
 
-/// Paints one sprite centred on [c] at logical scale (the atlas calls this at DPR scale too).
-void paintRepeaterSprite(Canvas canvas, Offset c, RepeaterSpriteSpec spec, RepeaterSpriteTheme theme) {
+/// Paints one sprite centred on [c] at logical scale (the atlas calls this at DPR scale too). [scale] is the Icon size choice.
+void paintRepeaterSprite(Canvas canvas, Offset c, RepeaterSpriteSpec spec, RepeaterSpriteTheme theme, {double scale = 1}) {
+  if (scale != 1) {
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.scale(scale);
+    paintRepeaterSprite(canvas, Offset.zero, spec, theme);
+    canvas.restore();
+    return;
+  }
   final v = spec.variant;
   final sym = theme.symbol;
   final r = v.radius;
@@ -317,7 +328,8 @@ class RepeaterSpriteAtlas {
 
   static Future<RepeaterSpriteAtlas> build(RepeaterSpriteKey key) async {
     final dpr = key.dpr;
-    final cellPx = (kSpriteCell * dpr).roundToDouble();
+    // A bigger Icon size needs a bigger cell (the biggest sprite plus its halo must fit).
+    final cellPx = (kSpriteCell * math.max(1.0, key.scale) * dpr).roundToDouble();
     final rows = (RepeaterSpriteSpec.count / _cols).ceil();
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -327,7 +339,7 @@ class RepeaterSpriteAtlas {
       final col = i % _cols, row = i ~/ _cols;
       canvas.save();
       canvas.scale(dpr);
-      paintRepeaterSprite(canvas, Offset((col + 0.5) * cell, (row + 0.5) * cell), RepeaterSpriteSpec.ofIndex(i), key.theme);
+      paintRepeaterSprite(canvas, Offset((col + 0.5) * cell, (row + 0.5) * cell), RepeaterSpriteSpec.ofIndex(i), key.theme, scale: key.scale);
       canvas.restore();
       rects[i * 4] = col * cellPx;
       rects[i * 4 + 1] = row * cellPx;

@@ -35,6 +35,7 @@ import '../sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 import '../legend_sheet.dart' show LegendSwatch, SwatchShape, showMapLegend;
 import '../legend_card.dart' show PaletteSwitch, RepeaterRingKey;
 import '../active_map_definition.dart';
+import '../map_size_controls.dart';
 import '../legend_card.dart' show legendEntryKey;
 import '../../../core/map_basemaps.dart' show MapBasemaps;
 import '../map_layers.dart' show PingColorMode;
@@ -166,6 +167,9 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
               trailing: model.filter.activeCount == 0 ? null : '${model.filter.activeCount} active',
               onTap: () => showMapFilterSheet(context, model),
             ),
+            const _SectionLabel('Size and colour', key: Key('layers-group-size')),
+            const MapSizeControls(),
+            const ColourByControl(),
             const _SectionLabel('Palette', key: Key('layers-group-palette')),
             const Padding(padding: EdgeInsets.symmetric(horizontal: Gap.l), child: Align(alignment: Alignment.centerLeft, child: PaletteSwitch(keyPrefix: 'layers-palette'))),
             const _SectionLabel(''),
