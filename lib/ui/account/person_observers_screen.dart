@@ -12,6 +12,7 @@ import '../../core/api.dart' show CmatException;
 import '../../core/node_claim.dart';
 import '../../core/person_observers.dart';
 import '../app.dart';
+import '../claims/claim_proof_label.dart';
 import '../design/app_surfaces.dart';
 import '../settings/confirm_sheet.dart';
 import '../widgets.dart';
@@ -23,14 +24,8 @@ String _when(DateTime? t) {
   return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
 }
 
-/// How the claim was proved, in the site's words (`METHOD_TRUST`).
-String methodWords(ClaimMethod m) => switch (m) {
-      ClaimMethod.signature => "Proved with the radio's own key; we checked the signature ourselves.",
-      ClaimMethod.advert => "Proved by the radio's own signed advert, heard by a MeshSonar observer; we checked the signature ourselves.",
-      ClaimMethod.login =>
-        'Attested by your app after an admin login from your own radio. We cannot see the login ourselves, so a later signature or advert proof from someone else replaces it.',
-      ClaimMethod.other => 'Proved by its owner.',
-    };
+/// How the claim was proved, in the site's words: the one shared wording (lib/ui/claims/claim_proof_label.dart).
+String methodWords(ClaimMethod m) => claimProofWords(m);
 
 String positionWords(ObserverPosition p) => switch (p) {
       ObserverPosition.hidden => 'Its position is not shown anywhere.',
@@ -262,7 +257,8 @@ class _FixedCard extends StatelessWidget {
                 const Chip(label: Text('Observer'), visualDensity: VisualDensity.compact),
               ],
             ),
-            Text(o.named ? 'It named you as its owner and you agreed' : 'Proof: ${methodWords(o.method)}', key: Key('observer-proof-${o.key}'), style: dim),
+            if (o.named) Text('It named you as its owner and you agreed', key: Key('observer-proof-${o.key}'), style: dim),
+            KeyedSubtree(key: o.named ? null : Key('observer-proof-${o.key}'), child: ClaimProofLabel(o.method, style: ClaimProofStyle.line)),
             Text(o.iata == null ? 'No area yet' : 'Area ${o.iata}', style: dim),
             Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${_when(o.lastHeardAt)}', key: Key('observer-heard-${o.key}'), style: dim),
             if (o.nodeName != null && o.nodeName != o.name) Text('It calls itself "${o.nodeName}".', style: dim),
