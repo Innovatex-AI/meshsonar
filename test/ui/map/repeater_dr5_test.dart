@@ -23,6 +23,9 @@ import 'package:meshsonar/ui/theme.dart';
 
 import 'repeater_visuals_test.dart' show simulate;
 
+// The dark chart colour (was MapTokens.chartDark, only ever read by tests).
+const _chartDark = Color(0xFF2B2F36);
+
 const _names = [
   'Westerville Water Tower', 'Otterbein Hill', 'Polaris Rooftop', 'Easton Mast', 'OSU West Campus', 'Hoover Dam Park',
   'Alum Creek N1', 'Genoa Ridge', 'Sunbury Silo', 'Delaware Hub', 'Dublin Bridge St', 'Grandview 5th Ave',
@@ -81,7 +84,7 @@ void main() {
     final selectedKey = rows.first.key;
 
     Widget cell(double zoom, Brightness b, bool street) {
-      final land = b == Brightness.dark ? MapTokens.chartDark : MapTokens.landLight;
+      final land = b == Brightness.dark ? _chartDark : MapTokens.landLight;
       return SizedBox(
         width: 300,
         height: 420,

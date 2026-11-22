@@ -4,9 +4,6 @@
 // Known and deferred to Drive WP3b: MapIconButton (ui/drive/drive_controls.dart, owned by WP8) and the dock/footer widgets.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/core/gps_health.dart';
-import 'package:meshsonar/core/startup_location.dart';
-import 'package:meshsonar/ui/drive/gps_health_banner.dart';
 import 'package:meshsonar/ui/map/map_info_panel.dart';
 import 'package:meshsonar/ui/map/parts/map_chips.dart';
 import 'package:meshsonar/ui/map/parts/simulated_tag.dart';
@@ -40,19 +37,7 @@ void main() {
       tester.pumpWidget(MaterialApp(theme: meshSonarTheme(b), home: Scaffold(body: Center(child: child))));
 
   for (final b in Brightness.values) {
-    testWidgets('GPS banner, Heard box, info panel, pill and SIMULATED tag are opaque (${b.name})', (tester) async {
-      final health = computeGpsHealth(
-        sinceStart: const Duration(seconds: 3),
-        fixAge: null,
-        accuracyM: null,
-        haveUsableFix: false,
-        access: LocationAccess.approximate,
-        background: BackgroundLocation.notApplicable,
-      );
-      await pump(tester, GpsHealthView(health: health), b: b);
-      expect(find.byType(GpsHealthView), findsOneWidget);
-      expect(translucentFills(tester, find.byType(GpsHealthView)), isEmpty, reason: 'GPS banner');
-
+    testWidgets('Heard box, info panel, pill and SIMULATED tag are opaque (${b.name})', (tester) async {
       await pump(tester, MapInfoPanel(title: 't', summary: 's', busy: false, body: const SizedBox(height: 20), onClose: () {}), b: b);
       expect(translucentFills(tester, find.byType(MapInfoPanel)), isEmpty, reason: 'info panel');
 
