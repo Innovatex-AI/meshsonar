@@ -13,6 +13,10 @@ import 'package:flutter_map/flutter_map.dart' show CircleLayer, PolygonLayer;
 import 'package:meshsonar/core/map_definition.dart';
 import 'package:meshsonar/ui/map/active_map_definition.dart';
 import 'package:meshsonar/ui/map/tools/zone_layer.dart' show ZonePin;
+import 'package:meshsonar/core/basemap.dart' show BasemapLook;
+import 'package:meshsonar/core/map_styles.dart' show BaseMapStyle;
+import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapLayer;
+import 'package:meshsonar/ui/settings/privacy_zones_screen.dart' show zonesBasemap;
 import '../support/tool_definition.dart';
 import '../support/zones_harness.dart';
 
@@ -42,6 +46,26 @@ Future<void> addByTap(WidgetTester tester, MapController map, double lat, double
 }
 
 void main() {
+  group('the saved base map in the editor (build 75)', () {
+    test('Chart, and no tiles, draw MapPreview\'s own base map as in build 74', () {
+      expect(zonesBasemap(style: BaseMapStyle.chart, tiles: true), isNull);
+      expect(zonesBasemap(style: BaseMapStyle.satellite, tiles: true), isNull, reason: 'Satellite needs its imagery credits: the editor keeps Chart');
+      for (final style in BaseMapStyle.values) {
+        expect(zonesBasemap(style: style, tiles: false), isNull, reason: style.id);
+      }
+    });
+
+    test('Light, Dark and Topo draw their own look', () {
+      final light = zonesBasemap(style: BaseMapStyle.street, tiles: true)! as BasemapLayer;
+      expect((light.dark, light.look), (false, BasemapLook.road));
+      final dark = zonesBasemap(style: BaseMapStyle.dark, tiles: true)! as BasemapLayer;
+      expect((dark.dark, dark.look), (true, BasemapLook.road));
+      final topo = zonesBasemap(style: BaseMapStyle.topo, tiles: true)! as BasemapLayer;
+      expect((topo.dark, topo.look), (null, BasemapLook.topo));
+    });
+  });
+
+
   for (final dark in [false, true]) {
     testWidgetsT('zones from the live definition (${dark ? 'dark' : 'light'}): dashed circle, selected zone active, key and handles', (tester) async {
       ActiveMapDefinition.notifier.value = liveToolDefinition();
