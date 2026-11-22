@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/ui/design/map_panel.dart';
+import 'package:meshsonar/ui/map/coverage_map.dart' show CoverageMap;
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/network_request.dart';
@@ -18,10 +19,13 @@ import 'package:meshsonar/core/v1/live_api.dart';
 import 'package:meshsonar/core/v1/live_geometry.dart';
 import 'package:meshsonar/core/v1/nodes_api.dart';
 import 'package:meshsonar/core/v1/packets_api.dart';
+import 'package:meshsonar/ui/app.dart' show AppScope;
 import 'package:meshsonar/ui/network/live/live_map_controller.dart';
 import 'package:meshsonar/ui/network/live/live_map_view.dart';
 import 'package:meshsonar/ui/network/live/packet_type_colors.dart';
 import 'package:meshsonar/ui/theme.dart';
+
+import '../fakes.dart' show Harness;
 
 String fixture(String name) => File('test/fixtures/analyzer/$name').readAsStringSync();
 
@@ -78,6 +82,9 @@ LiveMapController makeController(FakeSse fake, {http.Client? client, DateTime Fu
   ));
   return c;
 }
+
+/// The Live map reads the app (Layers, basemap, the roster): host it under an AppScope like the app does.
+Widget scoped(Widget app) => AppScope(state: Harness().state, child: app);
 
 Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 10));
 
@@ -268,9 +275,12 @@ void main() {
       await tester.runAsync(() async {
         c = makeController(fake);
       });
-      await tester.pumpWidget(MaterialApp(
-        theme: meshSonarTheme(Brightness.dark),
-        home: Scaffold(body: NetworkLiveMap(region: region, controller: c, showBasemap: false, request: request)),
+      await tester.pumpWidget(AppScope(
+        state: Harness().state,
+        child: MaterialApp(
+          theme: meshSonarTheme(Brightness.dark),
+          home: Scaffold(body: NetworkLiveMap(region: region, controller: c, showBasemap: false, request: request)),
+        ),
       ));
       await tester.pump();
       if (open) {
@@ -298,9 +308,11 @@ void main() {
       expect(find.text('1 packet'), findsOneWidget);
       expect(find.byKey(const Key('live-map-pause')), findsOneWidget);
       expect(find.byKey(const Key('live-panel-body')), findsNothing);
-      // Nothing but the map above the header.
+      // Nothing but the map above the header: the map's own buttons (Layers, the legend chip, the credit) belong to the map and
+      // are not the Live panel's chrome (build 75: the Live map is a CoverageMap with a Layers button).
       final chrome = find.descendant(of: find.byKey(const Key('live-map')), matching: find.byType(Material));
       for (final e in chrome.evaluate()) {
+        if (find.descendant(of: find.byType(CoverageMap), matching: find.byWidget(e.widget)).evaluate().isNotEmpty) continue;
         final r = tester.getRect(find.byWidget(e.widget));
         expect(r.top, greaterThanOrEqualTo(panel.top - 0.5), reason: 'no bar or card above the panel header');
       }
@@ -467,7 +479,7 @@ void main() {
       late LiveMapController c;
       await tester.runAsync(() async => c = makeController(fake));
       const bar = 83.0;
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(scoped(MaterialApp(
         theme: meshSonarTheme(Brightness.dark),
         home: MediaQuery(
           data: const MediaQueryData(size: Size(402, 874), padding: EdgeInsets.only(top: 59, bottom: bar)),
@@ -478,7 +490,7 @@ void main() {
             ]),
           ),
         ),
-      ));
+      )));
       await tester.pump();
       await tester.runAsync(() async {
         await settle();
@@ -538,7 +550,7 @@ void main() {
       final fake = FakeSse();
       late LiveMapController c;
       await tester.runAsync(() async => c = makeController(fake));
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(scoped(MaterialApp(
         theme: meshSonarTheme(Brightness.dark),
         home: MediaQuery(
           // iPhone SE: 20 pt status bar; the tab bar zone (56) is the bottom padding the body runs behind.
@@ -550,7 +562,7 @@ void main() {
             ]),
           ),
         ),
-      ));
+      )));
       await tester.pump();
       await tester.runAsync(() async {
         await settle();
@@ -586,13 +598,13 @@ void main() {
       final fake = FakeSse();
       late LiveMapController c;
       await tester.runAsync(() async => c = makeController(fake));
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(scoped(MaterialApp(
         theme: meshSonarTheme(Brightness.dark),
         home: MediaQuery(
           data: const MediaQueryData(size: Size(390, 844), textScaler: TextScaler.linear(2)),
           child: Scaffold(body: NetworkLiveMap(region: region, controller: c, showBasemap: false)),
         ),
-      ));
+      )));
       await tester.pump();
       expect(tester.takeException(), isNull);
       await tester.tap(find.byKey(const Key('live-panel-header')));

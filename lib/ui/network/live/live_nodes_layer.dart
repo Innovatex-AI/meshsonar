@@ -9,16 +9,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/map_definition.dart' show MapDefinition;
+import '../../../core/map_definition_pages.dart';
 import '../../../core/map_definition_v2.dart';
 import '../../../core/map_prefs.dart';
 import '../../../core/map_styles.dart' show BaseMapStyle;
 import '../../../core/v1/nodes_api.dart' show NodeRow;
+import '../../drive_detail_map.dart' show driveDetailLayerState;
 import '../../map/active_map_definition.dart';
+import '../../map/layers/map_layer.dart' show MapLayerState;
+import '../../map/layers/repeater_map_source.dart' show kLabelsLayerId, kRosterLayerId;
 import '../../map/layers/repeater_name_labels.dart';
 import '../../map/layers/repeater_painter_layer.dart' show RepeaterBadge;
 import '../../map/layers/repeater_sprites.dart' show RepeaterFreshness, freshnessOfAge, spriteVariantFor;
 import '../../map/map_size_controls.dart' show colourByNow;
 import '../../map/node_symbol.dart';
+
+/// What the Live page's Layers sheet starts with: the definition's `live` page preset (repeaters, names, region borders) when it
+/// has one, else what build 74 drew (the nodes and their names, nothing else). The person's own choices sit on top (page `live`).
+MapLayerState liveDefaultLayerState([MapDefinition? def]) {
+  final d = def ?? ActiveMapDefinition.current;
+  final fromPreset = d.hasPages ? driveDetailLayerState(d, page: 'live') : null;
+  return fromPreset ?? MapLayerState(on: Set.unmodifiable({kRosterLayerId, kLabelsLayerId}), mode: const {'pings': 'snr'});
+}
+
+/// The registry layers the Live map draws: the nodes (Repeaters, with Names under it) and, with a preset, the region border.
+const Set<String> kLiveDrawnLayerIds = {kRosterLayerId, kLabelsLayerId, 'borders'};
+
+/// Tests: how many times the node markers rebuilt (the layer must not rebuild per packet).
+@visibleForTesting
+int liveNodeMarkerBuilds = 0;
 
 /// The Live nodes that can be drawn: repeaters and room servers with a position.
 List<NodeRow> liveDrawableNodes(Iterable<NodeRow> rows) => [
@@ -90,6 +110,7 @@ class _LiveNodeMarkers extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    liveNodeMarkerBuilds++;
     final camera = MapCamera.of(context);
     final spec = ActiveMapDefinition.current.labelSpec;
     // Below the spec's first name zoom a whole region of badges is a smear: only the ones in use are drawn.
