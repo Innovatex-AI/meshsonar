@@ -36,6 +36,7 @@ import '../../core/plan/plan_model.dart';
 import '../../core/plan/saved_plans.dart';
 import '../../core/plan_contract.dart';
 import '../app.dart';
+import '../design/anchored_sheet.dart' show MapPanelHostController;
 import '../design/app_haptics.dart';
 import '../design/map_panel.dart';
 import '../design/app_surfaces.dart';
