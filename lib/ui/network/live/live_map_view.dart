@@ -76,8 +76,8 @@ LatLngBounds? _regionBounds(RegionIndexEntry r) {
   final b = r.bbox;
   if (b == null || b.length != 4 || !(b[0] < b[2] && b[1] < b[3])) return null;
   // A whole region fits below the first name zoom, where only the nodes a packet is crossing are drawn: an empty map on first
-  // open. So the map opens on the region's middle, at most about one degree across (zoom 9 on a phone, where build 74 opened).
-  const halfLon = 0.5, halfLat = 0.42;
+  // open. So the map opens on the region's middle, at most about 0.6 degree across (just past zoom 9 on a phone; build 74 opened at 9).
+  const halfLon = 0.3, halfLat = 0.26;
   final midLon = (b[0] + b[2]) / 2, midLat = (b[1] + b[3]) / 2;
   final w = math.min((b[2] - b[0]) / 2, halfLon),
       h = math.min((b[3] - b[1]) / 2, halfLat);
