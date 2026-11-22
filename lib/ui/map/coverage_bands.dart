@@ -2,11 +2,14 @@
 // colours per palette and theme (`palettes[].themes[theme].bands`, No-reply outline / point), the absolute opacities
 // (`drawing`) and the predicted multipliers (`palettes[].predicted[theme]`). No colour is copied into the app: a change on the
 // server reaches every map. Band meaning and labels come from the definition's `bands` / `/api/coverage/meta`.
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../../core/colour_palette.dart';
 import '../../core/coverage_v2.dart' show CoverageBand;
 import '../../core/map_definition.dart';
+import '../../core/map_definition_v2.dart' show CoverageLadder;
 import 'active_map_definition.dart';
 import 'cell_raster_layer.dart' show CellStyle;
 
@@ -144,3 +147,50 @@ List<CellStyle> predictedStyles(CoverageBandColors c) => [
         return CellStyle(c[b].withValues(alpha: o * k.fill), none, 0, c[b].withValues(alpha: o * k.hatch), c[b].withValues(alpha: o), 2);
       }(),
 ];
+
+// ------------------------------------------------------------------------------------------------ summary hexagons (MAP slice 1)
+
+/// Strength buckets of a summary hexagon (the fill is `min + span * sqrt(f)`; sqrt(f) is cut into 8 steps so cells share styles).
+const int kSummaryStrengthSteps = 8;
+
+/// The strength bucket of a cell whose measured share is [f] (0..1).
+int summaryStrengthStep(double f) => (math.sqrt(f.isNaN ? 1.0 : f.clamp(0.0, 1.0)) * (kSummaryStrengthSteps - 1)).round();
+
+double _strengthOfStep(CoverageLadder l, int step) => l.strengthMin + l.strengthSpan * step / (kSummaryStrengthSteps - 1);
+
+/// Measured summary: style index = band * 8 + strength step (56 styles). Colour = the cell's band; the fill is the measured
+/// opacity times the strength, so one driven road in a big cell is drawn light (plan 4.4). No outline, no dot.
+int measuredSummaryStyleIndex(int band, double f) => band.clamp(0, 6) * kSummaryStrengthSteps + summaryStrengthStep(f);
+
+List<CellStyle> measuredSummaryStyles(CoverageBandColors c, CoverageLadder ladder) {
+  final d = c.definition;
+  const none = Color(0x00000000);
+  return [
+    for (var b = 0; b <= 6; b++)
+      for (var s = 0; s < kSummaryStrengthSteps; s++)
+        () {
+          final k = _strengthOfStep(ladder, s);
+          final base = b == CoverageBand.noReply ? d.drawingValue('noReplyFill', 0.6) : d.drawingValue('measured', 0.85);
+          return CellStyle(c[b].withValues(alpha: base * k), none, 0);
+        }(),
+  ];
+}
+
+/// Predicted summary: style index = (band * 10 + opacity step) * 8 + strength step (480 styles). Same hatch and quieter fill
+/// as the res-11 predicted hexagons, times the strength.
+int predictedSummaryStyleIndex(int band, double o, double f) => predictedStyleIndex(band, o) * kSummaryStrengthSteps + summaryStrengthStep(f);
+
+List<CellStyle> predictedSummaryStyles(CoverageBandColors c, CoverageLadder ladder) {
+  const none = Color(0x00000000);
+  final k = PredictedOpacity.of(c);
+  return [
+    for (var b = 0; b <= 5; b++)
+      for (var step = 0; step < kPredictedOpacitySteps; step++)
+        for (var s = 0; s < kSummaryStrengthSteps; s++)
+          () {
+            final o = predictedOpacityOfStep(step) * _strengthOfStep(ladder, s);
+            if (b == 0) return CellStyle(none, none, 0, c.noReplyPoint.withValues(alpha: o * k.noneHatch), none, 1);
+            return CellStyle(c[b].withValues(alpha: o * k.fill), none, 0, c[b].withValues(alpha: o * k.hatch), none, 2);
+          }(),
+  ];
+}

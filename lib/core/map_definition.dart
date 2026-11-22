@@ -21,7 +21,11 @@ import 'package:path/path.dart' as p;
 import 'map_definition_bundled.g.dart';
 
 /// The schema version this app reads. A definition with a higher `v` is refused (contract rule).
-const supportedMapDefinitionV = 1;
+const supportedMapDefinitionV = 2;
+
+/// The definition version this app asks the server for (`?v=2`: the coverage ladder, `labels.spec`, `symbols.set`, `variables`,
+/// `packetTypes`). A server that does not know `v` answers version 1, which the same reader accepts.
+const requestedMapDefinitionV = 2;
 
 /// The bundled copy (pubspec assets).
 const mapDefinitionAsset = 'assets/map/map-definition.json';
@@ -218,7 +222,11 @@ class MapDefinitionStore {
       base = base.substring(0, base.length - 1);
     }
     final k = _key(scope);
-    return origin.replace(path: '$base/api/map/definition', queryParameters: k.isEmpty ? null : {'scope': k}, fragment: null);
+    return origin.replace(
+      path: '$base/api/map/definition',
+      queryParameters: {if (k.isNotEmpty) 'scope': k, if (requestedMapDefinitionV > 1) 'v': '$requestedMapDefinitionV'},
+      fragment: null,
+    );
   }
 
   Future<MapDefinitionCopy> _bundledCopy() async =>

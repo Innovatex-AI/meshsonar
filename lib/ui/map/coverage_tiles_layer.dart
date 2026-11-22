@@ -19,6 +19,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_map/flutter_map.dart';
 
 import '../../core/coverage_v2.dart';
+import '../../core/map_definition_v2.dart' show CoverageLadder;
 import 'cell_raster_layer.dart';
 import 'coverage_bands.dart';
 
@@ -58,7 +59,11 @@ class CoverageTilesLayer extends StatefulWidget {
 
   /// Measured features with fewer attempts are faint (meta.faintBelow).
   final int faintBelow;
-  const CoverageTilesLayer({super.key, required this.layer, required this.store, required this.meta, required this.colors, this.faintBelow = 3});
+
+  /// The Map Definition's coverage ladder (`coverage.summary`), or null = build 72 behaviour. With it the summary layers draw
+  /// the picture from [CoverageLadder.fromZoom] to the res-11 hexagons, and the dot layers keep to the zooms below it.
+  final CoverageLadder? ladder;
+  const CoverageTilesLayer({super.key, required this.layer, required this.store, required this.meta, required this.colors, this.faintBelow = 3, this.ladder});
 
   @override
   State<CoverageTilesLayer> createState() => CoverageTilesLayerState();
@@ -116,9 +121,11 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     final out = <CellShape>[];
     for (var f = 0; f < d.length; f++) {
       final band = d.band[f];
-      final style = heard
-          ? band.clamp(0, 6)
-          : (measured ? measuredStyleIndex(band, d.n[f] < widget.faintBelow) : predictedStyleIndex(band, d.o[f]));
+      final style = switch (widget.layer) {
+        CoverageTileLayer.measuredSummary => measuredSummaryStyleIndex(band, d.share(f)),
+        CoverageTileLayer.predictedSummary => predictedSummaryStyleIndex(band, d.o[f], d.share(f)),
+        _ => heard ? band.clamp(0, 6) : (measured ? measuredStyleIndex(band, d.n[f] < widget.faintBelow) : predictedStyleIndex(band, d.o[f])),
+      };
       out.add(CellShape.slice(d.latLon, d.starts[f], d.starts[f + 1], style));
     }
     if (_shapes.length > 600) _shapes.remove(_shapes.keys.first);
@@ -149,16 +156,28 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
     final meta = widget.meta;
-    final measured = widget.layer != CoverageTileLayer.predicted; // measured and heard follow the measured zoom rules
+    final summary = widget.layer.isSummary;
+    final ladder = widget.ladder;
+    // measured and heard follow the measured zoom rules
+    final measured = widget.layer != CoverageTileLayer.predicted && widget.layer != CoverageTileLayer.predictedSummary;
     stats.builds++;
-    if (!measured && camera.zoom < meta.predictedFromZoom) {
+    // With the ladder the summary layers draw from its first zoom up to the res-11 hexagons; the dot layers keep to the zooms
+    // below it (measured) or draw nothing before the hexagons (predicted: its dots are gone, site slice 1).
+    final skip = summary
+        ? (ladder == null || !ladder.drawsAt(camera.zoom))
+        : (ladder != null &&
+              ((widget.layer == CoverageTileLayer.measured && camera.zoom >= ladder.fromZoom && camera.zoom < ladder.hexFromZoom) ||
+                  (widget.layer == CoverageTileLayer.predicted && camera.zoom < ladder.hexFromZoom)));
+    if (skip || (!measured && !summary && camera.zoom < meta.predictedFromZoom)) {
       _endHold();
       _shownZ = null;
+      _data = CellLayerData.empty;
+      _usedSig = '';
       _drawnTiles = const [];
       holes = 0;
       return const SizedBox.shrink();
     }
-    final z = coverageTileZoom(camera.zoom);
+    final z = summary ? ladder!.tileZoom(camera.zoom) : coverageTileZoom(camera.zoom);
     final b = camera.visibleBounds;
     final preset = meta.defaultPreset;
     final version = meta.versionFor(widget.layer);
@@ -208,7 +227,8 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     // z12 Predicted tile (a grid of points) stood in for them and drew a fine dot-matrix over the whole area. A gap that fills in
     // as the hexagon tile lands is honest; dots at a hexagon zoom are not.
     final hexes = z >= meta.hexFromZoom;
-    final minZ = hexes ? meta.hexFromZoom : (measured ? 0 : meta.predictedFromZoom);
+    final minZ = summary ? ladder!.fromZoom : (hexes ? meta.hexFromZoom : (measured ? 0 : meta.predictedFromZoom));
+    final maxChildZ = summary ? ladder!.toZoom : 16;
     for (final (x, y) in tiles) {
       final key = keyOf(z, x, y);
       final d = store.peek(key);
@@ -228,7 +248,7 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
       }
       // Else its loaded children, one or two levels down (zooming out: the finer tiles stay until the coarser one lands).
       // Below the hexagon zoom the painter draws every cell as a dot, so hexagon children read as dots there.
-      for (var dz = 1; !stood && dz <= 2 && z + dz <= 16; dz++) {
+      for (var dz = 1; !stood && dz <= 2 && z + dz <= maxChildZ; dz++) {
         final n = 1 << dz;
         for (var cx = x * n; cx < (x + 1) * n; cx++) {
           for (var cy = y * n; cy < (y + 1) * n; cy++) {
@@ -255,6 +275,8 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
         CoverageTileLayer.measured => measuredStyles(widget.colors),
         CoverageTileLayer.predicted => predictedStyles(widget.colors),
         CoverageTileLayer.heard => heardStyles(widget.colors),
+        CoverageTileLayer.measuredSummary => measuredSummaryStyles(widget.colors, ladder!),
+        CoverageTileLayer.predictedSummary => predictedSummaryStyles(widget.colors, ladder!),
       };
       _stylesFor = widget.colors;
       _usedSig = '';
@@ -262,9 +284,26 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     if (sig != _usedSig) {
       _usedSig = sig;
       stats.dataSwaps++;
-      final all = parts.length == 1 ? parts.single : [for (final p in parts) ...p];
+      final List<CellShape> all;
+      if (summary) {
+        // A summary hexagon on a tile edge is the same feature in both tiles: draw it once, or its fill doubles there.
+        final seen = <String>{};
+        all = [];
+        for (var i = 0; i < used.length; i++) {
+          final d = store.peek(used[i]);
+          if (d == null) continue;
+          for (var f = 0; f < parts[i].length; f++) {
+            final h = d.h[f];
+            if (h.isNotEmpty && !seen.add(h)) continue;
+            all.add(parts[i][f]);
+          }
+        }
+      } else {
+        all = parts.length == 1 ? parts.single : [for (final p in parts) ...p];
+      }
       _data = CellLayerData(all, _styles!,
-          dotBelowZoom: meta.hexFromZoom.toDouble(), dotPx: widget.layer == CoverageTileLayer.heard ? kHeardDotPx : (measured ? 3 : 2));
+          dotBelowZoom: summary ? null : meta.hexFromZoom.toDouble(),
+          dotPx: widget.layer == CoverageTileLayer.heard ? kHeardDotPx : (measured ? 3 : 2));
     }
     if (_data.isEmpty) return const SizedBox.shrink();
     return CellRasterLayer(key: ValueKey('coverage-tiles-${widget.layer.name}'), data: _data);

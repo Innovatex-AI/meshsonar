@@ -83,9 +83,11 @@ import '../../core/region_overview_api.dart' show RegionObserver;
 import '../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../core/network_coverage.dart';
 import '../../core/coverage_v2.dart';
+import '../../core/map_definition_v2.dart';
 import 'coverage_bands.dart';
 import 'coverage_tiles_layer.dart';
 import 'sheets/coverage_cell_sheet.dart';
+import 'sheets/coverage_summary_sheet.dart';
 import '../../core/camera_follow.dart';
 import '../../core/heading.dart' show shortestArc;
 import '../../core/map_health.dart' show CameraTelemetry;
@@ -684,6 +686,9 @@ class _CoverageMapState extends State<CoverageMap> {
   /// Coverage v2 inspector: the tapped res-11 cell and its answer (null while loading or when the read failed).
   ({String h3, double lat, double lon})? _panelV2;
   CoverageCellInfo? _v2Info;
+
+  /// MAP slice 1: the tap card of a summary hexagon (the tapped id is a res 5 to 10 cell, not a res-11 one).
+  CoverageSummaryInfo? _summaryInfo;
   DrivePing? _panelPing;
   final ScrollController _pingScroll = ScrollController();
   RepeaterPoint? _panelPoint;
@@ -722,6 +727,7 @@ class _CoverageMapState extends State<CoverageMap> {
       _panelCell = null;
       _panelV2 = null;
       _v2Info = null;
+      _summaryInfo = null;
       _panelPoint = null;
       _panelPing = null;
       _reachTotals = null;
@@ -737,6 +743,19 @@ class _CoverageMapState extends State<CoverageMap> {
     String cellOf(double lat, double lon) => hexId(h3.geoToCell(GeoCoord(lon: lon, lat: lat), kCoverageV2Res));
     final dots = zoom < v2.meta.hexFromZoom;
     final tz = coverageTileZoom(zoom);
+    // MAP slice 1: below the res-11 hexagons the picture is the summary hexagons; a tap on one opens its summary card.
+    final ladder = ActiveMapDefinition.current.coverageLadder;
+    if (ladder != null && v2.drawTiles && ladder.drawsAt(zoom)) {
+      final sz = ladder.tileZoom(zoom);
+      for (final (layer, on) in [
+        (CoverageTileLayer.measuredSummary, ls.isOn('measured')),
+        (CoverageTileLayer.predictedSummary, ls.isOn('predicted')),
+      ]) {
+        if (!on) continue;
+        final h = coverageTileHit(v2.tiles, layer, v2.meta, p.latitude, p.longitude, sz);
+        if (h?.h3 != null) return (h3: h!.h3!, lat: p.latitude, lon: p.longitude);
+      }
+    }
     if (!dots) {
       final id = cellOf(p.latitude, p.longitude);
       final drawn = (ls.isOn('hexes') && _ensureHexes().any((h) => h.id == id)) ||
@@ -792,6 +811,7 @@ class _CoverageMapState extends State<CoverageMap> {
   /// way cell-links does: an exact key, else a unique prefix among the drawn repeaters).
   Future<void> _showCoverageCell(CoverageV2Inputs v2, String id, double lat, double lon) async {
     _panelHost.close(); // the newest thing the person tapped takes the one transient slot
+    if ((h3ResolutionOf(id) ?? kCoverageV2Res) < kCoverageV2Res) return _showSummaryCell(v2, id, lat, lon);
     final h3 = CoverageMap.hexEngine;
     var cLat = lat, cLon = lon;
     if (h3 != null) {
@@ -834,6 +854,43 @@ class _CoverageMapState extends State<CoverageMap> {
         _linkError = "Couldn't load this cell. Check your connection.";
       });
     }
+  }
+
+  /// The tap card of a summary hexagon: no link lines (it is a picture of many cells), just what it was rolled up from.
+  Future<void> _showSummaryCell(CoverageV2Inputs v2, String id, double lat, double lon) async {
+    _beginLinks('summary:$id', 'This area');
+    setState(() {
+      _panelV2 = (h3: id, lat: lat, lon: lon);
+      _v2Info = null;
+      _summaryInfo = null;
+      _panelCell = null;
+      _panelPoint = null;
+      _panelPing = null;
+    });
+    final gen = _linkGen;
+    try {
+      final info = await v2.tiles.client.summary(id, preset: v2.meta.defaultPreset);
+      if (!mounted || gen != _linkGen) return;
+      setState(() {
+        _summaryInfo = info;
+        _linkBusy = false;
+      });
+    } catch (_) {
+      if (!mounted || gen != _linkGen) return;
+      setState(() {
+        _linkBusy = false;
+        _linkError = "Couldn't load this area. Check your connection.";
+      });
+    }
+  }
+
+  /// "Zoom in" on a summary card: one rung closer, centred on the area.
+  void _zoomIntoSummary(CoverageV2Inputs v2, double lat, double lon) {
+    final z = _controller.camera.zoom;
+    final ladder = ActiveMapDefinition.current.coverageLadder;
+    final next = z < (ladder?.hexFromZoom ?? 13) ? (z + 1.5).clamp(0.0, (ladder?.hexFromZoom ?? 13) + 0.5) : z + 1;
+    _clearLinks();
+    _controller.move(LatLng(lat, lon), next.toDouble());
   }
 
   void _beginLinks(String id, String title) {
@@ -987,6 +1044,26 @@ class _CoverageMapState extends State<CoverageMap> {
   Widget? _panel(BuildContext context) {
     final p = _panelPoint, cell = _panelCell, ping = _panelPing, v2 = _panelV2;
     if (p == null && cell == null && ping == null && v2 == null) return null;
+    if (v2 != null && p == null && ping == null && (h3ResolutionOf(v2.h3) ?? kCoverageV2Res) < kCoverageV2Res) {
+      final cv2 = widget.coverageV2;
+      return MapInfoPanel(
+        key: ValueKey('info-panel-summary-${v2.h3}'),
+        title: 'Coverage summary',
+        summary: _linkBusy ? 'Loading…' : (_linkError ?? coverageSummaryLine(_summaryInfo)),
+        busy: _linkBusy,
+        body: SingleChildScrollView(
+          child: CoverageSummarySheet(
+            info: _summaryInfo,
+            meta: cv2?.meta ?? CoverageMeta.fallback,
+            onZoomIn: cv2 == null ? null : () => _zoomIntoSummary(cv2, v2.lat, v2.lon),
+          ),
+        ),
+        onClose: _clearLinks,
+        locked: widget.inspectorLocked,
+        bottomSafe: _panelInset == 0,
+        autoClear: widget.inspectorAutoClear,
+      );
+    }
     if (v2 != null && p == null && ping == null) {
       final set = _currentLinks();
       final info = _v2Info;
@@ -1885,6 +1962,8 @@ class _CoverageMapState extends State<CoverageMap> {
     // Topo / Satellite are drawn only while the definition in use advertises them; a saved choice an older cached definition does
     // not offer is Chart (M3, contract "Map Definition M3").
     final style = BaseMapStyle.effective(widget.baseStyle, ActiveMapDefinition.current);
+    // MAP slice 1: the coverage summary ladder (null on an older definition: build 72 drawing).
+    final ladder = ActiveMapDefinition.current.coverageLadder;
     final tiles = !widget.plainBasemap && (widget.showTiles ?? CoverageMap.tilesByDefault);
     final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
     // The tile request queue holds what this screen can ask for at once (a request beyond it is dropped and its tile stays blank).
@@ -2047,6 +2126,15 @@ class _CoverageMapState extends State<CoverageMap> {
               ],
               'measured': () => [
             if (widget.coverageV2 case final v2? when v2.drawTiles) ...[
+              if (layerState.isOn('predicted') && ladder != null)
+                CoverageTilesLayer(
+                  key: const Key('coverage-predicted-summary-layer'),
+                  layer: CoverageTileLayer.predictedSummary,
+                  store: v2.tiles,
+                  meta: v2.meta,
+                  colors: CoverageBandColors.of(mc.palette, t.brightness),
+                  ladder: ladder,
+                ),
               if (layerState.isOn('predicted'))
                 CoverageTilesLayer(
                   key: const Key('coverage-predicted-layer'),
@@ -2054,6 +2142,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   store: v2.tiles,
                   meta: v2.meta,
                   colors: CoverageBandColors.of(mc.palette, t.brightness),
+                  ladder: ladder,
                 ),
               // Heard (no ping): over Predicted, under Measured, so a pinged cell always shows its Measured colour (§8.5).
               if (v2.heard && layerState.isOn(kHeardCellsLayerId))
@@ -2063,6 +2152,16 @@ class _CoverageMapState extends State<CoverageMap> {
                   store: v2.tiles,
                   meta: v2.meta,
                   colors: CoverageBandColors.of(mc.palette, t.brightness),
+                  ladder: ladder,
+                ),
+              if (layerState.isOn('measured') && ladder != null)
+                CoverageTilesLayer(
+                  key: const Key('coverage-measured-summary-layer'),
+                  layer: CoverageTileLayer.measuredSummary,
+                  store: v2.tiles,
+                  meta: v2.meta,
+                  colors: CoverageBandColors.of(mc.palette, t.brightness),
+                  ladder: ladder,
                 ),
               if (layerState.isOn('measured'))
                 CoverageTilesLayer(
@@ -2072,6 +2171,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   meta: v2.meta,
                   colors: CoverageBandColors.of(mc.palette, t.brightness),
                   faintBelow: v2.meta.faintBelow,
+                  ladder: ladder,
                 ),
             ] else if (layerState.isOn('measured') && widget.networkCells.isNotEmpty)
               CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),

@@ -352,11 +352,78 @@ class CoverageCellInfo {
   }
 }
 
+/// One side of a summary cell's tap card: how many res-11 cells it was rolled up from, their mean SNR and band, and the share of the
+/// big cell they cover (0..1).
+class CoverageSummarySide {
+  final int cells, band;
+  final double? snrMean;
+  final double share;
+  const CoverageSummarySide({required this.cells, required this.band, this.snrMean, required this.share});
+}
+
+/// `GET /api/coverage/summary/{h3}` (MAP slice 1): the tap card of a summary hexagon (H3 res 5 to 10). A picture, not a
+/// measurement of its own: every statistic still counts res-11 cells.
+class CoverageSummaryInfo {
+  final String h3;
+  final int res, childCells;
+  final CoverageSummarySide? measured, predicted;
+  const CoverageSummaryInfo({required this.h3, required this.res, required this.childCells, this.measured, this.predicted});
+
+  static CoverageSummaryInfo fromJson(Map<String, dynamic> j) {
+    final h3 = j['h3'];
+    if (h3 is! String) throw const FormatException('coverage summary answer without h3');
+    int i(Object? v) => v is num ? v.toInt() : 0;
+    double? d(Object? v) => v is num ? v.toDouble() : null;
+    CoverageSummarySide? side(Object? v) => v is Map
+        ? CoverageSummarySide(cells: i(v['cells']), band: i(v['band']), snrMean: d(v['snrMean']), share: (d(v['share']) ?? 0).clamp(0.0, 1.0))
+        : null;
+    return CoverageSummaryInfo(h3: h3.toLowerCase(), res: i(j['res']), childCells: i(j['childCells']), measured: side(j['measured']), predicted: side(j['predicted']));
+  }
+}
+
+/// "38%", never "0%" or "100%" by rounding: "under 1%" / "over 99%" say what is true (the website's `sharePct`).
+String coverageSharePct(double share) {
+  if (share <= 0) return '0%';
+  final p = share * 100;
+  if (p < 1) return 'under 1%';
+  if (p >= 99.5 && share < 1) return 'over 99%';
+  return '${p.round()}%';
+}
+
+/// The H3 resolution encoded in an H3 index (hex string); null when it is not one.
+int? h3ResolutionOf(String id) {
+  final n = BigInt.tryParse(id, radix: 16);
+  return n == null ? null : ((n >> 52) & BigInt.from(0xF)).toInt();
+}
+
 // ---------------------------------------------------------------------------------------------------------- tiles
 
 /// The tile layers (`source-layer` = the layer name). `heard` = passive Heard evidence (phone observer contract section
 /// 8.5; shape in meshsonar-infra coverage-v2-api-contract.md "Heard layer"), behind `capabilities.coverageHeard`.
-enum CoverageTileLayer { measured, predicted, heard }
+///
+/// `measuredSummary` / `predictedSummary` (MAP slice 1, site #363, Map Definition `ladder`): the same coverage in bigger H3 cells
+/// (res 5 to 10) for tile zoom 5 to 12, so coverage is a filled picture from the whole region down to the res-11 hexagons.
+/// Their tiles carry `f` (the share of the big cell that was measured) next to `band` and `n` / `o`.
+enum CoverageTileLayer {
+  measured('measured'),
+  predicted('predicted'),
+  heard('heard'),
+  measuredSummary('measured-summary'),
+  predictedSummary('predicted-summary');
+
+  /// The name in the tile URL and the MVT source layer.
+  final String tileName;
+  const CoverageTileLayer(this.tileName);
+
+  bool get isSummary => this == measuredSummary || this == predictedSummary;
+
+  /// The summary layer that carries this layer's coverage in bigger cells (null for heard and for the summaries).
+  CoverageTileLayer? get summary => switch (this) {
+    measured => measuredSummary,
+    predicted => predictedSummary,
+    _ => null,
+  };
+}
 
 /// A decoded coverage tile, flat (cheap to send between isolates): feature f has vertices [starts[f], starts[f+1]) in
 /// [latLon] (lat, lon pairs). One vertex = a point (zoom <= 12, D11), more = a hexagon's outer ring (not closed).
@@ -371,7 +438,15 @@ class CoverageTileData {
 
   /// H3 ids (hexagons only, zoom >= 13); empty strings otherwise.
   final List<String> h;
-  const CoverageTileData(this.latLon, this.starts, this.band, this.n, this.o, this.h);
+
+  /// Summary tiles only: the share of the cell that was measured (predicted: predicted), 0..1; 1 elsewhere.
+  final Float32List f;
+  CoverageTileData(this.latLon, this.starts, this.band, this.n, this.o, this.h, [Float32List? f]) : f = f ?? _noShare;
+
+  static final Float32List _noShare = Float32List(0);
+
+  /// The share of feature [i]: 1 when the tile carries none.
+  double share(int i) => i < f.length ? f[i] : 1.0;
 
   static final CoverageTileData empty = CoverageTileData(Float64List(0), Int32List(1), Uint8List(0), Int32List(0), Float32List(0), const []);
 
@@ -401,13 +476,13 @@ CoverageTileData decodeCoverageTile(Uint8List bytes, CoverageTileLayer layer, in
   final tile = vt.VectorTile.fromBytes(bytes: bytes);
   vt.VectorTileLayer? lyr;
   for (final l in tile.layers) {
-    if (l.name == layer.name) lyr = l;
+    if (l.name == layer.tileName) lyr = l;
   }
   if (lyr == null) return CoverageTileData.empty;
   final ext = lyr.extent.toDouble();
   final ll = <double>[];
   final starts = <int>[0];
-  final band = <int>[], nn = <int>[], oo = <double>[];
+  final band = <int>[], nn = <int>[], oo = <double>[], ff = <double>[];
   final hh = <String>[];
   for (final f in lyr.features) {
     final props = f.decodeProperties();
@@ -443,6 +518,7 @@ CoverageTileData decodeCoverageTile(Uint8List bytes, CoverageTileLayer layer, in
     band.add(pi('band').clamp(0, 6));
     nn.add(pi('n'));
     oo.add(pd('o'));
+    ff.add(props['f'] == null ? 1.0 : pd('f').clamp(0.0, 1.0));
     final hv = props['h']?.value;
     hh.add(hv is String ? hv.toLowerCase() : '');
   }
@@ -453,6 +529,7 @@ CoverageTileData decodeCoverageTile(Uint8List bytes, CoverageTileLayer layer, in
     Int32List.fromList(nn),
     Float32List.fromList(oo),
     List.unmodifiable(hh),
+    layer.isSummary ? Float32List.fromList(ff) : Float32List(0),
   );
 }
 
@@ -534,13 +611,17 @@ class CoverageV2Client {
     return jsonEncode(j);
   }
 
+  /// The tap card of a summary hexagon (H3 res 5 to 10).
+  Future<CoverageSummaryInfo> summary(String h3, {String? preset}) async =>
+      CoverageSummaryInfo.fromJson(_json(await _get(_u('summary/${h3.trim().toLowerCase()}', {'preset': ?preset}))));
+
   Future<CoverageCellInfo> cell(String h3, {String? preset}) async =>
       CoverageCellInfo.fromJson(_json(await _get(_u('cell/${h3.trim().toLowerCase()}', {'preset': ?preset}))));
 
   /// One tile's bytes; null when the server has nothing there (204).
   Future<Uint8List?> tile(CoverageTileLayer layer, int z, int x, int y, {required String preset, int? version}) async {
     final r = await _get(
-      _u('tiles/${layer.name}/$z/$x/$y.mvt', {'preset': preset, if (version != null && version > 0) 'v': '$version'}),
+      _u('tiles/${layer.tileName}/$z/$x/$y.mvt', {'preset': preset, if (version != null && version > 0) 'v': '$version'}),
       accept: 'application/vnd.mapbox-vector-tile',
     );
     if (r.statusCode == 204) return null;
@@ -665,7 +746,7 @@ class CoverageTileStore {
     _queue.add((key, () async {
       Future<bool> fromPack() async {
         final src = offlineTiles;
-        if (src == null || _tiles.containsKey(key)) return false;
+        if (layer.isSummary || src == null || _tiles.containsKey(key)) return false; // a pack carries no summary tiles
         try {
           final b = await src(preset, z, x, y);
           if (b == null) return false;

@@ -20,6 +20,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/coverage_v2.dart' show CoverageTileLayer;
+import '../../core/map_definition_v2.dart';
 import '../../core/map_prefs.dart';
 
 import '../app.dart' show AppScope;
@@ -135,6 +136,7 @@ class MapPreview extends StatelessWidget {
     final mc = MeshSonarColors.of(context);
     final colors = CoverageBandColors.of(mc.palette, Theme.of(context).brightness);
     final out = <Widget>[];
+    final ladder = ActiveMapDefinition.current.coverageLadder;
     // The definition's drawing order (predicted under heard under measured).
     for (final id in definitionLayerIds(ActiveMapDefinition.current)) {
       if (!coverage.contains(id)) continue;
@@ -145,6 +147,19 @@ class MapPreview extends StatelessWidget {
         _ => null,
       };
       if (layer == null) continue;
+      // MAP slice 1: the summary picture under the same layer's res-11 tiles (a preview shows a whole region too).
+      if (ladder != null && layer.summary != null) {
+        out.add(
+          CoverageTilesLayer(
+            key: Key('preview-coverage-$id-summary'),
+            layer: layer.summary!,
+            store: s.coverageTiles,
+            meta: s.coverageMeta,
+            colors: colors,
+            ladder: ladder,
+          ),
+        );
+      }
       out.add(
         CoverageTilesLayer(
           key: Key('preview-coverage-$id'),
@@ -153,6 +168,7 @@ class MapPreview extends StatelessWidget {
           meta: s.coverageMeta,
           colors: colors,
           faintBelow: s.coverageMeta.faintBelow,
+          ladder: ladder,
         ),
       );
     }
