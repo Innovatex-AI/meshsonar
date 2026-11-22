@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../app/messages.dart';
 import '../../core/person_identity.dart';
 import '../app.dart';
+import '../design/app_surfaces.dart';
 import '../settings/confirm_sheet.dart';
 import '../widgets.dart';
 
@@ -48,7 +49,11 @@ class _PersonDevicesScreenState extends State<PersonDevicesScreen> {
 
   Future<void> _rename(PersonDevice d) async {
     final c = AppScope.read(context).personDevices;
-    final name = await showDialog<String>(context: context, builder: (ctx) => _RenameDialog(initial: d.nameSet ? d.name : ''));
+    final name = await showAppSheet<String>(
+      context,
+      detents: const [0.5],
+      builder: (ctx, controller) => _RenameSheet(initial: d.nameSet ? d.name : '', controller: controller),
+    );
     if (name == null) return;
     await _guard(() => c.rename(d.id, name), 'Renaming the device');
   }
@@ -104,7 +109,7 @@ class _PersonDevicesScreenState extends State<PersonDevicesScreen> {
                 key: const Key('ask-first-switch'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Ask me first'),
-                subtitle: const Text('When a device connects a radio that is yours, wait for your approval before it joins your account.'),
+                subtitle: const Text('When a device connects a radio that is yours, wait until you say yes before it joins your account.'),
                 value: c.askFirst,
                 onChanged: (v) => _guard(() => c.setAskFirst(v), 'Saving the setting'),
               ),
@@ -224,15 +229,16 @@ class _NoticeTile extends StatelessWidget {
   }
 }
 
-/// Owns its text controller, so it is disposed with the dialog (not while the dialog is still animating out).
-class _RenameDialog extends StatefulWidget {
+/// Owns its text controller, so it is disposed with the sheet (not while the sheet is still animating out).
+class _RenameSheet extends StatefulWidget {
   final String initial;
-  const _RenameDialog({required this.initial});
+  final ScrollController controller;
+  const _RenameSheet({required this.initial, required this.controller});
   @override
-  State<_RenameDialog> createState() => _RenameDialogState();
+  State<_RenameSheet> createState() => _RenameSheetState();
 }
 
-class _RenameDialogState extends State<_RenameDialog> {
+class _RenameSheetState extends State<_RenameSheet> {
   late final TextEditingController _ctl = TextEditingController(text: widget.initial);
 
   @override
@@ -242,18 +248,19 @@ class _RenameDialogState extends State<_RenameDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Rename device'),
-        content: TextField(
-          key: const Key('device-rename-field'),
-          controller: _ctl,
-          autofocus: true,
-          maxLength: 40,
-          decoration: const InputDecoration(hintText: 'Leave empty for the default name'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(key: const Key('device-rename-save'), onPressed: () => Navigator.pop(context, _ctl.text), child: const Text('Save')),
+  Widget build(BuildContext context) => AppSheetScaffold(
+        controller: widget.controller,
+        title: 'Rename device',
+        primaryAction: FilledButton(key: const Key('device-rename-save'), onPressed: () => Navigator.pop(context, _ctl.text), child: const Text('Save')),
+        secondaryAction: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        children: [
+          TextField(
+            key: const Key('device-rename-field'),
+            controller: _ctl,
+            autofocus: true,
+            maxLength: 40,
+            decoration: const InputDecoration(hintText: 'Leave empty for the default name'),
+          ),
         ],
       );
 }
