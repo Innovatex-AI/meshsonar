@@ -47,7 +47,7 @@ void main() {
       final seen = <BaseMapStyle>[];
       for (var i = 0; i < BaseMapStyle.values.length; i++) {
         seen.add(s);
-        s = s.next;
+        s = s.nextAvailable(BaseMapStyle.values);
       }
       expect(seen.toSet(), BaseMapStyle.values.toSet());
       expect(s, BaseMapStyle.chart);

@@ -20,6 +20,9 @@
 // `pages.mapHeights`. Without [page], or when the definition has no `pages` / no such preset (MapDefinition.bundled, a version 1
 // answer), the map draws exactly what build 73 drew: the caller's [coverage] set.
 //
+// Build 75: a page preset that lists `repeaters` / `observers` draws them (node symbols) from the nodes the caller passes in
+// [MapPreview.repeaters] / [MapPreview.observers]: the region's already-loaded list; no list, nothing drawn, nothing fetched.
+//
 // Keys: the map keeps the caller's [mapKey]; 'map-preview-open' is the Open button.
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -44,6 +47,7 @@ import 'layers/plan_overlay.dart' show PlanOverlayController;
 import 'layers/registry.dart' show definitionLayerIds, kHeardCellsLayerId, kPlanLayerId;
 import 'main_map_focus.dart';
 import 'overlays/mini_map_credit.dart';
+import 'still/still_nodes.dart';
 
 enum MapPreviewInteraction {
   /// A still picture of the map (lists, cards).
@@ -76,6 +80,11 @@ class MapPreview extends StatelessWidget {
 
   /// The page's own drawing, on top of the definition layers.
   final List<Widget> overlays;
+
+  /// MAP slice 5 (build 75): the region's already-loaded repeaters / observers, drawn with the node symbols when the page preset lists
+  /// the `repeaters` / `observers` layer and the person has not switched it off. Null or empty = nothing drawn (a preview has no
+  /// node feed of its own, and nothing is fetched for it).
+  final List<StillNode>? repeaters, observers;
 
   /// Definition coverage layers to draw (a subset of [kPreviewCoverage]); empty = basemap only (pages that draw their own cells).
   final Set<String> coverage;
@@ -115,6 +124,8 @@ class MapPreview extends StatelessWidget {
     this.maxZoom = 18,
     this.interaction = MapPreviewInteraction.none,
     this.overlays = const [],
+    this.repeaters,
+    this.observers,
     this.coverage = const {},
     this.tiles = true,
     this.basemap,
@@ -232,6 +243,18 @@ class MapPreview extends StatelessWidget {
     return [RegionBordersLayer(key: const Key('preview-region-borders'), rings: rings)];
   }
 
+  /// The `repeaters` then `observers` layers of the page preset, from the nodes the caller passed (none = nothing).
+  List<Widget> _nodeLayers(MapPrefs p) {
+    final pr = preset;
+    if (pr == null) return const [];
+    return [
+      if (repeaters != null && repeaters!.isNotEmpty && pr.has('repeaters') && p.previewLayerOn(layerPage, 'repeaters', fallback: true))
+        StillNodesLayer(key: const Key('preview-repeaters'), nodes: repeaters!),
+      if (observers != null && observers!.isNotEmpty && pr.has('observers') && p.previewLayerOn(layerPage, 'observers', fallback: true))
+        StillNodesLayer(key: const Key('preview-observers'), nodes: observers!),
+    ];
+  }
+
   void _open(BuildContext context) {
     final at = openAt;
     if (at == null) return;
@@ -270,6 +293,7 @@ class MapPreview extends StatelessWidget {
         if (basemap != null) basemap! else if (tiles) const BasemapLayer(),
         ..._coverageLayers(context, effectiveCoverage(p)),
         if (preset?.has('borders') == true) ..._borders(context),
+        ..._nodeLayers(p),
         ...overlays,
         if (planOverlay case final plan? when p.previewLayerOn(layerPage, kPlanLayerId, fallback: true)) ...planLayerWidgets(plan),
         const MiniMapCredit(),

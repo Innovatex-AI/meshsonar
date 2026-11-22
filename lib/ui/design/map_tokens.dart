@@ -16,10 +16,6 @@ abstract final class MapTokens {
   /// Stale (> 7 d or never): hollow, dashed ring. Light `#6B7280`, dark `#9CA3AF`.
   static Color repeaterStale(Brightness b) => b == Brightness.dark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
 
-  /// Glyph colour on the fresh / recent / stale fill: white in light, `#12161B` in dark.
-  static Color repeaterGlyph(Brightness b) => b == Brightness.dark ? const Color(0xFF12161B) : const Color(0xFFFFFFFF);
-
-  /// Land colour of the light base map and the dark chart colour the contrast table is computed against.
+  /// Land colour of the light base map the contrast table is computed against.
   static const Color landLight = Color(0xFFF2EFE9);
-  static const Color chartDark = Color(0xFF2B2F36);
 }

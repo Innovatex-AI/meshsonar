@@ -41,9 +41,6 @@ enum BaseMapStyle {
   final bool usesOfflinePack;
   const BaseMapStyle(this.id, this.label, this.blurb, this.maxNativeZoom, this.attribution, this.usesOfflinePack);
 
-  /// The next style in the cycle over every style (wraps); the cycler uses [nextAvailable].
-  BaseMapStyle get next => values[(index + 1) % values.length];
-
   /// The next style among [available] (wraps; the current one when it is the only one).
   BaseMapStyle nextAvailable(List<BaseMapStyle> available) {
     if (available.isEmpty) return this;

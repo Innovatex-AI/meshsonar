@@ -10,6 +10,7 @@ import '../../theme.dart';
 import '../coverage_map.dart' show CoverageMap;
 import '../map_preview.dart';
 import 'path_layer.dart';
+import 'still_nodes.dart';
 
 /// Tiles on unless running under `flutter test` (the same switch the Drive map uses).
 bool stillMapTiles(bool? tiles) => tiles ?? CoverageMap.tilesByDefault;
@@ -43,6 +44,9 @@ class StillPathMap extends StatelessWidget {
   final List<LatLng> extraPoints;
   final MapPreviewInteraction interaction;
   final Key? mapKey;
+
+  /// The region's loaded repeaters / observers, drawn behind the path when the `path` preset lists those layers (null = none).
+  final List<StillNode>? repeaters, observers;
   const StillPathMap({
     super.key,
     this.mapKey,
@@ -56,6 +60,8 @@ class StillPathMap extends StatelessWidget {
     this.overlays = const [],
     this.extraPoints = const [],
     this.interaction = MapPreviewInteraction.pan,
+    this.repeaters,
+    this.observers,
   });
 
   @override
@@ -78,6 +84,8 @@ class StillPathMap extends StatelessWidget {
             zoom: 13,
             fit: cam.fit,
             interaction: interaction,
+            repeaters: repeaters,
+            observers: observers,
             tiles: stillMapTiles(tiles),
             overlays: [...underlays, PathLayer(spec: spec, style: style), ...overlays],
           ),
