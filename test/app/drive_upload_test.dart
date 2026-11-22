@@ -7,6 +7,7 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/map_links.dart';
 import 'package:meshsonar/core/node_claim.dart';
 import 'package:meshsonar/core/person_identity.dart';
+import 'package:meshsonar/core/person_observers.dart';
 import 'package:meshsonar/core/repeater_reach.dart';
 import 'package:meshsonar/core/drive_context_wire.dart';
 import 'package:meshsonar/core/driver_summary.dart';
@@ -274,6 +275,12 @@ class RecordingClient implements CmatClient {
   Future<void> personNoticeAct(String driverKey, String id, String action) => throw UnimplementedError();
   @override
   Future<bool> setAskFirst(String driverKey, bool askFirst) => throw UnimplementedError();
+  @override
+  Future<PersonObservers> personObservers(String driverKey) => throw UnimplementedError();
+  @override
+  Future<OfferOutcome> answerObserverOffer(String driverKey, String key, {required bool accept}) => throw UnimplementedError();
+  @override
+  Future<void> setShowRadioName(String driverKey, String key, bool show) => throw UnimplementedError();
   @override
   Future<RepeaterReach> repeaterReach(String driverKey, String repeaterKey, {double? lat, double? lon, bool h3 = false}) => throw UnimplementedError();
   @override
