@@ -12,6 +12,7 @@ import '../../radio/tools/tool_frames.dart' show maxTraceHops, traceHashSizes;
 import '../../radio/tools/trace_tool.dart';
 import '../app.dart';
 import 'contact_ref.dart';
+import '../map/still/path_layer.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 import '../design/app_surfaces.dart';
@@ -483,6 +484,17 @@ class _ResultCard extends StatelessWidget {
       prev = p;
     }
     final unplaced = [for (final h in r.hops) if (!h.stop.hasPosition) h.stop.name];
+    // MAP slice 5: the ONE path (numbered, named, solid certain / dashed likely). An ambiguous hash is a likely hop.
+    final pathSpec = PathSpec(hops: [
+      for (var i = 0; i < r.hops.length; i++)
+        PathHop(
+          n: i + 1,
+          name: r.hops[i].stop.name,
+          lat: r.hops[i].stop.hasPosition ? r.hops[i].stop.lat : null,
+          lon: r.hops[i].stop.hasPosition ? r.hops[i].stop.lon : null,
+          certainty: r.hops[i].ambiguous ? PathCertainty.likely : PathCertainty.certain,
+        ),
+    ]);
     final km = r.totalKm;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       NoteCard(note, kind: kind, title: title),
@@ -520,6 +532,8 @@ class _ResultCard extends StatelessWidget {
         ToolMap(
           pins: pins,
           lines: lines,
+          path: pathSpec,
+          pathPins: [if (start != null) pins.first],
           semanticLabel: pins.isEmpty
               ? 'No positions are known for this path, so there is no map.'
               : 'Map of the route: ${r.hops.length} hops${km == null ? '' : ', ${units.distance(km * 1000)} in total'}${unplaced.isEmpty ? '' : '. Not on the map, position unknown: ${unplaced.join(', ')}'}.',

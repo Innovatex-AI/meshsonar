@@ -14,12 +14,19 @@
 // there, on the Drive map) is not drawn, even if the page asks for it; a preview never adds a layer the page did not ask for.
 // [planOverlay] draws the `plan` layer (layers/plan_layer.dart) on top, unless the page's choice switched it off.
 //
+// MAP slice 5 (app half, build 74): [page] names a Map Definition page preset (`path`, `node`, `observer`, ...; lib/core/
+// map_definition_pages.dart). With a preset in the active definition the preset decides which coverage layers and whether the
+// region border the still map draws (it replaces the caller's [coverage] set), and [MapPreview.stillHeight] gives its height from
+// `pages.mapHeights`. Without [page], or when the definition has no `pages` / no such preset (MapDefinition.bundled, a version 1
+// answer), the map draws exactly what build 73 drew: the caller's [coverage] set.
+//
 // Keys: the map keeps the caller's [mapKey]; 'map-preview-open' is the Open button.
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/coverage_v2.dart' show CoverageTileLayer;
+import '../../core/map_definition_pages.dart';
 import '../../core/map_definition_v2.dart';
 import '../../core/map_prefs.dart';
 
@@ -32,6 +39,7 @@ import 'basemap_layer.dart';
 import 'coverage_bands.dart';
 import 'coverage_tiles_layer.dart';
 import 'layers/plan_layer.dart' show planLayerWidgets;
+import 'layers/region_borders_layer.dart' show RegionBordersLayer, regionBorderRings;
 import 'layers/plan_overlay.dart' show PlanOverlayController;
 import 'layers/registry.dart' show definitionLayerIds, kHeardCellsLayerId, kPlanLayerId;
 import 'main_map_focus.dart';
@@ -62,6 +70,9 @@ class MapPreview extends StatelessWidget {
   final CameraFit? fit;
   final double minZoom, maxZoom;
   final MapPreviewInteraction interaction;
+
+  /// A Map Definition page preset id (`path`, `node`, `observer`); null = no preset, the caller's [coverage] decides.
+  final String? page;
 
   /// The page's own drawing, on top of the definition layers.
   final List<Widget> overlays;
@@ -95,6 +106,7 @@ class MapPreview extends StatelessWidget {
   const MapPreview({
     super.key,
     this.mapKey,
+    this.page,
     this.controller,
     this.center,
     this.zoom = 13,
@@ -123,11 +135,49 @@ class MapPreview extends StatelessWidget {
     MapPreviewInteraction.edit => InteractiveFlag.all & ~InteractiveFlag.rotate,
   };
 
-  /// The coverage layers this preview draws: what the page asks for, less what the person switched off.
-  Set<String> effectiveCoverage(MapPrefs p) => {
-    for (final id in kPreviewCoverage)
-      if (coverage.contains(id) && p.previewLayerOn(layerPage, id, fallback: true)) id,
-  };
+  /// The preset of [page] in the active definition; null when there is no [page], no `pages` or no such preset.
+  MapPagePreset? get preset => presetOf(page);
+
+  /// The preset of page [id] in the active definition, or null (the caller keeps its build 73 drawing).
+  static MapPagePreset? presetOf(String? id) {
+    if (id == null) return null;
+    final d = ActiveMapDefinition.current;
+    return d.hasPages ? d.pagePreset(id) : null;
+  }
+
+  /// Height of the still map of page [id]: the preset's `height` word in `pages.mapHeights` (`tall` is a share of the screen),
+  /// else [fallback] (what the caller used in build 73, or the definition says nothing).
+  static double stillHeight(BuildContext context, String? id, {required double fallback}) {
+    final preset = presetOf(id);
+    final word = preset?.height;
+    if (word == null) return fallback;
+    final d = ActiveMapDefinition.current;
+    if (word == 'tall') {
+      final t = d.tallMapHeight;
+      if (t == null) return fallback;
+      return (MediaQuery.sizeOf(context).height * t.share).clamp(t.minPx, t.maxPx).toDouble();
+    }
+    return d.stillMapHeight(word) ?? fallback;
+  }
+
+  /// Whether the page's preset shows node names; null = it does not say (or there is no preset).
+  static bool? presetNames(String? id) => presetOf(id)?.names;
+
+  /// The coverage layers this preview draws: the page preset's (when there is one) else what the caller asks for, less what the
+  /// person switched off.
+  Set<String> effectiveCoverage(MapPrefs p) {
+    final pr = preset;
+    final asked = pr == null
+        ? coverage
+        : {
+            for (final id in kPreviewCoverage)
+              if (pr.has(id == kHeardCellsLayerId ? 'heard' : id)) id,
+          };
+    return {
+      for (final id in kPreviewCoverage)
+        if (asked.contains(id) && p.previewLayerOn(layerPage, id, fallback: true)) id,
+    };
+  }
 
   List<Widget> _coverageLayers(BuildContext context, Set<String> coverage) {
     if (coverage.isEmpty) return const [];
@@ -175,6 +225,13 @@ class MapPreview extends StatelessWidget {
     return out;
   }
 
+  /// The region border (the preset has `borders`): the viewed region's outline in the definition's border symbol.
+  List<Widget> _borders(BuildContext context) {
+    final rings = regionBorderRings(AppScope.maybeOf(context)?.viewingRegion);
+    if (rings.isEmpty) return const [];
+    return [RegionBordersLayer(key: const Key('preview-region-borders'), rings: rings)];
+  }
+
   void _open(BuildContext context) {
     final at = openAt;
     if (at == null) return;
@@ -212,6 +269,7 @@ class MapPreview extends StatelessWidget {
       children: [
         if (basemap != null) basemap! else if (tiles) const BasemapLayer(),
         ..._coverageLayers(context, effectiveCoverage(p)),
+        if (preset?.has('borders') == true) ..._borders(context),
         ...overlays,
         if (planOverlay case final plan? when p.previewLayerOn(layerPage, kPlanLayerId, fallback: true)) ...planLayerWidgets(plan),
         const MiniMapCredit(),
