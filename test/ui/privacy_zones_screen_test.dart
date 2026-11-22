@@ -9,6 +9,11 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/driver_settings.dart';
 import 'package:meshsonar/core/privacy_zones.dart';
 
+import 'package:flutter_map/flutter_map.dart' show CircleLayer, PolygonLayer;
+import 'package:meshsonar/core/map_definition.dart';
+import 'package:meshsonar/ui/map/active_map_definition.dart';
+import 'package:meshsonar/ui/map/tools/zone_layer.dart' show ZonePin;
+import '../support/tool_definition.dart';
 import '../support/zones_harness.dart';
 
 Finder k(String key) => find.byKey(Key(key), skipOffstage: false);
@@ -37,6 +42,36 @@ Future<void> addByTap(WidgetTester tester, MapController map, double lat, double
 }
 
 void main() {
+  for (final dark in [false, true]) {
+    testWidgetsT('zones from the live definition (${dark ? 'dark' : 'light'}): dashed circle, selected zone active, key and handles', (tester) async {
+      ActiveMapDefinition.notifier.value = liveToolDefinition();
+      addTearDown(() => ActiveMapDefinition.notifier.value = MapDefinition.bundled);
+      final (h, _) = await pumpZones(tester, brightness: dark ? Brightness.dark : Brightness.light);
+      await h.state.privacyZones.setZones(const [PrivacyZone(lat: 39.9612, lon: -82.9988, radiusM: 300), PrivacyZone(lat: 39.9712, lon: -82.9888, radiusM: 300)]);
+      await tester.pumpAndSettle();
+      await tester.tap(k('zone-pin-1'));
+      await tester.pumpAndSettle();
+      final polys = [for (final l in tester.widgetList<PolygonLayer>(find.byType(PolygonLayer))) ...l.polygons.where((p) => p.pattern.segments != null)];
+      expect(polys, hasLength(2));
+      expect(find.byType(CircleLayer), findsNothing);
+      final fill = Color(dark ? 0xFF94A3B8 : 0xFF64748B);
+      expect(polys.map((p) => p.color), [fill.withValues(alpha: 0.16), fill.withValues(alpha: 0.28)], reason: 'the selected zone is active');
+      expect(polys.map((p) => p.borderStrokeWidth), [1, 2]);
+      expect(find.descendant(of: find.byKey(const Key('drive-key-zone')), matching: find.text('Privacy zones')), findsOneWidget);
+      expect(find.byType(ZonePin), findsWidgets, reason: 'the handles are the definition\'s');
+      expect(h.state.privacyZones.zones, hasLength(2), reason: 'drawing only: the stored zones are untouched');
+    });
+  }
+
+  testWidgetsT('zones with the bundled definition keep the circles of build 73 and show no key', (tester) async {
+    final (_, map) = await pumpZones(tester);
+    await addByTap(tester, map, 39.9612, -82.9988);
+    expect(find.byType(PolygonLayer).evaluate().where((e) => (e.widget as PolygonLayer).polygons.any((p) => p.pattern.segments != null)), isEmpty);
+    expect(find.byType(CircleLayer), findsOneWidget);
+    expect(find.byKey(const Key('drive-key')), findsNothing);
+    expect(find.byType(CircleAvatar), findsWidgets);
+  });
+
   testWidgetsT('empty: explains what zones do, offers Add, adds nothing by itself', (tester) async {
     final (h, _) = await pumpZones(tester);
     expect(find.textContaining('never uploaded'), findsOneWidget);

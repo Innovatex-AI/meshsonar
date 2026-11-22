@@ -229,6 +229,8 @@ void main() {
     expect(find.byKey(const Key('server-drive-totals')), findsOneWidget);
     expect(tester.widget<Text>(find.byKey(const Key('server-drive-totals'))).data, contains('2 pings'));
     expect(tester.widget<Text>(find.byKey(const Key('server-drive-totals'))).data, contains('50% heard'));
+    expect(find.byKey(const Key('drive-key')), findsOneWidget, reason: 'the drive key sits on the server drive map (MAP slice 6)');
+    expect(find.byKey(const Key('drive-key-zone')), findsNothing, reason: 'the server copy never shows the phone\'s zones');
     await tester.scrollUntilVisible(find.byKey(const ValueKey('server-ping-p1')), 300, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('Hill 4.5 dB'), findsOneWidget);
     await tester.tap(find.byKey(const Key('server-drive-hide')));
