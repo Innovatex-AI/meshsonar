@@ -410,7 +410,7 @@ void main() {
     });
 
     testWidgets('the weather category switched off says where to turn it on', (tester) async {
-      await explained(tester, await open(tester, categoryOn: false), 'weather-gate-switchedOff', has: 'Privacy & data sharing');
+      await explained(tester, await open(tester, categoryOn: false), 'weather-gate-switchedOff', has: 'Sharing & privacy');
     });
 
     testWidgets('a drive that never reached the server says weather is added after upload, with the real delay', (tester) async {

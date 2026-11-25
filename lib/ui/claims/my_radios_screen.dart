@@ -107,7 +107,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                     padding: const EdgeInsets.all(Gap.m),
                     child: Text(s.hasKey
                         ? 'Radio claims need a server that offers them and a driver key it accepts.'
-                        : 'Radio claims need a driver key. Add one under Account & driver key.'),
+                        : 'Radio claims need a driver key. Add one under Settings > Account.'),
                   ),
                 ),
               if (enabled) ...[

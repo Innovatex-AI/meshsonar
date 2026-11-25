@@ -157,7 +157,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             const SizedBox(height: Gap.xs),
             Text(
               'What the colours and symbols on the maps mean. Colour palette: ${mc.palette.label}. Change it in Settings, '
-              'Units & display.',
+              'Map & display.',
               key: const Key('legend-palette-note'),
               style: t.textTheme.bodyMedium,
             ),

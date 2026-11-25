@@ -21,7 +21,7 @@ const String observerJoinTitle = 'Set up a repeater observer';
 /// The intro: the phone is already an observer; this guide is for a repeater.
 const String observerJoinIntro =
     'Make a repeater report what it hears to MeshSonar. Free. (Your phone already does this while your radio is '
-    'connected: Settings > Observer.)';
+    'connected: Settings > Sharing & privacy.)';
 
 /// The website page with the copy-paste settings for each kind of observer.
 const String observerSetupPath = '/observers/setup';
@@ -43,7 +43,7 @@ class ObserverJoinProgress {
 
   /// Why claims cannot be used right now (no key, server too old), null when they can.
   static String? claimsBlocker(AppState s) {
-    if (!s.hasKey) return 'Needs a driver key. Add one under Settings > Account & driver key.';
+    if (!s.hasKey) return 'Needs a driver key. Add one under Settings > Account.';
     if (s.uploadSiteConfig?.nodeClaims != true || s.uploadSiteConfig?.nodeClaimsLogin != true) {
       return 'This server does not offer claims yet.';
     }

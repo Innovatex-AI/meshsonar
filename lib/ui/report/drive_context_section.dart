@@ -79,7 +79,7 @@ class _DriveContextSectionState extends State<DriveContextSection> {
           ];
           body = Text(
               'No phone or radio context was recorded with this drive. It is recorded during a drive while its '
-              'categories are on in Settings > Privacy & data sharing.'
+              'categories are on in Settings > Sharing & privacy > What is shared.'
               '${off.isEmpty ? '' : ' Off right now: ${off.join(', ')}.'}',
               key: const Key('report-context-none'),
               style: t.textTheme.bodyMedium);

@@ -130,7 +130,7 @@ class _DriveWeatherSectionState extends State<DriveWeatherSection> {
 String weatherGateText(DriveWeatherGate gate) => switch (gate) {
       DriveWeatherGate.ok => '',
       DriveWeatherGate.switchedOff =>
-        'Weather is off, so nothing is looked up for this drive. Turn it on under Settings > Privacy & data sharing; '
+        'Weather is off, so nothing is looked up for this drive. Turn it on under Settings > Sharing & privacy > What is shared; '
             'it then applies to recent drives on the next upload.',
       DriveWeatherGate.noApprovedKey =>
         'Weather is added by the server after a drive uploads, which needs an approved driver key. Request or check '

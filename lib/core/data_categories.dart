@@ -88,12 +88,12 @@ abstract final class CategoryId {
 /// Shown under the list on the disclosure sheet: what "Saved with your drive" means.
 const String savedWithDriveNote =
     '"Saved with your drive" means: on this phone, and uploaded with the drive only when the server you upload to '
-    "accepts it (Settings > Privacy & data sharing says which). Your drive's location is handled by your drive privacy "
+    "accepts it (Settings > Sharing & privacy says which). Your drive's location is handled by your drive privacy "
     'settings (start/end trim, privacy zones), as today.';
 
 /// Heading line of the disclosure sheet.
 const String collectionDisclosureHeading =
-    'What MeshSonar collects (on unless you turn it off; change it any time in Settings > Privacy)';
+    'What MeshSonar collects (on unless you turn it off; change it any time in Settings > Sharing & privacy)';
 
 /// Every category, in disclosure order.
 const List<DataCategory> dataCategories = [

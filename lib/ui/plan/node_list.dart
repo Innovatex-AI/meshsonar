@@ -269,7 +269,7 @@ class _NodeEditorState extends State<_NodeEditor> {
               onChanged: n.existingKey != null ? null : (v) => _edit((x) => x.copyWith(mine: v)),
             ),
             if (n.existingKey != null)
-              Text('A network node is yours when you have claimed it (Settings > Claimed radios).', style: t.textTheme.bodySmall),
+              Text('A network node is yours when you have claimed it (Settings > Account > Claimed radios).', style: t.textTheme.bodySmall),
             const SizedBox(height: Gap.s),
             Semantics(header: true, child: Text('Mount', style: t.textTheme.titleSmall)),
             const SizedBox(height: Gap.xs),
