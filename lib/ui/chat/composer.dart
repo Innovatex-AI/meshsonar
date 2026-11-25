@@ -156,7 +156,7 @@ class _ComposerState extends State<Composer> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() => _trimmed = true);
-      _trimTimer = Timer(const Duration(seconds: 3), () {
+      _trimTimer = Timer(const Duration(seconds: 5), () {
         if (mounted) setState(() => _trimmed = false);
       });
     });
@@ -248,11 +248,9 @@ class _ComposerState extends State<Composer> {
       sheetKey: const Key('photo-source-sheet'),
       title: 'Send a photo',
       message: private
-          ? 'The photo is shrunk, its details (like location) removed and then encrypted on this phone. MeshSonar stores only '
-              'the encrypted copy; the link in the message holds the key, so only people who get the message can open it. '
-              'It is deleted after 30 days.'
-          : 'The photo is shrunk and its details (like location) removed on this phone, then stored on the MeshSonar '
-              'server. The message carries a short link to it.',
+          ? 'Location is removed and the photo is encrypted on this phone. Only people who get the message can open it. '
+              'Deleted after 30 days.'
+          : 'Location is removed on this phone. The photo is stored on the MeshSonar server and the message carries a link to it.',
       actions: const [
         AppAction('Take Photo', PhotoPickSource.camera, symbol: AppSymbols.camera, key: Key('photo-camera')),
         AppAction('Choose from Library', PhotoPickSource.library, symbol: AppSymbols.photo, key: Key('photo-library')),
@@ -349,10 +347,10 @@ class _ComposerState extends State<Composer> {
         text = j.progress >= 1 ? 'Processing…' : 'Uploading photo ${(j.progress * 100).round()}%';
       case _PhotoStage.waitingForRoom:
         final n = _bytesToCut(j.result!.url);
-        text = 'Photo uploaded. Its link needs ${utf8.encode(j.result!.url).length + 1} bytes: cut $n ${n == 1 ? 'byte' : 'bytes'} from your message to add it.';
+        text = 'Photo ready. Shorten your message by $n ${n == 1 ? 'character' : 'characters'} to add it.';
         tone = colors.warning;
       case _PhotoStage.failed:
-        text = j.error ?? 'Upload failed.';
+        text = j.error ?? 'Could not send the photo.';
         tone = colors.danger;
     }
     Widget btn(Key key, String label, VoidCallback onTap) => CupertinoButton(
@@ -453,8 +451,8 @@ class _ComposerState extends State<Composer> {
     }
 
     final note = offAir
-        ? 'This channel is not on your radio, so nothing can be sent or received.'
-        : (!c.hasRadioIdentity ? 'Connect your radio once to start chatting.' : (!c.radioConnected ? 'Will send when radio connects' : null));
+        ? 'This channel is not on your radio.'
+        : (!c.hasRadioIdentity ? 'Connect your radio once to start chatting.' : (!c.radioConnected ? 'Radio not connected. Sends when it connects.' : null));
 
     final bar = Container(
       decoration: BoxDecoration(
@@ -472,7 +470,7 @@ class _ComposerState extends State<Composer> {
               if (_trimmed)
                 Padding(
                   padding: const EdgeInsets.only(left: Gap.m, bottom: Gap.xs),
-                  child: Text('Trimmed to fit', key: const Key('composer-trimmed'), style: AppType.footnote.copyWith(color: colors.warning)),
+                  child: Text('Too long for one message: the end was cut off', key: const Key('composer-trimmed'), style: AppType.footnote.copyWith(color: colors.warning)),
                 ),
               ?strip,
               if (_job != null) _photoStrip(colors),
@@ -487,7 +485,7 @@ class _ComposerState extends State<Composer> {
                         padding: const EdgeInsets.symmetric(horizontal: Gap.s),
                         minimumSize: Size.square(Hit.of(context)),
                         onPressed: widget.onChannelInfoWhenOffRadio,
-                        child: Text('Put it back on the radio', style: AppType.footnote.copyWith(color: colors.accent, fontWeight: FontWeight.w600)),
+                        child: Text('Put it back', style: AppType.footnote.copyWith(color: colors.accent, fontWeight: FontWeight.w600)),
                       ),
                   ]),
                 ),
@@ -663,7 +661,7 @@ class _SendButton extends StatelessWidget {
     final Widget inner = budget.showNumber
         ? Text('${budget.left < 0 ? 0 : budget.left}', key: const Key('composer-left'), style: AppType.num(12, weight: FontWeight.w700).copyWith(color: ink))
         : AppSymbolIcon(offline ? AppSymbols.clock : AppSymbols.arrowUpCircleFill, size: 18, color: ink, scaleWithText: false);
-    final label = budget.full ? 'Send. No bytes left' : (budget.showNumber ? 'Send. ${budget.left} bytes left' : 'Send');
+    final label = budget.full ? 'Send. No room left' : (budget.showNumber ? 'Send. Room for ${budget.left} more' : (offline ? 'Send when the radio connects' : 'Send'));
     return Semantics(
       button: true,
       enabled: enabled,

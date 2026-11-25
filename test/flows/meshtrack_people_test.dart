@@ -696,7 +696,7 @@ void main() {
       await ww.flush();
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('mt-invite-qr')), findsOneWidget, reason: 'invite shown');
-      expect(find.textContaining('This is a new group link'), findsOneWidget);
+      expect(find.textContaining('New link.'), findsOneWidget);
       final nid = andy.svc.state.groups.single.channelId;
       expect(nid, isNot(old));
       final qr = tester.widget<QrView>(find.byKey(const Key('mt-invite-qr')));

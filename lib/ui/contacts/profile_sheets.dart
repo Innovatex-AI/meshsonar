@@ -32,19 +32,20 @@ Future<void> showContactShareSheet(
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
-            child: Text('Scan this with MeshSonar or the MeshCore app to add ${contact.displayName}.',
+            child: Text('Scan to add ${contact.displayName}.',
                 textAlign: TextAlign.center, style: AppType.subhead.copyWith(color: c.textMuted)),
           ),
           const SizedBox(height: Gap.l),
           Center(child: QrView(data: link, size: 220, semanticLabel: 'QR code for contact ${contact.displayName}')),
           const SizedBox(height: Gap.l),
           ProfileGroup(rows: [
+            // Share first: it is what people come here for.
+            ProfileRow(key: const Key('qr-share-link'), label: 'Share link', chevron: true, onTap: onShare),
             ProfileRow(key: const Key('qr-copy-link'), label: 'Copy link', onTap: onCopyLink),
             ProfileRow(key: const Key('share-copy-key'), label: 'Copy key', onTap: onCopyKey),
-            ProfileRow(key: const Key('qr-share-link'), label: 'Share link', onTap: onShare),
             ProfileRow(key: const Key('share-export-file'), label: 'Export as file', onTap: onExportFile),
             if (connected) ProfileRow(key: const Key('contact-share-nearby'), label: 'Send to radios nearby', onTap: onNearby),
-          ], footer: connected ? 'Radios nearby only hear this within direct range. It uses a little airtime.' : null),
+          ], footer: connected ? 'Only radios in direct range hear it.' : null),
         ],
       );
     },

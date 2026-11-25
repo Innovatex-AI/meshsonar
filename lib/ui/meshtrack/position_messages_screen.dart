@@ -60,7 +60,7 @@ class _PositionMessagesScreenState extends State<PositionMessagesScreen> {
     final now = b?.now() ?? DateTime.now();
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: CupertinoNavigationBar(backgroundColor: c.bg, border: null, middle: const Text('Position messages')),
+      appBar: CupertinoNavigationBar(backgroundColor: c.bg, border: null, middle: Text(list.isEmpty ? 'Position messages' : 'Position messages (${list.length})', maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -80,7 +80,7 @@ class _PositionMessagesScreenState extends State<PositionMessagesScreen> {
                     child: Column(children: [
                       AppSymbolIcon(AppSymbols.locationFill, size: 36, color: c.textMuted),
                       const SizedBox(height: Gap.s),
-                      Text('No MeshTrack updates in ${widget.name} in the last 24 hours.',
+                      Text('Nothing from ${widget.name} in the last 24 hours.',
                           key: const Key('mt-position-messages-empty'), textAlign: TextAlign.center, style: AppType.subhead.copyWith(color: c.textMuted)),
                     ]),
                   )
@@ -126,7 +126,7 @@ class _Row extends StatelessWidget {
       label: '$who, $what, $ago',
       child: ExcludeSemantics(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(minHeight: 52),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
             child: Row(children: [
@@ -139,7 +139,7 @@ class _Row extends StatelessWidget {
                 ]),
               ),
               const SizedBox(width: Gap.s),
-              Text(ago, style: AppType.caption.copyWith(color: c.textMuted)),
+              Text(ago, style: AppType.footnote.copyWith(color: c.textMuted)),
             ]),
           ),
         ),

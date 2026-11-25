@@ -217,6 +217,8 @@ class _AskLocationCardState extends State<AskLocationCard> {
             tint: col.accent,
             title: askWhere(env.here(), p.lat, p.lon, env.units),
             detail: askAnsweredAgo(p.at, now),
+            // The answer itself opens the map too: the biggest thing on the card is the obvious thing to tap.
+            onTap: () => env.openOnMap(context, p, friendsLayer: env.meshTrack != null),
           ));
           rows.add(_ActionRow(
               key: const Key('ask-location-open'),
@@ -304,16 +306,22 @@ class _StatusRow extends StatelessWidget {
   final Color tint;
   final String title;
   final String? detail;
-  const _StatusRow({super.key, required this.symbol, required this.tint, required this.title, this.detail});
+  final VoidCallback? onTap;
+  const _StatusRow({super.key, required this.symbol, required this.tint, required this.title, this.detail, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
     return Semantics(
       liveRegion: true,
+      button: onTap != null,
+      onTap: onTap,
       label: detail == null ? title : '$title. $detail',
       excludeSemantics: true,
-      child: Padding(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.m),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(padding: const EdgeInsets.only(top: 1), child: AppSymbolIcon(symbol, size: 20, color: tint)),
@@ -323,11 +331,12 @@ class _StatusRow extends StatelessWidget {
               Text(title, style: AppType.body.copyWith(color: c.textPrimary)),
               if (detail != null) ...[
                 const SizedBox(height: 2),
-                Text(detail!, style: AppType.footnote.copyWith(color: c.textMuted)),
+                Text(detail!, style: AppType.subhead.copyWith(color: c.textMuted)),
               ],
             ]),
           ),
         ]),
+        ),
       ),
     );
   }

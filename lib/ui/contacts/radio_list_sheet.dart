@@ -1,4 +1,5 @@
 // "Contacts on your radio": what the radio's table holds, and a way to free slots without touching the phone's book.
+import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 
 import '../design/app_surfaces.dart';
@@ -69,17 +70,35 @@ class _RadioListSheetState extends State<RadioListSheet> {
               ],
               const SizedBox(height: Gap.m),
               Text(
-                'Your phone keeps every contact. The radio holds a copy of the ones it needs. Taking one off the radio does not '
-                'delete it from your phone, but the radio can no longer receive messages from them until it is put back.',
+                'Your phone keeps every contact. Someone taken off the radio cannot message you until you put them back.',
                 style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: Gap.m),
               if (!m.connected)
                 Text('Connect your radio to change what is on it.', key: const Key('radio-list-offline'), style: t.textTheme.bodyLarge)
               else if (cands.isEmpty)
-                Text('Nothing to suggest. Favourites and people you have talked to are never suggested.', key: const Key('radio-list-none'), style: t.textTheme.bodyLarge)
+                Text('Nothing to take off. Favourites and people you have talked to stay.', key: const Key('radio-list-none'), style: t.textTheme.bodyLarge)
               else ...[
-                Text('Safe to take off', style: t.textTheme.titleSmall),
+                Row(children: [
+                  Expanded(child: Text('Safe to take off', style: t.textTheme.titleSmall)),
+                  // One tap for the whole list: ticking twenty strangers one by one was the slow part.
+                  if (cands.length > 1)
+                    CupertinoButton(
+                      key: const Key('radio-list-select-all'),
+                      minimumSize: const Size(48, 48),
+                      padding: EdgeInsets.zero,
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() {
+                                if (_picked.length == cands.length) {
+                                  _picked.clear();
+                                } else {
+                                  _picked.addAll([for (final c in cands) c.contact.publicKey as String]);
+                                }
+                              }),
+                      child: Text(_picked.length == cands.length ? 'Select none' : 'Select all'),
+                    ),
+                ]),
                 for (final c in cands)
                   CheckboxListTile(
                     key: Key('cleanup-${c.contact.publicKey.substring(0, 8)}'),
@@ -94,9 +113,9 @@ class _RadioListSheetState extends State<RadioListSheet> {
                 const SizedBox(height: Gap.m),
                 FilledButton(
                   key: const Key('radio-list-remove'),
-                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                  style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
                   onPressed: _picked.isEmpty || _busy ? null : _remove,
-                  child: Text(_picked.isEmpty ? 'Pick contacts to take off' : 'Take ${_picked.length} off the radio'),
+                  child: Text(_picked.isEmpty ? 'Pick who to take off' : 'Take ${_picked.length} off the radio'),
                 ),
               ],
             ],

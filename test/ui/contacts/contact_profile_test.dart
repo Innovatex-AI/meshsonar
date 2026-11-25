@@ -421,13 +421,13 @@ void main() {
       await tester.tap(find.byKey(const Key('contact-share-nearby')));
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
-      expect(find.textContaining('has no stored announcement'), findsOneWidget);
+      expect(find.textContaining('cannot send this contact'), findsOneWidget);
       rig.port.hasAdvert = {keyN(1)};
       await tester.pump(const Duration(seconds: 5));
       await tester.tap(find.byKey(const Key('contact-share-nearby')));
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
-      expect(find.text('Sent. Only radios within direct range can hear it.'), findsOneWidget);
+      expect(find.text('Sent to radios in direct range.'), findsOneWidget);
     });
   });
 

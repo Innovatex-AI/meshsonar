@@ -35,7 +35,7 @@ void announceJoin(BuildContext context, ChatController controller, ChannelJoin j
 /// Runs a join with a progress indicator and shows the plain-language error in a dialog when it fails.
 Future<ChannelJoin?> runChannelAction(BuildContext context, ChatController controller, Future<ChannelJoin> Function() action, {String? what}) async {
   if (controller.radioId == null) {
-    await _errorDialog(context, 'Connect your radio once first. Channels live in the radio, so MeshSonar needs to see it before it can add one.');
+    await _errorDialog(context, 'Connect your radio first. Channels are saved on the radio.');
     return null;
   }
   try {
@@ -45,7 +45,7 @@ Future<ChannelJoin?> runChannelAction(BuildContext context, ChatController contr
   } on ChannelAdminException catch (e) {
     if (context.mounted) await _errorDialog(context, e.message);
   } catch (e) {
-    if (context.mounted) await _errorDialog(context, 'Something went wrong while changing the channel. Nothing was changed. Try again.');
+    if (context.mounted) await _errorDialog(context, 'That did not work. Nothing was changed. Try again.');
   }
   return null;
 }
@@ -71,9 +71,8 @@ Future<void> handleMeshLink(BuildContext context, ChatController controller, Str
         context,
         title: 'Join ${p.name}?',
         message:
-            '${kind == ChannelKind.private ? 'This is a private channel. Everyone who has this link can read it.' : 'This is an open channel. Anyone who types the same name can read it.'}'
-            '${p.regionScope != null ? '\n\nIt is limited to the region "${p.regionScope}".' : ''}'
-            '\n\nIt uses up one of the channel spaces on your radio.',
+            '${kind == ChannelKind.private ? 'Private channel: everyone with this link can read it.' : 'Open channel: anyone who types the same name can read it.'}'
+            '${p.regionScope != null ? '\n\nLimited to the region "${p.regionScope}".' : ''}',
         confirmLabel: 'Join',
         cancelLabel: 'Not now',
         dialogKey: const Key('join-link-dialog'),

@@ -155,8 +155,8 @@ class _ContactsViewState extends State<ContactsView> {
   Widget _noRadio(BuildContext context) => AppEmptyView(
         key: const Key('contacts-no-radio'),
         symbol: AppSymbols.person2,
-        title: 'Your contacts appear here',
-        message: 'Connect your MeshCore radio once. Its contacts are copied to this phone and stay here, even when the radio is off.',
+        title: 'Connect a radio to see your contacts',
+        message: 'They are copied to this phone and stay here.',
         actionLabel: 'Connect radio',
         onAction: _connect,
       );
@@ -194,7 +194,7 @@ class _ContactsViewState extends State<ContactsView> {
     } else if (s.phase == SyncPhase.syncing) {
       banner = Column(key: const Key('banner-syncing'), children: [
         ChatStatusBanner(
-          message: s.total > 0 ? 'Loading contacts from your radio: ${s.received} of ${s.total}' : 'Asking your radio for its contacts',
+          message: s.total > 0 ? 'Loading contacts: ${s.received} of ${s.total}' : 'Loading contacts from your radio',
         ),
         if (s.total > 0)
           LinearProgressIndicator(value: (s.received / s.total).clamp(0, 1).toDouble(), minHeight: 2, color: col.accent, backgroundColor: col.outline.withValues(alpha: 0.3)),
@@ -205,14 +205,14 @@ class _ContactsViewState extends State<ContactsView> {
       card = _Card(
         key: const Key('banner-full'),
         symbol: AppSymbols.exclamationTriangle,
-        text: 'Your radio\'s contact list is full${s.radioCount != null && s.capacity != null ? ' (${s.radioCount} of ${s.capacity})' : ''}. It cannot add new nodes until you free space.',
+        text: 'Your radio\'s contact list is full${s.radioCount != null && s.capacity != null ? ' (${s.radioCount} of ${s.capacity})' : ''}. Free up space to add anyone new.',
         actions: [_CardButton(const Key('banner-free'), 'Free up space', () => showRadioListSheet(context, _c))],
       );
     } else if (_m.shouldOfferAskFirst) {
       card = _Card(
         key: const Key('ask-first'),
         symbol: AppSymbols.personBadgePlus,
-        text: 'Your radio adds every node it hears. That fills its contact list with strangers. Ask me before adding?',
+        text: 'Your radio saves everyone it hears as a contact, strangers too. Ask you first instead?',
         actions: [
           _CardButton(const Key('ask-keep'), 'Keep automatic', () => _m.answerPolicyPrompt('keep')),
           _CardButton(const Key('ask-yes'), 'Ask me first', () async {
@@ -242,15 +242,15 @@ class _ContactsViewState extends State<ContactsView> {
         const SizedBox(height: Gap.xs),
         Text(
           hasOthers
-              ? 'People appear when their radio advertises. Repeaters and rooms are in More, under Radio.'
-              : 'People appear when their radio advertises. You can also add one by QR code, link or key.',
+              ? 'People show up here when their radio announces itself. Repeaters and rooms are in More, under Radio.'
+              : 'People show up here when their radio announces itself, or add one yourself.',
           style: AppType.subhead.copyWith(color: col.textMuted),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: Gap.l),
         Wrap(alignment: WrapAlignment.center, spacing: Gap.m, runSpacing: Gap.s, children: [
           _FilledAction(key: const Key('contacts-send-advert'), label: announceMyself, onPressed: _advert),
-          _FilledAction(key: const Key('contacts-scan-qr'), label: 'Scan a QR code', onPressed: _add, tinted: true),
+          _FilledAction(key: const Key('contacts-scan-qr'), label: 'Add a contact', onPressed: _add, tinted: true),
         ]),
       ]),
     );
@@ -289,7 +289,8 @@ class _ContactsViewState extends State<ContactsView> {
     final col = AppColors.of(context);
     final canMessage = _c.openConversation != null;
     void open() => _profile(c);
-    final tile = _ContactTile(key: Key('contact-${c.publicKey.substring(0, 8)}'), row: r, nowMs: now, onTap: open, actions: {
+    final tile = _ContactTile(key: Key('contact-${c.publicKey.substring(0, 8)}'), row: r, nowMs: now, onTap: open,
+        onMessage: canMessage && (c.type == ContactType.companion || c.type == ContactType.room) && !c.blocked ? () => _message(c) : null, actions: {
       if (canMessage) const CustomSemanticsAction(label: 'Message'): () => _message(c),
       CustomSemanticsAction(label: c.favourite ? 'Remove from favourites' : 'Add to favourites'): () => _favourite(c),
       const CustomSemanticsAction(label: 'Ping'): () => unawaited(_ping(c)),
@@ -350,8 +351,11 @@ class _ContactTile extends StatelessWidget {
   final ContactRow row;
   final int nowMs;
   final VoidCallback onTap;
+
+  /// Opens the conversation: the visible message button at the end of the row (people and rooms).
+  final VoidCallback? onMessage;
   final Map<CustomSemanticsAction, VoidCallback> actions;
-  const _ContactTile({super.key, required this.row, required this.nowMs, required this.onTap, required this.actions});
+  const _ContactTile({super.key, required this.row, required this.nowMs, required this.onTap, this.onMessage, required this.actions});
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +401,15 @@ class _ContactTile extends StatelessWidget {
                   child: Text('$unread', style: AppType.footnote.copyWith(color: col.onAccent, fontWeight: FontWeight.w600)),
                 ),
             ]),
+            // One tap to write to them: before, Message was only behind a swipe or inside the profile.
+            if (onMessage != null)
+              CupertinoButton(
+                key: Key('contact-message-${c.publicKey.substring(0, 8)}'),
+                padding: const EdgeInsets.only(left: Gap.s),
+                minimumSize: const Size(Hit.min, Hit.min),
+                onPressed: onMessage,
+                child: AppSymbolIcon(AppSymbols.message, size: 22, color: col.accent),
+              ),
           ]),
         ),
       ),

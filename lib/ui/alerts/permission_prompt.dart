@@ -10,10 +10,9 @@ import '../design/sheet_detents.dart';
 import '../theme.dart' show Gap;
 
 const String alertsPrePromptTitle = 'Get an alert when a message arrives?';
-const String alertsPrePromptBody = 'MeshSonar can show a notification when your radio receives a message. Messages stay on this phone: '
+const String alertsPrePromptBody = 'MeshSonar can notify you when your radio receives a message. Messages stay on this phone: '
     'there is no server and nothing is sent to anyone.\n\n'
-    'Alerts only come while your radio is connected, and iOS may pause MeshSonar in the background. '
-    'The next screen is the system\'s own question.';
+    'Alerts only come while your radio is connected.';
 
 /// Shows the explanation, then (on Continue) the system prompt. Returns what happened, or null when alerts are not
 /// available in this build.
@@ -48,9 +47,20 @@ Future<PermissionOutcome?> askForNotifications(BuildContext context, {bool force
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton(key: const Key('alerts-preprompt-yes'), onPressed: () => Navigator.pop(c, true), child: const Text('Continue')),
+                  // The button says what it does (the system's own question follows it).
+                  FilledButton(
+                    key: const Key('alerts-preprompt-yes'),
+                    style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                    onPressed: () => Navigator.pop(c, true),
+                    child: const Text('Turn on alerts'),
+                  ),
                   const SizedBox(height: Gap.xs),
-                  TextButton(key: const Key('alerts-preprompt-no'), onPressed: () => Navigator.pop(c, false), child: const Text('Not now')),
+                  TextButton(
+                    key: const Key('alerts-preprompt-no'),
+                    style: TextButton.styleFrom(minimumSize: const Size(double.infinity, 44)),
+                    onPressed: () => Navigator.pop(c, false),
+                    child: const Text('Not now'),
+                  ),
                 ],
               ),
             ),

@@ -90,7 +90,7 @@ void main() {
     kit.service.contacts.detach();
     await tester.pump();
     await tester.pump();
-    expect(find.text('Will send when radio connects'), findsOneWidget);
+    expect(find.text('Radio not connected. Sends when it connects.'), findsOneWidget);
   });
 
   testWidgets('"always search" is said in the subtitle', (tester) async {

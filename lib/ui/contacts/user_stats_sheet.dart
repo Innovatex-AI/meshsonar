@@ -144,7 +144,7 @@ class _UserStatsBodyState extends State<UserStatsBody> {
         key: const Key('stats-disconnected'),
         symbol: AppSymbols.antenna,
         title: 'Radio not connected',
-        message: 'Connect your radio to ask $name for stats.',
+        message: 'Connect your radio to ask $name.',
       ));
     } else if (r == null || (_loading && !(r.ok))) {
       kids.add(_Waiting(who: name));
@@ -194,7 +194,7 @@ class _UserStatsBodyState extends State<UserStatsBody> {
       case TelemetryStatus.notConnected:
         return [_Card(key: const Key('stats-disconnected'), symbol: AppSymbols.antenna, title: 'Radio not connected', message: r.detail ?? '')];
       case TelemetryStatus.tooSoon || TelemetryStatus.cancelled:
-        return [_Card(key: const Key('stats-too-soon'), symbol: AppSymbols.clock, title: 'Hold on', message: r.detail ?? 'Try again in a moment.')];
+        return [_Card(key: const Key('stats-too-soon'), symbol: AppSymbols.clock, title: 'Too soon', message: r.detail ?? 'Try again in a moment.')];
       case TelemetryStatus.refused:
         return [_Card(key: const Key('stats-refused'), symbol: AppSymbols.exclamationCircle, title: 'Your radio refused', message: r.detail ?? '')];
       case TelemetryStatus.empty:
@@ -360,7 +360,7 @@ class _AutoRow extends StatelessWidget {
   Widget build(BuildContext context) => ConstrainedBox(
         constraints: const BoxConstraints(minHeight: Hit.minAndroid),
         child: Row(children: [
-          Expanded(child: Text('Refresh every 10 s', style: AppType.body.copyWith(color: AppColors.of(context).textPrimary))),
+          Expanded(child: Text('Refresh every 10 seconds', style: AppType.body.copyWith(color: AppColors.of(context).textPrimary))),
           CupertinoSwitch(key: const Key('stats-auto'), value: on, onChanged: onChanged),
         ]),
       );

@@ -136,7 +136,7 @@ class _PhotoThumbState extends State<PhotoThumb> {
     final Widget child = switch (_state) {
       PhotoThumbState.loading => tile(AppSymbols.photo, '', key: const Key('photo-loading'), spinner: true),
       PhotoThumbState.tapToLoad => tile(AppSymbols.photo, 'Tap to load photo', key: const Key('photo-tap-to-load')),
-      PhotoThumbState.offline => tile(AppSymbols.photo, 'Photo, loads when online', key: const Key('photo-offline')),
+      PhotoThumbState.offline => tile(AppSymbols.photo, 'Photo. Tap to try again', key: const Key('photo-offline')),
       PhotoThumbState.removed => _isPrivate(widget.url)
           ? tile(AppSymbols.xmarkCircleFill, 'Photo expired', key: const Key('photo-expired'))
           : tile(AppSymbols.xmarkCircleFill, 'Photo removed', key: const Key('photo-removed')),
@@ -276,8 +276,7 @@ Future<void> sharePhotoFlow(BuildContext context, PhotoSource source, String url
 Future<void> showPhotoNeedsKey(BuildContext context) => showAppAlert(
       context,
       title: 'Photos need a driver key',
-      message: 'Photos are stored on the MeshSonar server, so sending one needs an approved driver key. '
-          'Set it up in Settings > Account. Reading photos others send does not.',
+      message: 'Sending a photo needs an approved driver key. Set it up in Settings > Account. You can still see photos others send.',
       confirmLabel: 'OK',
       cancelLabel: 'Close',
       dialogKey: const Key('photo-needs-key'),
@@ -339,11 +338,29 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
     final removed = _failed == PhotoFetchState.removed;
     Widget body;
     if (removed) {
-      body = Text(private ? 'Photo expired' : 'Photo removed', key: Key(private ? 'viewer-expired' : 'viewer-removed'), style: AppType.body.copyWith(color: ink));
+      body = Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(private ? 'Photo expired' : 'Photo removed', key: Key(private ? 'viewer-expired' : 'viewer-removed'), style: AppType.body.copyWith(color: ink)),
+        const SizedBox(height: Gap.xs),
+        Text(private ? 'Private photos are deleted after 30 days.' : 'The sender or a moderator deleted it.', textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: Colors.white70)),
+      ]);
     } else if (b == null) {
       body = _failed == null
           ? const CupertinoActivityIndicator(color: ink)
-          : Text('Photo, loads when online', key: const Key('viewer-offline'), style: AppType.body.copyWith(color: ink));
+          : Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('Could not load the photo', key: const Key('viewer-offline'), style: AppType.body.copyWith(color: ink)),
+              const SizedBox(height: Gap.xs),
+              Text('It needs an internet connection.', style: AppType.footnote.copyWith(color: Colors.white70)),
+              // Before, the only way to retry was to close the viewer and open it again.
+              CupertinoButton(
+                key: const Key('viewer-retry'),
+                minimumSize: Size.square(Hit.of(context)),
+                onPressed: () {
+                  setState(() => _failed = null);
+                  unawaited(_load());
+                },
+                child: const Text('Try again'),
+              ),
+            ]);
     } else {
       body = InteractiveViewer(
         key: const Key('viewer-zoom'),
@@ -362,7 +379,7 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 AppSymbolIcon(s, size: 24, color: onTap == null ? Colors.white38 : (danger ? AppColors.of(context).danger : ink)),
                 const SizedBox(height: 2),
-                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.caption.copyWith(color: onTap == null ? Colors.white38 : ink)),
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.footnote.copyWith(color: onTap == null ? Colors.white38 : ink)),
               ]),
             ),
           ),
@@ -387,6 +404,12 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
             const SizedBox(width: 44 + Gap.s * 2),
           ]),
           Expanded(child: Center(child: body)),
+          // The small copy shows first: say the sharp one is still coming, so a blurry photo is not a surprise.
+          if (b != null && !_full && _failed == null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.xs),
+              child: Text('Loading full size…', key: const Key('viewer-loading-full'), style: AppType.footnote.copyWith(color: Colors.white70)),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Gap.s),
             child: Row(children: [
