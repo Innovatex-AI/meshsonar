@@ -444,6 +444,12 @@ void main() {
       await tester.tap(find.byKey(const Key('ble-clear')));
       await tester.pump();
       expect(find.byKey(const Key('ble-line')), findsNothing);
+      // Build 76: an empty log says how to start it, and there is nothing left to clear.
+      expect(find.byKey(const Key('ble-empty')), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(find.byKey(const Key('ble-clear'))).onPressed, isNull);
+      for (final k in ['ble-add-note', 'ble-copy', 'ble-keeper-pull', 'ble-clear']) {
+        expect(tester.getSize(find.byKey(Key(k))).height, greaterThanOrEqualTo(48), reason: k);
+      }
     });
   });
 }

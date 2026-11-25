@@ -10,7 +10,10 @@ import '../theme.dart';
 class _Section {
   final String title;
   final List<Object> parts; // String paragraph, List<String> bullets, List<(String, String)> numbered "bold. rest"
-  const _Section(this.title, this.parts);
+
+  /// Reference text: only the title shows until it is tapped (build 76). [open] starts it opened.
+  final bool fold, open;
+  const _Section(this.title, this.parts, {this.fold = false, this.open = false});
 }
 
 const howSteps = <(String, String)>[
@@ -37,21 +40,21 @@ const _howSections = <_Section>[
         'that crosses a border counts in both regions. Each region has its own site with its own map, drives and leaderboard; one sign-in works on all of them. '
         'Neighbouring regions can form a group that shows a combined map.',
     'In the app, the Network tab shows the region you are viewing; tap the region name at the top to change it.',
-  ]),
+  ], fold: true),
   _Section('Go deeper', [
     <String>[
       'Method (More > Help > Method): how the figures are made and what they can and cannot say.',
       'Network: packets, the live map, nodes, channels, observers, analytics and tools for the region.',
       'More > Set up a repeater observer: make your own repeater report to MeshSonar.',
     ],
-  ]),
+  ], fold: true),
 ];
 
 const _methodSections = <_Section>[
   _Section('What is measured', [
     'A ping is a short message sent from a phone-paired radio at a known place and time. A ping is heard when at least one repeater echoes it back to the radio. '
         'Only repeaters that answered directly (one hop) count. The app also records the signal-to-noise ratio of each echo. A ping nobody answered is kept: it is how a dead zone shows.',
-  ]),
+  ], fold: true, open: true),
   _Section('Cells', [
     'Public maps do not show pings. They show cells: hexagons about 50 metres across (H3 resolution 11), the same size at every zoom; zoomed out, each '
         'cell is drawn as a dot. Pings from the last 365 days count.',
@@ -60,19 +63,19 @@ const _methodSections = <_Section>[
         '(-7.5 dB at SF7; each band is 5 dB wide). Pings nobody answered do not pull the average down: a cell where pings were sent and no repeater '
         'answered any of them is shown as No reply. A cell with answers but no signal reading is shown as heard, without a band. A cell with fewer '
         'than 3 pings is drawn faint.',
-  ]),
+  ], fold: true),
   _Section('Predicted coverage', [
     'Predicted coverage fills the gaps between measured cells with an estimate made from the measured cells around them (within about a kilometre, at least '
         'two of them, nearer cells counting more). It is drawn hatched, under the measured cells, and fades with distance. It is a guess from real '
         'drives, never a measurement: drive there to replace it with one.',
-  ]),
+  ], fold: true),
   _Section('What it cannot say', [
     <String>[
       'A cell with no pings is unmeasured, not dead. Coverage depends on the phone\'s antenna and radio, so one drive is one sample.',
       'GPS error and the radio\'s listening window mean a ping can land in a neighbouring cell.',
       'Pings are not weighted by time: inside the 365-day window a ping from last year counts the same as one from yesterday.',
     ],
-  ]),
+  ], fold: true),
   _Section('Privacy rules applied before anything is public', [
     <String>[
       'The start and end of every drive are trimmed (500 metres unless the driver chooses another distance).',
@@ -81,19 +84,19 @@ const _methodSections = <_Section>[
       'Drives under review, hidden by their owner or from a banned driver are left out.',
       'A callsign is shown only for drivers who opted in to the leaderboard and are not anonymous.',
     ],
-  ]),
+  ], fold: true),
   _Section('Channels and pings', [
     'Pings go out on the #wardriving channel, an open channel that anyone can join. A ping\'s text is MS: and ten random characters, with no position in it. '
         'MeshSonar keeps its pings under 2% of the time in any 10 minutes, skips a ping rather than sending it late, and never delays a chat message for one.',
-  ]),
+  ], fold: true),
   _Section('Claiming a radio', [
     'Claim means manage, never required to feed data. Repeaters, observers and drivers count whether or not anyone has claimed them. An owner who proves control of a '
         'radio (a signature from the radio, or a one-time code that an observer hears it advertise) can set the name shown for it and hide its position. We never ask for '
         'or see a radio\'s admin password, and a claim, or a moderator ending one, never changes what is collected or counted.',
-  ]),
+  ], fold: true),
   _Section('Open data and code', [
     'The upload format and the public API are documented on the MeshSonar website, and the app and the site are open source.',
-  ]),
+  ], fold: true),
 ];
 
 class _InfoPage extends StatelessWidget {
@@ -116,15 +119,30 @@ class _InfoPage extends StatelessWidget {
           padding: const EdgeInsets.all(Gap.l),
           children: [
             Text(lead, style: t.textTheme.bodyLarge?.copyWith(color: m.textMuted)),
-            for (final s in sections)
-              Padding(
-                padding: const EdgeInsets.only(top: Gap.l),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Semantics(header: true, child: Text(s.title, style: t.textTheme.titleMedium)),
-                  const SizedBox(height: Gap.xs),
-                  for (final p in s.parts) _part(context, p),
-                ]),
-              ),
+            const SizedBox(height: Gap.s),
+            for (final (i, s) in sections.indexed)
+              if (s.fold)
+                ExpansionTile(
+                  key: Key('$keyPrefix-section-$i'),
+                  initiallyExpanded: s.open,
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: Gap.s),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  expandedAlignment: Alignment.centerLeft,
+                  shape: const Border(),
+                  collapsedShape: const Border(),
+                  title: Text(s.title, style: t.textTheme.titleMedium),
+                  children: [for (final p in s.parts) _part(context, p)],
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.s, bottom: Gap.s),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Semantics(header: true, child: Text(s.title, style: t.textTheme.titleMedium)),
+                    const SizedBox(height: Gap.s),
+                    for (final p in s.parts) _part(context, p),
+                  ]),
+                ),
             ...footer,
             const SizedBox(height: Gap.xl),
           ],
@@ -149,9 +167,10 @@ class _InfoPage extends StatelessWidget {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         for (final (i, s) in p.indexed)
           Padding(
-            padding: const EdgeInsets.only(bottom: Gap.s),
+            padding: const EdgeInsets.only(bottom: Gap.m),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              CircleAvatar(radius: 12, child: Text('${i + 1}', style: const TextStyle(fontSize: 12))),
+              // The number keeps its size at large text: at 2x it used to spill out of its circle.
+              CircleAvatar(radius: 14, child: Text('${i + 1}', textScaler: TextScaler.noScaling, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
               const SizedBox(width: Gap.s),
               Expanded(
                 child: Text.rich(TextSpan(children: [
@@ -179,12 +198,28 @@ class HowItWorksScreen extends StatelessWidget {
         lead: 'From a phone in a car to a coloured hexagon on the map, in four steps.',
         sections: _howSections,
         footer: [
+          // The next page is one tap away (it was a line of text saying "More > Help > Method").
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.l),
+            child: Builder(
+              builder: (context) => FilledButton.tonalIcon(
+                key: const Key('howitworks-method'),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const MethodScreen())),
+                icon: const Icon(Icons.science_outlined),
+                label: const Text('Method: how the figures are made'),
+              ),
+            ),
+          ),
           if (onReplayTour != null)
             Padding(
-              padding: const EdgeInsets.only(top: Gap.l),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(key: const Key('howitworks-tour'), onPressed: onReplayTour, icon: const Icon(Icons.explore_outlined), label: const Text('Replay the tour of the tabs')),
+              padding: const EdgeInsets.only(top: Gap.s),
+              child: OutlinedButton.icon(
+                key: const Key('howitworks-tour'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: onReplayTour,
+                icon: const Icon(Icons.explore_outlined),
+                label: const Text('Replay the tour of the tabs'),
               ),
             ),
         ],
@@ -198,7 +233,7 @@ class MethodScreen extends StatelessWidget {
   Widget build(BuildContext context) => const _InfoPage(
         title: 'Method',
         keyPrefix: 'method',
-        lead: 'How MeshSonar turns pings into a coverage map, and the limits of what it shows. The same method applies in every region.',
+        lead: 'How pings become the coverage map, and what the map cannot say. Tap a heading to read it.',
         sections: _methodSections,
       );
 }

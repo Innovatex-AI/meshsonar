@@ -228,6 +228,32 @@ void main() {
       nav.push(MaterialPageRoute<void>(builder: (_) => const SavedRadiosScreen()));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('saved-radios-empty')), findsOneWidget);
+      // Build 76: the empty page has the next step on it.
+      expect(tester.getSize(find.byKey(const Key('saved-radios-connect'))).height, greaterThanOrEqualTo(48));
+      await tester.tap(find.byKey(const Key('saved-radios-connect')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConnectScreen), findsOneWidget);
+    });
+
+    testWidgets('Saved radios screen: one short footer line, "Connect another radio", and a tap on the connected radio says so', (tester) async {
+      install(tester, twoSaved());
+      final h = Harness();
+      useTallScreen(tester);
+      await h.pumpApp(tester);
+      final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+      nav.push(MaterialPageRoute<void>(builder: (_) => const SavedRadiosScreen()));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(find.byKey(const Key('saved-radios-footer'))).data!.length, lessThan(90));
+      expect(find.byKey(const Key('saved-radios-connect')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const ValueKey('saved-radio-info-zz:zz'))).width, greaterThanOrEqualTo(48));
+      await tester.tap(find.byKey(const ValueKey('saved-radio-zz:zz')));
+      await tester.pumpAndSettle();
+      expect(h.state.connected, isTrue);
+      await tester.pump(const Duration(seconds: 6)); // the "Connected to" toast goes
+      await tester.tap(find.byKey(const ValueKey('saved-radio-zz:zz')));
+      await tester.pump();
+      expect(find.text('Already connected to Base Station.'), findsOneWidget);
+      expect(h.state.device?.id, 'zz:zz');
     });
   });
 

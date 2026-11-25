@@ -182,14 +182,18 @@ void main() {
       await pickCategory(tester, 'bug');
       final reviewBtn = find.byKey(const Key('report-review'));
       expect(isEnabled(tester, reviewBtn), isFalse);
+      // Build 76: the greyed-out button says what is still missing.
+      expect(tester.widget<Text>(find.byKey(const Key('report-review-hint'))).data, 'Describe the problem to continue.');
       await describe(tester, '   ');
       expect(isEnabled(tester, reviewBtn), isFalse);
       await describe(tester, 'x' * 4001);
       expect(isEnabled(tester, reviewBtn), isFalse);
       expect(tester.widget<Text>(find.byKey(const Key('report-counter'))).data, matches(RegExp(r'4,?001')));
       expect(counterInError(tester), isTrue);
+      expect(tester.widget<Text>(find.byKey(const Key('report-review-hint'))).data, 'Shorten the description to continue.');
       await describe(tester, 'x' * 4000);
       expect(isEnabled(tester, reviewBtn), isTrue);
+      expect(find.byKey(const Key('report-review-hint')), findsNothing);
       expect(tester.widget<Text>(find.byKey(const Key('report-counter'))).data, matches(RegExp(r'4,?000')));
       expect(counterInError(tester), isFalse);
       await describe(tester, 'ok');
@@ -338,6 +342,13 @@ void main() {
       expect(drafts.draft, isNotNull);
       final firstBody = h1.reports.sent.single.body;
       expect(firstBody, shown);
+      // Build 76: after a failed try the button says "Send again", and "Send later" leaves with the report kept.
+      expect(find.descendant(of: find.byKey(const Key('report-send')), matching: find.text('Send again')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('report-later')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('report-preview')), findsNothing);
+      expect(find.byKey(const Key('report-screen')), findsNothing, reason: 'the form closes too: the report is saved');
+      expect(drafts.draft, isNotNull);
       await drain(tester);
 
       // App restart: a fresh app over the same phone storage, and signal is back.

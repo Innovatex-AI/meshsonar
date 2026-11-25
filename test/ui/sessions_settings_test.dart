@@ -253,6 +253,8 @@ void main() {
     await tester.tap(find.byKey(const Key('about')));
     await tester.pumpAndSettle();
     expect(find.textContaining('MIT License'), findsWidgets);
+    await tester.tap(find.byKey(const Key('about-credits'))); // build 76: the credits open on a tap
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('MeshCore Open'), 200,
         scrollable: find.descendant(of: find.byType(AboutScreen), matching: find.byType(Scrollable)).first);
     expect(find.text('MeshCore Open'), findsOneWidget);

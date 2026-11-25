@@ -41,6 +41,14 @@ const String exportText =
     'reports) as '
     'one file you can keep or share.';
 
+/// The one line shown for each part of the screen (build 76). The full texts above are one tap away, under
+/// "What this covers" ([deleteMyDataLead], [exportText]) and "What deleting my account covers" ([deleteAccountText]).
+const String deleteMyDataShort = 'Download or delete what MeshSonar holds about you.';
+const String exportShort = 'One file with everything the server holds for you. Do this first if you want a copy.';
+const String deleteServerShort = 'Sensor readings, phone details and observer packets. Your drives stay.';
+const String deleteLocalShort = 'The same readings saved with the drives on this phone. Your drives stay.';
+const String deleteAccountShort = 'Removes your driver key and everything the server holds for it. This is permanent.';
+
 class DeleteMyDataScreen extends StatefulWidget {
   const DeleteMyDataScreen({super.key});
 
@@ -82,9 +90,11 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
 
   Future<void> _deleteAccount(AppState s) async {
     var alsoPhone = false;
+    final onPhone = s.sessions.length;
     final ok = await showAppSheet<bool>(
       context,
-      detents: const [0.55],
+      detents: const [0.55, 0.92], // can be pulled up: at large text the words did not fit the one height
+
       builder: (ctx, controller) => StatefulBuilder(
         builder: (ctx, set) => AppSheetScaffold(
           key: const Key('delete-account-dialog'),
@@ -94,6 +104,7 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
           primaryAction: FilledButton(
             key: const Key('delete-account-confirm'),
             style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
               backgroundColor: Theme.of(ctx).colorScheme.error,
               foregroundColor: Theme.of(ctx).colorScheme.onError,
             ),
@@ -102,19 +113,23 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
           ),
           secondaryAction: TextButton(
             key: const Key('delete-account-cancel'),
+            style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
           children: [
             const Text('This deletes your driver key and all your drives, pings and reports on the server. It cannot be undone.'),
-            CheckboxListTile(
-              key: const Key('delete-account-also-phone'),
-              contentPadding: EdgeInsets.zero,
-              value: alsoPhone,
-              onChanged: (v) => set(() => alsoPhone = v ?? false),
-              title: const Text('Also delete the drives on this phone'),
-              subtitle: const Text('Ones not uploaded yet are lost.'),
-            ),
+            // Nothing on the phone: no box to think about.
+            if (onPhone > 0)
+              CheckboxListTile(
+                key: const Key('delete-account-also-phone'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: alsoPhone,
+                onChanged: (v) => set(() => alsoPhone = v ?? false),
+                title: Text('Also delete the $onPhone drive${onPhone == 1 ? '' : 's'} on this phone'),
+                subtitle: const Text('Ones not uploaded yet are lost.'),
+              ),
           ],
         ),
       ),
@@ -146,9 +161,8 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       dialogKey: 'delete-server-dialog',
       title: 'Delete my data on the server?',
       body:
-          'The server deletes all the drive context it holds for your driver key (every drive) and every packet '
-          'header this phone shared. This cannot be undone. Your drives and their pings stay. Collection continues '
-          'as your switches say.',
+          'Deletes the sensor readings and phone details of every drive, and the observer packets this phone shared. '
+          'This cannot be undone. Your drives and their pings stay.',
       confirmLabel: 'Delete on the server',
       destructive: true,
     );
@@ -179,8 +193,7 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       dialogKey: 'delete-local-dialog',
       title: 'Delete the context saved on this phone?',
       body:
-          'Removes the air pressure, altitude, battery, radio readings and phone details recorded with your drives '
-          'from every drive on this phone, and from the drive reports. The drives themselves stay. '
+          'Removes the sensor readings and phone details saved with every drive on this phone. The drives stay. '
           '${s.meshTrack != null ? 'MeshTrack forgets your friends\' last positions and your group list; the channels stay in Chats. ' : ''}'
           'This does not change the server.',
       confirmLabel: 'Delete on this phone',
@@ -206,19 +219,21 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
     final ids = [for (final x in s.sessions) x.session.id];
     final recording = s.currentSession?.id;
     final n = ids.where((id) => id != recording).length;
+    if (n == 0) {
+      // Was a dialog with a red "Delete drives" button that then did nothing.
+      setState(() => _drivesResult = recording == null ? 'There are no drives on this phone.' : 'Only the drive being recorded is on this phone, and it is kept.');
+      return;
+    }
     final ok = await confirmSettingsChange(
       context,
       dialogKey: 'delete-drives-dialog',
       title: 'Delete all drives on this phone?',
-      body: n == 0
-          ? 'There are no drives on this phone.'
-          : 'Deletes $n drive${n == 1 ? '' : 's'} from this phone, including any that have not uploaded yet (those '
-                'are lost: export them first if you want a copy). Drives already on the server stay there until you '
-                'delete your account. This cannot be undone.',
+      body: 'Deletes $n drive${n == 1 ? '' : 's'} from this phone, including any not uploaded yet (export those first '
+          'to keep a copy). Drives on the server stay. This cannot be undone.',
       confirmLabel: 'Delete drives',
       destructive: true,
     );
-    if (!ok || !mounted || n == 0) return;
+    if (!ok || !mounted) return;
     setState(() => _drivesBusy = true);
     var done = 0;
     for (final id in ids) {
@@ -228,7 +243,9 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
     if (!mounted) return;
     setState(() {
       _drivesBusy = false;
-      _drivesResult = 'Deleted $done drive${done == 1 ? '' : 's'} from this phone.';
+      _drivesResult = 'Deleted $done drive${done == 1 ? '' : 's'} from this phone.'
+          '${done < n ? ' ${n - done} could not be deleted; try again.' : ''}'
+          '${recording != null ? ' The drive being recorded was kept.' : ''}';
     });
   }
 
@@ -238,13 +255,14 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
       dialogKey: 'delete-key-dialog',
       title: 'Remove the driver key from this phone?',
       body:
-          'This phone forgets the key and stops uploading. The key and your account stay on the server until you '
-          'delete your account on the website. The app keeps no copy of the key.',
+          'This phone forgets the key and stops uploading. Your account stays on the server. Save the key somewhere '
+          'first if you want to use it again: the app keeps no copy.',
       confirmLabel: 'Remove key',
       destructive: true,
     );
     if (!ok || !mounted) return;
     await s.forgetKey();
+    if (mounted) showAppToast(context, 'Driver key removed from this phone.');
   }
 
   @override
@@ -263,6 +281,46 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
         ? '$serverCannotEraseText Observer packets can still be erased with "Erase shared observer packets" in Privacy & data sharing.'
         : null;
 
+    const spinner = SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2));
+    final tall = ButtonStyle(minimumSize: WidgetStateProperty.all(const Size.fromHeight(48)));
+    final danger = FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError);
+    Widget line(String text, {Key? key}) => Text(text, key: key, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant));
+    // What happened, under the button that did it, in a box so it is not lost among the other text.
+    Widget result(Key key, List<String> lines, {String? title}) => Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Semantics(
+        liveRegion: true,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: t.colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            key: lines.length == 1 && title == null ? null : key,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (title != null) Text(title, style: t.textTheme.titleSmall),
+              if (lines.length == 1 && title == null)
+                Text(lines.single, key: key)
+              else
+                for (final l in lines) Padding(padding: const EdgeInsets.only(top: 2), child: Text(l)),
+            ],
+          ),
+        ),
+      ),
+    );
+    Widget more(String id, String title, List<Widget> children) => ExpansionTile(
+      key: Key(id),
+      dense: true,
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      expandedAlignment: Alignment.centerLeft,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: Text(title),
+      children: children,
+    );
+
     return Scaffold(
       appBar: AppBar(title: Text(settingsEntry('delete-my-data').title)),
       body: SafeArea(
@@ -270,119 +328,101 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
           key: const Key('delete-my-data-screen'),
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
-            const Text(deleteMyDataLead, key: Key('delete-my-data-lead')),
-            head('On the server'),
-            if (serverWhyNot != null) SettingsWhyNot(serverWhyNot, key: const Key('delete-server-whynot')),
-            if (s.contextErasePending && serverWhyNot == null)
-              const Text('An erase is waiting to reach the server; it is retried automatically.', key: Key('delete-server-pending')),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              key: const Key('delete-server-data'),
-              onPressed: (serverWhyNot != null || _serverBusy) ? null : () => _deleteOnServer(s),
-              icon: _serverBusy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_off_outlined),
-              label: const Text('Delete my data on the server'),
-            ),
-            if (_serverResult != null) ...[
-              const SizedBox(height: 12),
-              Semantics(
-                liveRegion: true,
-                child: Column(
-                  key: const Key('delete-server-result'),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_serverFailed ? 'Not finished' : 'Done', style: t.textTheme.titleSmall),
-                    for (final line in _serverResult!) Padding(padding: const EdgeInsets.only(top: 2), child: Text(line)),
-                  ],
-                ),
-              ),
-            ],
-            head('On this phone'),
-            const Text(
-              'The context saved with your drives on this phone is yours and stays unless you delete it here. '
-              'Deleting it does not change the server.',
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              key: const Key('delete-local-context'),
-              onPressed: _localBusy ? null : () => _deleteLocal(s),
-              icon: const Icon(Icons.phone_android_outlined),
-              label: const Text('Delete context saved on this phone'),
-            ),
-            if (_localResult != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Semantics(liveRegion: true, child: Text(_localResult!, key: const Key('delete-local-result'))),
-              ),
+            const Text(deleteMyDataShort, key: Key('delete-my-data-short')),
+            more('delete-details', 'What this covers', const [
+              Text(deleteMyDataLead, key: Key('delete-my-data-lead')),
+              SizedBox(height: 8),
+              Text(exportText, key: Key('export-text')),
+            ]),
+            // Download comes first (build 76): it is the safe step, and the one to take before deleting.
             head('Download my data'),
-            const Text(exportText, key: Key('export-text')),
+            line(exportShort, key: const Key('export-short')),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               key: const Key('export-data'),
+              style: tall,
               onPressed: (!s.accountAvailable || _exportBusy) ? null : () => _export(s),
-              icon: _exportBusy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.download_outlined),
-              label: const Text('Download my data'),
+              icon: _exportBusy ? spinner : const Icon(Icons.download_outlined),
+              label: Text(_exportBusy ? 'Preparing your file…' : 'Download my data'),
             ),
             if (!s.accountAvailable)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  s.hasKey ? 'Not available yet: the server has not confirmed your driver key.' : 'Needs a driver key. Add one in Settings > Account & driver key.',
+                  key: const Key('export-whynot'),
+                ),
+              ),
+            if (_exportResult != null) result(const Key('export-result'), [_exportResult!]),
+            head('Delete collected data on the server'),
+            line(deleteServerShort, key: const Key('delete-server-short')),
+            if (serverWhyNot != null) Padding(padding: const EdgeInsets.only(top: 6), child: SettingsWhyNot(serverWhyNot, key: const Key('delete-server-whynot'))),
+            if (s.contextErasePending && serverWhyNot == null)
               const Padding(
                 padding: EdgeInsets.only(top: 6),
-                child: Text('Needs a confirmed driver key on a server that offers it.', key: Key('export-whynot')),
+                child: Text('An earlier delete has not reached the server yet. It is sent again by itself.', key: Key('delete-server-pending')),
               ),
-            if (_exportResult != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Semantics(liveRegion: true, child: Text(_exportResult!, key: const Key('export-result'))),
-              ),
-            head('Your account and drives'),
-            const Text(deleteAccountText, key: Key('delete-account-text')),
             const SizedBox(height: 8),
-            if (s.serverCanDeleteDriver)
-              FilledButton.icon(
-                key: const Key('delete-account'),
-                style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
-                onPressed: _acctBusy ? null : () => _deleteAccount(s),
-                icon: _acctBusy
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.manage_accounts_outlined),
-                label: const Text('Delete my account'),
-              )
-            else
-              FilledButton.icon(
-                key: const Key('delete-account-website'),
-                style: FilledButton.styleFrom(backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
-                onPressed: () => s.openWebPage('/me/privacy'),
-                icon: const Icon(Icons.manage_accounts_outlined),
-                label: const Text('Delete my account on the website'),
-              ),
-            if (_acctResult != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Semantics(liveRegion: true, child: Text(_acctResult!, key: const Key('delete-account-result'))),
-              ),
+            FilledButton.icon(
+              key: const Key('delete-server-data'),
+              style: tall,
+              onPressed: (serverWhyNot != null || _serverBusy) ? null : () => _deleteOnServer(s),
+              icon: _serverBusy ? spinner : const Icon(Icons.cloud_off_outlined),
+              label: Text(_serverBusy ? 'Deleting…' : 'Delete my data on the server'),
+            ),
+            if (_serverResult != null) result(const Key('delete-server-result'), _serverResult!, title: _serverFailed ? 'Not finished' : 'Done'),
+            head('Delete collected data on this phone'),
+            line(deleteLocalShort, key: const Key('delete-local-short')),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              key: const Key('delete-all-drives'),
-              onPressed: _drivesBusy ? null : () => _deleteAllDrives(s),
-              icon: const Icon(Icons.route_outlined),
-              label: const Text('Delete all drives on this phone'),
+              key: const Key('delete-local-context'),
+              style: tall,
+              onPressed: _localBusy ? null : () => _deleteLocal(s),
+              icon: _localBusy ? spinner : const Icon(Icons.phone_android_outlined),
+              label: Text(_localBusy ? 'Deleting…' : 'Delete context saved on this phone'),
             ),
-            if (_drivesResult != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Semantics(liveRegion: true, child: Text(_drivesResult!, key: const Key('delete-drives-result'))),
-              ),
+            if (_localResult != null) result(const Key('delete-local-result'), [_localResult!]),
+            head('Your drives and driver key on this phone'),
+            OutlinedButton.icon(
+              key: const Key('delete-all-drives'),
+              style: tall,
+              onPressed: _drivesBusy ? null : () => _deleteAllDrives(s),
+              icon: _drivesBusy ? spinner : const Icon(Icons.route_outlined),
+              label: Text(_drivesBusy ? 'Deleting…' : 'Delete all drives on this phone'),
+            ),
+            if (_drivesResult != null) result(const Key('delete-drives-result'), [_drivesResult!]),
             if (s.hasKey) ...[
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 key: const Key('delete-remove-key'),
+                style: tall,
                 onPressed: () => _removeKey(s),
                 icon: const Icon(Icons.key_off_outlined),
                 label: const Text('Remove the driver key from this phone'),
               ),
             ],
+            // The one that cannot be taken back is last, alone, and red.
+            head('Delete my account'),
+            line(deleteAccountShort, key: const Key('delete-account-short')),
+            more('delete-account-details', 'What deleting my account covers', const [Text(deleteAccountText, key: Key('delete-account-text'))]),
+            const SizedBox(height: 4),
+            if (s.serverCanDeleteDriver)
+              FilledButton.icon(
+                key: const Key('delete-account'),
+                style: danger,
+                onPressed: _acctBusy ? null : () => _deleteAccount(s),
+                icon: _acctBusy ? spinner : const Icon(Icons.manage_accounts_outlined),
+                label: Text(_acctBusy ? 'Deleting…' : 'Delete my account'),
+              )
+            else
+              FilledButton.icon(
+                key: const Key('delete-account-website'),
+                style: danger,
+                onPressed: () => s.openWebPage('/me/privacy'),
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Delete my account on the website'),
+              ),
+            if (_acctResult != null) result(const Key('delete-account-result'), [_acctResult!]),
           ],
         ),
       ),

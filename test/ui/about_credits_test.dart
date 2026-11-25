@@ -2,10 +2,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart' show openMeteoCredit;
 import 'package:meshsonar/ui/about_screen.dart';
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/ui/settings/settings_index.dart';
 
 import 'fakes.dart';
@@ -57,6 +59,18 @@ void main() {
     Navigator.of(tester.element(find.byType(Scaffold).first)).push(MaterialPageRoute<void>(builder: (_) => const AboutScreen()));
     await tester.pumpAndSettle();
     final scroll = find.descendant(of: find.byType(AboutScreen), matching: find.byType(Scrollable)).first;
+    // Build 76: the page is rows; the licence text and the credits open on a tap, the long text is not on the page.
+    expect(find.byKey(const Key('mit-license')), findsNothing);
+    expect(find.byKey(const Key('notice-Open-Meteo')), findsNothing);
+    expect(find.text('${thirdPartyNotices.length} projects MeshSonar builds on'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('about-licence')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mit-license')), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const Key('about-credits')), 200, scrollable: scroll);
+    await tester.ensureVisible(find.byKey(const Key('about-credits')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('about-credits')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('notice-Open-Meteo')), 300, scrollable: scroll);
     expect(find.textContaining('Weather data by Open-Meteo.com (CC BY 4.0)'), findsOneWidget);
     expect(find.textContaining('non-commercial'), findsOneWidget);
@@ -65,5 +79,41 @@ void main() {
     await tester.tap(find.byKey(const Key('notice-Open-Meteo')));
     await tester.pumpAndSettle();
     expect(h.openedUrls, [Uri.parse('https://open-meteo.com')]);
+  });
+
+  testWidgets('About at 375 pt and 2x text: rows, no overflow; the version row copies the version', (tester) async {
+    tester.view.physicalSize = const Size(750, 1334);
+    tester.view.devicePixelRatio = 2;
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    String? clip;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') clip = (call.arguments as Map)['text'] as String;
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    final h = Harness();
+    await h.state.init();
+    await tester.pumpWidget(MaterialApp(home: AppScope(state: h.state, child: const AboutScreen())));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const Key('about-version')));
+    await tester.pump();
+    expect(clip, startsWith('MeshSonar '));
+    await tester.pump(const Duration(seconds: 6));
+    final scroll = find.byType(Scrollable).first;
+    for (final k in ['about-version', 'about-privacy-policy', 'about-licence', 'about-credits']) {
+      await tester.scrollUntilVisible(find.byKey(Key(k)), 100, scrollable: scroll);
+      expect(tester.getSize(find.byKey(Key(k))).height, greaterThanOrEqualTo(44), reason: k);
+    }
+    await tester.ensureVisible(find.byKey(const Key('about-credits')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('about-credits')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('show-licenses')), 300, scrollable: scroll);
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byKey(const Key('show-licenses'))).height, greaterThanOrEqualTo(44));
+    dismissAppToast();
   });
 }
