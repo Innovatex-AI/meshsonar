@@ -489,7 +489,10 @@ void main() {
       await tapShellTab(tester, 'Plan');
       expect(tester.widget<Text>(find.byKey(const Key('mini-bar-hero'))).data, '1 heard');
       // Build 76: a second line says what the drive is doing, and a red dot on the Drive tab says it is recording.
-      expect(tester.widget<Text>(find.byKey(const Key('mini-bar-next'))).data, contains('1 heard · '));
+      // It never repeats the headline: the ping count and what the next ping waits for.
+      final next = tester.widget<Text>(find.byKey(const Key('mini-bar-next'))).data!;
+      expect(next, startsWith('1 ping · '));
+      expect(next, isNot(contains('heard')), reason: 'line 1 already says "1 heard"');
       expect(find.byKey(const Key('drive-badge')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('mini-bar-elapsed'))).data, matches(RegExp(r'^\d+:\d\d$')));
       await tester.tap(find.byKey(const Key('mini-bar-open')));

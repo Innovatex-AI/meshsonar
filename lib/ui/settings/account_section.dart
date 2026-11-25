@@ -1,4 +1,4 @@
-// Settings > Account: the driver key (request, paste, reveal, remove), the server it works on, and the
+// Settings > Account: the driver key (create on its own page, paste, reveal, remove), the server it works on, and the
 // website links for the account. DriverKeyScreen shows the key part on its own over screens that need a key.
 import 'dart:async';
 
@@ -17,7 +17,8 @@ import '../widgets.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String driverHelp = 'Your driver key lets this phone upload drives. Without one, drives stay on this phone.';
+/// The one line on the no-key card (build 76: it was a line above the card and a second one inside it).
+const String driverKeyLine = 'Lets this phone upload drives. Without one, drives stay on this phone.';
 
 /// The section's rows, for the Settings shell.
 List<Widget> accountSectionRows(BuildContext context) => const [
@@ -84,7 +85,6 @@ class DriverKeyScreen extends StatelessWidget {
               id: 'driver',
               title: 'Driver key',
               icon: Icons.badge_outlined,
-              help: driverHelp,
               children: [DriverKeySection()],
             ),
           ],
@@ -281,9 +281,6 @@ class DriverKeySection extends StatefulWidget {
 }
 
 class _DriverKeySectionState extends State<DriverKeySection> {
-  final _name = TextEditingController();
-  final _callsign = TextEditingController();
-  final _email = TextEditingController();
   final _pasted = TextEditingController();
 
   // Tap-to-reveal: the full key is on screen only while the person asks for it (hides itself after 30 s).
@@ -300,13 +297,9 @@ class _DriverKeySectionState extends State<DriverKeySection> {
     }
   }
   bool _showPaste = false;
-  final _form = GlobalKey<FormState>();
 
   @override
   void dispose() {
-    _name.dispose();
-    _callsign.dispose();
-    _email.dispose();
     _pasted.dispose();
     _hideTimer?.cancel();
     super.dispose();
@@ -317,7 +310,7 @@ class _DriverKeySectionState extends State<DriverKeySection> {
     final s = AppScope.of(context);
     final st = s.settings;
     if (s.hasKey) return _status(context, s, st);
-    return _requestForm(context, s);
+    return _noKey(context, s);
   }
 
   Widget _status(BuildContext context, AppState s, Settings st) {
@@ -421,88 +414,48 @@ class _DriverKeySectionState extends State<DriverKeySection> {
     }
   }
 
-  Widget _requestForm(BuildContext context, AppState s) {
+  /// No key yet (build 76): one small card. What the key is for, "Create my key" (opens the form on its own page),
+  /// "I already have a key" (the paste field opens here), and a row to Devices and keys.
+  Widget _noKey(BuildContext context, AppState s) {
     final t = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: SizedBox(
-        width: double.infinity,
-        child: Material(
-          type: MaterialType.transparency,
-          child: Form(
-            key: _form,
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(children: [
-                  Text('Driver key', style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const Spacer(),
+                  Expanded(child: Text('Driver key', style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
                   const KeyStatusBadge(status: DriverKeyStatus.none),
                 ]),
                 const SizedBox(height: 6),
-                Text(
-                  s.keyBusy
-                      ? 'Setting up your driver key…'
-                      : 'Tap Create my key to upload your drives. All three fields are optional; only the callsign is public.',
-                  style: t.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  key: const Key('key-name'),
-                  controller: _name,
-                  decoration: const InputDecoration(labelText: 'Name (optional)'),
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  key: const Key('key-callsign'),
-                  controller: _callsign,
-                  decoration: const InputDecoration(labelText: 'Callsign (optional)', helperText: 'Shown in public. Empty: "Driver N".'),
-                  textCapitalization: TextCapitalization.characters,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  key: const Key('key-email'),
-                  controller: _email,
-                  decoration: const InputDecoration(labelText: 'Email (optional)'),
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  autofillHints: const [AutofillHints.email],
-                  textInputAction: TextInputAction.done,
-                  validator: (v) =>
-                      (v != null && v.trim().isNotEmpty && !v.contains('@')) ? 'That doesn\'t look like an email' : null,
-                ),
-                const SizedBox(height: 16),
+                Text(s.keyBusy ? 'Setting up your driver key…' : driverKeyLine,
+                    key: const Key('key-line'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 12),
                 if (s.keyError != null && !_showPaste) ErrorBanner(s.keyError!),
                 FilledButton.icon(
-                  key: const Key('key-request'),
+                  key: const Key('key-create'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
                   onPressed: s.keyBusy
                       ? null
-                      : () {
-                          if (!(_form.currentState?.validate() ?? false)) return;
-                          FocusScope.of(context).unfocus();
-                          s.requestKey(name: _name.text, callsign: _callsign.text, email: _email.text);
-                        },
+                      : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CreateKeyScreen())),
                   icon: s.keyBusy
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.vpn_key),
                   label: const Text('Create my key'),
                 ),
-                const SizedBox(height: 12),
-                const AccountLinks(),
+                const SizedBox(height: 4),
                 if (!_showPaste)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: const Key('key-have'),
-                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-                      onPressed: () => setState(() => _showPaste = true),
-                      icon: const Icon(Icons.key, size: 18),
-                      label: const Text('I already have a key'),
-                    ),
+                  TextButton(
+                    key: const Key('key-have'),
+                    style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                    onPressed: () => setState(() => _showPaste = true),
+                    child: const Text('I already have a key'),
                   )
                 else ...[
                   const SizedBox(height: 8),
@@ -538,8 +491,9 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                   ),
                   if (s.keyError != null) ...[const SizedBox(height: 8), ErrorBanner(s.keyError!, key: const Key('key-paste-error'))],
                   const SizedBox(height: 8),
-                  FilledButton.icon(
+                  FilledButton.tonalIcon(
                     key: const Key('key-use'),
+                    style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
                     onPressed: s.keyBusy
                         ? null
                         : () {
@@ -550,17 +504,139 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                     label: const Text('Use this key'),
                   ),
                 ],
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    key: const Key('key-privacy-policy'),
-                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 0)),
-                    onPressed: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
-                    icon: const Icon(Icons.policy_outlined, size: 18),
-                    label: const Text('Privacy policy'),
-                  ),
-                ),
               ],
+            ),
+          ),
+          if (s.radioProofCapable)
+            // No key to handle on this phone: the website link and the devices list, as before.
+            const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12), child: AccountLinks())
+          else ...[
+            Divider(height: 1, indent: 56, color: t.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            // A normal row (it was a loose link inside the form).
+            ListTile(
+              key: const Key('key-website'),
+              leading: const Icon(Icons.devices_outlined),
+              title: const Text('Devices and keys'),
+              subtitle: Text('Also on the website at ${s.webPage('/me')} if you sign in there.', key: const Key('account-hint')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen())),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// "Create my key" on a page of its own (build 76; it was a form at the top of Settings): name, callsign and email, all
+/// optional. Closes itself once this phone has a key; an error stays here with what was typed.
+class CreateKeyScreen extends StatefulWidget {
+  const CreateKeyScreen({super.key});
+  @override
+  State<CreateKeyScreen> createState() => _CreateKeyScreenState();
+}
+
+class _CreateKeyScreenState extends State<CreateKeyScreen> {
+  final _name = TextEditingController();
+  final _callsign = TextEditingController();
+  final _email = TextEditingController();
+  final _form = GlobalKey<FormState>();
+  bool _asked = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _callsign.dispose();
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create(AppState s) async {
+    if (!(_form.currentState?.validate() ?? false)) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _asked = true);
+    final ok = await s.requestKey(name: _name.text, callsign: _callsign.text, email: _email.text);
+    if (ok && mounted) Navigator.of(context).maybePop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create my key')),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          key: const Key('create-key-page'),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Form(
+                key: _form,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      s.keyBusy
+                          ? 'Setting up your driver key…'
+                          : 'Tap Create my key to upload your drives. All three fields are optional; only the callsign is public.',
+                      style: t.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      key: const Key('key-name'),
+                      controller: _name,
+                      decoration: const InputDecoration(labelText: 'Name (optional)'),
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      key: const Key('key-callsign'),
+                      controller: _callsign,
+                      decoration: const InputDecoration(labelText: 'Callsign (optional)', helperText: 'Shown in public. Empty: "Driver N".'),
+                      textCapitalization: TextCapitalization.characters,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      key: const Key('key-email'),
+                      controller: _email,
+                      decoration: const InputDecoration(labelText: 'Email (optional)'),
+                      keyboardType: TextInputType.emailAddress,
+                      autocorrect: false,
+                      autofillHints: const [AutofillHints.email],
+                      textInputAction: TextInputAction.done,
+                      validator: (v) =>
+                          (v != null && v.trim().isNotEmpty && !v.contains('@')) ? 'That doesn\'t look like an email' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    // Only an error from this page's own request: an older one belongs to the card behind.
+                    if (_asked && s.keyError != null) ErrorBanner(s.keyError!),
+                    FilledButton.icon(
+                      key: const Key('key-request'),
+                      style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                      onPressed: s.keyBusy || s.hasKey ? null : () => _create(s),
+                      icon: s.keyBusy
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.vpn_key),
+                      label: const Text('Create my key'),
+                    ),
+                    const SizedBox(height: 4),
+                    // Where data is first given, the policy is one tap away (App Review).
+                    TextButton.icon(
+                      key: const Key('key-privacy-policy'),
+                      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                      onPressed: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
+                      icon: const Icon(Icons.policy_outlined, size: 18),
+                      label: const Text('Privacy policy'),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

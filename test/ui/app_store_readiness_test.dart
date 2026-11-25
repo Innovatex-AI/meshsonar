@@ -58,7 +58,10 @@ void main() {
 
     testWidgets('the driver-key request form (where data is first given) links to it', (tester) async {
       final h = await open(tester, key: false);
-      await showSetting(tester, 'key-privacy-policy');
+      // Build 76: the form is on its own page behind "Create my key".
+      await showSetting(tester, 'key-create');
+      await tester.tap(find.byKey(const Key('key-create')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('key-privacy-policy')));
       await tester.pumpAndSettle();
       expect(h.openedUrls.map((u) => u.toString()), contains(privacyPolicyUrl));

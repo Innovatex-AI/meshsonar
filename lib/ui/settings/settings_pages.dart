@@ -72,7 +72,6 @@ List<Widget> settingsSectionRows(BuildContext context, String id) {
 
 /// One short line under a section's title; null for a section that needs none.
 String? settingsSectionHelp(String id) => switch (sectionInfo(id).id) {
-      'driver' => driverHelp,
       'wardriving' => wardrivingHelp,
       'privacy' => privacyHelp,
       _ => null,

@@ -217,9 +217,9 @@ void main() {
       expect(h.settings.saved.keyStatus, DriverKeyStatus.none);
       // Back on the first level, Account offers a new key.
       expect(find.byKey(const Key('settings-page-account-advanced')), findsOneWidget);
-      await showSetting(tester, 'key-request');
+      await showSetting(tester, 'key-create');
       expect(find.byKey(const Key('settings-page-account-advanced')), findsNothing);
-      expect(find.byKey(const Key('key-request')), findsOneWidget);
+      expect(find.byKey(const Key('key-create')), findsOneWidget);
     },
   );
 
@@ -260,7 +260,7 @@ void main() {
           .data!;
       expect(
         hint,
-        'Your keys, drives and reports are all in the app. The same pages are on the website at https://mesh.example.org/me if you sign in there.',
+        'Also on the website at https://mesh.example.org/me if you sign in there.',
       );
       await showSetting(tester, 'key-website');
       expect(find.text('Devices and keys'), findsOneWidget);

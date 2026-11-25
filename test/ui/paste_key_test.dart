@@ -35,7 +35,7 @@ void main() {
   testWidgets('pasting a website key checks it with the server, then saves it', (tester) async {
     final h = await openSettings(tester);
     expect(find.byKey(const Key('key-paste')), findsOneWidget);
-    expect(find.byKey(const Key('key-request')), findsOneWidget, reason: 'requesting a new key still works');
+    expect(find.byKey(const Key('key-create')), findsOneWidget, reason: 'creating a new key still works');
 
     h.client.statusResult = (status: DriverKeyStatus.approved, display: 'KE4BFI');
     await tester.enterText(find.byKey(const Key('key-paste')), '  ms_websiteKey0123456789abcdefghijklmnopqrstuv9876  ');
