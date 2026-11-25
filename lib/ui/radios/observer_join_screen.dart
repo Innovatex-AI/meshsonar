@@ -12,6 +12,7 @@ import '../claims/claim_radio_screen.dart';
 import '../claims/claim_repeater_screen.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
+import '../drive/drive_controls.dart' show openConnect;
 import '../shell/plan_tab.dart' show planToolUri;
 
 /// The screen's title (also the More row's label: one wording everywhere).
@@ -19,8 +20,8 @@ const String observerJoinTitle = 'Set up a repeater observer';
 
 /// The intro: the phone is already an observer; this guide is for a repeater.
 const String observerJoinIntro =
-    'Your phone is already an observer while your radio is connected (Settings > Observer). This guide sets up a '
-    'repeater that reports every packet it hears to MeshSonar: free, and it joins its region on its own.';
+    'Make a repeater report what it hears to MeshSonar. Free. (Your phone already does this while your radio is '
+    'connected: Settings > Observer.)';
 
 /// The website page with the copy-paste settings for each kind of observer.
 const String observerSetupPath = '/observers/setup';
@@ -145,10 +146,18 @@ class ObserverJoinScreen extends StatelessWidget {
                   const SizedBox(height: Gap.m),
                 ],
                 step(1, 'connect', 'Connect your radio',
-                    'The radio in your hand talks to the repeater for you, so it has to be within reach of it.', p.connect,
-                    action: p.radioConnected ? null : Text('Open More > Radio to connect your radio.', style: t.textTheme.bodySmall)),
+                    'It talks to the repeater for you, so stay within reach of it.', p.connect,
+                    // Build 76: a button, not directions to another tab.
+                    action: p.radioConnected
+                        ? null
+                        : FilledButton.tonalIcon(
+                            key: const Key('observer-connect'),
+                            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                            icon: const Icon(Icons.bluetooth_searching),
+                            label: const Text('Connect radio'),
+                            onPressed: () => openConnect(context))),
                 step(2, 'claim-radio', 'Claim your radio (optional)',
-                    'Proves the radio is yours without a password, so you can manage it later.', p.claimRadio,
+                    'Proves the radio is yours. No password.', p.claimRadio,
                     action: p.radioClaimed
                         ? null
                         : OutlinedButton(
@@ -156,8 +165,8 @@ class ObserverJoinScreen extends StatelessWidget {
                             onPressed: p.claimRadio == ObserverStepState.next ? () => _open(context, const ClaimRadioScreen()) : null,
                             child: const Text('Claim my radio'))),
                 step(3, 'claim-repeater', 'Claim the repeater',
-                    'Your radio logs in to the repeater with its admin password, over the mesh. That is the proof it is yours. '
-                    'Nothing on the repeater is changed, and the password stays on this phone and goes only to your radio.',
+                    'Your radio logs in to the repeater with its admin password. Nothing on the repeater is changed, and the '
+                    'password never leaves this phone and your radio.',
                     p.claimRepeater,
                     action: p.repeaterClaimed
                         ? null
@@ -166,8 +175,7 @@ class ObserverJoinScreen extends StatelessWidget {
                             onPressed: p.claimRepeater == ObserverStepState.next ? () => _open(context, const ClaimRepeaterScreen()) : null,
                             child: const Text('Claim a repeater'))),
                 step(4, 'report', 'Point the repeater at MeshSonar',
-                    'The repeater has to run observer firmware and publish to mqtt.meshsonar.com. The website lists the exact settings for '
-                    'your hardware, ready to copy. This app never sends commands to your repeater.',
+                    'The repeater needs observer firmware. The website has the exact settings for your hardware, ready to copy.',
                     p.repeaterClaimed ? ObserverStepState.next : ObserverStepState.waiting,
                     action: OutlinedButton(
                         key: const Key('observer-open-setup'),
@@ -179,8 +187,7 @@ class ObserverJoinScreen extends StatelessWidget {
                         },
                         child: const Text('Open the setup steps'))),
                 step(5, 'check', 'See it on the map',
-                    'A few minutes after it reports, the repeater shows as an observer in your region and its pings get confirmed. '
-                    'Drive near it and the Last ping line says how many observers confirmed.',
+                    'A few minutes later it shows as an observer in your region.',
                     ObserverStepState.waiting),
               ],
             ),

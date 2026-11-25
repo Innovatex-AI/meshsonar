@@ -335,12 +335,32 @@ class _PlanSettings extends StatelessWidget {
     final r = p.radio;
     final choices = planRadioChoices(regionPreset);
     final units = AppScope.unitsOf(context);
+    final sfTile = SliderTile(
+      key: const ValueKey('plan-radio-sf'),
+      sliderKey: const Key('plan-radio-sf-slider'),
+      icon: symbolData(context, AppSymbols.waveform),
+      title: 'Spreading factor',
+      caption: 'Higher reaches farther and takes longer on the air.',
+      stops: presetSf,
+      value: r.sf,
+      label: (v) => 'SF$v',
+      onChanged: (v) => controller.setRadio(PlanRadio(freqMHz: r.freqMHz, bwKHz: r.bwKHz, sf: v, cr: r.cr)),
+    );
+    final isDefault = p.clutter.canopyM == const PlanClutter().canopyM && p.clutter.dbPerKm == const PlanClutter().dbPerKm;
     return AppSheetScaffold(
       key: const Key('plan-settings'),
       controller: scroll,
-      title: 'Radio and clutter',
+      title: 'Radio and trees',
+      // Build 76: a full-width Done at the thumb (the sheet could only be dragged away), the two things people know
+      // (which radio preset, how tall the trees are) first, and the expert figures under "Fine-tune".
+      primaryAction: FilledButton(
+        key: const Key('plan-settings-done'),
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
+        onPressed: () => Navigator.of(context).maybePop(),
+        child: const Text('Done'),
+      ),
       children: [
-        Text('These settings belong to this plan. Every link and coverage Estimate uses them.', style: t.textTheme.bodyMedium),
+        Text('Used for every Estimate in this plan.', style: t.textTheme.bodyMedium),
         const SizedBox(height: Gap.m),
         Semantics(header: true, child: Text('Radio', style: t.textTheme.titleSmall)),
         for (final c in choices)
@@ -355,19 +375,24 @@ class _PlanSettings extends StatelessWidget {
             // ignore: deprecated_member_use
             onChanged: (_) => controller.setRadio(c.radio),
           ),
+        const SizedBox(height: Gap.s),
+        Semantics(header: true, child: Text('Trees and buildings (Estimate)', style: t.textTheme.titleSmall)),
+        Text('The map data has no trees or buildings. Turn this down for open country.', style: t.textTheme.bodySmall),
         SliderTile(
-          key: const ValueKey('plan-radio-sf'),
-          sliderKey: const Key('plan-radio-sf-slider'),
-          icon: symbolData(context, AppSymbols.waveform),
-          title: 'Spreading factor',
-          caption: 'Higher reaches farther and takes longer on the air.',
-          stops: presetSf,
-          value: r.sf,
-          label: (v) => 'SF$v',
-          onChanged: (v) => controller.setRadio(PlanRadio(freqMHz: r.freqMHz, bwKHz: r.bwKHz, sf: v, cr: r.cr)),
+          key: const ValueKey('plan-canopy'),
+          sliderKey: const Key('plan-canopy-slider'),
+          icon: symbolData(context, AppSymbols.arrowUpCircleFill),
+          title: 'Tree height',
+          stops: _canopyStops,
+          value: p.clutter.canopyM.round(),
+          label: (v) => units.height(v.toDouble()),
+          onChanged: (v) => controller.setClutter(PlanClutter(canopyM: v.toDouble(), dbPerKm: p.clutter.dbPerKm)),
         ),
         const SizedBox(height: Gap.s),
-        Text('Bandwidth', style: t.textTheme.titleSmall),
+        Semantics(header: true, child: Text('Fine-tune', style: t.textTheme.titleSmall)),
+        sfTile,
+        const SizedBox(height: Gap.s),
+        Text('Bandwidth (kHz)', style: t.textTheme.titleSmall),
         const SizedBox(height: Gap.xs),
         SegmentedButton<double>(
           key: const Key('plan-radio-bw'),
@@ -380,29 +405,28 @@ class _PlanSettings extends StatelessWidget {
           title: 'Sensitivity ${sensitivityDbm(r.sf, r.bwKHz).toStringAsFixed(1)} dBm (Estimate)',
           subtitle: radioWords(r),
         ),
-        const SizedBox(height: Gap.m),
-        Semantics(header: true, child: Text('Clutter (Estimate)', style: t.textTheme.titleSmall)),
-        Text('Trees and buildings are not in the terrain data, so the model adds this allowance. Turn it down for open country.', style: t.textTheme.bodySmall),
-        SliderTile(
-          key: const ValueKey('plan-canopy'),
-          sliderKey: const Key('plan-canopy-slider'),
-          icon: symbolData(context, AppSymbols.arrowUpCircleFill),
-          title: 'Tree canopy height',
-          stops: _canopyStops,
-          value: p.clutter.canopyM.round(),
-          label: (v) => units.height(v.toDouble()),
-          onChanged: (v) => controller.setClutter(PlanClutter(canopyM: v.toDouble(), dbPerKm: p.clutter.dbPerKm)),
-        ),
         SliderTile(
           key: const ValueKey('plan-clutter-loss'),
           sliderKey: const Key('plan-clutter-loss-slider'),
           icon: symbolData(context, AppSymbols.minus),
-          title: 'Loss through clutter',
+          title: 'Loss through trees',
           stops: _lossStops,
           value: (p.clutter.dbPerKm * 10).round(),
           label: (v) => '${(v / 10).toStringAsFixed(1)} dB/km',
           onChanged: (v) => controller.setClutter(PlanClutter(canopyM: p.clutter.canopyM, dbPerKm: v / 10)),
         ),
+        // One tap back to the usual values, shown only when they were changed.
+        if (!isDefault)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('plan-clutter-reset'),
+              style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+              onPressed: () => controller.setClutter(const PlanClutter()),
+              icon: const Icon(Icons.restart_alt, size: 18),
+              label: const Text('Back to the usual tree settings'),
+            ),
+          ),
         const SizedBox(height: Gap.l),
       ],
     );

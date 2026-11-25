@@ -36,7 +36,7 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
         if (!c.isAdmin) {
           return const Padding(
             padding: EdgeInsets.all(Gap.xl),
-            child: Center(child: Text('Settings need the admin password. You are logged in as a guest.', key: Key('settings-guest'), textAlign: TextAlign.center)),
+            child: Center(child: Text('You are logged in as a guest. Log in with the admin password to change settings.', key: Key('settings-guest'), textAlign: TextAlign.center)),
           );
         }
         final p = c.settingsProgress;
@@ -58,7 +58,7 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
                       child: Column(children: [
                         LinearProgressIndicator(key: const Key('settings-progress'), value: p == null || p.total == 0 ? null : p.done / p.total),
                         const SizedBox(height: 6),
-                        Text(p == null ? 'Reading settings...' : 'Reading ${p.done} of ${p.total}. Each takes about a second.', textAlign: TextAlign.center),
+                        Text(p == null ? 'Reading settings…' : 'Reading ${p.done} of ${p.total}…', textAlign: TextAlign.center),
                       ]),
                     ),
                   if (c.session.pendingReboot.isNotEmpty) _rebootBanner(context),
@@ -83,12 +83,25 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
       margin: const EdgeInsets.only(bottom: Gap.s),
       padding: const EdgeInsets.all(Gap.m),
       decoration: BoxDecoration(color: t.colorScheme.tertiaryContainer, borderRadius: BorderRadius.circular(Corners.chip)),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Icons.restart_alt, color: t.colorScheme.onTertiaryContainer),
-        const SizedBox(width: Gap.s),
-        Expanded(
-            child: Text('Saved but not used yet: ${c.session.pendingReboot.join(', ')}. The repeater uses it after it reboots (see Advanced).',
-                style: TextStyle(color: t.colorScheme.onTertiaryContainer, height: 1.3))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.restart_alt, color: t.colorScheme.onTertiaryContainer),
+          const SizedBox(width: Gap.s),
+          Expanded(
+              child: Text('Saved but not used yet: ${c.session.pendingReboot.join(', ')}. The repeater uses it after it reboots.',
+                  style: TextStyle(color: t.colorScheme.onTertiaryContainer, height: 1.3))),
+        ]),
+        // Build 76: the reboot is one tap from here (it said "see Advanced", three scrolls and an expander away). It
+        // still asks for the typed word.
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            key: const Key('reboot-banner-go'),
+            style: TextButton.styleFrom(minimumSize: kTarget, foregroundColor: t.colorScheme.onTertiaryContainer),
+            onPressed: () => _reboot(context),
+            child: const Text('Reboot now…'),
+          ),
+        ),
       ]),
     );
   }
@@ -167,7 +180,7 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
               minVerticalPadding: Gap.s,
               leading: Icon(Icons.restart_alt, color: t.colorScheme.error),
               title: const Text('Reboot the repeater'),
-              subtitle: const Text('It is off the air for a few seconds and does not answer the reboot command. Needed after changing radio parameters.'),
+              subtitle: const Text('Off the air for a few seconds. Needed after changing radio settings.'),
               onTap: () => _reboot(context),
             ),
           ],
@@ -203,6 +216,8 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
     final applied = c.lastApplied[d.key];
     String sub;
     var enabled = true;
+    // Build 76: a row that could not be read gets its own Try again (it needed a pull on the whole page).
+    var retry = false;
     if (v == null) {
       sub = c.loadingSettings ? 'Reading...' : 'Not read yet';
     } else {
@@ -213,9 +228,11 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
           sub = 'Not on this firmware';
           enabled = false;
         case ReadState.silent:
-          sub = 'No answer. Pull down to read again.';
+          sub = 'No answer. Tap the arrow to read again.';
+          retry = true;
         case ReadState.error:
-          sub = 'Could not read';
+          sub = 'Could not read. Tap the arrow to try again.';
+          retry = true;
       }
     }
     Widget? badge;
@@ -239,7 +256,15 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
         enabled: enabled && c.stage == AdminStage.ready,
         title: Text(d.label),
         subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(sub, style: t.textTheme.bodyMedium), ?badge]),
-        trailing: Icon(d.danger.index >= Danger.disruptive.index ? Icons.warning_amber_rounded : Icons.chevron_right, color: d.danger.index >= Danger.disruptive.index ? const Color(0xFFB26A00) : null),
+        trailing: retry
+            ? IconButton(
+                key: Key('setting-retry-${d.key}'),
+                tooltip: 'Read again',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                onPressed: c.loadingSettings ? null : () => c.loadSettings(force: true),
+                icon: const Icon(Icons.refresh),
+              )
+            : Icon(d.danger.index >= Danger.disruptive.index ? Icons.warning_amber_rounded : Icons.chevron_right, color: d.danger.index >= Danger.disruptive.index ? const Color(0xFFB26A00) : null),
         onTap: enabled ? () => showSettingEditor(context, c, d) : null,
       ),
     );

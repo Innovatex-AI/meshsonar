@@ -15,17 +15,21 @@ void main() {
     attachUiPrefs(h.state, prefs);
     await h.pumpApp(tester);
     expect(find.byKey(const Key('onboarding')), findsOneWidget);
-    expect(find.text('Your MeshCore radio, in one app'), findsOneWidget);
+    expect(find.text('Map where your mesh reaches'), findsOneWidget);
 
+    // Build 76: the radio page is second, so Connect is one tap from the first page.
+    await tester.tap(find.byKey(const Key('onboarding-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect your radio'), findsOneWidget);
+    expect(find.byKey(const Key('onboarding-connect')), findsOneWidget);
+    expect(find.text('Later'), findsOneWidget, reason: 'the radio can wait: the button says so');
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('Find your way around'), findsOneWidget);
     for (final tab in ['Chat', 'Drive', 'Network', 'Plan', 'More']) {
       expect(find.text(tab), findsWidgets);
     }
-    await tester.tap(find.byKey(const Key('onboarding-next')));
-    await tester.pumpAndSettle();
-    expect(find.text('Connect your radio'), findsOneWidget);
+    expect(find.text('Record a drive and see coverage'), findsOneWidget, reason: 'one line per tab');
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     expect(find.text('Nothing to sign up for'), findsOneWidget);
@@ -40,6 +44,22 @@ void main() {
     attachUiPrefs(h2.state, prefs);
     await h2.pumpApp(tester);
     expect(find.byKey(const Key('onboarding')), findsNothing);
+  });
+
+  testWidgets('every page fits an iPhone SE (375x667) without overflow', (tester) async {
+    tester.view.physicalSize = const Size(375, 667);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final h = Harness();
+    attachUiPrefs(h.state, UiPrefs());
+    await h.pumpApp(tester);
+    for (var i = 0; i < 3; i++) {
+      expect(tester.takeException(), isNull, reason: 'page ${i + 1}');
+      await tester.tap(find.byKey(const Key('onboarding-next')));
+      await tester.pumpAndSettle();
+    }
+    expect(tester.takeException(), isNull);
+    expect(find.text('Get started'), findsOneWidget);
   });
 
   testWidgets('intro is skippable', (tester) async {
@@ -59,8 +79,6 @@ void main() {
     final h = Harness();
     attachUiPrefs(h.state, UiPrefs());
     await h.pumpApp(tester);
-    await tester.tap(find.byKey(const Key('onboarding-next')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('onboarding-next')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('onboarding-simulator')));

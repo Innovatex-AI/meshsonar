@@ -38,13 +38,14 @@ class AdminOverviewView extends StatelessWidget {
                 children: [
                   if (c.notices['overview'] != null) NoticeBanner(c.notices['overview']!, bannerKey: const Key('overview-notice')),
                   if (c.isAdmin && c.factoryPasswordInUse != null) _FactoryNag(),
-                  if (!c.isAdmin) NoticeBanner(const AdminNotice('Logged in as a guest: you can read status, but settings, the access list and the console need the admin password.', error: false), bannerKey: const Key('guest-note')),
+                  if (!c.isAdmin) NoticeBanner(const AdminNotice('Guest: you can look, not change. Changing needs the admin password.', error: false), bannerKey: const Key('guest-note')),
+                  // Build 76: the page is called Health check, so the check comes first; the long counter table is last.
+                  _health(context),
                   _identity(context, s),
                   if (c.loadingOverview && s == null) _loading(context) else ...[
-                    _status(context, s),
                     _clock(context, s),
+                    _status(context, s),
                   ],
-                  _health(context),
                   if (c.isAdmin) _adverts(context),
                   ClaimRepeaterAction(keyHex: keyHex, name: s?.identity.name ?? c.title, isRoom: c.isRoom),
                 ],
@@ -180,7 +181,7 @@ class AdminOverviewView extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
           c.isAdmin
-              ? 'Checks the clock, radio settings against this region, power, adverts, neighbours and (for observers) the uplink. It reads about 15 values and never changes anything.'
+              ? 'Checks the clock, radio settings, power, adverts and neighbours. It only reads; nothing is changed.'
               : 'Checks what a guest can read: the clock, battery and noise. Log in as admin for the full check.',
           style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
         ),
@@ -231,7 +232,7 @@ class AdminOverviewView extends StatelessWidget {
       title: 'Adverts',
       icon: Icons.campaign_outlined,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('An advert tells other radios this repeater exists. A flood advert travels the whole mesh and uses airtime on every repeater that passes it on (about 0.35 s each). A local advert only reaches direct neighbours.',
+        Text('An advert tells other radios this repeater exists. Local reaches its direct neighbours; flood crosses the whole mesh and uses airtime on every repeater.',
             style: t.textTheme.bodyMedium?.copyWith(height: 1.3)),
         const SizedBox(height: Gap.s),
         Wrap(spacing: Gap.m, runSpacing: Gap.s, children: [

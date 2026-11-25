@@ -123,6 +123,10 @@ void main() {
       expect(find.text('This radio is on KE4BFI\'s account. Is that you?'), findsOneWidget);
       expect(find.textContaining('Yes, add this'), findsOneWidget);
       expect(find.text('No, the radio is mine now'), findsOneWidget);
+      // Build 76: one card per answer, and Not now is a full-width 48 pt button.
+      expect(find.byKey(const Key('radio-proof-yes-card')), findsOneWidget);
+      expect(find.byKey(const Key('radio-proof-no-card')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('radio-proof-later'))).height, greaterThanOrEqualTo(48));
       expect(h.proof.decides, 0);
       await tester.tap(find.byKey(const Key('radio-proof-join')));
       await settle(tester, () => h.proof.decides > 0);

@@ -106,15 +106,19 @@ class _AdminConsoleViewState extends State<AdminConsoleView> {
             Padding(
               padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
               child: Text(
-                  'Read-only commands run at once. Anything that changes a setting asks you to confirm first. The repeater answers in up to 160 characters, and each command uses airtime.',
+                  'Tap a command or type one. Anything that changes a setting asks first.',
                   style: t.textTheme.bodyMedium?.copyWith(height: 1.3)),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.s),
-              child: Wrap(spacing: Gap.s, runSpacing: 0, children: [
-                for (final q in const ['ver', 'board', 'clock', 'get radio', 'get tx', 'neighbors', 'region'])
-                  ActionChip(key: Key('console-q-$q'), label: Text(q), onPressed: _busy ? null : () => _send(q)),
-              ]),
+              // One scrolling row (build 76): seven chips wrapped onto three rows and pushed the replies off an iPhone SE.
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  for (final q in const ['ver', 'board', 'clock', 'get radio', 'get tx', 'neighbors', 'region'])
+                    Padding(padding: const EdgeInsets.only(right: Gap.s), child: ActionChip(key: Key('console-q-$q'), label: Text(q), onPressed: _busy ? null : () => _send(q))),
+                ]),
+              ),
             ),
             Expanded(
               child: Container(
@@ -122,7 +126,7 @@ class _AdminConsoleViewState extends State<AdminConsoleView> {
                 padding: const EdgeInsets.all(Gap.m),
                 decoration: BoxDecoration(color: t.colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(Corners.chip)),
                 child: _lines.isEmpty
-                    ? Text('Nothing yet. Try "ver" or "get radio".', style: t.textTheme.bodyMedium)
+                    ? Text('Replies show here. Each command uses a little airtime.', style: t.textTheme.bodyMedium)
                     : ListView.builder(
                         key: const Key('console-history'),
                         controller: _scroll,
@@ -154,7 +158,7 @@ class _AdminConsoleViewState extends State<AdminConsoleView> {
                     enableSuggestions: false,
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
-                    decoration: const InputDecoration(hintText: 'Command, for example get radio'),
+                    decoration: const InputDecoration(hintText: 'Command'),
                   ),
                 ),
                 const SizedBox(width: Gap.s),

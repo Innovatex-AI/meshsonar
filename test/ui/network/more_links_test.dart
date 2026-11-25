@@ -103,6 +103,8 @@ void main() {
     expect(find.byKey(const Key('more-radio-screen')), findsOneWidget);
     expect(find.byKey(const Key('network-subtitle')), findsOneWidget);
     expect(find.byKey(const Key('network-radio-card')), findsOneWidget);
+    // Build 76: set-up and the region check sit above the radio card and the repeaters, not under them.
+    expect(tester.getTopLeft(find.byKey(const Key('more-radioSetup'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('network-radio-card'))).dy));
     final list = find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first;
     for (final k in ['more-radioSettings', 'more-radioSetup', 'more-noiseFloor', 'more-telemetry']) {
       await tester.scrollUntilVisible(find.byKey(Key(k)), 200, scrollable: list);

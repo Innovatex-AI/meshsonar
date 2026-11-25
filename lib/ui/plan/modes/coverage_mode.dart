@@ -59,6 +59,8 @@ class CoverageMode extends PlanMode {
   @override
   String get hint => 'What the nodes of the plan would cover, drawn on the map.';
   @override
+  String get what => 'How far would a radio here reach?';
+  @override
   Widget buildSheet(PlanModeContext context) => CoverageBody(context, key: ValueKey('plan-mode-body-coverage-${context.intent?.seq}'));
 }
 
@@ -541,7 +543,7 @@ class CoverageBodyState extends State<CoverageBody> {
         key: const Key('plan-mode-coverage'),
         symbol: AppSymbols.antenna,
         title: 'Add a node to estimate its coverage',
-        message: 'Long-press the map where a repeater could go, or add one from the network.',
+        message: 'Press and hold the map where a repeater could go, or add one from the network.',
         actionLabel: 'Add from the network',
         onAction: ctx.openNodePicker,
       );
@@ -587,7 +589,7 @@ class CoverageBodyState extends State<CoverageBody> {
               : 'Estimate ${missing.length == nodes.length ? 'every node' : 'the other ${missing.length} ${missing.length == 1 ? 'node' : 'nodes'}'}${nodes.length > coverageMaxSites ? ' (first $coverageMaxSites)' : ''}'),
         ),
       ],
-      if (busy) const PlanLine(AppSymbols.clock, 'The model reads terrain tiles and sweeps the area; the first run for a place can take up to a minute.'),
+      if (busy) const PlanLine(AppSymbols.clock, 'Working it out from the hills around it. The first time can take up to a minute.'),
       const SizedBox(height: Gap.s),
       if (run != null && !run.result.ok && current)
         AppErrorView(key: const Key('coverage-error'), title: 'Could not estimate coverage', message: run.result.error, onRetry: () => unawaited(estimate(node.id))),
@@ -695,6 +697,9 @@ class CoverageBodyState extends State<CoverageBody> {
           excludeSemantics: true,
           child: Text(areaWords(units, d.coveredKm2), key: const Key('coverage-area'), style: numberStyle(context, size: 30)),
         ),
+        // Build 76: the area as a distance people can picture, before the technical line.
+        if (d.coveredKm2 > 0)
+          Text('About the same as a circle ${units.distance(2000 * math.sqrt(d.coveredKm2 / math.pi))} across.', key: const Key('coverage-plain'), style: t.textTheme.bodyLarge),
         Text('Estimate: area where a ${CoverageReceiver.of(_plan.receiverM).label.toLowerCase()} radio can decode this site', style: t.textTheme.bodySmall),
         const SizedBox(height: Gap.s),
         for (final b in d.bands)
@@ -881,12 +886,12 @@ class CoverageBodyState extends State<CoverageBody> {
     final spot = _session.spot;
     final reach = spot?.rows.where((r) => r.$3).length ?? 0;
     return [
-      Semantics(header: true, child: Text('How many repeaters see a spot', style: t.textTheme.titleSmall)),
+      Semantics(header: true, child: Text('Which repeaters reach one spot?', style: t.textTheme.titleSmall)),
       Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
         FilterChip(
           key: const Key('coverage-spot-arm'),
           avatar: const AppSymbolIcon(AppSymbols.pin, size: 16),
-          label: Text(_spotArmed ? 'Long-press the map to check' : 'Check a spot'),
+          label: Text(_spotArmed ? 'Now press and hold the map' : 'Check a spot'),
           selected: _spotArmed,
           onSelected: (on) => setState(() => _spotArmed = on),
         ),
@@ -898,10 +903,10 @@ class CoverageBodyState extends State<CoverageBody> {
             if (b == null) return;
             unawaited(checkSpot(PlanPoint((b.south + b.north) / 2, (b.west + b.east) / 2)));
           },
-          child: const Text('Check the middle of the map'),
+          child: const Text('Check the map centre'),
         ),
       ]),
-      if (_spotArmed) const PlanLine(AppSymbols.infoCircle, 'While this is on, a long-press checks the spot instead of dropping a node.'),
+      if (_spotArmed) const PlanLine(AppSymbols.infoCircle, 'On: press and hold the map to check that spot (no node is added).'),
       if (spot != null)
         Semantics(
           liveRegion: true,

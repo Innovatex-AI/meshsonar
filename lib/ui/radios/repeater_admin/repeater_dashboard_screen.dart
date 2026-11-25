@@ -8,6 +8,7 @@ import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator, Cuperti
 import 'package:flutter/material.dart';
 
 import '../../../chat/db/stats_history_repository.dart' show StatsPoint;
+import '../../../core/units.dart' show Units;
 import '../../../radio/default_passwords.dart';
 import '../../../radio/has_connection.dart';
 import '../../../radio/repeater_admin.dart';
@@ -196,20 +197,28 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
                   _updatedLine(context),
                   if (admin && c.factoryPasswordInUse != null) _factoryCard(context),
                   _statusGroup(context),
+                  // Build 76: two groups. What you can look at, then (admin) what you can change; they were one list of seven.
                   InsetGroup(
                     groupKey: const Key('group-more'),
-                    header: 'More',
+                    header: 'Look',
                     footer: admin ? null : 'Signed in as Guest. Admin features need the admin password.',
                     rows: [
                       if (c.hasNeighbours) GroupRow(rowKey: const Key('row-neighbours'), title: 'Neighbours', value: c.neighbours == null ? null : '${c.neighbours!.length}', onTap: () => _push('Neighbours', AdminNeighboursView(controller: c))),
                       GroupRow(rowKey: const Key('row-telemetry'), title: 'Telemetry', onTap: () => _push('Telemetry', _TelemetryPage(controller: c))),
                       if (c.hasRegions) GroupRow(rowKey: const Key('row-regions'), title: 'Regions', onTap: () => _push('Regions', AdminRegionsView(controller: c))),
                       GroupRow(rowKey: const Key('row-health'), title: 'Health check and clock', onTap: () => _push('Health check', AdminOverviewView(controller: c, keyHex: widget.keyHex))),
-                      if (admin) GroupRow(rowKey: const Key('row-settings'), title: 'Settings', onTap: _openSettings),
-                      if (admin) GroupRow(rowKey: const Key('row-access'), title: 'Access list', onTap: () => _push('Access list', AdminAccessView(controller: c))),
-                      if (admin) GroupRow(rowKey: const Key('row-console'), title: 'Console', onTap: () => _push('Console', AdminConsoleView(controller: c))),
                     ],
                   ),
+                  if (admin)
+                    InsetGroup(
+                      groupKey: const Key('group-manage'),
+                      header: 'Change',
+                      rows: [
+                        GroupRow(rowKey: const Key('row-settings'), title: 'Settings', onTap: _openSettings),
+                        GroupRow(rowKey: const Key('row-access'), title: 'Passwords and access', onTap: () => _push('Access list', AdminAccessView(controller: c))),
+                        GroupRow(rowKey: const Key('row-console'), title: 'Console (expert)', onTap: () => _push('Console', AdminConsoleView(controller: c))),
+                      ],
+                    ),
                   SizedBox(height: Gap.xl, child: ColoredBox(color: colors.bg)),
                 ]),
               ),
@@ -337,9 +346,9 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
       GroupRow(
           rowKey: const Key('status-signal'),
           valueKey: const Key('v-signal'),
-          title: 'Last RSSI / SNR',
+          title: 'Last signal (RSSI / SNR)',
           value: st == null ? '—' : '${st.lastRssiDbm} / ${st.hasSnr ? '${st.lastSnrDb >= 0 ? '+' : ''}${st.lastSnrDb.toStringAsFixed(1)}' : na}'),
-      GroupRow(rowKey: const Key('status-queue'), valueKey: const Key('v-queue'), title: 'Queue · errors', value: st == null ? '—' : '${st.txQueueLen} · ${st.hasErrEvents ? st.errEvents : na}'),
+      GroupRow(rowKey: const Key('status-queue'), valueKey: const Key('v-queue'), title: 'Waiting to send · errors', value: st == null ? '—' : '${st.txQueueLen} · ${st.hasErrEvents ? st.errEvents : na}'),
     ];
     return InsetGroup(groupKey: const Key('group-status'), header: 'Status', rows: rows);
   }
@@ -353,8 +362,9 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
         const AppAction('Refresh', 'refresh', key: Key('dash-refresh')),
         AppAction('Auto-refresh', 'auto', checked: c.autoRefresh, key: const Key('dash-auto')),
         AppAction('Stay logged in', 'stay', checked: c.stayLoggedIn, key: const Key('dash-stay')),
+        // Build 76: Log out is harmless and no longer red; the one destructive action is last, on its own.
+        const AppAction('Log out', 'logout', key: Key('admin-menu-logout')),
         if (c.caps.isAdmin) const AppAction('Reboot repeater', 'reboot', destructive: true, key: Key('dash-reboot')),
-        const AppAction('Log out', 'logout', destructive: true, key: Key('admin-menu-logout')),
       ],
     );
     if (!mounted) return;
@@ -380,7 +390,7 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
     final go = await showAppActionSheet<bool>(
       context,
       title: 'Reboot $name?',
-      message: 'It is off the air for a few seconds and then comes back.',
+      message: 'It stops repeating for a few seconds, then comes back. Nothing is erased.',
       actions: const [AppAction('Reboot repeater', true, destructive: true, key: Key('dash-reboot-confirm'))],
     );
     if (go != true || !mounted) return;
@@ -451,6 +461,15 @@ class _TelemetryPageState extends State<_TelemetryPage> {
     if (c.snapshot?.telemetry == null) WidgetsBinding.instance.addPostFrameCallback((_) => c.refreshTelemetry());
   }
 
+  /// The reading with its unit (build 76: extra sensors showed a bare number).
+  static String _value(LppValue v, Units units) => switch (v.type) {
+        LppValue.typeVoltage => '${v.value.toStringAsFixed(2)} V',
+        LppValue.typeTemperature => units.temperature(v.value),
+        LppValue.typeHumidity => '${v.value.toStringAsFixed(0)} %',
+        LppValue.typePressure => '${v.value.toStringAsFixed(0)} hPa',
+        _ => v.value.toStringAsFixed(2),
+      };
+
   static String _name(LppValue v) => switch (v.type) {
         LppValue.typeVoltage => 'Voltage',
         LppValue.typeTemperature => 'Temperature',
@@ -473,7 +492,7 @@ class _TelemetryPageState extends State<_TelemetryPage> {
           for (final v in t.values) {
             if (v.type == LppValue.typeVoltage && t.voltageV != null && v.channel == 1) continue;
             if (v.type == LppValue.typeTemperature && t.temperatureC != null && v.channel == 1) continue;
-            rows.add(GroupRow(title: _name(v), value: v.value.toStringAsFixed(2)));
+            rows.add(GroupRow(title: _name(v), value: _value(v, AppScope.unitsOf(context))));
           }
         }
         return CustomScrollView(
@@ -487,9 +506,24 @@ class _TelemetryPageState extends State<_TelemetryPage> {
                 delegate: SliverChildListDelegate([
                   if (c.notices['telemetry'] != null) NoticeBanner(c.notices['telemetry']!),
                   if (c.loadingTelemetry && t == null)
-                    const Padding(padding: EdgeInsets.all(Gap.xl), child: Center(child: CupertinoActivityIndicator()))
+                    Padding(
+                      padding: const EdgeInsets.all(Gap.xl),
+                      child: Column(children: [
+                        const CupertinoActivityIndicator(),
+                        const SizedBox(height: Gap.s),
+                        Text('Asking the repeater… up to 12 s', key: const Key('telemetry-loading'), style: AppType.footnote.copyWith(color: colors.textMuted)),
+                      ]),
+                    )
                   else if (rows.isEmpty)
-                    Padding(padding: const EdgeInsets.all(Gap.xl), child: Text('No readings yet. Pull down to ask the repeater.', style: AppType.body.copyWith(color: colors.textMuted)))
+                    // Build 76: a button that fixes it, not only "pull down".
+                    Padding(
+                      padding: const EdgeInsets.all(Gap.xl),
+                      child: Column(children: [
+                        Text('No readings yet.', style: AppType.body.copyWith(color: colors.textMuted)),
+                        const SizedBox(height: Gap.m),
+                        CupertinoButton.filled(key: const Key('telemetry-read'), minimumSize: const Size(Hit.min, Hit.min), onPressed: c.refreshTelemetry, child: const Text('Read now')),
+                      ]),
+                    )
                   else
                     InsetGroup(
                       header: 'Readings',
@@ -554,11 +588,21 @@ class DashboardChartPage extends StatelessWidget {
                 if (values.length < 2)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: Gap.xl),
-                    child: Text(
-                      values.isEmpty ? 'No readings yet. Every time the dashboard reads this repeater it adds a point.' : 'One reading so far. A line appears after the next one.',
-                      key: const Key('chart-empty'),
-                      style: AppType.body.copyWith(color: colors.textMuted),
-                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(
+                        values.isEmpty ? 'No readings yet. Each read of this repeater adds a point.' : 'One reading so far. A line appears after the next one.',
+                        key: const Key('chart-empty'),
+                        style: AppType.body.copyWith(color: colors.textMuted),
+                      ),
+                      const SizedBox(height: Gap.m),
+                      // Build 76: add a point from here (it meant going back to the dashboard and pulling down).
+                      CupertinoButton.filled(
+                        key: const Key('chart-read'),
+                        minimumSize: const Size(Hit.min, Hit.min),
+                        onPressed: controller.loadingStatus ? null : () => controller.refreshStatus(),
+                        child: Text(controller.loadingStatus ? 'Reading…' : 'Read now'),
+                      ),
+                    ]),
                   )
                 else
                   SparklineChart(values: values, format: (x) => x.toStringAsFixed(dec), semanticLabel: Sparkline.summary(title, values, unit: unit, decimals: dec)),

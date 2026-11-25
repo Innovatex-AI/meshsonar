@@ -1,8 +1,10 @@
 // Console: the radio's own command line (RUN_CLI_COMMAND 66, firmware 1.18+). Type a line, see the reply; tap a past line to
 // put it back in the box. Lines that reboot, erase or reveal the key never leave the phone (blockedCliReason).
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../radio/tools/device_settings.dart';
+import '../design/app_surfaces.dart' show showAppToast;
 import '../design/tokens.dart';
 import '../theme.dart' show numberStyle;
 
@@ -31,8 +33,11 @@ class _DeviceConsoleScreenState extends State<DeviceConsoleScreen> {
     super.dispose();
   }
 
-  Future<void> _run() async {
-    final line = _c.text.trim();
+  /// Commands that only read, offered as one-tap chips (build 76): nobody should have to know what to type first.
+  static const quick = ['ver', 'get name'];
+
+  Future<void> _run([String? preset]) async {
+    final line = (preset ?? _c.text).trim();
     if (line.isEmpty || _busy) return;
     final e = _Entry(line);
     setState(() {
@@ -67,7 +72,7 @@ class _DeviceConsoleScreenState extends State<DeviceConsoleScreen> {
             child: _entries.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.all(Layout.screenMargin),
-                    child: Text('Commands run on this radio itself. Try ver or get name. Commands that reboot or erase the radio, or show its key, are not sent from here.',
+                    child: Text('Type a command for this radio, or tap one below. Commands that restart or erase it, or show its key, are never sent.',
                         key: const Key('console-empty'), style: t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant)),
                   )
                 : ListView.builder(
@@ -81,6 +86,13 @@ class _DeviceConsoleScreenState extends State<DeviceConsoleScreen> {
                         padding: const EdgeInsets.only(bottom: Gap.m),
                         child: InkWell(
                           onTap: () => setState(() => _c.text = e.line),
+                          // Press and hold copies the reply (build 76): it could not be selected or shared before.
+                          onLongPress: e.reply == null
+                              ? null
+                              : () async {
+                                  await Clipboard.setData(ClipboardData(text: e.reply!));
+                                  if (context.mounted) showAppToast(context, 'Reply copied.');
+                                },
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text('> ${e.line}', style: mono.copyWith(color: c.primary)),
                             if (e.reply == null) Text('...', style: mono) else Text(e.reply!, style: mono.copyWith(color: e.error ? c.error : c.onSurface)),
@@ -89,6 +101,21 @@ class _DeviceConsoleScreenState extends State<DeviceConsoleScreen> {
                       );
                     },
                   ),
+          ),
+          SizedBox(
+            height: Hit.min + Gap.s,
+            child: ListView(
+              key: const Key('console-quick'),
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
+              children: [
+                for (final q in quick)
+                  Padding(
+                    padding: const EdgeInsets.only(right: Gap.s),
+                    child: Center(child: ActionChip(key: Key('console-q-$q'), label: Text(q, style: mono), onPressed: _busy ? null : () => _run(q))),
+                  ),
+              ],
+            ),
           ),
           Container(
             decoration: BoxDecoration(border: Border(top: BorderSide(color: c.outlineVariant))),
@@ -102,10 +129,18 @@ class _DeviceConsoleScreenState extends State<DeviceConsoleScreen> {
                   enableSuggestions: false,
                   textInputAction: TextInputAction.send,
                   decoration: const InputDecoration(hintText: 'Command', border: InputBorder.none),
+                  onChanged: (_) => setState(() {}),
                   onSubmitted: (_) => _run(),
                 ),
               ),
-              IconButton(key: const Key('console-send'), onPressed: _busy ? null : _run, icon: const Icon(Icons.arrow_upward), tooltip: 'Send'),
+              // Off while the box is empty or a command is running, so a tap never looks like it did nothing.
+              IconButton.filled(
+                key: const Key('console-send'),
+                constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+                onPressed: _busy || _c.text.trim().isEmpty ? null : () => _run(),
+                icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.arrow_upward),
+                tooltip: 'Send',
+              ),
             ]),
           ),
         ]),

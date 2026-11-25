@@ -267,6 +267,10 @@ void main() {
       await settle(tester);
       expect(c.plan.node(n.id)!.heightM, isNotNull);
       expect(c.plan.node(n.id)!.heightM, greaterThan(plannedHeightM));
+      // Build 76: Delete is alone at the bottom of the editor, under a divider, not next to "Move on the map".
+      await tester.scrollUntilVisible(find.byKey(const Key('node-delete')), 160, scrollable: find.descendant(of: find.byKey(const Key('node-editor')), matching: find.byType(Scrollable)).first);
+      await settle(tester);
+      expect(tester.getTopLeft(find.byKey(const Key('node-delete'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('node-move'))).dy), reason: 'in the scrolling content, above the pinned Move button');
       await tester.tap(find.byKey(const Key('node-delete')));
       await settle(tester);
       expect(c.nodes, isEmpty);
@@ -440,6 +444,10 @@ void main() {
       await tapIn(tester, find.byKey(const Key('plan-radio-summary')));
       await settle(tester);
       expect(find.byKey(const Key('plan-settings')), findsOneWidget);
+      // Build 76: a full-width Done pinned at the bottom, and the tree height above the expert sliders.
+      expect(find.byKey(const Key('plan-settings-done')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('plan-settings-done'))).height, greaterThanOrEqualTo(44));
+      expect(find.byKey(const Key('plan-clutter-reset')), findsNothing, reason: 'the usual tree settings are in use');
       await tester.tap(find.byKey(const Key('plan-radio-eu')));
       await settle(tester);
       expect(st.controller!.plan.radio.freqMHz, 869.618);
