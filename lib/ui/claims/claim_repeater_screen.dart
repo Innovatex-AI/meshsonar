@@ -4,6 +4,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../drive/drive_controls.dart' show openConnect;
 import 'package:flutter/services.dart';
 
 import '../../app/app_state.dart';
@@ -170,7 +171,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
     return [
       Text(restoring
           ? 'An earlier claim could not confirm this repeater\'s name was put back. Log in again and it will be restored.'
-          : 'Prove a repeater is yours. Your radio logs in to it over the mesh with its admin password. That is all: nothing on the repeater is changed.'),
+          : 'Proves a repeater is yours: your radio logs in to it with its admin password. Nothing on the repeater is changed.'),
       const SizedBox(height: Gap.m),
       if (!connected)
         Card(
@@ -178,8 +179,18 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
           color: t.colorScheme.errorContainer,
           child: Padding(
             padding: const EdgeInsets.all(Gap.m),
-            child: Text('Connect your radio first (More > Radio). It talks to the repeater for you, so it has to be within reach of the repeater.',
-                style: TextStyle(color: t.colorScheme.onErrorContainer)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Connect your radio first. It talks to the repeater for you, so it must be within reach of it.', style: TextStyle(color: t.colorScheme.onErrorContainer)),
+              const SizedBox(height: Gap.s),
+                // Build 76: the way out is a button here, not directions to another tab.
+                FilledButton.tonalIcon(
+                  key: const Key('claim-repeater-connect'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                  icon: const Icon(Icons.bluetooth_searching),
+                  label: const Text('Connect radio'),
+                  onPressed: () => openConnect(context),
+                ),
+            ]),
           ),
         ),
       const SizedBox(height: Gap.s),
@@ -257,7 +268,7 @@ class _ClaimRepeaterScreenState extends State<ClaimRepeaterScreen> {
         maxLength: 15,
         decoration: const InputDecoration(
           labelText: 'Repeater admin password',
-          helperText: 'Repeaters read at most 15 characters. Kept in memory on this phone only.',
+          helperText: 'Up to 15 characters. Not saved, never leaves this phone and your radio.',
           helperMaxLines: 3,
         ),
         onChanged: (_) => setState(() {}),

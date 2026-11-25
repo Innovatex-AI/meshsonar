@@ -140,7 +140,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                 if (!s.repeaterClaimEnabled)
                   Padding(
                     padding: const EdgeInsets.only(top: Gap.s),
-                    child: Text('Claiming a repeater needs a newer server (it is being updated). Claiming your own radio works now.',
+                    child: Text('Claiming a repeater is not on this server yet. Claiming your own radio works now.',
                         key: const Key('my-radios-repeater-soon'), style: t.textTheme.bodySmall),
                   ),
                 const SizedBox(height: Gap.l),
@@ -155,7 +155,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                     child: Text(c.error!, key: const Key('my-radios-error'), style: TextStyle(color: t.colorScheme.error)),
                   ),
                 if (c.loadedOnce && c.active.isEmpty && c.past.isEmpty && c.error == null)
-                  Text('You have not claimed a radio yet. Claim your own radio, or a repeater you run.', key: const Key('my-radios-empty'), style: t.textTheme.bodyMedium),
+                  Text('No claimed radios yet.', key: const Key('my-radios-empty'), style: t.textTheme.bodyMedium),
                 for (final claim in c.active)
                   Card(
                     key: ValueKey('radio-${claim.pubkey}'),
@@ -189,7 +189,8 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                         if (claim.verifiedAt != null) Text('Claimed ${claim.verifiedAt!.toLocal().toIso8601String().substring(0, 10)}', style: t.textTheme.bodySmall),
                         if (claim.notes != null) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(claim.notes!, style: t.textTheme.bodySmall)),
                         const SizedBox(height: Gap.xs),
-                        Wrap(spacing: Gap.s, children: [
+                        // Build 76: Edit on the left, Give up on the far right, so the two are never side by side.
+                        Wrap(alignment: WrapAlignment.spaceBetween, children: [
                           TextButton.icon(
                             key: ValueKey('edit-${claim.pubkey}'),
                             style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -232,7 +233,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                   minVerticalPadding: Gap.s,
                   leading: const Icon(Icons.open_in_new),
                   title: const Text('View your radios on the website'),
-                  subtitle: Text('The same list, optional: ${s.webPage('/me/radios')}'),
+                  subtitle: const Text('Opens in your browser'),
                   onTap: () => s.openWebPage('/me/radios'),
                 ),
               ],

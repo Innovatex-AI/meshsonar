@@ -46,13 +46,13 @@ class _AdminRegionsViewState extends State<AdminRegionsView> {
                 children: [
                   if (c.notices['regions'] != null) NoticeBanner(c.notices['regions']!, bannerKey: const Key('regions-notice')),
                   Text(
-                      'A region is a named flood scope, such as a city. A repeater only passes on floods for regions it allows. Turning flooding off for a region stops this repeater passing that region\'s floods on.',
+                      'A region is a named area, such as a city. This repeater only passes messages on for the regions switched on here.',
                       style: t.textTheme.bodyMedium?.copyWith(height: 1.35)),
                   const SizedBox(height: Gap.m),
                   if (c.loadingRegions && r == null)
                     const Padding(padding: EdgeInsets.all(Gap.xl), child: Center(child: CircularProgressIndicator(key: Key('regions-loading'))))
                   else if (r != null) ...[
-                    if (!c.isAdmin) NoticeBanner(const AdminNotice('Without the admin password you can see which regions are allowed, not change them.', error: false)),
+                    if (!c.isAdmin) NoticeBanner(const AdminNotice('Guest: you can look, not change.', error: false)),
                     if (r.truncated && c.isAdmin) NoticeBanner(const AdminNotice('The region list is long, so the repeater could only send names, not the tree.', error: false)),
                     AdminCard(
                       cardKey: const Key('card-default-region'),
@@ -92,7 +92,7 @@ class _AdminRegionsViewState extends State<AdminRegionsView> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(n.name == '*' ? '* (everything)' : n.name, style: t.textTheme.titleSmall),
-              Text(n.floodAllowed ? 'Flooding allowed' : 'Flooding stopped', style: t.textTheme.bodySmall),
+              Text(n.floodAllowed ? 'Passed on' : 'Not passed on', style: t.textTheme.bodySmall),
               if (isDefault) Text('Default', style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.primary)),
             ]),
           ),

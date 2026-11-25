@@ -353,6 +353,7 @@ void main() {
       await open(tester, radio: false);
       await openScreen(tester, const ClaimRadioScreen());
       expect(find.byKey(const Key('claim-radio-needs-radio')), findsOneWidget);
+      expect(find.byKey(const Key('claim-radio-connect')), findsOneWidget, reason: 'build 76: a Connect button, not directions to another tab');
       expect(tester.widget<FilledButton>(find.byKey(const Key('claim-radio-start'))).onPressed, isNull);
       expect(find.text('Needs a connected radio.'), findsOneWidget);
     });
@@ -391,6 +392,7 @@ void main() {
       await open(tester, radio: false, repeaters: repeaters);
       await openScreen(tester, const ClaimRepeaterScreen());
       expect(find.byKey(const Key('claim-needs-radio')), findsOneWidget);
+      expect(find.byKey(const Key('claim-repeater-connect')), findsOneWidget);
       final pw = tester.widget<TextField>(find.byKey(const Key('claim-password')));
       expect(pw.obscureText, isTrue);
       expect(pw.maxLength, 15);

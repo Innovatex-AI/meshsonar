@@ -118,6 +118,12 @@ class PlannerScreenState extends State<PlannerScreen> {
   PlanController? get controller => _c;
   PlanModeId get mode => _mode;
   PlannerDetent get detent => _detent;
+
+  /// The Plan tab was tapped again: the sheet goes down so the whole map shows, or comes back up when it already is down.
+  void collapseSheet() {
+    if (!mounted || _moving != null) return;
+    setState(() => _detent = _detent == PlannerDetent.dock ? PlannerDetent.medium : PlannerDetent.dock);
+  }
   String? get selectedNodeId => _selected;
 
   /// Resolves once the last plan has been opened.
@@ -905,6 +911,11 @@ class PlannerScreenState extends State<PlannerScreen> {
     final mode = planModeOf(_mode);
     final sel = _selected == null ? null : p.node(_selected!);
     return [
+      // What the picked mode answers, in one line (build 76): the chips alone ("Link", "Coverage") did not say.
+      Padding(
+        padding: const EdgeInsets.only(bottom: Gap.xs),
+        child: Text(mode.what, key: const Key('planner-mode-what'), style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.primary)),
+      ),
       // The plan bar: name, count, save state, menu.
       Row(children: [
         Expanded(
@@ -934,7 +945,21 @@ class PlannerScreenState extends State<PlannerScreen> {
         onTap: () => showPlanSettings(context, c, regionPreset: _s.siteConfig?.radioPreset),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: Hit.min),
-          child: PlanLine(AppSymbols.antenna, 'Radio ${radioWords(p.radio)} · clutter ${AppScope.unitsOf(context).height(p.clutter.canopyM.roundToDouble())} trees (Estimate). Tap to change.'),
+          // One line with a chevron (build 76): it read as a paragraph of radio figures and nobody saw it was a button.
+          child: Row(children: [
+            AppSymbolIcon(AppSymbols.antenna, size: 18, color: t.colorScheme.onSurfaceVariant),
+            const SizedBox(width: Gap.s),
+            Expanded(
+              child: Text(
+                'Radio and trees: ${p.radio.freqMHz.toStringAsFixed(1)} MHz · SF${p.radio.sf} · ${AppScope.unitsOf(context).height(p.clutter.canopyM.roundToDouble())}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.textTheme.bodyMedium,
+                semanticsLabel: 'Radio ${radioWords(p.radio)}, trees ${AppScope.unitsOf(context).height(p.clutter.canopyM.roundToDouble())}, an Estimate. Double-tap to change.',
+              ),
+            ),
+            AppSymbolIcon(AppSymbols.chevronRight, size: 16, color: t.colorScheme.onSurfaceVariant),
+          ]),
         ),
       ),
       if (_loadNote != null) PlanLine(AppSymbols.exclamationTriangle, _loadNote!, key: const Key('planner-load-note')),
@@ -981,7 +1006,7 @@ class PlannerScreenState extends State<PlannerScreen> {
         icon: const AppSymbolIcon(AppSymbols.antenna, size: 18),
         label: const Text('Add a repeater from the network'),
       ),
-      const PlanLine(AppSymbols.pin, 'Or long-press the map to drop a planned node.'),
+      const PlanLine(AppSymbols.pin, 'Or press and hold the map to add a spot.'),
       const Divider(),
     ];
   }

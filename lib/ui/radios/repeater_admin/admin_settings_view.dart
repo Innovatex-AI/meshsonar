@@ -36,7 +36,7 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
         if (!c.isAdmin) {
           return const Padding(
             padding: EdgeInsets.all(Gap.xl),
-            child: Center(child: Text('Settings need the admin password. You are logged in as a guest.', key: Key('settings-guest'), textAlign: TextAlign.center)),
+            child: Center(child: Text('You are logged in as a guest. Log in with the admin password to change settings.', key: Key('settings-guest'), textAlign: TextAlign.center)),
           );
         }
         final p = c.settingsProgress;
@@ -58,7 +58,7 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
                       child: Column(children: [
                         LinearProgressIndicator(key: const Key('settings-progress'), value: p == null || p.total == 0 ? null : p.done / p.total),
                         const SizedBox(height: 6),
-                        Text(p == null ? 'Reading settings...' : 'Reading ${p.done} of ${p.total}. Each takes about a second.', textAlign: TextAlign.center),
+                        Text(p == null ? 'Reading settings…' : 'Reading ${p.done} of ${p.total}…', textAlign: TextAlign.center),
                       ]),
                     ),
                   if (c.session.pendingReboot.isNotEmpty) _rebootBanner(context),
@@ -167,7 +167,7 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
               minVerticalPadding: Gap.s,
               leading: Icon(Icons.restart_alt, color: t.colorScheme.error),
               title: const Text('Reboot the repeater'),
-              subtitle: const Text('It is off the air for a few seconds and does not answer the reboot command. Needed after changing radio parameters.'),
+              subtitle: const Text('Off the air for a few seconds. Needed after changing radio settings.'),
               onTap: () => _reboot(context),
             ),
           ],

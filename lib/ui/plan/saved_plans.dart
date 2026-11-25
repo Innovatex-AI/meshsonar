@@ -185,7 +185,7 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
     final ok = await showAppConfirm(
       context,
       title: 'Delete "${p.name}"?',
-      message: 'The plan and its ${p.nodeCount} ${p.nodeCount == 1 ? 'node' : 'nodes'} are removed from this phone. Links you shared keep working.',
+      message: 'Removed from this phone. Links you already shared keep working.',
       confirmLabel: 'Delete plan',
       destructive: true,
       confirmKey: Key('saved-plan-delete-confirm-${p.id}'),
@@ -215,7 +215,7 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
             minTileHeight: Hit.min + 8,
             leading: const AppSymbolIcon(AppSymbols.squareAndArrowDown),
             title: const Text('Import a plan or contacts'),
-            subtitle: const Text('Paste a plan link, a plan code or a MeshCore contacts list'),
+            subtitle: const Text('Paste a link, a code or a contacts list'),
             onTap: () => Navigator.of(context).pop(const SavedPlansChoice.import()),
           ),
           const SizedBox(height: Gap.s),
@@ -229,7 +229,7 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
           if (snap.hasData && snap.data!.isEmpty)
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 200),
-              child: const AppEmptyView(key: Key('saved-plans-empty'), symbol: AppSymbols.tray, title: 'No saved plans yet', message: 'A plan is saved here as soon as you add a node.'),
+              child: const AppEmptyView(key: Key('saved-plans-empty'), symbol: AppSymbols.tray, title: 'No saved plans yet', message: 'A plan is saved here by itself as soon as you add to it.'),
             ),
           if (snap.hasData)
             for (final p in snap.data!)

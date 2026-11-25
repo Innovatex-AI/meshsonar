@@ -370,7 +370,8 @@ void main() {
       final h = Harness();
       await h.pumpApp(tester);
       await tapShellTab(tester, 'Chat');
-      expect(find.text('Messages arrive here once you connect a radio'), findsOneWidget);
+      expect(find.text('Connect a radio to start chatting'), findsOneWidget);
+      expect(find.text('Messages go out over your MeshCore radio.'), findsOneWidget);
       await tester.tap(find.text('Connect radio'));
       await tester.pumpAndSettle();
       expect(find.text('MeshCore-Truck'), findsOneWidget); // the connect screen
@@ -432,6 +433,35 @@ void main() {
       expect(find.text('Plan on the website'), findsNothing);
       await drain(tester);
     });
+
+    testWidgets('build 76: each mode says what it is for in one line; tapping the Plan tab again puts the sheet down and back', (tester) async {
+      phone(tester);
+      final h = Harness();
+      await h.pumpApp(tester);
+      await tapShellTab(tester, 'Plan');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('drive-badge')), findsNothing, reason: 'no drive is recording');
+      String what() => tester.widget<Text>(find.byKey(const Key('planner-mode-what'))).data!;
+      expect(what(), 'Will these two radios hear each other?');
+      for (final (id, line) in const [
+        ('coverage', 'How far would a radio here reach?'),
+        ('findSites', 'Where would a new repeater help most?'),
+        ('whereToDrive', 'Where should I drive next?'),
+      ]) {
+        await tester.tap(find.byKey(Key('planner-mode-$id')));
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(what(), line, reason: id);
+      }
+      double h0() => tester.getSize(find.byKey(const Key('planner-sheet'))).height;
+      final open = h0();
+      await tapShellTab(tester, 'Plan');
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(h0(), lessThan(open - 40), reason: 'the sheet went down: the whole map shows');
+      await tapShellTab(tester, 'Plan');
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(h0(), closeTo(open, 1), reason: 'and comes back');
+      await drain(tester);
+    });
   });
 
   group('mini drive bar', () {
@@ -458,6 +488,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tapShellTab(tester, 'Plan');
       expect(tester.widget<Text>(find.byKey(const Key('mini-bar-hero'))).data, '1 heard');
+      // Build 76: a second line says what the drive is doing, and a red dot on the Drive tab says it is recording.
+      expect(tester.widget<Text>(find.byKey(const Key('mini-bar-next'))).data, contains('1 heard · '));
+      expect(find.byKey(const Key('drive-badge')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('mini-bar-elapsed'))).data, matches(RegExp(r'^\d+:\d\d$')));
       await tester.tap(find.byKey(const Key('mini-bar-open')));
       await settleLive(tester);
@@ -577,6 +610,7 @@ void main() {
       expect(sem.label, contains('no pings yet'));
       expect(sem.hint, 'Opens the Drive tab');
       expect(tester.getSemantics(find.byKey(const Key('mini-bar-stop'))).tooltip, 'Stop drive');
+      expect(find.descendant(of: find.byKey(const Key('mini-bar-stop')), matching: find.text('Stop')), findsOneWidget, reason: 'build 76: Stop is a labelled button');
       handle.dispose();
       await h.state.stopDrive();
       await drain(tester);

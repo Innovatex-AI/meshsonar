@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../drive/drive_controls.dart' show openConnect;
 
 import '../../core/claim_flow.dart';
 import '../app.dart';
@@ -50,7 +51,7 @@ class _ClaimRadioScreenState extends State<ClaimRadioScreen> {
     final List<Widget> body;
     if (_flow == null) {
       body = [
-        const Text('Prove the radio that is connected right now is yours. The server sends a short message, your radio signs it with its own secret key, and the server checks the signature. No password, and nothing is sent over the air.'),
+        const Text('Proves the connected radio is yours. Your radio signs a short message from the server. No password, and nothing goes over the air.'),
         const SizedBox(height: Gap.m),
         if (connected)
           Card(
@@ -59,7 +60,9 @@ class _ClaimRadioScreenState extends State<ClaimRadioScreen> {
               minVerticalPadding: Gap.s,
               leading: const Icon(Icons.settings_input_antenna),
               title: Text(info.name.isEmpty ? 'Your radio' : info.name),
-              subtitle: Text(info.publicKey, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+              // The start and end of the key on one line (build 76): all 64 characters wrapped over three.
+              subtitle: Text(info.publicKey.length > 20 ? 'Key ${info.publicKey.substring(0, 8)}…${info.publicKey.substring(info.publicKey.length - 8)}' : info.publicKey,
+                  maxLines: 1, style: const TextStyle(fontFamily: 'monospace', fontSize: 12), semanticsLabel: 'Public key ${info.publicKey}'),
             ),
           )
         else
@@ -68,8 +71,18 @@ class _ClaimRadioScreenState extends State<ClaimRadioScreen> {
             color: t.colorScheme.errorContainer,
             child: Padding(
               padding: const EdgeInsets.all(Gap.m),
-              child: Text('Connect your radio first (More > Radio). This claims the radio that is connected.',
-                  style: TextStyle(color: t.colorScheme.onErrorContainer)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Connect your radio first. This claims the radio that is connected.', style: TextStyle(color: t.colorScheme.onErrorContainer)),
+                const SizedBox(height: Gap.s),
+                // Build 76: the way out is a button here, not directions to another tab.
+                FilledButton.tonalIcon(
+                  key: const Key('claim-radio-connect'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                  icon: const Icon(Icons.bluetooth_searching),
+                  label: const Text('Connect radio'),
+                  onPressed: () => openConnect(context),
+                ),
+              ]),
             ),
           ),
         const SizedBox(height: Gap.m),

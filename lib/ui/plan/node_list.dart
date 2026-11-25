@@ -122,7 +122,7 @@ class NodeList extends StatelessWidget {
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, children: [
         Semantics(
           header: true,
-          child: Text('Nodes (${nodes.length} of ${Plan.maxNodes})', style: t.textTheme.titleSmall),
+          child: Text('In this plan (${nodes.length} of ${Plan.maxNodes})', style: t.textTheme.titleSmall),
         ),
         TextButton.icon(
           key: const Key('plan-node-add'),
@@ -135,7 +135,7 @@ class NodeList extends StatelessWidget {
       if (nodes.isEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-          child: PlanLine(AppSymbols.pin, 'No nodes yet. Long-press the map to drop a planned node.',
+          child: PlanLine(AppSymbols.pin, 'Nothing yet. Press and hold the map to add a spot.',
               key: const Key('plan-node-list-empty'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       for (final n in nodes)
@@ -453,14 +453,14 @@ class _NodePickerState extends State<_NodePicker> {
           key: const Key('node-picker-search'),
           decoration: InputDecoration(
             prefixIcon: const AppSymbolIcon(AppSymbols.magnifyingglass, size: 18),
-            hintText: 'Search by name or key',
+            hintText: 'Search repeaters by name',
             border: const OutlineInputBorder(),
             suffixText: '${rows.length}',
           ),
           onChanged: (v) => setState(() => _q = v),
         ),
         const SizedBox(height: Gap.s),
-        Text('Your radios first, then repeaters and rooms with a public position, nearest to the map first.', style: t.textTheme.bodySmall),
+        Text('Your radios first, then the nearest repeaters.', style: t.textTheme.bodySmall),
         if (loading) ConstrainedBox(constraints: const BoxConstraints(minHeight: 160), child: AppLoadingView(label: 'Loading the network\'s repeaters…')),
         if (failed)
           ConstrainedBox(
@@ -474,7 +474,7 @@ class _NodePickerState extends State<_NodePicker> {
               key: const Key('node-picker-empty'),
               symbol: AppSymbols.antenna,
               title: q.isEmpty ? 'No repeaters near here' : 'Nothing matches "$_q"',
-              message: q.isEmpty ? 'Move the map closer to a mesh, or long-press the map to drop a planned node.' : 'Try part of the name or the first characters of the key.',
+              message: q.isEmpty ? 'Move the map closer to a mesh, or press and hold the map to add a spot.' : 'Try part of the name or the start of the key.',
             ),
           ),
         for (final p in rows.take(200))

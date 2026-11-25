@@ -85,6 +85,37 @@ void main() {
     await done(tester);
   });
 
+  testWidgets('build 76: Reboot asks first, and sits in its own group apart from Factory reset', (tester) async {
+    final r = rig();
+    await open(tester, r);
+    // Two groups, never one row under the other in the same card.
+    expect(find.descendant(of: find.byKey(const Key('group-restart')), matching: find.byKey(const Key('row-reboot'))), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('group-erase')), matching: find.byKey(const Key('row-reset'))), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('group-restart')), matching: find.byKey(const Key('row-reset'))), findsNothing);
+    // What people change comes first: Name, then position / power / frequency, both above the contact rows.
+    final name = tester.getTopLeft(find.byKey(const Key('row-name'))).dy;
+    final setup = tester.getTopLeft(find.byKey(const Key('row-setup'))).dy;
+    expect(setup, greaterThan(name));
+    expect(setup, lessThan(tester.getTopLeft(find.byKey(const Key('row-ask'))).dy));
+    expect(tester.getTopLeft(find.byKey(const Key('row-hash'))).dy, greaterThan(tester.getTopLeft(find.byKey(const Key('row-pin'))).dy), reason: 'expert rows are below Security');
+
+    await tester.tap(find.byKey(const Key('row-reboot')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reboot-confirm')), findsOneWidget);
+    expect(r.radio.rebooted, isFalse, reason: 'one tap must not reboot the radio');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(r.radio.rebooted, isFalse);
+    await tester.tap(find.byKey(const Key('row-reboot')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reboot-confirm-ok')));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(r.radio.rebooted, isTrue);
+    await done(tester);
+  });
+
   testWidgets('factory reset: button stays off until RESET is typed, and the sheet lists what is lost', (tester) async {
     final r = rig();
     await open(tester, r);
@@ -138,13 +169,17 @@ void main() {
     await open(tester, r);
     await tester.tap(find.byKey(const Key('row-console')));
     await tester.pumpAndSettle();
+    expect(tester.widget<IconButton>(find.byKey(const Key('console-send'))).onPressed, isNull, reason: 'Send is off while the box is empty');
+    expect(find.byKey(const Key('console-q-ver')), findsOneWidget, reason: 'one-tap commands');
     await tester.enterText(find.byKey(const Key('console-input')), 'ver');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('console-send')));
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pump();
     expect(find.text('> ok'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('console-input')), 'get prv.key');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('console-send')));
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));

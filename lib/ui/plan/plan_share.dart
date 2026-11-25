@@ -167,7 +167,7 @@ class _PlanShareSheetState extends State<PlanShareSheet> {
             key: Key('plan-share-empty'),
             symbol: AppSymbols.squareAndArrowUp,
             title: 'Nothing to share yet',
-            message: 'Add a node first: long-press the map, or add a repeater from the list.',
+            message: 'Add a spot first: press and hold the map, or add a repeater.',
           ),
         ],
       );
@@ -195,8 +195,8 @@ class _PlanShareSheetState extends State<PlanShareSheet> {
       ),
       children: [
         Text(
-          '${plan.name}: ${plan.nodes.length} ${plan.nodes.length == 1 ? 'node' : 'nodes'}. The person who opens the link gets their own copy; '
-          'nothing is stored on a server (the plan rides after the # in the link).',
+          '${plan.name}: ${plan.nodes.length} ${plan.nodes.length == 1 ? 'node' : 'nodes'}. Whoever opens the link gets their own copy. '
+          'Nothing is stored on a server.',
           style: t.textTheme.bodyMedium,
         ),
         const SizedBox(height: Gap.m),
@@ -245,7 +245,7 @@ class _PlanShareSheetState extends State<PlanShareSheet> {
           ),
         const SizedBox(height: Gap.l),
         Semantics(header: true, child: Text('Export', style: t.textTheme.titleSmall)),
-        Text('Files open in the share sheet; choose Save to Files to keep one.', style: t.textTheme.bodySmall),
+        Text('To keep a file, choose Save to Files.', style: t.textTheme.bodySmall),
         _ExportRow(
           key: const Key('plan-export-kml'),
           symbol: AppSymbols.globe,
@@ -559,8 +559,7 @@ class _PlanImportSheetState extends State<PlanImportSheet> {
       ),
       children: [
         Text(
-          'Paste a plan link someone sent you (or just its code), or a MeshCore contacts export or public repeater list to add those '
-          'radios to this plan.',
+          'Paste a plan link or code someone sent you, or a MeshCore contacts list to add those radios to this plan.',
           style: t.textTheme.bodyMedium,
         ),
         const SizedBox(height: Gap.m),

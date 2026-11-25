@@ -47,6 +47,10 @@ void main() {
     expect(find.byKey(const Key('radio-region-compare')), findsOneWidget);
     expect(find.byKey(const Key('cmp-summary')), findsOneWidget);
     if (radio.sf != 8) expect(find.textContaining('differs'), findsWidgets);
+    // Build 76: the verdict card and the two buttons sit above the tables, so the community button is further down.
+    expect(find.byKey(const Key('radio-verdict')), findsOneWidget);
+    expect(find.byKey(const Key('radio-open-setup')), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const Key('radio-community-load')), 200, scrollable: find.descendant(of: find.byKey(const Key('radio-list')), matching: find.byType(Scrollable)).first);
     await tester.tap(find.byKey(const Key('radio-community-load')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('community-Here')), findsOneWidget);

@@ -43,33 +43,54 @@ class _MoreRadioScreenState extends State<MoreRadioScreen> {
         listenable: Listenable.merge([ChatTabHost.provider, ChatTabHost.debugFixtures]),
         builder: (context, _) {
           final p = _provider;
+          // Build 76: what people change (name, position, frequency) and the region check sit at the TOP, above the
+          // list of repeaters (they were under it, a long scroll away). The two expert tools stay at the bottom.
+          final setup = <Widget>[
+            MoreRow(MoreItem.radioSetup, Icons.tune, 'Set up my radio', 'Name, position, power, frequency', onOpen: widget.onOpen),
+            MoreRow(MoreItem.radioSettings, Icons.fact_check_outlined, 'Check my radio\'s settings',
+                s.connected ? 'Does it match this region?' : 'Connect a radio to check it',
+                onOpen: widget.onOpen),
+            const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
+          ];
           final tools = <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
-              child: Semantics(header: true, child: Text('Radio settings and tools', style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary))),
+              child: Semantics(header: true, child: Text('More tools', style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary))),
             ),
-            MoreRow(MoreItem.radioSettings, Icons.settings_input_antenna, 'Radio settings and region preset',
-                s.connected ? 'What your radio reports, compared with this region' : 'Not connected. Connect and see its settings',
-                onOpen: widget.onOpen),
-            MoreRow(MoreItem.radioSetup, Icons.tune, 'Radio setup', 'Name, position, power and frequency, with checks', onOpen: widget.onOpen),
-            MoreRow(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor and health', 'Interference and radio counters, live', onOpen: widget.onOpen),
-            MoreRow(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery, temperature and position of a node', onOpen: widget.onOpen),
+            MoreRow(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor', 'How quiet the channel is at your radio', onOpen: widget.onOpen),
+            MoreRow(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery and sensor readings from a node', onOpen: widget.onOpen),
             const SizedBox(height: Gap.xl),
           ];
           if (p == null) {
             // No chat services yet (no radio has connected): say so, and keep the settings and tools reachable.
             return ListView(key: const Key('more-radio-list'), children: [
-              ListTile(
-                key: const Key('more-radio-connect'),
-                minVerticalPadding: Gap.s,
-                leading: const Icon(Icons.bluetooth_searching),
-                title: Text(s.connected ? 'Your radio is connected' : 'Connect a radio'),
-                subtitle: Text(s.connected
-                    ? 'Its repeaters, rooms and sensors appear here in a moment.'
-                    : 'Its repeaters, rooms, sensors and the nodes it hears nearby show up here.'),
-                trailing: s.connected ? null : const Icon(Icons.chevron_right),
-                onTap: s.connected ? null : () => openConnect(context),
-              ),
+              if (s.connected)
+                const ListTile(
+                  key: Key('more-radio-connect'),
+                  minVerticalPadding: Gap.s,
+                  leading: Icon(Icons.bluetooth_connected),
+                  title: Text('Your radio is connected'),
+                  subtitle: Text('Its repeaters and rooms appear here in a moment.'),
+                )
+              else
+                // Not connected: one clear button, not a row that looks like the others.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Gap.l, Gap.m, Gap.l, Gap.s),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Text('No radio connected', style: t.textTheme.titleMedium),
+                    const SizedBox(height: Gap.xs),
+                    Text('Connect yours to see its repeaters and rooms here.', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                    const SizedBox(height: Gap.m),
+                    FilledButton.icon(
+                      key: const Key('more-radio-connect'),
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
+                      onPressed: () => openConnect(context),
+                      icon: const Icon(Icons.bluetooth_searching),
+                      label: const Text('Connect radio'),
+                    ),
+                  ]),
+                ),
+              ...setup,
               ...tools,
             ]);
           }
@@ -92,6 +113,7 @@ class _MoreRadioScreenState extends State<MoreRadioScreen> {
                     ),
                   ),
                 ),
+                SliverList(delegate: SliverChildListDelegate(setup)),
                 p.networkSliver(context, ChatTabArgs(query: _search.text, onConnect: () => openConnect(context))),
                 SliverList(delegate: SliverChildListDelegate(tools)),
               ],

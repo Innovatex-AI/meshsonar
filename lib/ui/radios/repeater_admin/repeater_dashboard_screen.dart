@@ -196,20 +196,28 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
                   _updatedLine(context),
                   if (admin && c.factoryPasswordInUse != null) _factoryCard(context),
                   _statusGroup(context),
+                  // Build 76: two groups. What you can look at, then (admin) what you can change; they were one list of seven.
                   InsetGroup(
                     groupKey: const Key('group-more'),
-                    header: 'More',
+                    header: 'Look',
                     footer: admin ? null : 'Signed in as Guest. Admin features need the admin password.',
                     rows: [
                       if (c.hasNeighbours) GroupRow(rowKey: const Key('row-neighbours'), title: 'Neighbours', value: c.neighbours == null ? null : '${c.neighbours!.length}', onTap: () => _push('Neighbours', AdminNeighboursView(controller: c))),
                       GroupRow(rowKey: const Key('row-telemetry'), title: 'Telemetry', onTap: () => _push('Telemetry', _TelemetryPage(controller: c))),
                       if (c.hasRegions) GroupRow(rowKey: const Key('row-regions'), title: 'Regions', onTap: () => _push('Regions', AdminRegionsView(controller: c))),
                       GroupRow(rowKey: const Key('row-health'), title: 'Health check and clock', onTap: () => _push('Health check', AdminOverviewView(controller: c, keyHex: widget.keyHex))),
-                      if (admin) GroupRow(rowKey: const Key('row-settings'), title: 'Settings', onTap: _openSettings),
-                      if (admin) GroupRow(rowKey: const Key('row-access'), title: 'Access list', onTap: () => _push('Access list', AdminAccessView(controller: c))),
-                      if (admin) GroupRow(rowKey: const Key('row-console'), title: 'Console', onTap: () => _push('Console', AdminConsoleView(controller: c))),
                     ],
                   ),
+                  if (admin)
+                    InsetGroup(
+                      groupKey: const Key('group-manage'),
+                      header: 'Change',
+                      rows: [
+                        GroupRow(rowKey: const Key('row-settings'), title: 'Settings', onTap: _openSettings),
+                        GroupRow(rowKey: const Key('row-access'), title: 'Passwords and access', onTap: () => _push('Access list', AdminAccessView(controller: c))),
+                        GroupRow(rowKey: const Key('row-console'), title: 'Console (expert)', onTap: () => _push('Console', AdminConsoleView(controller: c))),
+                      ],
+                    ),
                   SizedBox(height: Gap.xl, child: ColoredBox(color: colors.bg)),
                 ]),
               ),
@@ -337,9 +345,9 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
       GroupRow(
           rowKey: const Key('status-signal'),
           valueKey: const Key('v-signal'),
-          title: 'Last RSSI / SNR',
+          title: 'Last signal (RSSI / SNR)',
           value: st == null ? '—' : '${st.lastRssiDbm} / ${st.hasSnr ? '${st.lastSnrDb >= 0 ? '+' : ''}${st.lastSnrDb.toStringAsFixed(1)}' : na}'),
-      GroupRow(rowKey: const Key('status-queue'), valueKey: const Key('v-queue'), title: 'Queue · errors', value: st == null ? '—' : '${st.txQueueLen} · ${st.hasErrEvents ? st.errEvents : na}'),
+      GroupRow(rowKey: const Key('status-queue'), valueKey: const Key('v-queue'), title: 'Waiting to send · errors', value: st == null ? '—' : '${st.txQueueLen} · ${st.hasErrEvents ? st.errEvents : na}'),
     ];
     return InsetGroup(groupKey: const Key('group-status'), header: 'Status', rows: rows);
   }
@@ -353,8 +361,9 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
         const AppAction('Refresh', 'refresh', key: Key('dash-refresh')),
         AppAction('Auto-refresh', 'auto', checked: c.autoRefresh, key: const Key('dash-auto')),
         AppAction('Stay logged in', 'stay', checked: c.stayLoggedIn, key: const Key('dash-stay')),
+        // Build 76: Log out is harmless and no longer red; the one destructive action is last, on its own.
+        const AppAction('Log out', 'logout', key: Key('admin-menu-logout')),
         if (c.caps.isAdmin) const AppAction('Reboot repeater', 'reboot', destructive: true, key: Key('dash-reboot')),
-        const AppAction('Log out', 'logout', destructive: true, key: Key('admin-menu-logout')),
       ],
     );
     if (!mounted) return;
@@ -380,7 +389,7 @@ class _RepeaterDashboardScreenState extends State<RepeaterDashboardScreen> with 
     final go = await showAppActionSheet<bool>(
       context,
       title: 'Reboot $name?',
-      message: 'It is off the air for a few seconds and then comes back.',
+      message: 'It stops repeating for a few seconds, then comes back. Nothing is erased.',
       actions: const [AppAction('Reboot repeater', true, destructive: true, key: Key('dash-reboot-confirm'))],
     );
     if (go != true || !mounted) return;
@@ -489,7 +498,7 @@ class _TelemetryPageState extends State<_TelemetryPage> {
                   if (c.loadingTelemetry && t == null)
                     const Padding(padding: EdgeInsets.all(Gap.xl), child: Center(child: CupertinoActivityIndicator()))
                   else if (rows.isEmpty)
-                    Padding(padding: const EdgeInsets.all(Gap.xl), child: Text('No readings yet. Pull down to ask the repeater.', style: AppType.body.copyWith(color: colors.textMuted)))
+                    Padding(padding: const EdgeInsets.all(Gap.xl), child: Text('No readings yet. Pull down to ask for them.', style: AppType.body.copyWith(color: colors.textMuted)))
                   else
                     InsetGroup(
                       header: 'Readings',

@@ -7,6 +7,9 @@ import '../../core/radio_presets.dart';
 import '../../radio/radio_api.dart';
 import '../app.dart';
 import '../connect_screen.dart';
+import '../design/tokens.dart' show Hit;
+import '../tools/tool_kit.dart' show NoteCard, NoteKind;
+import '../radios/radio_setup/radio_setup_screen.dart';
 import '../region/preset_info.dart';
 import 'device_settings_screen.dart';
 
@@ -52,18 +55,31 @@ class _RadioScreenState extends State<RadioScreen> {
     final info = s.connected ? s.selfInfo : null;
     final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Radio')),
+      // Not "Radio" again (build 76): More > Radio is the page above this one.
+      appBar: AppBar(title: const Text('My radio\'s settings')),
       body: SafeArea(
         child: ListView(
           key: const Key('radio-list'),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
             if (info != null) ...[
+              // The answer first (build 76): does this radio match the region, in one line, before any table.
+              ?_verdict(context, info.radio),
+              // Then what people change: name, position and frequency one tap away; everything else behind it.
+              FilledButton.icon(
+                key: const Key('radio-open-setup'),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioSetupScreen())),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Change name, position or frequency'),
+              ),
+              const SizedBox(height: Gap.s),
               OutlinedButton.icon(
                 key: const Key('radio-device-settings'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DeviceSettingsScreen())),
                 icon: const Icon(Icons.tune),
-                label: const Text('Device settings'),
+                label: const Text('All device settings'),
               ),
               const SizedBox(height: Gap.l),
             ],
@@ -74,13 +90,31 @@ class _RadioScreenState extends State<RadioScreen> {
             _communitySection(context, info?.radio),
             const SizedBox(height: Gap.l),
             Text(
-              'This screen only reads your radio. MeshSonar never changes its settings by itself; to change them yourself, use Radio setup in More.',
+              'This page only reads your radio. Nothing here changes it.',
               key: const Key('radio-readonly-note'),
               style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// "Matches Columbus, US" or what differs, as one card. Null while the region's preset is not known.
+  Widget? _verdict(BuildContext context, Radio radio) {
+    final s = AppScope.of(context);
+    final preset = s.viewingPreset;
+    if (preset == null || s.siteConfig == null || !s.siteConfigIsForViewing) return null;
+    final cmp = compareRegionPreset(radio, preset);
+    final region = s.viewingRegion?.name ?? 'this region';
+    final (kind, title, text) = cmp.allMatch
+        ? (NoteKind.good, 'Set up right for $region', 'Your radio uses the same frequency settings as the repeaters here.')
+        : cmp.anyDiffers
+            ? (NoteKind.problem, 'Not set up for $region', 'Different: ${cmp.differing.join(', ')}. Repeaters here will not hear this radio until it matches.')
+            : (NoteKind.info, 'Could not compare with $region', 'Your radio did not report all of its settings.');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.m),
+      child: NoteCard(text, key: const Key('radio-verdict'), kind: kind, title: title),
     );
   }
 
@@ -252,9 +286,9 @@ class ComparisonTable extends StatelessWidget {
     final c = t.colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Expanded(flex: 3, child: Text('Field', style: t.textTheme.labelMedium?.copyWith(color: c.onSurfaceVariant))),
+        Expanded(flex: 3, child: Text('Setting', style: t.textTheme.labelMedium?.copyWith(color: c.onSurfaceVariant))),
         Expanded(flex: 3, child: Text('Your radio', style: t.textTheme.labelMedium?.copyWith(color: c.onSurfaceVariant))),
-        Expanded(flex: 3, child: Text('Preset', style: t.textTheme.labelMedium?.copyWith(color: c.onSurfaceVariant))),
+        Expanded(flex: 3, child: Text('This region', style: t.textTheme.labelMedium?.copyWith(color: c.onSurfaceVariant))),
         Expanded(flex: 3, child: Text('Result', style: t.textTheme.labelMedium?.copyWith(color: c.onSurfaceVariant))),
       ]),
       for (final f in comparison.fields)
@@ -262,9 +296,10 @@ class ComparisonTable extends StatelessWidget {
           key: Key('cmp-${f.label}'),
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(flex: 3, child: Text(f.label, style: t.textTheme.bodySmall)),
-            Expanded(flex: 3, child: Text(f.radioValue ?? (hasRadio ? 'Not reported' : 'No radio'), style: numberStyle(context, size: 14, weight: FontWeight.w500))),
-            Expanded(flex: 3, child: Text(f.presetValue, style: numberStyle(context, size: 14, weight: FontWeight.w500, color: c.primary))),
+            Expanded(flex: 3, child: Padding(padding: const EdgeInsets.only(right: Gap.s), child: Text(f.label, style: t.textTheme.bodySmall))),
+            // 8 pt between the columns (build 76): "910.525 MHz" ran into the next column's "910.525 MHz" at 375 pt.
+            Expanded(flex: 3, child: Padding(padding: const EdgeInsets.only(right: Gap.s), child: Text(f.radioValue ?? (hasRadio ? 'Not reported' : 'No radio'), style: numberStyle(context, size: 13, weight: FontWeight.w500)))),
+            Expanded(flex: 3, child: Padding(padding: const EdgeInsets.only(right: Gap.s), child: Text(f.presetValue, style: numberStyle(context, size: 13, weight: FontWeight.w500, color: c.primary)))),
             Expanded(flex: 3, child: hasRadio ? _Verdict(f.verdict, switch (f.verdict) { FieldVerdict.matches => 'Matches', FieldVerdict.differs => 'Differs', FieldVerdict.unknown => 'Unknown' }) : const Text('Not compared')),
           ]),
         ),

@@ -31,7 +31,7 @@ Widget _map(List<Widget> panels, {MapPanelGroup? group, VoidCallback? onMapTap})
   return group == null ? stack : MapPanelScope(group: group, child: stack);
 }
 
-MapPanel _panel(String id, {bool allowFull = false, VoidCallback? onClose, Widget? action, bool locked = false, ValueChanged<MapPanelState>? onState, double height = 200, bool bottomSafe = true}) =>
+MapPanel _panel(String id, {bool allowFull = false, VoidCallback? onClose, Widget? action, ValueChanged<MapPanelState>? onState, double height = 200, bool bottomSafe = true}) =>
     MapPanel(
       id: id,
       title: 'Title $id',
@@ -39,7 +39,6 @@ MapPanel _panel(String id, {bool allowFull = false, VoidCallback? onClose, Widge
       allowFull: allowFull,
       onClose: onClose,
       action: action,
-      locked: locked,
       bottomSafe: bottomSafe,
       onStateChanged: onState,
       child: SizedBox(height: height, child: Text('body $id')),
@@ -203,7 +202,7 @@ void main() {
     expect(r.bottom, 768 - 16);
   });
 
-  testWidgets('header action works while collapsed and does not toggle; locked panels do not open', (tester) async {
+  testWidgets('header action works while collapsed and does not toggle', (tester) async {
     var pressed = 0;
     await _pump(tester, _map([_panel('a', action: IconButton(key: const Key('act'), icon: const Icon(Icons.pause), onPressed: () => pressed++))]));
     await tester.tap(find.byKey(const Key('act')));
@@ -211,11 +210,6 @@ void main() {
     expect(pressed, 1);
     expect(_body('a'), findsNothing);
     expect(tester.getSize(find.byKey(const Key('act'))).height, greaterThanOrEqualTo(44));
-
-    await _pump(tester, _map([_panel('l', locked: true, onClose: () {})]));
-    await tester.tap(_header('l'));
-    await tester.pumpAndSettle();
-    expect(_body('l'), findsNothing);
   });
 
   testWidgets('large text: the header grows and nothing overflows', (tester) async {

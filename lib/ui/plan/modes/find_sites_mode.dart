@@ -59,6 +59,8 @@ class FindSitesMode extends PlanMode {
   @override
   String get hint => 'Where a new repeater would help most: in the part of the map you are looking at, or near you.';
   @override
+  String get what => 'Where would a new repeater help most?';
+  @override
   bool get needsNodes => false;
   @override
   Widget buildSheet(PlanModeContext context) => FindSitesBody(context, key: const ValueKey('plan-mode-body-sites'));
@@ -639,7 +641,7 @@ class _FindSitesBodyState extends State<FindSitesBody> {
     final t = Theme.of(context);
     final r = _res;
     return [
-      Text('Ranks up to $kMaxSites places in the part of the map above this sheet. Only the view and the plan\'s radio settings are sent.',
+      Text('Finds the best $kMaxSites places in the map area you can see. Only that area and the radio settings are sent.',
           style: t.textTheme.bodyMedium),
       const SizedBox(height: Gap.s),
       sitesPrimaryButton(
@@ -670,7 +672,7 @@ class _FindSitesBodyState extends State<FindSitesBody> {
           key: const Key('sites-empty'),
           symbol: AppSymbols.magnifyingglass,
           title: 'No sites in this view',
-          message: 'Zoom out or move the map, then find sites again.',
+          message: 'Zoom out or move the map, then try again.',
           actionLabel: 'Try again',
           onAction: () => unawaited(_run()),
         ),
@@ -707,7 +709,7 @@ class _FindSitesBodyState extends State<FindSitesBody> {
         busy: c.busy,
         onPressed: () => unawaited(_verify()),
       ),
-      if (c.busy) const PlanLine(AppSymbols.clock, 'The server runs one site at a time; each can take up to a minute the first time.'),
+      if (c.busy) const PlanLine(AppSymbols.clock, 'One site at a time. Each can take up to a minute.'),
       const SizedBox(height: Gap.xs),
       sitesSecondaryButton(
         key: const Key('sites-drive-map'),

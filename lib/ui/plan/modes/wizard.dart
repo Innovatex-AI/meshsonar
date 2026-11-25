@@ -385,7 +385,7 @@ class FindSitesWizard extends StatelessWidget {
       ),
       const SizedBox(height: Gap.s),
       Semantics(header: true, child: Text('2. About where', style: t.textTheme.titleSmall)),
-      Text('A ZIP code or address is looked up on this phone and never sent. Only a point rounded to about 1 km leaves the phone.',
+      Text('Looked up on this phone. Only a point rounded to about 1 km is sent.',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       const SizedBox(height: Gap.s),
       TextField(
@@ -453,7 +453,7 @@ class FindSitesWizard extends StatelessWidget {
         busy: m.loading,
         onPressed: p == null ? null : () => unawaited(m.run(context)),
       ),
-      if (p == null) const PlanLine(AppSymbols.infoCircle, 'Pick a place first: a ZIP code, the map or your location.'),
+      if (p == null) const PlanLine(AppSymbols.infoCircle, 'Pick a place first (step 2).'),
       if (m.loading && !m.hasResults)
         ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 120),

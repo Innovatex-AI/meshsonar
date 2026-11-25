@@ -1,3 +1,4 @@
+// Build 76: a second small line (counts and what the next ping waits for), a chevron, and Stop as a labelled button.
 // The mini drive bar (plan 4.16): a 56 pt, opaque summary of a running drive, shown above the tab bar on every tab except
 // Drive (which already is the drive screen, its dock is the bar) and never while Drive is Immersive. Status dot, one hero
 // ("2 heard" / "No echo" for the last ping), elapsed time (tabular) and Stop (44 pt, trailing, the usual confirm).
@@ -179,10 +180,12 @@ class _MiniDriveBarState extends State<MiniDriveBar> with DriveClock {
     final t = Theme.of(context);
     final elapsed = _elapsed(s);
     final hero = miniBarHero(s, elapsed: elapsed);
+    final sum = miniBarSummary(s);
     final paused = s.pingsPaused;
     // The bar never grows past 1.6x text: a persistent strip must not swallow the screen. Screen readers get the whole
     // sentence regardless, and Dynamic Type 2.5x still reads everywhere else.
     final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.6);
+    final tight = MediaQuery.sizeOf(context).width < 360 && scaler.scale(10) > 13;
     final dotColor = hero.problem ? t.colorScheme.error : (paused ? t.colorScheme.outline : t.colorScheme.primary);
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: scaler),
@@ -221,12 +224,28 @@ class _MiniDriveBarState extends State<MiniDriveBar> with DriveClock {
                                   LiveDot(color: dotColor),
                                 const SizedBox(width: Gap.m),
                                 Expanded(
-                                  child: Text(hero.text,
-                                      key: const Key('mini-bar-hero'),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: numberStyle(context, size: 17)
-                                          .copyWith(color: hero.problem ? t.colorScheme.error : null)),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(hero.text,
+                                          key: const Key('mini-bar-hero'),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: numberStyle(context, size: 17)
+                                              .copyWith(color: hero.problem ? t.colorScheme.error : null)),
+                                      // Build 76: what the drive is doing right now ("Next ping 14 s", "Pings paused"),
+                                      // so nobody has to open the Drive tab to see that it is still working.
+                                      if (!hero.problem)
+                                        Text('${sum.counts} · ${sum.waiting}',
+                                            key: const Key('mini-bar-next'),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: t.textTheme.bodySmall!.copyWith(
+                                                color: t.colorScheme.onSurfaceVariant,
+                                                fontFeatures: const [FontFeature.tabularFigures()])),
+                                    ],
+                                  ),
                                 ),
                                 const SizedBox(width: Gap.m),
                                 Text(miniBarElapsed(elapsed),
@@ -235,6 +254,8 @@ class _MiniDriveBarState extends State<MiniDriveBar> with DriveClock {
                                     style: t.textTheme.bodyMedium!.copyWith(
                                         color: t.colorScheme.onSurfaceVariant,
                                         fontFeatures: const [FontFeature.tabularFigures()])),
+                                // A chevron: the bar opens the Drive tab (it looked like a plain status line).
+                                if (!tight) Icon(Icons.chevron_right, size: 20, color: t.colorScheme.onSurfaceVariant),
                               ],
                             ),
                           ),
@@ -243,17 +264,30 @@ class _MiniDriveBarState extends State<MiniDriveBar> with DriveClock {
                     ),
                   ),
                 ),
-                IconButton(
+                // A labelled Stop button like the dock's (build 76): a bare red square read as a recording light.
+                FilledButton(
                   key: const Key('mini-bar-stop'),
-                  tooltip: 'Stop drive',
-                  constraints: const BoxConstraints(minWidth: miniDriveBarStopSize, minHeight: miniDriveBarStopSize),
-                  color: t.colorScheme.error,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(miniDriveBarStopSize, miniDriveBarStopSize),
+                    padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+                    backgroundColor: t.colorScheme.error.withValues(alpha: 0.16),
+                    foregroundColor: t.colorScheme.error,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                   onPressed: s.busy
                       ? null
                       : () async {
                           await confirmAndStopDrive(context, s);
                         },
-                  icon: const Icon(Icons.stop_rounded, size: 28),
+                  // The tooltip rides inside the button, so it merges into the button's own semantics node.
+                  child: Semantics(
+                    tooltip: 'Stop drive',
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.stop_rounded, size: 22),
+                      // A narrow phone at large text keeps the icon alone, so the bar never overflows.
+                      if (!tight) ...[const SizedBox(width: Gap.xs), const Text('Stop')],
+                    ]),
+                  ),
                 ),
                 const SizedBox(width: Gap.s),
               ],
