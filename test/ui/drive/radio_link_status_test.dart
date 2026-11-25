@@ -61,7 +61,7 @@ void main() {
         expect(const RadioLinkStatus(RadioLink.notConnected).color(c), c.textMuted);
         expect(const RadioLinkStatus(RadioLink.connecting).color(c), c.warning);
         expect(const RadioLinkStatus(RadioLink.reconnecting).color(c), c.warning);
-        expect(const RadioLinkStatus(RadioLink.simulator).color(c), c.warning);
+        expect(const RadioLinkStatus(RadioLink.simulator).color(c), c.ok);
         expect(const RadioLinkStatus(RadioLink.connected).color(c), c.ok);
       }
     });

@@ -7,6 +7,7 @@ import '../../app/app_state.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart' show showAppSheet;
 import '../design/sheet_detents.dart';
+import 'drive_controls.dart' show DrivePanelRow;
 import '../settings/settings_kit.dart' show distanceStops;
 import '../settings/wardriving_section.dart' show pingCadenceTiles;
 import '../settings_screen.dart' show SettingsScreen;
@@ -26,14 +27,15 @@ class PingSettingsChip extends StatelessWidget {
     } else if (s.pingsPaused) {
       text = 'Pings paused';
     } else {
-      text = 'Ping ${st.intervalSec} s / ${s.units.minDistanceLabel(st.minDistanceM, distanceStops)}';
+      text = 'Every ${st.intervalSec} s / ${s.units.minDistanceLabel(st.minDistanceM, distanceStops)}';
     }
-    return ActionChip(
+    return DrivePanelRow(
       key: const Key('ping-settings-chip'),
-      tooltip: 'Ping interval, distance and listen window',
-      avatar: Icon(Icons.tune_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      label: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
-      onPressed: () => showPingSettingsSheet(context),
+      icon: Icons.tune_rounded,
+      label: 'Pings',
+      value: text,
+      semanticsHint: 'Ping interval, distance and listen window',
+      onTap: () => showPingSettingsSheet(context),
     );
   }
 }

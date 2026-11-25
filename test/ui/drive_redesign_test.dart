@@ -95,7 +95,7 @@ void main() {
     h.engines.single.emit(heardPing('p1', const [Echo(repeater: 'a1b2', snrDb: 6.5)]));
     await settle(tester);
     await openDrivePanel(tester);
-    expect(find.text('Log · 1'), findsOneWidget);
+    expect(find.text('1 ping'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('open-log')));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('open-log')));

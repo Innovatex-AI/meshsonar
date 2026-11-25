@@ -72,7 +72,7 @@ void main() {
 
     await openDrivePanel(tester); // the chip is in the Medium panel
     expect(find.byKey(const Key('ping-settings-chip')), findsOneWidget);
-    expect(find.text('Ping 30 s / 15 m'), findsOneWidget);
+    expect(find.text('Every 30 s / 15 m'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('ping-settings-chip')));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('ping-settings-chip')));
@@ -93,7 +93,7 @@ void main() {
     // The chip says so, and the sheet's link goes to the full section.
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
-    expect(find.text('Ping 60 s / 250 m'), findsOneWidget);
+    expect(find.text('Every 60 s / 250 m'), findsOneWidget);
     await h.state.stopDrive();
     await drain(tester);
   });

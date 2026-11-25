@@ -490,6 +490,7 @@ class _MapPane extends StatelessWidget {
             meta: model.coverageV2 ? s.coverageMeta : null,
             local: model.coverageFiltered,
             drivePanel: model.pings.isNotEmpty || s.driving,
+            compact: true,
             onOpen: _toggleLegend,
           ),
           openLegend: () => showMapLegend(context, pingColors: model.pingColors),

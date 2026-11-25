@@ -16,6 +16,7 @@ import '../../../core/dead_area.dart' show silentPingStreak;
 import '../../../core/model.dart';
 import '../../../core/startup_location.dart' show LocationAccess;
 import '../../../radio/radio_api.dart';
+import '../../antenna_sheet.dart' show showAntennaSheet;
 import '../../design/tokens.dart';
 import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport;
 import '../radio_link_status.dart';
@@ -116,24 +117,45 @@ class _IdleDock extends StatelessWidget {
     // Pro Max); after the automatic reconnect gave up the second line says "Could not reach <radio>". Location off ->
     // "Location is off for MeshSonar" (Start disabled; the strip above carries Allow location / Open Settings).
     final locationOff = s.locationNote != null;
-    final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (locationOff ? 'Location is off for MeshSonar' : 'Ready');
+    // Build 76: the lines are short enough for the 130 pt an iPhone SE leaves them ("Location is off for MeshSonar" and
+    // "Set your antenna first (open the panel)" were cut off), and the antenna line opens the antenna sheet itself.
+    final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (s.needsAntennaSetup ? 'Set antenna' : (locationOff ? 'Location is off' : 'Ready'));
     final String? sub = !s.connected
         ? RadioLinkStatus.detailOf(s)
-        : (s.needsAntennaSetup ? 'Set your antenna first (open the panel)' : (locationOff ? 'Allow location to start a drive' : s.connectionLabel));
-    final text = _dockText(
+        : (s.needsAntennaSetup ? 'Tap to set it up' : (locationOff ? 'Allow it to start' : s.connectionLabel));
+    final antennaTap = s.connected && s.needsAntennaSetup;
+    Widget text = _dockText(
       context,
       Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, key: const Key('status-line'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(title, key: const Key('status-line'), maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          ),
           if (sub != null) ...[
             const SizedBox(height: 2),
-            Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+            Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: antennaTap ? c.accent : c.textMuted)),
           ],
         ],
       ),
     );
+    if (antennaTap) {
+      text = Semantics(
+        button: true,
+        label: 'Set up this radio\'s antenna',
+        excludeSemantics: true,
+        onTap: () => showAntennaSheet(context),
+        child: GestureDetector(
+          key: const Key('dock-antenna-setup'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => showAntennaSheet(context),
+          child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Align(alignment: Alignment.centerLeft, heightFactor: 1, child: text)),
+        ),
+      );
+    }
     final button = _StartStopButton(state: s, busy: busy, fullWidth: ax);
     if (ax) {
       return Column(mainAxisAlignment: MainAxisAlignment.center, children: [

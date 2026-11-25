@@ -91,21 +91,6 @@ class MediumContent {
           ),
         );
 
-    Widget row(IconData icon, String title, VoidCallback onTap, {Key? key}) => GestureDetector(
-          key: key,
-          onTap: onTap,
-          behavior: HitTestBehavior.opaque,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: Row(children: [
-              Icon(icon, size: 20, color: c.textMuted),
-              const SizedBox(width: 12),
-              Expanded(child: Text(title, style: const TextStyle(fontSize: 16))),
-              Icon(Icons.chevron_right_rounded, color: c.textMuted),
-            ]),
-          ),
-        );
-
     final heardRows = <Widget>[];
     if (last != null && last.kind == PingKind.tx) {
       final ech = [...last.echoes]..sort((a, b) => (b.snrDb ?? -99).compareTo(a.snrDb ?? -99));
@@ -159,10 +144,12 @@ class MediumContent {
             behavior: HitTestBehavior.opaque,
             onTap: onPickNearby == null ? null : () => onPickNearby(n.key),
             child: SizedBox(
-              height: 44,
+              height: 48,
               child: Row(children: [
                 Expanded(child: Text(n.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16))),
                 Text(s.units.distance(n.distanceM), style: numberStyle(context, size: 14, weight: FontWeight.w500)),
+                // Says the row does something: it shows the repeater on the map (build 76; the rows looked like plain text).
+                if (onPickNearby != null) ...[const SizedBox(width: 8), Icon(Icons.my_location_rounded, size: 18, color: c.textMuted)],
               ]),
             ),
           ),
@@ -170,9 +157,13 @@ class MediumContent {
       ],
       // MeshTrack (build 69): a full-width row by the chips, so friends' sharing is in the panel, not a pill on the map.
       const MeshTrackPanelRow(),
-      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [AntennaChip(state: s), PingSettingsChip(state: s), LogButton(state: s)]),
-      const SizedBox(height: 4),
-      row(Icons.help_outline_rounded, 'Map guide', openGuide, key: const Key('medium-guide')),
+      // One list, every row labelled and 48 pt tall (build 76): the old chips did not say what they were.
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        AntennaChip(state: s),
+        PingSettingsChip(state: s),
+        LogButton(state: s),
+        DrivePanelRow(key: const Key('medium-guide'), icon: Icons.help_outline_rounded, label: 'Map guide', onTap: openGuide),
+      ]),
     ];
   }
 }

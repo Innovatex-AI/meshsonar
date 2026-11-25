@@ -139,7 +139,7 @@ void main() {
       await waitDefinition('cmh');
       await lookAtRegion();
       if (find.byKey(const Key('legend-card')).evaluate().isEmpty) throw StateError('no legend card on the Drive map');
-      expectText('legend', 'Weak → strong signal');
+      expectText('legend', 'Weak → strong');
       await mdframe(t, 'md-01-cmh-map');
     });
     await step('legend-open', () async {
