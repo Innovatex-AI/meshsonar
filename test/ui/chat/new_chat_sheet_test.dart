@@ -212,11 +212,10 @@ void main() {
       await openSheet(tester);
       await tester.tap(find.byKey(const Key('add-hashtag')));
       await tester.pumpAndSettle();
-      expect(find.text('Type a name to see its key.'), findsOneWidget);
+      expect(find.text('Type a name.'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('form-name')), 'HamRadio');
       await tester.pump();
-      final key = hashtagSecret16('#hamradio').take(4).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-      expect(tester.widget<Text>(find.byKey(const Key('hashtag-preview'))).data, '#hamradio  ->  key $key…');
+      expect(tester.widget<Text>(find.byKey(const Key('hashtag-preview'))).data, 'Joins #hamradio');
       await tester.enterText(find.byKey(const Key('form-name')), 'two words');
       await tester.pump();
       expect(tester.widget<Text>(find.byKey(const Key('hashtag-preview'))).data, contains('letters, numbers and dashes'));

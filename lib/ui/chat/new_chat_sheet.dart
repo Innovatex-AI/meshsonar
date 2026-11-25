@@ -15,7 +15,6 @@ import 'package:flutter/services.dart';
 
 import '../../app/chat_controller.dart';
 import '../../chat/channel_admin.dart';
-import '../../chat/channel_secret.dart';
 import '../../chat/conversation_row.dart';
 import '../../chat/models.dart';
 import '../contacts/add_contact_screen.dart';
@@ -64,7 +63,7 @@ class _NewMeshTrackGroup extends _Outcome {
 }
 
 /// The sentence shown when there is no radio identity to put a channel on.
-const String noRadioForChannelText = 'Connect your radio once first. Channels live in the radio, so MeshSonar needs to see it before it can add one.';
+const String noRadioForChannelText = 'Connect your radio first. Channels are saved on the radio.';
 
 Future<void> showNewChatSheet(
   BuildContext context,
@@ -182,7 +181,7 @@ class _NewChatBodyState extends State<_NewChatBody> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = 'Something went wrong while changing the channel. Nothing was changed. Try again.';
+          _error = 'That did not work. Nothing was changed. Try again.';
         });
       }
     }
@@ -213,7 +212,7 @@ class _NewChatBodyState extends State<_NewChatBody> {
   // ------------------------------------------------------------------ chrome
 
   String get _title => switch (_page) {
-        _Page.home => 'New',
+        _Page.home => 'New chat',
         _Page.hashtag => 'Join a # channel',
         _Page.paste => 'Paste a link or key',
         _Page.create => 'Create a private channel',
@@ -328,8 +327,7 @@ class _NewChatBodyState extends State<_NewChatBody> {
         ));
       }
       if (_error != null) children.add(_inlineError(_error!));
-      children.add(_sectionLabel('Start'));
-      children.add(_entries(context));
+      children.addAll(_entries(context));
     } else {
       children.addAll(_search(context, q, people));
     }
@@ -350,7 +348,7 @@ class _NewChatBodyState extends State<_NewChatBody> {
       if (lower.startsWith('meshcore://'))
         _tile(AppSymbols.docOnDoc, 'Use this link', 'Join the channel or add the contact it holds', () => _go(_Page.paste, link: q), key: const Key('new-use-link')),
       if (q.startsWith('#') && q.length > 1)
-        _tile(AppSymbols.message, 'Join $q', 'A # channel: anyone who types the same name joins the same channel', () => _go(_Page.hashtag, name: q.substring(1)),
+        _tile(AppSymbols.numberSign, 'Join $q', 'Anyone who types the same name is in it', () => _go(_Page.hashtag, name: q.substring(1)),
             key: const Key('new-use-hashtag')),
     ];
     return [
@@ -376,25 +374,35 @@ class _NewChatBodyState extends State<_NewChatBody> {
       if (shortcuts.isNotEmpty) _group(shortcuts),
       _sectionLabel('Or'),
       _group([
-        _tile(AppSymbols.personBadgePlus, 'Add a contact', 'Add someone with their link, key or QR code', () => Navigator.pop(context, const _AddContact()), key: const Key('new-contact-search')),
+        _tile(AppSymbols.personBadgePlus, 'Add a contact', 'With their link, key or QR code', () => Navigator.pop(context, const _AddContact()), key: const Key('new-contact-search')),
       ]),
     ];
   }
 
-  Widget _entries(BuildContext context) {
-    return _group([
-      _tile(AppSymbols.squareAndPencil, 'New message', 'Pick someone from Contacts', () => Navigator.pop(context, const _PickPerson()), key: const Key('new-message')),
-      _tile(AppSymbols.numberSign, 'Join a hashtag channel', 'Type a name like #hamradio. Anyone who types the same name joins the same channel', () => _go(_Page.hashtag),
-          key: const Key('add-hashtag')),
-      _tile(AppSymbols.globe, 'Join Public channel', 'The open channel most MeshCore users share', _busy ? null : () => _run((a, id) => a.joinPublic(id)), key: const Key('add-public')),
-      _tile(AppSymbols.lockFill, 'Create a private channel', 'Only people you give the QR code or link to can read it', () => _go(_Page.create), key: const Key('add-create')),
-      // MeshTrack (build 69): a group is a private channel made for it; the New group screen does the rest.
-      if (MeshTrackUi.of(context) != null)
-        _tile(AppSymbols.person2Fill, mtNewGroupEntry, mtNewGroupEntryBody, () => Navigator.pop(context, const _NewMeshTrackGroup()), key: const Key('add-meshtrack')),
-      _tile(AppSymbols.qrcode, 'Scan a QR code', 'Use the camera on a code from a friend', () => Navigator.pop(context, const _Scan()), key: const Key('add-scan')),
-      _tile(AppSymbols.docOnDoc, 'Paste a link or key', 'A meshcore:// link, or a channel name with its secret', () => _go(_Page.paste), key: const Key('add-paste')),
-      _tile(AppSymbols.personBadgePlus, 'Add a contact', 'Add someone with their link, key or QR code', () => Navigator.pop(context, const _AddContact()), key: const Key('new-contact')),
-    ]);
+  /// The ways to start, in three short groups (one long list of eight read as a wall): a person, a channel, or someone
+  /// or something to add.
+  List<Widget> _entries(BuildContext context) {
+    return [
+      const SizedBox(height: Gap.s),
+      _group([
+        _tile(AppSymbols.squareAndPencil, 'New message', 'To someone in Contacts', () => Navigator.pop(context, const _PickPerson()), key: const Key('new-message')),
+      ]),
+      _sectionLabel('Channels'),
+      _group([
+        _tile(AppSymbols.globe, 'Join Public channel', 'Everyone in range', _busy ? null : () => _run((a, id) => a.joinPublic(id)), key: const Key('add-public')),
+        _tile(AppSymbols.numberSign, 'Join a # channel', 'By name, like #hamradio', () => _go(_Page.hashtag), key: const Key('add-hashtag')),
+        _tile(AppSymbols.lockFill, 'Create a private channel', 'Only people you invite can read it', () => _go(_Page.create), key: const Key('add-create')),
+        // MeshTrack (build 69): a group is a private channel made for it; the New group screen does the rest.
+        if (MeshTrackUi.of(context) != null)
+          _tile(AppSymbols.person2Fill, mtNewGroupEntry, mtNewGroupEntryBody, () => Navigator.pop(context, const _NewMeshTrackGroup()), key: const Key('add-meshtrack')),
+      ]),
+      _sectionLabel('Add'),
+      _group([
+        _tile(AppSymbols.qrcode, 'Scan a QR code', 'A contact or a channel', () => Navigator.pop(context, const _Scan()), key: const Key('add-scan')),
+        _tile(AppSymbols.docOnDoc, 'Paste a link or key', 'A meshcore:// link, or a name and secret', () => _go(_Page.paste), key: const Key('add-paste')),
+        _tile(AppSymbols.personBadgePlus, 'Add a contact', 'With their link, key or QR code', () => Navigator.pop(context, const _AddContact()), key: const Key('new-contact')),
+      ]),
+    ];
   }
 
   Widget _tile(AppSymbol symbol, String title, String subtitle, VoidCallback? onTap, {required Key key}) {
@@ -454,12 +462,11 @@ class _NewChatBodyState extends State<_NewChatBody> {
     String line;
     var ok = false;
     if (raw.isEmpty) {
-      line = 'Type a name to see its key.';
+      line = 'Type a name.';
     } else {
       try {
         final n = ChannelAdmin.normaliseHashtag(raw);
-        final key = hashtagSecret16(n);
-        line = '$n  ->  key ${key.take(4).map((b) => b.toRadixString(16).padLeft(2, '0')).join()}…';
+        line = 'Joins $n';
         ok = true;
       } on ChannelAdminException catch (e) {
         line = e.message;
@@ -470,7 +477,7 @@ class _NewChatBodyState extends State<_NewChatBody> {
       child: Text(
         line,
         key: const Key('hashtag-preview'),
-        style: ok ? AppType.mono.copyWith(color: c.textPrimary) : AppType.subhead.copyWith(color: c.textMuted),
+        style: AppType.subhead.copyWith(color: ok ? c.textPrimary : c.textMuted),
       ),
     );
   }
@@ -501,8 +508,8 @@ class _NewChatBodyState extends State<_NewChatBody> {
     final action = _page == _Page.create ? 'Create' : 'Join';
     final intro = switch (_page) {
       _Page.hashtag =>
-        'The key is made from the name, so anyone who types the same name lands in the same channel. Capitals are turned into lower case.',
-      _Page.create => 'MeshSonar makes a random secret. Only people you give the QR code or link to can read this channel.',
+        'Anyone who types the same name is in the same channel.',
+      _Page.create => 'Only people you give its QR code or link to can read it.',
       _ => 'Paste a meshcore:// link, or type a channel name with its secret.',
     };
     return AppSheetScaffold(
@@ -580,14 +587,14 @@ class _NewChatBodyState extends State<_NewChatBody> {
         child: const Text('Done'),
       ),
       children: [
-        Text('${j.channel.name} is on your radio. Give the QR code or link to the people who should read it.', style: AppType.subhead.copyWith(color: c.textMuted)),
+        Text('${j.channel.name} is ready. Show this code to the people you want in it, or send them the link.', style: AppType.subhead.copyWith(color: c.textMuted)),
         const SizedBox(height: Gap.m),
         if (link == null)
           Text('The secret of this channel is not on this phone, so it cannot be shared.', style: AppType.subhead)
         else ...[
           Center(child: QrView(key: const Key('share-qr'), data: link, size: 220)),
           const SizedBox(height: Gap.s),
-          Text('Anyone who scans this code or opens the link can read and write in this channel. Share it only with people you trust.',
+          Text('Anyone with this code or link can read and write here.',
               style: AppType.footnote.copyWith(color: c.textMuted), textAlign: TextAlign.center),
           const SizedBox(height: Gap.m),
           SelectableText(link, key: const Key('share-link'), style: AppType.mono.copyWith(color: c.textPrimary)),

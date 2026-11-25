@@ -36,6 +36,17 @@ class _QuickRepliesBodyState extends State<_QuickRepliesBody> {
 
   void _save() => saveQuickReplies(widget.store, _items);
 
+  void _addReply(String v) {
+    final t = v.trim();
+    if (t.isEmpty) return;
+    setState(() {
+      // The same reply twice would only waste a chip.
+      if (!_items.contains(t)) _items.add(t);
+      _add.clear();
+      _save();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
@@ -48,9 +59,14 @@ class _QuickRepliesBodyState extends State<_QuickRepliesBody> {
           _items = List.of(defaultQuickReplies);
           _save();
         }),
-        child: const Text('Reset to the standard six'),
+        child: const Text('Reset to the standard replies'),
       ),
       children: [
+        if (_items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Gap.s),
+            child: Text('No quick replies yet. Add one below.', key: const Key('quick-empty'), style: AppType.subhead.copyWith(color: c.textMuted)),
+          ),
         for (var i = 0; i < _items.length; i++)
           Container(
             key: Key('quick-row-$i'),
@@ -77,15 +93,17 @@ class _QuickRepliesBodyState extends State<_QuickRepliesBody> {
             placeholder: 'Add a quick reply',
             maxLength: 60,
             textInputAction: TextInputAction.done,
-            onSubmitted: (v) {
-              final t = v.trim();
-              if (t.isEmpty) return;
-              setState(() {
-                _items.add(t);
-                _add.clear();
-                _save();
-              });
-            },
+            padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.m),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: _addReply,
+            // A visible Add button: the keyboard's Done key alone was easy to miss.
+            suffix: CupertinoButton(
+              key: const Key('quick-add-button'),
+              padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+              minimumSize: Size.square(Hit.of(context)),
+              onPressed: _add.text.trim().isEmpty ? null : () => _addReply(_add.text),
+              child: const Text('Add'),
+            ),
           ),
         ),
       ],

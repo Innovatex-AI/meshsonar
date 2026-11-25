@@ -321,8 +321,8 @@ String mtMessageSummary(MtLoggedMessage m, Units units) {
 
 /// The note above the list: what this list is and is not.
 const String mtPositionMessagesNote =
-    'MeshTrack updates heard in this channel in the last 24 hours. They are shown here only: never saved in the chat, '
-    'never notified, and not in backups, exports or search.';
+    'Position updates heard in the last 24 hours. Shown here only: never saved in the chat, never notified, and not in '
+    'backups, exports or search.';
 
 
 // ------------------------------------------------------------------------------------------------ Ask for location (MT-13)
@@ -334,7 +334,7 @@ const String askOpenOnMap = 'Open on map';
 const String askNotConnected = 'Connect your radio to ask.';
 const String askBusy = 'Your radio is busy with another request. Try again in a moment.';
 const String askFailed = 'Your radio could not send the request. Try again.';
-const String askNoAnswerHint = 'They may be out of range, or their radio may not answer location requests.';
+const String askNoAnswerHint = 'They may be out of range, or their radio does not share its location.';
 
 /// The "asked" mark on the Drive map pin and its legend.
 const String askedPinMark = 'Asked';

@@ -256,7 +256,7 @@ class _GroupSheetState extends State<GroupSheet> {
         _WideButton(key: const Key('mt-empty-new'), label: 'New group', filled: true, onPressed: () => openNewGroup(context)),
         const SizedBox(height: Gap.s),
         _WideButton(key: const Key('mt-empty-join'), label: 'Join a group', onPressed: () => openJoinGroup(context)),
-        _WideButton(key: const Key('mt-empty-existing'), label: 'Use a private channel you have', onPressed: () => openUseExisting(context)),
+        _WideButton(key: const Key('mt-empty-existing'), label: 'Use a channel I already have', onPressed: () => openUseExisting(context)),
       ];
     }
     return [
@@ -277,7 +277,7 @@ class _GroupSheetState extends State<GroupSheet> {
         padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, Gap.s),
         child: Text(mtGroupsFooter, key: const Key('mt-groups-footer'), style: AppType.footnote.copyWith(color: c.textMuted)),
       ),
-      _WideButton(key: const Key('mt-existing'), label: 'Use a private channel you have', onPressed: () => openUseExisting(context)),
+      _WideButton(key: const Key('mt-existing'), label: 'Use a channel I already have', onPressed: () => openUseExisting(context)),
     ];
   }
 
@@ -292,10 +292,10 @@ class _GroupSheetState extends State<GroupSheet> {
       title: g.name,
       sheetKey: const Key('mt-group-menu'),
       actions: [
-        const AppAction('Invite', 'invite', symbol: AppSymbols.qrcode, key: Key('mt-menu-invite')),
+        const AppAction('Invite friends', 'invite', symbol: AppSymbols.qrcode, key: Key('mt-menu-invite')),
         AppAction('Share on every drive', 'every', symbol: AppSymbols.car, checked: every, key: const Key('mt-menu-every')),
         const AppAction('Start fresh', 'fresh', symbol: AppSymbols.squareAndPencil, key: Key('mt-menu-fresh')),
-        const AppAction('Leave', 'leave', destructive: true, key: Key('mt-menu-leave')),
+        const AppAction('Leave', 'leave', destructive: true, symbol: AppSymbols.trash, key: Key('mt-menu-leave')),
       ],
     );
     if (pick == null || !context.mounted) return;
@@ -307,12 +307,12 @@ class _GroupSheetState extends State<GroupSheet> {
         if (!every && !await ensureMeshTrackIntro(context, b.ops)) return;
         if (!context.mounted) return;
         b.service.setShareEveryDrive(g.channelId, !every);
-        showAppToast(context, !every ? '${g.name}: Share turns on when you start a drive.' : '${g.name}: Share stays off until you turn it on.');
+        showAppToast(context, !every ? '${g.name}: sharing starts with each drive.' : '${g.name}: sharing stays off until you turn it on.');
       case 'fresh':
         final r = await b.ops.startFresh(g.channelId);
         if (!context.mounted) return;
         if (!r.ok || r.channelId == null) {
-          showAppToast(context, r.message ?? (r.status == MtGroupOpStatus.radioFull ? mtNotOnRadio : 'Could not start fresh. Nothing was changed.'), kind: AppToastKind.error);
+          showAppToast(context, r.message ?? (r.status == MtGroupOpStatus.radioFull ? mtNotOnRadio : 'That did not work. Nothing was changed.'), kind: AppToastKind.error);
           return;
         }
         final fresh = r.channelId!;
@@ -369,7 +369,7 @@ class _GroupSheetState extends State<GroupSheet> {
             label: inZone ? 'In a privacy zone' : 'Send my position',
             onPressed: notOnRadio || inZone ? null : () => _sendMine(context, b, g),
           ),
-          _HeaderButton(key: const Key('mt-meet-here'), symbol: AppSymbols.flag, label: 'Meet here', onPressed: notOnRadio ? null : () => _meetHere(context, b, g)),
+          _HeaderButton(key: const Key('mt-meet-here'), symbol: AppSymbols.flag, label: 'Meet up here', onPressed: notOnRadio ? null : () => _meetHere(context, b, g)),
           _HeaderButton(key: const Key('mt-invite-open'), symbol: AppSymbols.personBadgePlus, label: 'Invite friends', onPressed: () => openInvite(context, g.channelId, g.name)),
         ]),
       ),
@@ -382,15 +382,24 @@ class _GroupSheetState extends State<GroupSheet> {
           child: Column(children: [
             AppSymbolIcon(AppSymbols.mapFill, size: 40, color: c.textMuted),
             const SizedBox(height: Gap.s),
-            Text(g.config.see ? mtPeopleEmpty : 'See is off for this group, so their positions are not shown. Turn See on to show them.',
+            Text(g.config.see ? mtPeopleEmpty : 'You have turned off seeing this group on your map.',
                 key: const Key('mt-people-empty'), textAlign: TextAlign.center, style: AppType.subhead.copyWith(color: c.textMuted)),
             const SizedBox(height: Gap.m),
-            CupertinoButton(
-              key: const Key('mt-people-empty-invite'),
-              minimumSize: const Size.square(kMtHit),
-              onPressed: () => openInvite(context, g.channelId, g.name),
-              child: const Text('Invite friends'),
-            ),
+            // The button fixes what the line above says: seeing is off -> turn it on; nobody yet -> invite.
+            if (!g.config.see)
+              CupertinoButton(
+                key: const Key('mt-people-empty-see'),
+                minimumSize: const Size.square(kMtHit),
+                onPressed: () => b.service.setSee(g.channelId, true),
+                child: const Text('Show them on my map'),
+              )
+            else
+              CupertinoButton(
+                key: const Key('mt-people-empty-invite'),
+                minimumSize: const Size.square(kMtHit),
+                onPressed: () => openInvite(context, g.channelId, g.name),
+                child: const Text('Invite friends'),
+              ),
           ]),
         )
       else
@@ -587,7 +596,7 @@ class _NotOnRadio extends StatelessWidget {
           Text(mtNotOnRadio, style: AppType.subhead.copyWith(color: c.textPrimary)),
           Wrap(spacing: Gap.m, children: [
             CupertinoButton(key: const Key('mt-make-room'), minimumSize: const Size.square(kMtHit), padding: EdgeInsets.zero, onPressed: () => openMakeRoom(context), child: const Text(mtMakeRoom)),
-            CupertinoButton(key: const Key('mt-remove'), minimumSize: const Size.square(kMtHit), padding: EdgeInsets.zero, onPressed: onRemove, child: Text('Remove', style: TextStyle(color: c.danger))),
+            CupertinoButton(key: const Key('mt-remove'), minimumSize: const Size.square(kMtHit), padding: EdgeInsets.zero, onPressed: onRemove, child: Text('Remove group', style: TextStyle(color: c.danger))),
           ]),
         ]),
       ),
@@ -849,14 +858,14 @@ class _GroupCard extends StatelessWidget {
             Container(height: 0.5, color: c.outline.withValues(alpha: 0.35)),
             AppSwitchTile(
               switchKey: Key('mt-see-${g.channelId}'),
-              title: 'See',
-              subtitle: 'Their positions on your map',
+              // The switch says what it does; the second line that explained a one-word title is gone.
+              title: 'See them on my map',
               value: g.config.see,
               onChanged: onSee,
             ),
             AppSwitchTile(
               switchKey: Key('mt-share-${g.channelId}'),
-              title: 'Share',
+              title: 'Share my position',
               subtitle: notOnRadio ? 'Not on this radio' : (capped ? mtUpToThree : mtShareDetail(g, now)),
               value: share,
               onChanged: notOnRadio || capped ? null : onShare,

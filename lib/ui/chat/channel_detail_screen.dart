@@ -165,7 +165,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
       title: 'Delete ${ch.name}?',
       message: ch.slot == null
           ? 'The channel and its messages are removed from this phone.'
-          : 'The channel is removed from your radio and its messages from this phone. You can join it again later with its link, if you still have it.',
+          : 'Removed from your radio and this phone. You can join again with its link.',
       confirmLabel: 'Delete',
       cancelLabel: 'Keep',
       destructive: true,
@@ -210,8 +210,8 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
       InsetGroup(
         header: 'MeshTrack',
         footer: group
-            ? 'Friends in this channel can see each other on the map while they share. Position updates never go into the chat; Show position messages lists them here.'
-            : 'See friends from this channel on your map while they share, and share yours when you choose.',
+            ? 'Friends in this channel see each other on the map while they share.'
+            : 'See friends from this channel on the map, and share your position when you choose.',
         rows: [
           AppSwitchTile(
             switchKey: const Key('mt-use-switch'),
@@ -225,7 +225,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
             AppSwitchTile(
               switchKey: const Key('mt-show-positions'),
               title: 'Show position messages',
-              subtitle: 'Lists the MeshTrack updates of this channel here. They are never saved in the chat.',
+              subtitle: 'Position updates are never saved in the chat.',
               value: b.ops.showPositionMessages(id),
               onChanged: (v) async {
                 await b.ops.setShowPositionMessages(id, v);
@@ -266,8 +266,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   }
 
   static const String _regionHelp =
-      'A region limits how far your messages are repeated: only repeaters set up for that region pass them on. '
-      'Leave it empty to use the whole mesh, which is what most channels do. Only set it if the people who run your local network tell you to, and use the name exactly as they write it.';
+      'Only repeaters set up for this region pass your messages on. Leave it empty unless your local network gives you a name, and type it exactly.';
 
   /// Messages heard in this channel since local midnight.
   int _heardToday(Channel ch) {
@@ -325,7 +324,8 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     final regionSub = ch.regionScope == null ? 'None: the whole mesh' : ch.regionScope!;
     return Scaffold(
       backgroundColor: col.bg,
-      appBar: CupertinoNavigationBar(backgroundColor: col.bg, border: null, middle: Text(ch.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      // The name is in the header right below: the bar says what this screen is.
+      appBar: CupertinoNavigationBar(backgroundColor: col.bg, border: null, middle: const Text('Channel info')),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -351,7 +351,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                           child: Text(initial, textScaler: TextScaler.noScaling, style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w600)),
                         ),
                         const SizedBox(height: Gap.s),
-                        Text(ch.name, key: const Key('channel-title'), textAlign: TextAlign.center, style: AppType.title2.copyWith(color: col.textPrimary)),
+                        Text(ch.name, key: const Key('channel-title'), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.title2.copyWith(color: col.textPrimary)),
                         Text(kindLabel, style: AppType.subhead.copyWith(color: col.textMuted)),
                         Text('Heard $heard ${heard == 1 ? 'time' : 'times'} today', key: const Key('channel-heard'), style: AppType.footnote.copyWith(color: col.textMuted)),
                       ]),
@@ -365,7 +365,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                     padding: const EdgeInsets.all(Gap.m),
                     decoration: BoxDecoration(color: col.surfaceHigh, borderRadius: BorderRadius.circular(Corners.card)),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Text('Messages cannot arrive or be sent until this channel is back on the radio. Another app may have replaced it.',
+                      Text('This channel is not on your radio, so nothing can be sent or received.',
                           style: AppType.subhead.copyWith(color: col.textPrimary)),
                       const SizedBox(height: Gap.s),
                       CupertinoButton.filled(
@@ -376,6 +376,50 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                       ),
                     ]),
                   ),
+                // What people change most comes first; the big QR code sits below it.
+                if (!ch.isSystem)
+                  InsetGroup(
+                    header: 'Notifications',
+                    footer: switch (mode) {
+                      NotifyMode.all => 'Every new message notifies you.',
+                      NotifyMode.mentionsOnly => 'Only messages that mention you notify you.',
+                      NotifyMode.muted => 'No notifications. Messages still arrive.',
+                    },
+                    rows: [
+                      Padding(
+                        padding: const EdgeInsets.all(Gap.m),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: CupertinoSlidingSegmentedControl<NotifyMode>(
+                            key: const Key('notify-mode'),
+                            groupValue: mode,
+                            children: const {
+                              NotifyMode.all: _Seg('All'),
+                              NotifyMode.mentionsOnly: _Seg('Mentions'),
+                              NotifyMode.muted: _Seg('Muted'),
+                            },
+                            onValueChanged: (v) {
+                              if (v == null) return;
+                              AppHaptics.selection();
+                              c.service.setNotifyMode(ch.radioId, ch.convKey, v);
+                            },
+                          ),
+                        ),
+                      ),
+                      InsetRow(key: const Key('mute-for'), title: 'Mute for a while', onTap: () => _muteFor(ch)),
+                      AppSwitchTile(
+                        switchKey: const Key('pin-switch'),
+                        symbol: AppSymbols.pin,
+                        title: 'Pin to the top of Chats',
+                        value: pinned,
+                        onChanged: (v) => c.service.setPinned(ch.radioId, ch.convKey, v),
+                      ),
+                    ],
+                  ),
+
+                if (!ch.isSystem) ...[
+                  ..._meshTrack(context, ch),
+                ],
                 InsetGroup(
                   header: 'Share',
                   rows: [
@@ -419,63 +463,15 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                 ),
                 if (!ch.isSystem) ...[
                   InsetGroup(
-                    header: 'Notifications',
-                    footer: switch (mode) {
-                      NotifyMode.all => 'Every new message in this channel notifies you.',
-                      NotifyMode.mentionsOnly => 'Only messages that mention you notify you.',
-                      NotifyMode.muted => 'Nothing notifies you. Messages still arrive and the unread count stays.',
-                    },
-                    rows: [
-                      Padding(
-                        padding: const EdgeInsets.all(Gap.m),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: CupertinoSlidingSegmentedControl<NotifyMode>(
-                            key: const Key('notify-mode'),
-                            groupValue: mode,
-                            children: const {
-                              NotifyMode.all: _Seg('All'),
-                              NotifyMode.mentionsOnly: _Seg('Mentions'),
-                              NotifyMode.muted: _Seg('Muted'),
-                            },
-                            onValueChanged: (v) {
-                              if (v == null) return;
-                              AppHaptics.selection();
-                              c.service.setNotifyMode(ch.radioId, ch.convKey, v);
-                            },
-                          ),
-                        ),
-                      ),
-                      InsetRow(key: const Key('mute-for'), title: 'Mute for a while', onTap: () => _muteFor(ch)),
-                    ],
-                  ),
-                  ..._meshTrack(context, ch),
-                  InsetGroup(rows: [
-                    AppSwitchTile(
-                      switchKey: const Key('pin-switch'),
-                      symbol: AppSymbols.pin,
-                      title: 'Pin to the top',
-                      value: pinned,
-                      onChanged: (v) => c.service.setPinned(ch.radioId, ch.convKey, v),
-                    ),
-                  ]),
-                  InsetGroup(
                     header: 'Region',
                     footer: 'Limits how far your messages are repeated. Most channels leave it empty.',
                     rows: [
                       InsetRow(key: const Key('region-row'), title: 'Region', value: regionSub, onTap: () => _editRegion(ch)),
                     ],
                   ),
-                  InsetGroup(
-                    header: 'Name',
-                    footer: ch.kind == ChannelKind.hashtag ? 'The name is the key. A hashtag channel cannot be renamed.' : null,
-                    rows: [
-                      if (ch.kind == ChannelKind.private)
-                        InsetRow(key: const Key('rename-row'), title: 'Rename', value: ch.name, onTap: () => _rename(ch))
-                      else
-                        InsetRow(key: const Key('rename-locked'), title: 'Rename', value: ch.kind == ChannelKind.hashtag ? 'The name is the key' : 'Fixed', chevron: false),
-                    ],
-                  ),
+                  // Only a private channel can be renamed: the others showed a row that did nothing.
+                  if (ch.kind == ChannelKind.private)
+                    InsetGroup(rows: [InsetRow(key: const Key('rename-row'), title: 'Rename', value: ch.name, onTap: () => _rename(ch))]),
                 ],
                 InsetGroup(rows: [
                   if (!ch.isSystem) InsetRow(key: const Key('clear-history'), title: 'Clear messages on this phone', chevron: false, onTap: () => _clearHistory(ch)),

@@ -16,6 +16,9 @@ import '../../alerts/alerts_runtime.dart';
 import '../drive/radio_link_status.dart';
 import '../theme.dart';
 
+/// The strip's buttons are full 44 pt targets (a bare TextButton is 36 pt tall here).
+final ButtonStyle _actionStyle = TextButton.styleFrom(minimumSize: const Size(64, 44), tapTargetSize: MaterialTapTargetSize.padded);
+
 class AlertsStatusStrip extends StatelessWidget {
   /// Space kept under the strip when it shows (the Drive tab runs behind the tab bar, so the strip clears it).
   final double bottomInset;
@@ -50,7 +53,7 @@ class AlertsStatusStrip extends StatelessWidget {
                 semantics: status,
                 action: active
                     ? null
-                    : TextButton(key: const Key('reconnect-now'), onPressed: () => reconnect.run(reason: 'button'), child: const Text('Reconnect')),
+                    : TextButton(key: const Key('reconnect-now'), style: _actionStyle, onPressed: () => reconnect.run(reason: 'button'), child: const Text('Reconnect')),
               ));
             }
             final q = rt.queue.message;
@@ -58,8 +61,9 @@ class AlertsStatusStrip extends StatelessWidget {
               rows.add(_Row(
                 key: const Key('queue-strip'),
                 icon: Icons.warning_amber_rounded,
+                warning: true,
                 text: q,
-                action: TextButton(key: const Key('queue-dismiss'), onPressed: rt.queue.dismiss, child: const Text('Dismiss')),
+                action: TextButton(key: const Key('queue-dismiss'), style: _actionStyle, onPressed: rt.queue.dismiss, child: const Text('Dismiss')),
               ));
             }
             if (rows.isEmpty) return const SizedBox.shrink();
@@ -110,7 +114,10 @@ class _Row extends StatelessWidget {
   /// What VoiceOver reads instead of title + text.
   final String? semantics;
   final Widget? action;
-  const _Row({super.key, required this.icon, required this.text, this.title, this.semantics, this.action});
+
+  /// A warning row: its icon takes the warning colour so it does not read as one more status line.
+  final bool warning;
+  const _Row({super.key, required this.icon, required this.text, this.title, this.semantics, this.action, this.warning = false});
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +133,7 @@ class _Row extends StatelessWidget {
               if (icon == null)
                 const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
               else
-                Icon(icon, size: 20, color: cs.onSecondaryContainer),
+                Icon(icon, size: 20, color: warning ? cs.error : cs.onSecondaryContainer),
               const SizedBox(width: Gap.m),
               Expanded(
                 child: Semantics(
@@ -138,6 +145,9 @@ class _Row extends StatelessWidget {
                       if (title != null) TextSpan(text: '$title  ', style: const TextStyle(fontWeight: FontWeight.w700)),
                       TextSpan(text: text),
                     ]),
+                    // Two lines at most: a long reason must not push the tab bar's neighbours up the screen.
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: cs.onSecondaryContainer),
                   ),
                 ),

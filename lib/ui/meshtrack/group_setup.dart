@@ -104,11 +104,11 @@ class _OpError extends StatelessWidget {
       r.message ??
       switch (r.status) {
         MtGroupOpStatus.radioFull => mtNotOnRadio,
-        MtGroupOpStatus.notConnected => 'Connect your radio first. A group lives on your radio, like any channel.',
+        MtGroupOpStatus.notConnected => 'Connect your radio first.',
         MtGroupOpStatus.invalidLink => 'That is not a group link. Ask your friend to share the group again.',
         MtGroupOpStatus.notEligible => 'That is an open channel. A group needs a private channel, so only people with the link can read it.',
         MtGroupOpStatus.nameInvalid => 'That name does not work for a channel. Keep it short, letters and numbers.',
-        MtGroupOpStatus.failed || MtGroupOpStatus.ok => 'Something went wrong. Nothing was changed. Try again.',
+        MtGroupOpStatus.failed || MtGroupOpStatus.ok => 'That did not work. Nothing was changed. Try again.',
       };
 
   @override
@@ -213,7 +213,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
-          child: Text('Name your group. Friends see this name when they join.', style: AppType.subhead.copyWith(color: c.textMuted)),
+          child: Text('Friends see this name when they join.', style: AppType.subhead.copyWith(color: c.textMuted)),
         ),
         const SizedBox(height: Gap.m),
         Padding(
@@ -227,11 +227,19 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
               autofocus: true,
               textCapitalization: TextCapitalization.words,
               placeholder: 'Group name',
+              // One tap clears the suggested name.
+              clearButtonMode: OverlayVisibilityMode.editing,
+              textInputAction: TextInputAction.done,
               padding: const EdgeInsets.all(Gap.m),
               style: AppType.body.copyWith(color: c.textPrimary),
               decoration: BoxDecoration(color: c.surfaceHigh, borderRadius: BorderRadius.circular(Corners.chip)),
               onChanged: (_) {
-                if (_fieldError != null) setState(() => _fieldError = null);
+                if (_fieldError != null || _error != null) {
+                  setState(() {
+                    _fieldError = null;
+                    _error = null;
+                  });
+                }
               },
               onSubmitted: (_) => _create(),
             ),
@@ -244,7 +252,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
           ),
         if (_error != null) _OpError(_error!),
         const SizedBox(height: Gap.l),
-        _Primary(key: const Key('mt-create'), label: 'Create', busy: _busy, onPressed: _create),
+        _Primary(key: const Key('mt-create'), label: 'Create group', busy: _busy, onPressed: _create),
       ],
     );
   }
@@ -284,8 +292,8 @@ class InviteScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
           child: Text(
             fresh
-                ? 'This is a new group link. The old one stops working for MeshTrack, so invite the people you want again.'
-                : 'Friends scan this code in MeshSonar or the MeshCore app, or open the link you send them.',
+                ? 'New link. The old one no longer works for MeshTrack, so invite everyone again.'
+                : 'Friends scan this code, or open the link you send them.',
             textAlign: TextAlign.center,
             style: AppType.subhead.copyWith(color: c.textMuted),
           ),
@@ -294,7 +302,7 @@ class InviteScreen extends StatelessWidget {
         if (link == null || link.isEmpty)
           const SizedBox(
             height: 240,
-            child: AppErrorView(title: 'No invite for this group', message: 'Its key is not on this phone, so it cannot be shared.'),
+            child: AppErrorView(title: 'This group cannot be shared from this phone', message: 'Ask the person who made it to invite people.'),
           )
         else ...[
           Center(
@@ -307,6 +315,22 @@ class InviteScreen extends StatelessWidget {
           ),
           const SizedBox(height: Gap.l),
           _Primary(key: const Key('mt-share-link'), label: 'Share link', onPressed: () => unawaited(_share(link!, name))),
+          // Copy, for pasting into a chat that is already open.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.s, Layout.screenMargin, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: CupertinoButton(
+                key: const Key('mt-copy-link'),
+                minimumSize: const Size.square(kMtHit),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: link!));
+                  if (context.mounted) showAppToast(context, 'Link copied', kind: AppToastKind.success);
+                },
+                child: const Text('Copy link'),
+              ),
+            ),
+          ),
         ],
         const SizedBox(height: Gap.s),
         Padding(
@@ -398,7 +422,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
-          child: Text('Scan the QR code on your friend\'s phone, or paste the link they sent you.', style: AppType.subhead.copyWith(color: c.textMuted)),
+          child: Text('Scan your friend\'s code, or paste the link they sent.', style: AppType.subhead.copyWith(color: c.textMuted)),
         ),
         const SizedBox(height: Gap.l),
         _Primary(key: const Key('mt-scan'), label: 'Scan QR code', onPressed: _busy ? null : _scan),
@@ -415,7 +439,12 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
                   key: const Key('mt-join-link'),
                   controller: _link,
                   autocorrect: false,
-                  placeholder: 'meshcore://channel/add?…',
+                  placeholder: 'Group link',
+                  clearButtonMode: OverlayVisibilityMode.editing,
+                  onChanged: (_) {
+                    // A new link is a new try: the old error goes.
+                    if (_error != null) setState(() => _error = null);
+                  },
                   padding: const EdgeInsets.all(Gap.m),
                   style: AppType.body.copyWith(color: c.textPrimary),
                   decoration: const BoxDecoration(),
@@ -429,7 +458,7 @@ class _JoinGroupScreenState extends State<JoinGroupScreen> {
         ),
         if (_error != null) _OpError(_error!),
         const SizedBox(height: Gap.m),
-        _Primary(key: const Key('mt-join-go'), label: 'Join', busy: _busy, onPressed: () => _join(_link.text)),
+        _Primary(key: const Key('mt-join-go'), label: 'Join group', busy: _busy, onPressed: () => _join(_link.text)),
       ],
     );
   }
@@ -474,17 +503,20 @@ class _UseExistingScreenState extends State<UseExistingScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
-          child: Text('Already share a private channel with these people? Use it for MeshTrack. The chat in it stays as it is.',
+          child: Text('Pick a private channel you already share with them. Its chat stays as it is.',
               style: AppType.subhead.copyWith(color: c.textMuted)),
         ),
         const SizedBox(height: Gap.l),
         if (list.isEmpty)
-          const SizedBox(
-            height: 260,
+          SizedBox(
+            height: 280,
             child: AppEmptyView(
               symbol: AppSymbols.lock,
               title: 'No private channels to use',
-              message: 'Only private channels can be groups. Open and # channels can be read by anyone, so they are not offered.',
+              message: 'Open and # channels can be read by anyone, so they cannot be groups.',
+              // The way forward from a dead end.
+              actionLabel: 'Make a new group',
+              onAction: () => Navigator.of(context).pushReplacement(_page(const NewGroupScreen())),
             ),
           )
         else
@@ -493,7 +525,6 @@ class _UseExistingScreenState extends State<UseExistingScreen> {
               InsetRow(
                 key: Key('mt-use-${ch.id}'),
                 title: ch.name,
-                subtitle: 'Private channel',
                 trailing: _busy == ch.id ? const CupertinoActivityIndicator() : null,
                 onTap: _busy != null ? null : () => _use(b!, ch),
               ),
@@ -512,6 +543,14 @@ class MakeRoomScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final chat = MeshTrackUi.of(context)?.chat();
+    if (chat == null) return _page(context);
+    // Follows the chat controller: a channel deleted on its own page is gone from this list when you come back (it used to
+    // stay until the screen was reopened).
+    return ListenableBuilder(listenable: chat, builder: (context, _) => _page(context));
+  }
+
+  Widget _page(BuildContext context) {
     final b = MeshTrackUi.of(context);
     final chat = b?.chat();
     final c = AppColors.of(context);
@@ -525,7 +564,7 @@ class MakeRoomScreen extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
-          child: Text('Your radio holds a fixed number of channels and it is full. Open one you no longer need and delete it, then come back.',
+          child: Text('Your radio has no room for another channel. Open one you no longer need and delete it.',
               style: AppType.subhead.copyWith(color: c.textMuted)),
         ),
         const SizedBox(height: Gap.l),
@@ -534,7 +573,7 @@ class MakeRoomScreen extends StatelessWidget {
         else if (list.isEmpty)
           const SizedBox(height: 240, child: AppEmptyView(symbol: AppSymbols.numberSign, title: 'No channels to remove', message: 'Only Public is on this radio.'))
         else
-          InsetGroup(header: 'On your radio', rows: [
+          InsetGroup(header: '${list.length} on your radio', rows: [
             for (final ch in list)
               InsetRow(
                 key: Key('mt-room-${ch.id}'),

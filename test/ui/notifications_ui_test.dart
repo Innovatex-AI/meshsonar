@@ -280,7 +280,15 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('in-app-banner')), findsOneWidget);
       expect(find.text('ping from bob'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('in-app-banner')));
+      // Build 76: it is no taller than a header, and a tap that was already on its way to the control underneath goes to
+      // that control, not into a chat.
+      expect(tester.getSize(find.byKey(const Key('in-app-banner'))).height, kInAppBannerHeight);
+      await tester.tap(find.byKey(const Key('in-app-banner')), warnIfMissed: false);
+      await tester.pump();
+      expect(s.coordinator.takePendingOpen(), isNull, reason: 'no touches in the first 400 ms');
+      expect(find.byKey(const Key('in-app-banner')), findsOneWidget);
+      await tester.pump(kInAppBannerArmDelay + const Duration(milliseconds: 10));
+      await tester.tap(find.byKey(const Key('in-app-banner-open')));
       await tester.pump();
       expect(s.coordinator.takePendingOpen(), h.bobConv);
       expect(find.byKey(const Key('in-app-banner')), findsNothing);
@@ -290,6 +298,46 @@ void main() {
       expect(find.byKey(const Key('in-app-banner')), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
       expect(find.byKey(const Key('in-app-banner')), findsNothing);
+    });
+
+    testWidgetsT('the banner lets an early tap reach the control under it; X and a swipe up dismiss without opening', (tester) async {
+      final s = await install(tester);
+      final h = chat.Harness();
+      h.bob();
+      s.coordinator.attachChat(h.service);
+      s.coordinator.setForeground(true);
+      var under = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: InAppBannerHost(
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(width: double.infinity, height: 60, child: GestureDetector(key: const Key('under'), behavior: HitTestBehavior.opaque, onTap: () => under++)),
+            ),
+          ),
+        ),
+      ));
+      h.service.handleInbound(dmEvent(100, 'a long message that would have wrapped onto a second and a third line before'));
+      await tester.pump();
+      await tester.pump();
+      final at = tester.getCenter(find.byKey(const Key('in-app-banner-open')));
+      await tester.tapAt(at);
+      await tester.pump();
+      expect(under, 1, reason: 'the tap went to the header under the new banner');
+      expect(s.coordinator.takePendingOpen(), isNull);
+      await tester.pump(kInAppBannerArmDelay + const Duration(milliseconds: 10));
+      await tester.tap(find.byKey(const Key('in-app-banner-close')));
+      await tester.pump();
+      expect(find.byKey(const Key('in-app-banner')), findsNothing);
+      expect(s.coordinator.takePendingOpen(), isNull, reason: 'X does not open the chat');
+      h.service.handleInbound(dmEvent(101, 'second'));
+      await tester.pump();
+      await tester.pump(kInAppBannerArmDelay + const Duration(milliseconds: 10));
+      await tester.fling(find.byKey(const Key('in-app-banner')), const Offset(0, -120), 800);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('in-app-banner')), findsNothing);
+      expect(s.coordinator.takePendingOpen(), isNull, reason: 'a swipe up does not open the chat');
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgetsT('a notification tap switches the shell to the Chat tab and opens that conversation', (tester) async {

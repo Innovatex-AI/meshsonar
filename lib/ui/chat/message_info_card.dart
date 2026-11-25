@@ -214,18 +214,25 @@ class MessagePathMapScreen extends StatelessWidget {
     return CupertinoPageScaffold(
       key: const Key('path-map-screen'),
       backgroundColor: c.bg,
-      navigationBar: CupertinoNavigationBar(middle: Text(title)),
+      navigationBar: CupertinoNavigationBar(middle: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis)),
       // CupertinoPageScaffold has no Material text style; without this the labels get Flutter's debug underline.
       child: Material(
         type: MaterialType.transparency,
         child: SafeArea(
         child: Column(children: [
+          // How much of the route the map can show, said once at the top.
+          if (placed.isNotEmpty && missing.isNotEmpty)
+            Padding(
+              key: const Key('path-map-count'),
+              padding: const EdgeInsets.fromLTRB(Gap.m, Gap.s, Gap.m, Gap.s),
+              child: Text('${placed.length} of ${nodes.length} repeaters are on the map', style: AppType.subhead.copyWith(color: c.textPrimary)),
+            ),
           Expanded(
             child: placed.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(Gap.xl),
-                      child: Text('None of these repeaters has a known position.',
+                      child: Text('No map for this route: none of its repeaters has shared a position.',
                           key: const Key('path-map-none'), textAlign: TextAlign.center, style: AppType.body.copyWith(color: c.textMuted)),
                     ),
                   )
@@ -237,7 +244,10 @@ class MessagePathMapScreen extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(Gap.m),
               child: Text(
-                'Not on the map (no known position): ${missing.map((n) => n.description).join('; ')}',
+                'Not on the map: ${missing.map((n) => n.description).join(', ')}',
+                // A long route must not push the map off a small phone.
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
                 style: AppType.footnote.copyWith(color: c.textMuted),
               ),
             ),

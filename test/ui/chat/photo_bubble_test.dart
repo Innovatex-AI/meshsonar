@@ -85,7 +85,7 @@ void main() {
   testWidgets('offline / failed: "Photo, loads when online"; a tap tries again', (tester) async {
     source.state = PhotoFetchState.failed;
     await pump(tester, [('Ann', photoUrlA)]);
-    expect(find.text('Photo, loads when online'), findsOneWidget);
+    expect(find.text('Photo. Tap to try again'), findsOneWidget);
     source.state = PhotoFetchState.ok;
     await tester.tap(find.byKey(const Key('photo-thumb-k3Xq9TzA')));
     await tester.pump();

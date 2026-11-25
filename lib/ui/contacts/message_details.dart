@@ -222,9 +222,7 @@ class _MessageDetailsState extends State<MessageDetails> {
             padding: const EdgeInsets.all(Gap.m),
             decoration: BoxDecoration(border: Border.all(color: c.accent), borderRadius: BorderRadius.circular(Corners.small)),
             child: Text(
-                'No delivery confirmation came back, but they replied after you sent it, so they most likely have it. '
-                'Confirmations travel back over the mesh and can be lost on the way. It is not sent again, so they will not '
-                'see it twice.',
+                'No confirmation came back, but they replied afterwards, so they most likely have it. It is not sent again.',
                 style: AppType.callout.copyWith(color: c.textPrimary)),
           ),
         ],
@@ -247,7 +245,7 @@ class _MessageDetailsState extends State<MessageDetails> {
               await Clipboard.setData(ClipboardData(text: m.text));
               if (context.mounted) showAppToast(context, 'Text copied');
             },
-            child: const Text('Copy'),
+            child: const Text('Copy text'),
           ),
           if (!m.isPending)
             CupertinoButton(

@@ -201,8 +201,13 @@ class _ConversationTileState extends State<ConversationTile> {
             child: AppSymbolIcon(sym, size: 14, color: r.delivery == RowDelivery.failed ? c.danger : (r.delivery == RowDelivery.delivered ? c.accent : c.textMuted)),
           ),
         ),
+      // A message that did not go out, or has not gone yet, says so in words: the small glyph alone is easy to miss.
+      if (!r.hasDraft && r.delivery == RowDelivery.failed)
+        TextSpan(text: 'Not delivered · ', style: subStyle.copyWith(color: c.danger, fontWeight: FontWeight.w600)),
+      if (!r.hasDraft && r.delivery == RowDelivery.queued) TextSpan(text: 'Waiting to send · ', style: subStyle),
       if (r.previewSender != null) TextSpan(text: '${r.previewSender}: ', style: subStyle.copyWith(color: c.textPrimary)),
-      TextSpan(text: text, style: r.offRadio && r.preview.isEmpty ? subStyle.copyWith(color: c.warning) : subStyle),
+      // Unread: the preview is as bright as the name, so new messages stand out down the list (as in Messages).
+      TextSpan(text: text, style: r.offRadio && r.preview.isEmpty ? subStyle.copyWith(color: c.warning) : (unread && !r.muted ? subStyle.copyWith(color: c.textPrimary) : subStyle)),
     ];
 
     final trailing = <Widget>[

@@ -151,7 +151,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.byKey(const Key('scan-notice')), findsOneWidget);
-      expect(find.text('That is not a MeshCore code'), findsOneWidget);
+      expect(find.text('Not a MeshCore code. Try another one.'), findsOneWidget);
       expect(find.byKey(const Key('scan-frame')), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 10));
       await tester.pumpAndSettle();
@@ -199,7 +199,7 @@ void main() {
       await pumpAdd(tester, link: false);
       await tester.tap(find.byKey(const Key('add-mine')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Connect your radio first'), findsOneWidget);
+      expect(find.textContaining('Connect your radio to show your code'), findsOneWidget);
       expect(find.byKey(const Key('qr-view')), findsNothing);
     });
   });
@@ -229,7 +229,7 @@ void main() {
       await pumpAdd(tester);
       expect(find.bySemanticsLabel(RegExp('Scan a QR code')), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('Paste a link or key')), findsOneWidget);
-      expect(find.bySemanticsLabel(RegExp('Show my contact')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Show my QR code')), findsOneWidget);
       h.dispose();
     });
   });
