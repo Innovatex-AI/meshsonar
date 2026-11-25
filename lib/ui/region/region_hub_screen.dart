@@ -19,8 +19,10 @@ class MachineDerivedNote extends StatelessWidget {
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            'Machine-derived outline: the border of $regionName was drawn automatically from open map data and node '
-            'positions and has not been reviewed yet, so it is approximate near the edge.',
+            // Build 76: one short line (it was a three-line paragraph under the header on a phone).
+            'Approximate border: $regionName was outlined automatically and not reviewed yet.',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
           ),
         ),

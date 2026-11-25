@@ -100,12 +100,22 @@ class _ChannelsSectionState extends State<ChannelsSection> {
     return FutureBuilder<_ChannelsData>(
       future: _f,
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState != ConnectionState.done) {
+          return Center(
+            key: const Key('channels-loading'),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: Gap.m),
+              Text('Loading the channels…', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ]),
+          );
+        }
         if (snap.hasError) return _error(snap.error);
         final d = snap.data!;
         final p = d.page;
         // readable channels first (busiest first, as the server sent them), private ones last
-        final rows = [...p.rows.where((r) => !r.private), ...p.rows.where((r) => r.private)];
+        final readable = p.rows.where((r) => !r.private).toList(), private = p.rows.where((r) => r.private).toList();
+        final rows = [...readable, ...private];
         final noFeed = rows.isEmpty && !d.feed.hasFeed;
         final storeOff = rows.isEmpty && !noFeed && p.statusCode == 'channel_store_off';
         return RefreshIndicator(
@@ -132,7 +142,7 @@ class _ChannelsSectionState extends State<ChannelsSection> {
                         child: Row(children: [
                           Icon(Icons.search, size: 20, color: t.colorScheme.onSurfaceVariant),
                           const SizedBox(width: Gap.s),
-                          Expanded(child: Text('Search messages', style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.onSurfaceVariant))),
+                          Expanded(child: Text('Search messages', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.bodyLarge?.copyWith(color: t.colorScheme.onSurfaceVariant))),
                         ]),
                       ),
                     ),
@@ -146,11 +156,35 @@ class _ChannelsSectionState extends State<ChannelsSection> {
                   child: PacketNote(plainServerText(p.status.reason) ?? 'Channel messages are not being stored on this server yet.', key: const Key('channels-store-off')),
                 )
               else if (rows.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(Gap.xl),
-                  child: Text('No channel messages heard here in the last 24 hours.', key: Key('channels-empty'), textAlign: TextAlign.center),
+                Padding(
+                  padding: const EdgeInsets.all(Gap.xl),
+                  child: Column(children: [
+                    const Text('No channel messages heard here in the last 24 hours.', key: Key('channels-empty'), textAlign: TextAlign.center),
+                    const SizedBox(height: Gap.m),
+                    OutlinedButton(key: const Key('channels-empty-retry'), onPressed: _reload, child: const Text('Check again')),
+                  ]),
                 ),
-              for (final r in rows) _ChannelTile(row: r, onTap: r.private ? null : () => setState(() => _open = (r.id, r.label))),
+              if (readable.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs),
+                  child: Text('Public radio conversations, read-only. Tap a channel to read it.',
+                      key: const Key('channels-intro'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                ),
+              for (final r in readable) _ChannelTile(row: r, onTap: () => setState(() => _open = (r.id, r.label))),
+              // Private channels cannot be opened: one closed row holds them, so the readable ones are not pushed apart.
+              if (private.isNotEmpty && readable.length + private.length <= 3)
+                for (final r in private) _ChannelTile(row: r)
+              else if (private.isNotEmpty)
+                Theme(
+                  data: t.copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    key: const PageStorageKey('channels-private'),
+                    leading: Icon(Icons.lock_outline, color: t.colorScheme.onSurfaceVariant),
+                    title: Text('Private channels (${private.length})'),
+                    subtitle: Text('Listed only: their text cannot be read without the key', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                    children: [for (final r in private) _ChannelTile(row: r)],
+                  ),
+                ),
               Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.m), child: WebTwinLine(_web)),
             ],
           ),
@@ -171,7 +205,7 @@ class _ChannelsSectionState extends State<ChannelsSection> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: Gap.m),
-          FilledButton(onPressed: _reload, child: const Text('Try again')),
+          FilledButton(key: const Key('channels-retry'), onPressed: _reload, child: const Text('Try again')),
         ]),
       ),
     );
@@ -212,9 +246,9 @@ class _ChannelTile extends StatelessWidget {
           Text('$counts in 24 h', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
           if (r.private)
             Text('Private: the text cannot be read without its key.', key: Key('channel-private-${r.id}'), style: muted)
-          else if (last.isNotEmpty)
-            Text('Last: $last', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
-          if (heardIn != null) Text(heardIn, style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
+          else if (last.isNotEmpty || heardIn != null)
+            // One line: who spoke last and when, then where it is heard (the hub).
+            Text([if (last.isNotEmpty) 'Last: $last', ?heardIn].join(' · '), style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
         ]),
         trailing: r.private ? null : Icon(Icons.chevron_right, color: c.onSurfaceVariant),
         onTap: onTap,

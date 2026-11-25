@@ -244,7 +244,8 @@ class NetworkHeaderBar extends StatelessWidget {
                           child: Text(title,
                               key: const Key('region-title'), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, textScaler: scaler, style: t.textTheme.titleMedium),
                         ),
-                        Icon(Icons.expand_more, size: 20, color: c.onSurfaceVariant),
+                        // In the accent colour, so the name reads as a button (it opens the region picker).
+                        Icon(Icons.expand_more, key: const Key('region-title-chevron'), size: 22, color: c.primary),
                       ]),
                     ),
                   ),
@@ -261,7 +262,7 @@ class NetworkHeaderBar extends StatelessWidget {
               height: 44,
               child: IconButton(
                 key: const Key('network-search'),
-                tooltip: 'Search nodes, keys, packets, observers and regions',
+                tooltip: 'Search',
                 padding: EdgeInsets.zero,
                 icon: const Icon(Icons.search),
                 onPressed: onSearch,
@@ -272,18 +273,22 @@ class NetworkHeaderBar extends StatelessWidget {
               height: 44,
               child: IconButton(
                 key: const Key('network-overflow'),
-                tooltip: 'More',
+                tooltip: 'Share or export',
                 padding: EdgeInsets.zero,
                 icon: const Icon(Icons.more_horiz),
                 onPressed: onShare == null && onExport == null
                     ? null
                     : () async {
                         // The app's own action sheet (no Material popup menu: test/lint/widget_ban_test.dart).
+                        // Titled with the region, so it is clear what is shared or exported; each row has an icon.
                         final v = await showAppActionSheet<String>(
                           context,
+                          title: title,
                           actions: [
-                            if (onShare != null) const AppAction('Share link', 'share', key: Key('network-share'), symbol: AppSymbols.squareAndArrowUp),
-                            if (onExport != null) const AppAction('Export region report', 'export', key: Key('region-report-export')),
+                            if (onShare != null)
+                              const AppAction('Share a link to this screen', 'share', key: Key('network-share'), symbol: AppSymbols.squareAndArrowUp),
+                            if (onExport != null)
+                              const AppAction('Export region report', 'export', key: Key('region-report-export'), symbol: AppSymbols.squareAndArrowDown),
                           ],
                         );
                         if (v == 'share') onShare?.call();
@@ -308,18 +313,36 @@ class _PulseSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final muted = t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    final mc = MeshSonarColors.of(context);
+    final (IconData icon, Color color, String headline) = switch (state) {
+      PulseChipState.unusual => (
+          Icons.warning_amber_rounded,
+          mc.beacon,
+          events.length == 1 ? '1 thing is unusual right now' : '${events.length} things are unusual right now',
+        ),
+      PulseChipState.noFeed => (Icons.portable_wifi_off, mc.textMuted, 'No packets from this region lately'),
+      _ => (Icons.check_circle_outline, mc.levelStrong, 'Everything looks normal'),
+    };
     return ListView(
       key: const Key('pulse-sheet'),
       controller: controller,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        Semantics(header: true, child: Text(state == PulseChipState.unusual ? 'Unusual right now' : 'Network pulse', style: t.textTheme.titleLarge)),
+        // The answer first, in plain words with its colour; the explanation under it.
+        Row(children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(width: 12),
+          Expanded(child: Semantics(header: true, child: Text(headline, key: const Key('pulse-sheet-headline'), style: t.textTheme.titleLarge))),
+        ]),
         const SizedBox(height: 8),
         if (state == PulseChipState.noFeed)
-          Text('No packets have reached the server from this region lately, so the pulse cannot say whether anything is unusual.',
+          Text('Nothing has reached the server from here, so it cannot tell whether anything is unusual. Check Observers to see who is reporting.',
               key: const Key('pulse-sheet-no-feed'), style: muted),
         if (state == PulseChipState.normal)
-          Text('Nothing unusual right now: traffic and repeaters look as they usually do for this hour.', key: const Key('pulse-sheet-normal'), style: muted),
+          Text('Traffic and repeaters look as they usually do for this hour. You will see a warning here when that changes.',
+              key: const Key('pulse-sheet-normal'), style: muted),
+        if (state == PulseChipState.unusual && events.any((e) => pulseLinkOf(e) != null))
+          Text('Tap one to see it in the app.', key: const Key('pulse-sheet-hint'), style: muted),
         for (final e in events) _PulseTile(e, inSheet: true),
       ],
     );

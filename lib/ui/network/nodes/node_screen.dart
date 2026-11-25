@@ -84,7 +84,7 @@ class _NetworkNodeScreenState extends State<NetworkNodeScreen> {
             body: switch (snap.connectionState) {
               ConnectionState.done when snap.hasError => _error(context, snap.error),
               ConnectionState.done => RefreshIndicator(onRefresh: _reload, child: NodePageBody(page: p!, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, mapTiles: widget.mapTiles)),
-              _ => const Center(child: CircularProgressIndicator()),
+              _ => const _Loading('Loading this node…'),
             },
           );
         },
@@ -97,14 +97,28 @@ class _NetworkNodeScreenState extends State<NetworkNodeScreen> {
       child: Padding(
         padding: const EdgeInsets.all(Gap.xl),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(notFound ? 'This region does not know that node.' : (e is V1Error ? e.message : 'The node did not load.'),
+          Text(notFound ? 'This node is not in this region. It may belong to another region or has not been heard here.' : (e is V1Error ? e.message : 'The node did not load.'),
               key: const Key('node-error'), textAlign: TextAlign.center),
           const SizedBox(height: Gap.m),
-          if (!notFound) FilledButton(onPressed: _reload, child: const Text('Try again')),
+          if (!notFound) FilledButton(key: const Key('node-retry'), onPressed: _reload, child: const Text('Try again')),
+          if (notFound) FilledButton(key: const Key('node-error-back'), onPressed: () => Navigator.of(context).maybePop(), child: const Text('Go back')),
         ]),
       ),
     );
   }
+}
+
+class _Loading extends StatelessWidget {
+  final String text;
+  const _Loading(this.text);
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: Gap.m),
+          Text(text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ]),
+      );
 }
 
 NodeKind _kindOf(String role) => switch (role) {
@@ -142,11 +156,7 @@ class NodePageBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
       children: [
         if (page.offlineAsOf != null) RegionOfflineAsOf(asOf: page.offlineAsOf!),
-        if (page.source == NetworkReadSource.legacy)
-          Text('From the region repeater page: paths through, reach, clock and battery come with the new node service.',
-              key: const Key('node-legacy-note'), style: muted),
-        if (page.status != null && page.status!.state.name != 'ready' && plainServerText(page.status!.reason) != null)
-          Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(plainServerText(page.status!.reason)!, key: const Key('node-status-note'), style: muted)),
+        // First: what it is, whether it is alive, where it is, and what you can do with it.
         _identity(context, d, hidden),
         // MAP slice 5: the node's small map (page `node`), when the definition presets one and the node has a public position.
         if (!hidden && d.position != null && MapPreview.presetOf('node') != null)
@@ -157,12 +167,19 @@ class NodePageBody extends StatelessWidget {
           ),
         const SizedBox(height: Gap.s),
         NodeActionBar(node: ref),
+        NodeKeyRow(d.key),
         if (d.health != null) _health(context, d),
+        // Then the rest, one closed row each (a tap opens it): the page is a few screens, not twenty.
         if (page.activity != null) ..._activity(context, page.activity!),
         if (page.heardBy != null && page.heardBy!.isNotEmpty) _heardBy(context, page),
         if (page.neighbours != null && page.neighbours!.isNotEmpty) _neighbours(context, page.neighbours!),
         if (page.paths != null && page.paths!.isNotEmpty) _paths(context, page),
         if (page.reach != null && (page.reach!.links.isNotEmpty || page.reach!.directObservers.isNotEmpty)) _reach(context, page.reach!),
+        if (page.battery != null || d.batteryMv != null) _battery(context, d, page.battery),
+        if (page.clock != null || (d.clockSeverity != null && d.clockSeverity != 'no_clock')) _clock(context, d, page.clock),
+        if (d.radio != null) _radio(context, d.radio!),
+        if (d.recentAdverts.isNotEmpty) _adverts(context, d),
+        _about(context, d),
         // What this phone's own drives know about the node (they need its position, and show nothing without drives).
         if (!hidden && d.position != null) ...[
           Padding(
@@ -176,12 +193,12 @@ class NodePageBody extends StatelessWidget {
             child: RepeaterReachSection(repeaterKey: d.key, lat: d.position!.lat, lon: d.position!.lon, mapTiles: mapTiles),
           ),
         ],
-        if (page.clock != null || (d.clockSeverity != null && d.clockSeverity != 'no_clock')) _clock(context, d, page.clock),
-        if (page.battery != null || d.batteryMv != null) _battery(context, d, page.battery),
-        if (d.radio != null) _radio(context, d.radio!),
-        if (d.hashSize != null) _hash(context, d),
-        if (d.recentAdverts.isNotEmpty) _adverts(context, d),
         const SizedBox(height: Gap.m),
+        // Quiet notes last: where the figures came from and what the server could not fill in.
+        if (page.source == NetworkReadSource.legacy)
+          Text('Some parts (paths, reach, clock, battery) are not available for this region yet.', key: const Key('node-legacy-note'), style: muted),
+        if (page.status != null && page.status!.state.name != 'ready' && plainServerText(page.status!.reason) != null)
+          Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(plainServerText(page.status!.reason)!, key: const Key('node-status-note'), style: muted)),
         WebTwinLine(Uri(scheme: 'https', host: '$regionSlug.meshsonar.com', path: '/nodes/${d.key}')),
       ],
     );
@@ -200,20 +217,35 @@ class NodePageBody extends StatelessWidget {
                 'invalid' => 'The advertised position is not valid',
                 _ => 'Never advertised a position',
               };
+    final heard = d.lastHeardAt ?? d.health?.lastHeardAt;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: Gap.s),
+      const SizedBox(height: Gap.xs),
+      // The whole name (the app bar cuts a long one short).
+      Semantics(header: true, child: Text(d.label, key: const Key('node-name'), maxLines: 3, overflow: TextOverflow.ellipsis, style: t.textTheme.headlineSmall)),
+      const SizedBox(height: Gap.xs),
       Row(children: [
         if (status != null) ...[StatusDot(status, size: 12), const SizedBox(width: Gap.s)],
-        Expanded(child: Text([nodeRoleLabel(d.role), if (status != null) nodeStatusLabel(status)].join(' · '), style: t.textTheme.titleSmall)),
+        Expanded(child: Text([nodeRoleLabel(d.role), if (status != null) nodeStatusLabel(status)].join(' · '), style: t.textTheme.titleMedium)),
       ]),
+      Text(heard == null ? 'Not heard yet' : 'Last heard ${agoText(heard)}',
+          key: const Key('node-heard'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       if (d.aka.isNotEmpty) Text('Also seen as ${d.aka.join(', ')}', style: t.textTheme.bodySmall),
       const SizedBox(height: Gap.xs),
-      SelectableText(d.key, key: const Key('node-key'), style: t.textTheme.bodySmall),
-      KvRow('Hop prefix', [d.prefixes['1'] ?? d.prefix, ?d.prefixes['2'], ?d.prefixes['3']].join(' · ')),
       KvRow('Position', posText, valueKey: const Key('node-position')),
-      if (d.lastHeardAt != null) KvRow('Last heard', agoText(d.lastHeardAt)),
-      if (d.lastAdvertAt != null) KvRow('Last advert', agoText(d.lastAdvertAt)),
+    ]);
+  }
+
+  /// The rarely needed identity facts, closed by default: the short IDs packets carry, first seen, last advert, claim,
+  /// and how many relays share its short ID.
+  Widget _about(BuildContext context, NodeDetail d) {
+    final col = d.hashSize == null ? null : d.collisions[(d.hashSize ?? 1).toString()];
+    return NodeSection(id: 'hash', title: 'More about this node', collapsible: true, summary: 'Short ID, first seen, last advert', children: [
+      KvRow('Short ID in packets', [d.prefixes['1'] ?? d.prefix, ?d.prefixes['2'], ?d.prefixes['3']].join(' · ')),
+      if (d.hashSize != null)
+        KvRow('Short ID size', '${d.hashSize} byte${d.hashSize == 1 ? '' : 's'}${d.hashInconsistent ? ' (changes between packets)' : ''}'),
+      if (col != null) KvRow('Shares its short ID with', col == 0 ? 'no other relay' : '$col other relay${col == 1 ? '' : 's'}'),
       if (d.firstSeen != null) KvRow('First seen', agoText(d.firstSeen)),
+      if (d.lastAdvertAt != null) KvRow('Last advert', agoText(d.lastAdvertAt)),
       if (d.claimed == true) const KvRow('Claimed', 'Claimed by its owner'),
     ]);
   }
@@ -222,13 +254,12 @@ class NodePageBody extends StatelessWidget {
     final h = d.health!;
     final how = switch (h.lastHeardHow) {
       'own_packet' => 'its own packet',
-      'relay_unique_prefix' => 'relaying (unique prefix)',
-      'relay_likely' => 'relaying (likely)',
+      'relay_unique_prefix' => 'a packet it relayed',
+      'relay_likely' => 'a packet it likely relayed',
       _ => null,
     };
     return NodeSection(id: 'health', title: 'Health', children: [
-      KvRow('Status', nodeStatusLabel(h.status)),
-      if (h.lastHeardAt != null) KvRow('Last heard', [agoText(h.lastHeardAt), ?how].join(', by ')),
+      if (how != null) KvRow('Heard through', how),
       if (h.offlineAfterH != null) KvRow('Counts as silent after', '${h.offlineAfterH!.round()} h${h.thresholdKind == 'adaptive' ? ' (learned from this node)' : ''}'),
       if (h.packetsToday != null) KvRow('Packets today', '${h.packetsToday}'),
       if (h.relayed1h != null) KvRow('Relayed last hour', '${h.relayed1h}'),
@@ -239,7 +270,7 @@ class NodePageBody extends StatelessWidget {
       if (h.heard7d != null) KvRow('Heard (7 d)', shareText(h.heard7d!), valueKey: const Key('node-heard-7d')),
       if (h.heard30d != null) KvRow('Heard (30 d)', shareText(h.heard30d!)),
       if (h.heard7d != null || h.heard24h != null || h.heard30d != null)
-        Text('Share of hours with traffic in which a source heard this node.', style: Theme.of(context).textTheme.bodySmall),
+        Text('Heard = the share of busy hours in which someone heard this node.', style: Theme.of(context).textTheme.bodySmall),
       if (d.usefulnessGrade != null)
         KvRow('Usefulness', '${d.usefulnessGrade}${d.usefulnessScore == null ? '' : ' (${shareText(d.usefulnessScore!)})'}'),
     ]);
@@ -255,7 +286,7 @@ class NodePageBody extends StatelessWidget {
     final out = <Widget>[];
     if (a.timeline.isNotEmpty) {
       final peak = a.timeline.reduce((x, y) => y.$2 > x.$2 ? y : x);
-      out.add(NodeSection(id: 'activity', title: 'Activity', children: [
+      out.add(NodeSection(id: 'activity', title: 'Activity', collapsible: true, summary: 'Busiest hour: ${peak.$2} packets at ${_hour(peak.$1)}', children: [
         ChartFrame(
           id: 'node-activity',
           title: 'Packets per hour',
@@ -280,7 +311,7 @@ class NodePageBody extends StatelessWidget {
     }
     if (a.types.isNotEmpty) {
       final sorted = a.types.entries.toList()..sort((x, y) => y.value.compareTo(x.value));
-      out.add(NodeSection(id: 'types', title: 'Packet types', children: [
+      out.add(NodeSection(id: 'types', title: 'Packet types', collapsible: true, summary: 'Mostly ${packetTypeLabel(sorted.first.key)} · ${sorted.fold<int>(0, (n, e) => n + e.value)} packets', children: [
         for (final e in sorted) KvRow(packetTypeLabel(e.key), '${e.value}'),
       ]));
     }
@@ -289,20 +320,13 @@ class NodePageBody extends StatelessWidget {
       String day(DateTime t) => '${t.month}/${t.day}';
       // Collapsed by default (a small screen): the header says the latest reading; the card (summary, chart, table) is
       // the one the old region repeater page had.
-      out.add(Padding(
-        key: const Key('node-section-snr'),
-        padding: const EdgeInsets.only(top: Gap.l),
-        child: Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            key: const PageStorageKey('node-snr-tile'),
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: EdgeInsets.zero,
-            title: Semantics(header: true, child: Text('SNR trend', style: Theme.of(context).textTheme.titleMedium)),
-            subtitle: Text('Latest ${snrText(snr.last.$2)} on ${day(snr.last.$1)} · ${snr.length} days with readings', key: const Key('node-snr-latest')),
-            children: [SnrTrendCard(daily: [for (final s in a.snrTrend) DailySnr(s.$1, s.$2, s.$3)])],
-          ),
-        ),
+      out.add(NodeSection(
+        id: 'snr',
+        title: 'Signal trend',
+        collapsible: true,
+        summary: 'Latest ${snrText(snr.last.$2)} on ${day(snr.last.$1)} · ${snr.length} ${snr.length == 1 ? 'day' : 'days'} with readings',
+        summaryKey: const Key('node-snr-latest'),
+        children: [SnrTrendCard(daily: [for (final s in a.snrTrend) DailySnr(s.$1, s.$2, s.$3)])],
       ));
     }
     return out;
@@ -310,12 +334,14 @@ class NodePageBody extends StatelessWidget {
 
   Widget _heardBy(BuildContext context, NodePage p) {
     final t = Theme.of(context);
-    return NodeSection(id: 'heard-by', title: 'Heard by (${p.heardBy!.length})', children: [
+    return NodeSection(id: 'heard-by', title: 'Heard by (${p.heardBy!.length})', collapsible: true, summary: 'Listening stations that heard it · ${p.heardBy!.where((h) => h.direct).length} directly · tap one to open it', children: [
+      NodeMoreList(id: 'heard-by', children: [
       for (final h in p.heardBy!)
         ListTile(
           key: Key('heard-by-${h.observer.id}'),
           contentPadding: EdgeInsets.zero,
-          title: Text(h.observer.name),
+          title: Text(readableName(h.observer.name), maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: const Icon(Icons.chevron_right),
           subtitle: Text([
             observerKindLabel(h.observer.kind),
             h.direct ? 'heard directly' : 'heard through relays',
@@ -326,17 +352,19 @@ class NodePageBody extends StatelessWidget {
           ].join(' · ')),
           onTap: () => openNetworkObserver(context, baseUrl: baseUrl, regionSlug: regionSlug, observerId: h.observer.id),
         ),
+      ]),
       if (p.relayOnlyObservers != null && p.relayOnlyObservers! > 0)
         Text('${p.relayOnlyObservers} more observers heard it only as a relay.', style: t.textTheme.bodySmall),
     ]);
   }
 
-  Widget _neighbours(BuildContext context, List<NeighbourRow> rows) => NodeSection(id: 'neighbours', title: 'Neighbours (${rows.length})', children: [
+  Widget _neighbours(BuildContext context, List<NeighbourRow> rows) => NodeSection(id: 'neighbours', title: 'Neighbours (${rows.length})', collapsible: true, summary: 'Nodes one radio hop away · tap one to open it', children: [
+        NodeMoreList(id: 'neighbours', children: [
         for (final n in rows)
           ListTile(
             key: Key('neighbour-${n.node?.key ?? n.prefix}'),
             contentPadding: EdgeInsets.zero,
-            title: Text(n.label),
+            title: Text(readableName(n.label), maxLines: 2, overflow: TextOverflow.ellipsis),
             subtitle: Text([
               if (n.count != null) '${n.count} ${n.count == 1 ? 'packet' : 'packets'}',
               if (n.avgSnr != null) snrText(n.avgSnr),
@@ -347,6 +375,7 @@ class NodePageBody extends StatelessWidget {
             trailing: HopConfidenceBadge(hopConfidenceOf(n.confidence)),
             onTap: n.node == null ? null : () => openNetworkNode(context, baseUrl: baseUrl, regionSlug: regionSlug, nodeKey: n.node!.key),
           ),
+        ]),
       ]);
 
   Widget _paths(BuildContext context, NodePage p) {
@@ -357,44 +386,50 @@ class NodePageBody extends StatelessWidget {
           HopConfidence.ambiguous => '${h.prefix}?',
           _ => '${h.prefix} (unknown)',
         };
-    return NodeSection(id: 'paths', title: 'Paths through (${p.totalPaths ?? p.paths!.length})', children: [
+    return NodeSection(id: 'paths', title: 'Paths through (${p.totalPaths ?? p.paths!.length})', collapsible: true, summary: 'Routes packets took through this node · tap one for a sample packet', children: [
+      NodeMoreList(id: 'paths', children: [
       for (final r in p.paths!)
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(r.hops.map(hop).join(' › ')),
+          trailing: r.sampleHash == null ? null : const Icon(Icons.chevron_right),
+          title: Text(r.hops.map(hop).join(' › '), maxLines: 3, overflow: TextOverflow.ellipsis),
           subtitle: Text(['${r.count} ${r.count == 1 ? 'packet' : 'packets'}', if (r.lastAt != null) 'last ${agoText(r.lastAt)}'].join(' · ')),
           onTap: r.sampleHash == null
               ? null
               : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: baseUrl, regionSlug: regionSlug, hash: r.sampleHash!))),
         ),
+      ]),
       Text('A name with "(likely)" is a best guess; "?" and "(unknown)" hops could not be named.', style: t.textTheme.bodySmall),
     ]);
   }
 
-  Widget _reach(BuildContext context, NodeReach r) => NodeSection(id: 'reach', title: 'Reach', children: [
+  Widget _reach(BuildContext context, NodeReach r) => NodeSection(id: 'reach', title: 'Reach', collapsible: true, summary: r.degree != null ? '${r.degree} direct ${r.degree == 1 ? 'link' : 'links'} to other nodes' : 'The nodes it links to directly', children: [
         if (r.degree != null) KvRow('Direct links', '${r.degree}${r.degreeRank == null ? '' : ' (rank ${r.degreeRank} here)'}'),
+        if (r.directObservers.isNotEmpty) KvRow('Observers in direct range', r.directObservers.map((o) => readableName(o.name)).join(', ')),
+        NodeMoreList(id: 'reach', children: [
         for (final l in r.links)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(l.node.label),
+            title: Text(readableName(l.node.label), maxLines: 2, overflow: TextOverflow.ellipsis),
+            trailing: const Icon(Icons.chevron_right),
             subtitle: Text([
               l.bidirectional ? 'both ways' : 'one way',
-              'it hears ${l.weHear}, heard by them ${l.theyHear}',
+              'hears them ${l.weHear}×, they hear it ${l.theyHear}×',
               if (l.distanceKm != null) distanceText(context, l.distanceKm!),
             ].join(' · ')),
             onTap: () => openNetworkNode(context, baseUrl: baseUrl, regionSlug: regionSlug, nodeKey: l.node.key),
           ),
-        if (r.directObservers.isNotEmpty) KvRow('Observers in direct range', r.directObservers.map((o) => o.name).join(', ')),
+        ]),
       ]);
 
   Widget _clock(BuildContext context, NodeDetail d, NodeClock? c) {
     final sev = c?.severity ?? d.clockSeverity ?? 'no_clock';
     final skew = c?.skewS ?? d.clockSkewS;
     final drift = c?.driftSPerDay ?? d.clockDriftSPerDay;
-    return NodeSection(id: 'clock', title: 'Clock', children: [
+    return NodeSection(id: 'clock', title: 'Clock', collapsible: true, summary: [clockSeverityLabel(sev), if (skew != null) skewText(skew)].join(' · '), children: [
       KvRow('Clock', clockSeverityLabel(sev), valueKey: const Key('node-clock')),
       if (skew != null) KvRow('Offset', skewText(skew)),
-      if (drift != null) KvRow('Drift', '${drift.toStringAsFixed(1)} s per day'),
+      if (drift != null) KvRow('Drift', driftText(drift)),
       if (c?.bimodal == true) const KvRow('Note', 'Two different clocks seem to advertise this key'),
     ]);
   }
@@ -404,8 +439,9 @@ class NodePageBody extends StatelessWidget {
     final status = b?.status ?? d.batteryStatus ?? 'unknown';
     final pal = chartPalette(context);
     String day(DateTime t) => '${t.month}/${t.day}';
-    return NodeSection(id: 'battery', title: 'Battery', children: [
-      if (mv != null) KvRow('Battery', '${voltsText(mv)} · ${switch (status) { 'ok' => 'OK', 'low' => 'Low', 'critical' => 'Critical', _ => 'Unknown' }}', valueKey: const Key('node-battery')),
+    final word = switch (status) { 'ok' => 'OK', 'low' => 'Low', 'critical' => 'Critical', _ => 'Unknown' };
+    return NodeSection(id: 'battery', title: 'Battery', collapsible: true, summary: mv == null ? word : '${voltsText(mv)} · $word', children: [
+      if (mv != null) KvRow('Battery', '${voltsText(mv)} · $word', valueKey: const Key('node-battery')),
       if (b != null && b.series.length > 1)
         ChartFrame(
           id: 'node-battery',
@@ -423,7 +459,7 @@ class NodePageBody extends StatelessWidget {
     ]);
   }
 
-  Widget _radio(BuildContext context, NodeRadio r) => NodeSection(id: 'radio', title: 'Radio', children: [
+  Widget _radio(BuildContext context, NodeRadio r) => NodeSection(id: 'radio', title: 'Radio', collapsible: true, summary: [?r.model, ?r.preset, if (r.model == null && r.preset == null && r.freqMhz != null) '${trimNumber(r.freqMhz!, 3)} MHz'].join(' · '), children: [
         if (r.model != null) KvRow('Model', r.model!),
         if (r.firmware != null) KvRow('Firmware', r.firmware!),
         if (r.preset != null) KvRow('Preset', r.preset!),
@@ -433,19 +469,12 @@ class NodePageBody extends StatelessWidget {
         if (r.differsFromNearby) const KvRow('Note', 'Its radio settings differ from nearby nodes'),
       ]);
 
-  Widget _hash(BuildContext context, NodeDetail d) {
-    final col = d.collisions[(d.hashSize ?? 1).toString()];
-    return NodeSection(id: 'hash', title: 'Hash size', children: [
-      KvRow('Hop prefix size', '${d.hashSize} byte${d.hashSize == 1 ? '' : 's'}${d.hashInconsistent ? ' (changes between packets)' : ''}'),
-      if (col != null) KvRow('Shares its prefix with', col == 0 ? 'no other relay' : '$col other relay${col == 1 ? '' : 's'}'),
-    ]);
-  }
-
-  Widget _adverts(BuildContext context, NodeDetail d) => NodeSection(id: 'adverts', title: 'Recent adverts', children: [
+  Widget _adverts(BuildContext context, NodeDetail d) => NodeSection(id: 'adverts', title: 'Recent adverts', collapsible: true, summary: 'Its last ${d.recentAdverts.take(10).length} "I am here" broadcasts · tap one for the packet', children: [
         for (final a in d.recentAdverts.take(10))
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(a.at == null ? a.hash : agoText(a.at)),
+            title: Text(a.at == null ? shortKey(a.hash) : agoText(a.at)),
+            trailing: const Icon(Icons.chevron_right),
             subtitle: Text([
               if (a.hops != null) '${a.hops} hops',
               if (a.observers != null) '${a.observers} observers',

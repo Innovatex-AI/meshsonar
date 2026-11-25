@@ -52,7 +52,16 @@ class _ObserversDirectoryViewState extends State<ObserversDirectoryView> {
     return FutureBuilder<ObserverListPage>(
       future: _f,
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+        if (snap.connectionState != ConnectionState.done) {
+          return Center(
+            key: const Key('observers-loading'),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: Gap.m),
+              Text('Loading the observers…', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ]),
+          );
+        }
         if (snap.hasError) {
           final e = snap.error;
           if (e is V1Error && e.offline) return SingleChildScrollView(child: RegionOfflineEmpty(what: 'the observers', onRetry: _reload));
@@ -62,7 +71,7 @@ class _ObserversDirectoryViewState extends State<ObserversDirectoryView> {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text(e is V1Error ? e.message : 'The observers did not load.', key: const Key('observers-error'), textAlign: TextAlign.center),
                 const SizedBox(height: Gap.m),
-                FilledButton(onPressed: _reload, child: const Text('Try again')),
+                FilledButton(key: const Key('observers-retry'), onPressed: _reload, child: const Text('Try again')),
               ]),
             ),
           );
@@ -80,14 +89,26 @@ class _ObserversDirectoryViewState extends State<ObserversDirectoryView> {
                 if (p.source == NetworkReadSource.legacy)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
-                    child: Text('From the region observer list: airtime and clock come with the new observer service.',
+                    child: Text('A simpler list for this region: airtime and clock figures are not available here yet.',
                         key: const Key('observers-legacy-note'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  ),
+                if (rows.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(Gap.l, Gap.m, Gap.l, Gap.xs),
+                    child: Text(
+                        '${rows.where((r) => r.status == 'online').length} of ${rows.length} online. Observers are listening stations that report what they hear; tap one for its details.',
+                        key: const Key('observers-intro'),
+                        style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                   ),
                 if (rows.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(Gap.xl),
-                    child: Text((p.status != null && p.status!.state.name != 'ready' ? plainServerText(p.status!.reason) : null) ?? 'No observer hears this region yet.',
-                        key: const Key('observers-empty'), textAlign: TextAlign.center),
+                    child: Column(children: [
+                      Text((p.status != null && p.status!.state.name != 'ready' ? plainServerText(p.status!.reason) : null) ?? 'No observer hears this region yet.',
+                          key: const Key('observers-empty'), textAlign: TextAlign.center),
+                      const SizedBox(height: Gap.m),
+                      OutlinedButton(key: const Key('observers-empty-retry'), onPressed: _reload, child: const Text('Check again')),
+                    ]),
                   ),
                 for (final r in rows)
                   ListTile(
@@ -95,7 +116,7 @@ class _ObserversDirectoryViewState extends State<ObserversDirectoryView> {
                     minTileHeight: 56,
                     leading: Padding(padding: const EdgeInsets.only(top: 6), child: StatusDot(r.status)),
                     title: Row(children: [
-                      Flexible(child: Text(r.name, maxLines: 2, overflow: TextOverflow.ellipsis)),
+                      Flexible(child: Text(readableName(r.name), maxLines: 2, overflow: TextOverflow.ellipsis)),
                       if (store.isFavourite(FavouriteKind.observer, r.id)) ...[
                         const SizedBox(width: Gap.xs),
                         Icon(Icons.star, size: 16, color: MeshSonarColors.of(context).beacon, semanticLabel: 'Favourite'),
@@ -107,11 +128,15 @@ class _ObserversDirectoryViewState extends State<ObserversDirectoryView> {
                         observerStatusLabel(r.status),
                         if (r.lastSeen != null) 'seen ${agoText(r.lastSeen)}',
                         if (r.packets1h != null) '${r.packets1h} packets last hour',
-                        if (r.noiseFloorDbm != null) 'noise ${r.noiseFloorDbm!.round()} dBm',
+                        // 0 dBm is "no reading", not a noise level.
+                        if (r.noiseFloorDbm != null && r.noiseFloorDbm!.round() != 0) 'noise ${r.noiseFloorDbm!.round()} dBm',
                       ].join(' · '),
                       style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
                     ),
-                    trailing: r.dutyCycleWarn ? Icon(Icons.warning_amber_rounded, color: MeshSonarColors.of(context).beacon, semanticLabel: 'Duty cycle high') : null,
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (r.dutyCycleWarn) Icon(Icons.warning_amber_rounded, color: MeshSonarColors.of(context).beacon, semanticLabel: 'Sending too much'),
+                      const Icon(Icons.chevron_right),
+                    ]),
                     onTap: () => openNetworkObserver(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, observerId: r.id),
                   ),
                 Padding(

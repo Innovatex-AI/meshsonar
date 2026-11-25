@@ -114,12 +114,34 @@ Future<bool> openNetworkSection(WidgetTester t, String name) async {
     }
   }
   if (!await waitFor(t, chip, timeout: const Duration(seconds: 20))) return false;
-  await t.ensureVisible(chip);
-  await pumpFor(t, const Duration(milliseconds: 500));
-  await t.tap(chip);
-  // The strip scrolls to the picked name (200 ms) and the section loads.
-  await pumpFor(t, const Duration(seconds: 1));
+  // Build 76: an incoming-message banner (the simulated radio's chat traffic) sits over the header and the strip for 4 s,
+  // and a tap on it opens that chat. That is what failed `network-packets` in the build 75 tour ("the packet list did not
+  // open": the tap at the strip landed on the banner). Wait until the banner is gone and the name can take the tap; if a
+  // new banner still caught it, go back and tap once more.
+  for (var attempt = 0; attempt < 3; attempt++) {
+    await waitInAppBannerGone(t);
+    await t.ensureVisible(chip);
+    await pumpFor(t, const Duration(milliseconds: 500));
+    await waitInAppBannerGone(t);
+    await t.tap(chip, warnIfMissed: false);
+    // The strip scrolls to the picked name (200 ms) and the section loads.
+    await pumpFor(t, const Duration(seconds: 1));
+    if (find.byKey(Key('network-section-body-$name')).evaluate().isNotEmpty) return true;
+    await popToRoots(t);
+    await openShellTab(t, 'Network');
+    if (chip.evaluate().isEmpty) return false;
+  }
+  // The name was tapped; the step that called says what did not open.
   return true;
+}
+
+/// Waits (up to 8 s) until no in-app message banner is on screen. The banner hides itself after 4 s.
+Future<void> waitInAppBannerGone(WidgetTester t) async {
+  final banner = find.byKey(const Key('in-app-banner'));
+  final end = DateTime.now().add(const Duration(seconds: 8));
+  while (banner.evaluate().isNotEmpty && DateTime.now().isBefore(end)) {
+    await pumpFor(t, const Duration(milliseconds: 250));
+  }
 }
 
 /// Opens the region switcher from the Network header (build 71: the region name is the button).
@@ -127,6 +149,7 @@ Future<bool> openRegionSwitcher(WidgetTester t) async {
   await openShellTab(t, 'Network');
   final b = find.byKey(const Key('network-region-button'));
   if (!await waitFor(t, b, timeout: const Duration(seconds: 20))) return false;
+  await waitInAppBannerGone(t); // the banner covers the header too
   await t.tap(b);
   await pumpFor(t, const Duration(seconds: 1));
   return true;
@@ -828,6 +851,21 @@ final List<ScreenStep> screens = [
     if (panelTop < view.height * 0.3) _stepFail('network-live: the open panel covers more than 60% of the screen (top ${panelTop.toStringAsFixed(0)} of ${view.height.toStringAsFixed(0)})');
     await t.tap(header.first, warnIfMissed: false);
     await pumpFor(t, const Duration(seconds: 1));
+    // Build 76: one sheet at a time. Layers open = the Live panel steps aside; closing Layers brings its header back.
+    final layersButton = find.descendant(of: find.byKey(const Key('live-map')), matching: find.byKey(const Key('drive-map-layers')));
+    if (layersButton.hitTestable().evaluate().isNotEmpty) {
+      await t.tap(layersButton.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'network-live-layers');
+      if (find.byKey(const Key('layers-sheet')).evaluate().isEmpty) _stepFail('network-live: the Layers button did not open the layers');
+      if (find.byKey(const Key('live-panel-header')).hitTestable().evaluate().isNotEmpty) _stepFail('network-live: the Live panel and the Layers panel are both on screen (stacked sheets)');
+      final done = find.byKey(const Key('layers-done'));
+      if (done.evaluate().isNotEmpty) await t.tap(done.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+      if (find.byKey(const Key('live-panel-header')).hitTestable().evaluate().isEmpty) _stepFail('network-live: closing Layers did not bring the Live panel back');
+    } else {
+      _stepNote('network-live', 'no Layers button on the live map: the one-sheet check was skipped');
+    }
     _stepOk('network-live');
   }, optional: true),
   ScreenStep('network-nodes', (t) async {

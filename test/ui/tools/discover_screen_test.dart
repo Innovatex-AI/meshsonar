@@ -93,8 +93,10 @@ void main() {
     final s = Scripted();
     final host = FakeToolsHost()..toolsValue = s.tools;
     await pumpTool(tester, const DiscoverScreen(), host);
-    expect(find.textContaining('only radios in direct range hear'), findsOneWidget);
-    expect(find.textContaining('4 scans every 2 minutes'), findsOneWidget);
+    // Build 76: one line of what it does; the scan limit is explained only once a scan has been used.
+    expect(find.byKey(const Key('discover-intro')), findsOneWidget);
+    expect(find.textContaining('in direct range of your radio'), findsOneWidget);
+    expect(find.byKey(const Key('discover-limit')), findsNothing);
     expect(find.text('Scans left: 4 of 4'), findsOneWidget);
     expect(find.byKey(const Key('discover-idle')), findsOneWidget);
     expect(find.byKey(const Key('airtime-note')), findsOneWidget);
@@ -152,6 +154,10 @@ void main() {
     expect(find.textContaining('dBm'), findsWidgets);
     expect(find.byKey(const Key('discover-result-0-added')), findsOneWidget, reason: 'the simulated repeaters are contacts already');
     expect(find.text('In your contacts'), findsWidgets);
+    // Build 76: each result leads with the verdict in a word, and the limit is explained now that a scan is used.
+    expect(find.byKey(const Key('discover-result-0-word')), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('discover-result-0-word'))).data, matches(RegExp(r'^(Strong|Good|Fair|Weak) link$')));
+    expect(find.textContaining('4 scans every 2 minutes'), findsOneWidget);
     expect(find.byKey(const Key('tool-map')), findsOneWidget);
     expect(find.text('Scans left: 3 of 4'), findsOneWidget);
     final sem = tester.ensureSemantics();

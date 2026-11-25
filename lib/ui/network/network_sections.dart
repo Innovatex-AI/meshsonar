@@ -25,6 +25,7 @@ import '../../core/region_lookup.dart';
 import '../../core/v1/busy_regions_api.dart';
 import '../../core/v1/network_api.dart';
 import '../app.dart';
+import '../design/app_haptics.dart';
 import '../region/analyze_panel.dart';
 import '../region/region_panels.dart';
 import '../region/regions_screen.dart';
@@ -37,8 +38,10 @@ import 'nodes/nodes_section.dart';
 import 'packets/packet_list_view.dart';
 import 'tools/tools_section.dart';
 
-/// The section strip: one line of section names that scrolls sideways, the shown one underlined. 44 pt tall (each
-/// name is a full-height target); the labels grow only a little with the text size so the line stays one line.
+/// The section strip: one line of section names that scrolls sideways. The shown one is a filled pill (build 76: obvious
+/// at a glance, in a car mount), and an edge fades wherever more names wait off screen, so the strip reads as scrollable.
+/// 44 pt tall (each name is a full-height target); the labels grow only a little with the text size so the line stays
+/// one line. A pick gives a selection tick (haptic).
 class NetworkSectionStrip extends StatefulWidget {
   final List<NetworkSection> sections;
   final NetworkSection selected;
@@ -47,16 +50,33 @@ class NetworkSectionStrip extends StatefulWidget {
 
   static const double height = 44;
 
+  /// What each section is, in a few plain words (VoiceOver hint and the long-press tooltip).
+  static String hintOf(NetworkSection s) => switch (s) {
+        NetworkSection.live => 'Live map of radio traffic',
+        NetworkSection.packets => 'Every radio message heard',
+        NetworkSection.nodes => 'Radios on the network',
+        NetworkSection.channels => 'Public group chats',
+        NetworkSection.observers => 'Stations that listen and report',
+        NetworkSection.analytics => 'Charts and findings',
+        NetworkSection.tools => 'Look-ups and radio tools',
+        NetworkSection.regions => 'The whole network',
+      };
+
   @override
   State<NetworkSectionStrip> createState() => _NetworkSectionStripState();
 }
 
 class _NetworkSectionStripState extends State<NetworkSectionStrip> {
   final Map<NetworkSection, GlobalKey> _keys = {for (final s in NetworkSection.values) s: GlobalKey()};
+  final ScrollController _scroll = ScrollController();
+
+  /// (more names to the left, more names to the right).
+  final ValueNotifier<(bool, bool)> _more = ValueNotifier((false, false));
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_edges);
     _reveal(animate: false);
   }
 
@@ -64,16 +84,56 @@ class _NetworkSectionStripState extends State<NetworkSectionStrip> {
   void didUpdateWidget(NetworkSectionStrip old) {
     super.didUpdateWidget(old);
     if (old.selected != widget.selected) _reveal(animate: true);
+    if (old.sections != widget.sections) WidgetsBinding.instance.addPostFrameCallback((_) => _edges());
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _more.dispose();
+    super.dispose();
+  }
+
+  void _edges() {
+    if (!mounted || !_scroll.hasClients) return;
+    final p = _scroll.position;
+    if (!p.hasContentDimensions) return;
+    _more.value = (p.pixels > p.minScrollExtent + 4, p.pixels < p.maxScrollExtent - 4);
   }
 
   /// Scrolls the shown section's name into view (a link or another screen may have picked one off the edge).
   void _reveal({required bool animate}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _edges();
       final ctx = _keys[widget.selected]?.currentContext;
       if (!mounted || ctx == null) return;
       Scrollable.ensureVisible(ctx, alignment: 0.5, duration: animate ? const Duration(milliseconds: 200) : Duration.zero);
     });
   }
+
+  Widget _fade(Color surface, {required bool left}) => Positioned(
+        left: left ? 0 : null,
+        right: left ? null : 0,
+        top: 0,
+        bottom: 1,
+        width: 28,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            key: Key(left ? 'network-sections-more-left' : 'network-sections-more-right'),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: left ? Alignment.centerLeft : Alignment.centerRight,
+                end: left ? Alignment.centerRight : Alignment.centerLeft,
+                colors: [surface, surface.withValues(alpha: 0)],
+              ),
+            ),
+            child: Align(
+              alignment: left ? Alignment.centerLeft : Alignment.centerRight,
+              child: Icon(left ? Icons.chevron_left : Icons.chevron_right, size: 16),
+            ),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -89,41 +149,76 @@ class _NetworkSectionStripState extends State<NetworkSectionStrip> {
           child: Semantics(
             container: true,
             label: 'Network sections',
-            child: SingleChildScrollView(
-              key: const Key('network-sections'),
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Row(children: [
-                for (final s in widget.sections)
-                  Semantics(
-                    key: _keys[s],
-                    button: true,
-                    selected: s == widget.selected,
-                    child: InkWell(
-                      onTap: () => widget.onChanged(s),
-                      child: Container(
-                        height: NetworkSectionStrip.height,
-                        constraints: const BoxConstraints(minWidth: 44),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border(bottom: BorderSide(color: s == widget.selected ? c.primary : Colors.transparent, width: 2)),
-                        ),
-                        child: Text(
-                          s.label,
-                          key: Key('network-section-${s.name}'),
-                          maxLines: 1,
-                          softWrap: false,
-                          style: t.textTheme.labelLarge?.copyWith(
-                            color: s == widget.selected ? c.primary : c.onSurfaceVariant,
-                            fontWeight: s == widget.selected ? FontWeight.w600 : FontWeight.w500,
+            child: Stack(children: [
+              Positioned.fill(
+                child: NotificationListener<ScrollMetricsNotification>(
+                  onNotification: (_) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) => _edges());
+                    return false;
+                  },
+                  child: SingleChildScrollView(
+                    key: const Key('network-sections'),
+                    controller: _scroll,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(children: [
+                      for (final s in widget.sections)
+                        Semantics(
+                          key: _keys[s],
+                          button: true,
+                          selected: s == widget.selected,
+                          hint: NetworkSectionStrip.hintOf(s),
+                          child: Tooltip(
+                            message: NetworkSectionStrip.hintOf(s),
+                            excludeFromSemantics: true,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: () {
+                                if (s != widget.selected) unawaited(AppHaptics.selection());
+                                widget.onChanged(s);
+                              },
+                              // The whole 44 pt of height is the target; the pill inside it is 34 pt.
+                              child: Container(
+                                height: NetworkSectionStrip.height,
+                                constraints: const BoxConstraints(minWidth: 44),
+                                padding: const EdgeInsets.symmetric(horizontal: 2),
+                                alignment: Alignment.center,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  height: 34,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: s == widget.selected ? c.primaryContainer : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(17),
+                                  ),
+                                  child: Text(
+                                    s.label,
+                                    key: Key('network-section-${s.name}'),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: t.textTheme.labelLarge?.copyWith(
+                                      color: s == widget.selected ? c.onPrimaryContainer : c.onSurfaceVariant,
+                                      fontWeight: s == widget.selected ? FontWeight.w700 : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                    ]),
                   ),
-              ]),
-            ),
+                ),
+              ),
+              ValueListenableBuilder<(bool, bool)>(
+                valueListenable: _more,
+                builder: (context, more, _) => Stack(children: [
+                  if (more.$1) _fade(t.scaffoldBackgroundColor, left: true),
+                  if (more.$2) _fade(t.scaffoldBackgroundColor, left: false),
+                ]),
+              ),
+            ]),
           ),
         ),
       ),
@@ -267,12 +362,17 @@ class NetworkAllRegionsBody extends StatelessWidget {
             key: const Key('all-regions-back'),
             leading: const Icon(Icons.arrow_back),
             title: Text('Back to ${viewed!.name}', maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(viewed!.code),
+            subtitle: const Text('Return to the region you were viewing'),
+            trailing: const Icon(Icons.chevron_right),
             onTap: onBack,
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Semantics(header: true, child: Text('Busiest regions, last 10 minutes', style: t.textTheme.titleSmall)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Semantics(header: true, child: Text('Busiest regions right now', style: t.textTheme.titleSmall)),
+            Text('Radio traffic in the last 10 minutes. Tap a region to open its live map.',
+                key: const Key('busy-regions-hint'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          ]),
         ),
         BusiestRegions(hubUrl: hubUrl, onOpen: onOpenRegion),
         const Divider(height: 24),
@@ -280,7 +380,7 @@ class NetworkAllRegionsBody extends StatelessWidget {
           key: const Key('all-regions-every-region'),
           leading: const Icon(Icons.public),
           title: const Text('Every region'),
-          subtitle: const Text('Compare every region and switch'),
+          subtitle: const Text('The full list, with numbers to compare'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RegionsScreen()))),
         ),
@@ -342,7 +442,13 @@ class _BusiestRegionsState extends State<BusiestRegions> {
             return const Padding(
               key: Key('busy-regions-loading'),
               padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+              child: Center(
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 12),
+                  Flexible(child: Text('Finding the busiest regions…')),
+                ]),
+              ),
             );
           }
           final e = snap.error;
@@ -374,7 +480,7 @@ class _BusiestRegionsState extends State<BusiestRegions> {
               ListTile(
                 key: Key('busy-region-${r.slug}'),
                 title: Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('${r.code} · ${_rate(r.packetsPerMin)} packets/min'),
+                subtitle: Text('${_rate(r.packetsPerMin)} packets a minute · ${r.code}'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => widget.onOpen(r.slug),
               ),

@@ -70,10 +70,11 @@ void main() {
     expect(find.text('Quiet'), findsOneWidget);
     expect(find.byKey(const Key('noise-tiles')), findsOneWidget);
     expect(find.textContaining('Noise floor looks healthy'), findsOneWidget);
-    expect(find.textContaining('Same thresholds as the website'), findsOneWidget);
     expect(find.byKey(const Key('noise-sampling-note')), findsOneWidget);
     expect(find.byKey(const Key('noise-flags-none')), findsOneWidget);
-    expect(find.textContaining('packets waiting to send'), findsOneWidget);
+    expect(find.text('Waiting to send'), findsOneWidget);
+    // Build 76: the verdict comes first, the "read every" control and its note after the readings.
+    expect(tester.getTopLeft(find.byKey(const Key('noise-verdict'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('noise-interval'))).dy));
     await leave(tester);
   });
 
@@ -142,8 +143,9 @@ void main() {
     expect(find.byKey(const Key('noise-flags')), findsOneWidget);
     expect(find.textContaining('send queue filled up'), findsOneWidget);
     expect(find.textContaining('timed out'), findsOneWidget);
-    expect(find.textContaining('with errors since boot: 3'), findsOneWidget);
-    expect(find.textContaining('1 packet waiting to send'), findsOneWidget);
+    expect(find.text('Received with errors since it started'), findsOneWidget);
+    expect(find.text('3 packets'), findsOneWidget);
+    expect(find.text('1 packet'), findsOneWidget, reason: 'waiting to send');
     expect(noiseErrorWords(0), isEmpty);
     await leave(tester);
   });

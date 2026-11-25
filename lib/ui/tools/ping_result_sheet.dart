@@ -39,7 +39,7 @@ String pingHeadline(PingResult r) => switch (r.status) {
 String pingFailureBody(PingResult r) => switch (r.status) {
       PingStatus.noReply => 'Not heard. Out of range, route out of date, or the radio is busy.',
       PingStatus.unsupported => 'This radio\'s firmware cannot search for a route. Update the radio\'s firmware to use Ping.',
-      PingStatus.notConnected => 'Connect your radio to ping.',
+      PingStatus.notConnected => 'Your radio is not connected. Connect it from the Drive tab, then ping again.',
       PingStatus.tooSoon => r.detail ?? 'A ping just ran. Try again in a few seconds.',
       PingStatus.refused => r.detail ?? 'The radio did not take the request.',
       PingStatus.invalid => r.detail ?? 'There is nothing to send.',
@@ -210,7 +210,6 @@ class _PingResultBodyState extends State<PingResultBody> {
     final c = AppColors.of(context);
     final r = _result;
     final repeaters = widget.manager.store.contacts.list(widget.manager.radioId ?? '');
-    final scaleBig = MediaQuery.textScalerOf(context).scale(1.0) > 1.3;
     final route = r?.outRoute;
     final children = <Widget>[];
     if (_running) {
@@ -219,8 +218,12 @@ class _PingResultBodyState extends State<PingResultBody> {
         const SizedBox(height: Gap.l),
         const Center(child: CupertinoActivityIndicator(radius: 14)),
         const SizedBox(height: Gap.m),
-        Text('Sending…', key: const Key('ping-sending'), textAlign: TextAlign.center, style: AppType.headline.copyWith(color: c.textPrimary)),
-        Text('Waiting $_waitSeconds s ($est)', textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.textMuted)),
+        Text('Pinging ${_c.displayName}…', key: const Key('ping-sending'), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.headline.copyWith(color: c.textPrimary)),
+        // What the wait is for, so a long one does not read as a hang.
+        Text(_person || _forceDiscovery ? 'Looking for a route and waiting for the reply.' : 'Waiting for each repeater on the route to answer.',
+            textAlign: TextAlign.center, style: AppType.subhead.copyWith(color: c.textMuted)),
+        const SizedBox(height: Gap.xs),
+        Text('$_waitSeconds s so far ($est)', key: const Key('ping-waited'), textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.textMuted)),
       ]);
     } else if (r != null) {
       children.add(Padding(
@@ -253,6 +256,8 @@ class _PingResultBodyState extends State<PingResultBody> {
             ],
             if (r.hopSnrDb.isNotEmpty) ...[
               const SizedBox(height: Gap.m),
+              // The verdict in a word first; the numbers stay for those who read them.
+              Text('Weakest link: ${_signalWord(r.hopSnrDb.reduce((a, b) => a < b ? a : b))}', key: const Key('ping-signal-word'), style: AppType.subhead.copyWith(color: c.textPrimary)),
               Text('Signal at each repeater: ${r.hopSnrDb.map((s) => '${s >= 0 ? '+' : ''}${s.toStringAsFixed(1)}').join('  ')} dB',
                   key: const Key('ping-snr'), style: AppType.subhead.copyWith(color: c.textMuted)),
             ],
@@ -261,15 +266,23 @@ class _PingResultBodyState extends State<PingResultBody> {
       }
     }
     final canUse = r != null && r.ok && r.kind == PingMethod.discovery && r.outRoute != null && !r.outRoute!.isEmpty && widget.onUseRoute != null;
+    // One filled button for the thing to do next (use the route, search wider, else ping again); the rest are plain.
+    // Stacked full width: every one is a thumb-sized target at the bottom of the sheet.
+    final canWiden = r != null && !r.ok && r.status == PingStatus.noReply && !(_person || _forceDiscovery) && widget.manager.connected;
+    final canAgain = r != null && r.status != PingStatus.unsupported && r.status != PingStatus.notConnected;
     final buttons = <Widget>[
       if (canUse) _btn('ping-use-route', 'Use this route', () async {
             final nav = Navigator.of(context);
             await widget.onUseRoute!(r.outRoute!);
             if (mounted) nav.pop(PingSheetOutcome(r.outRoute));
-          }),
-      if (r != null && !r.ok && r.status == PingStatus.noReply && !(_person || _forceDiscovery) && widget.manager.connected)
-        _btn('ping-search-wider', 'Search wider', () => _run(discovery: true)),
-      if (r != null && r.status != PingStatus.unsupported && r.status != PingStatus.notConnected) _btn('ping-again', 'Ping again', () => _run(discovery: _forceDiscovery)),
+          }, primary: true),
+      if (canWiden) _btn('ping-search-wider', 'Search wider', () => _run(discovery: true), primary: true),
+      if (canWiden)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Gap.xs),
+          child: Text('Looks for a new route through any repeater. Takes up to 45 s.', textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.textMuted)),
+        ),
+      if (canAgain) _btn('ping-again', 'Ping again', () => _run(discovery: _forceDiscovery), primary: !canUse && !canWiden),
       _btn('ping-close', 'Close', () => Navigator.of(context).pop()),
     ];
     return AppSheetScaffold(
@@ -279,16 +292,16 @@ class _PingResultBodyState extends State<PingResultBody> {
         Text(contactTypeLabel(_c.type), textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.textMuted)),
         ...children,
         const SizedBox(height: Gap.s),
-        if (scaleBig || buttons.length > 2)
-          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: buttons)
-        else
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [for (final b in buttons) Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.xs), child: b)]),
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: buttons),
         const SizedBox(height: Gap.l),
       ],
     );
   }
 
-  Widget _btn(String key, String label, VoidCallback onTap) {
+  /// "Strong", "Good", "Fair" or "Weak", by the same levels the coverage map uses.
+  static String _signalWord(double snr) => snr >= 5 ? 'strong' : (snr >= 0 ? 'good' : (snr >= -5 ? 'fair' : 'weak'));
+
+  Widget _btn(String key, String label, VoidCallback onTap, {bool primary = false}) {
     final c = AppColors.of(context);
     return Semantics(
       button: true,
@@ -298,9 +311,13 @@ class _PingResultBodyState extends State<PingResultBody> {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: ExcludeSemantics(
-          child: ConstrainedBox(
+          child: Container(
             constraints: const BoxConstraints(minHeight: Hit.minAndroid, minWidth: Hit.minAndroid),
-            child: Center(child: Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s), child: Text(label, style: AppType.body.copyWith(color: c.accent)))),
+            margin: primary ? const EdgeInsets.symmetric(vertical: Gap.xs) : EdgeInsets.zero,
+            decoration: primary ? BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(Corners.chip)) : null,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
+            child: Text(label, textAlign: TextAlign.center, style: AppType.body.copyWith(color: primary ? c.onAccent : c.accent, fontWeight: primary ? FontWeight.w600 : null)),
           ),
         ),
       ),

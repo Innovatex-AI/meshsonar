@@ -11,6 +11,7 @@ import '../../radio/tools/radio_tools.dart';
 import '../../radio/tools/telemetry_tool.dart';
 import '../app.dart';
 import 'contact_ref.dart';
+import 'discover_screen.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 
@@ -38,6 +39,7 @@ class TelemetryScreen extends StatelessWidget {
   Widget build(BuildContext context) => ToolPage(
         id: 'telemetry',
         title: 'Telemetry',
+        about: 'Telemetry reads battery and sensor values from your radio, or asks a repeater or sensor for its own.',
         builder: (context, host, tools) => _TelemetryBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools, contact: contact),
       );
 }
@@ -58,6 +60,15 @@ class _TelemetryBodyState extends State<_TelemetryBody> {
   String? _contactsError;
   String? _picked;
   TelemetryResult? _shown;
+
+  /// "Find a contact": shown when the radio holds more contacts than fit a phone screen.
+  final TextEditingController _find = TextEditingController();
+
+  @override
+  void dispose() {
+    _find.dispose();
+    super.dispose();
+  }
 
   TelemetryTool get _t => widget.tools.telemetry;
 
@@ -155,26 +166,30 @@ class _TelemetryBodyState extends State<_TelemetryBody> {
   }
 
   List<Widget> _selfControls(BuildContext context) => [
-        Text('Reads the sensors built into this radio. Nothing is sent over the air.', style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: Gap.m),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            key: const Key('telemetry-read-self'),
-            style: FilledButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
-            onPressed: _t.busy ? null : _readSelf,
-            icon: const Icon(Icons.sensors),
-            label: const Text('Read this radio'),
-          ),
+        FilledButton.icon(
+          key: const Key('telemetry-read-self'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(kToolTarget)),
+          onPressed: _t.busy ? null : _readSelf,
+          icon: const Icon(Icons.sensors),
+          label: const Text('Read this radio'),
         ),
+        const SizedBox(height: Gap.xs),
+        Text('Battery and built-in sensors. Nothing is sent over the air.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ];
 
   List<Widget> _contactControls(BuildContext context) {
     final t = Theme.of(context);
     final contacts = _contacts;
+    final q = _find.text.trim().toLowerCase();
+    // The picked contact stays in the list whatever is typed, so the choice is never hidden.
+    final shownContacts = [
+      for (final c in contacts ?? const <RadioContact>[])
+        if (q.isEmpty || c.publicKeyHex == _picked || c.name.toLowerCase().contains(q) || c.publicKeyHex.toLowerCase().startsWith(q)) c,
+    ];
+    final picked = contacts?.where((c) => c.publicKeyHex == _picked).firstOrNull;
+    final pickedName = picked == null ? null : (picked.name.isEmpty ? 'Node ${picked.publicKeyHex.substring(0, 8)}' : picked.name);
     return [
-      Text('A node answers only if it is set up to share telemetry, so silence is normal. Chat contacts usually do not answer.',
-          style: t.textTheme.bodyMedium),
+      Text('Repeaters and sensors answer only if they are set to share readings, so silence is normal.', style: t.textTheme.bodyMedium),
       const SizedBox(height: Gap.m),
       if (_loadingContacts)
         const Row(children: [SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: Gap.m), Text('Reading contacts…')])
@@ -183,16 +198,51 @@ class _TelemetryBodyState extends State<_TelemetryBody> {
         const SizedBox(height: Gap.s),
         OutlinedButton(style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)), onPressed: _loadContacts, child: const Text('Try again')),
       ] else if (contacts == null || contacts.isEmpty)
-        const NoteCard('This radio has no contacts yet. Use Discover nearby to find and add repeaters.', key: Key('telemetry-no-contacts'))
-      else ...[
+        ...[
+        const NoteCard('This radio has no contacts yet. Use Discover nearby to find and add repeaters.', key: Key('telemetry-no-contacts')),
+        const SizedBox(height: Gap.s),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const Key('telemetry-open-discover'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DiscoverScreen())),
+            icon: const Icon(Icons.radar),
+            label: const Text('Open Discover nearby'),
+          ),
+        ),
+      ] else ...[
         Semantics(header: true, child: Text('Choose a contact', style: t.textTheme.titleSmall)),
+        if (contacts.length > 8)
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.s),
+            child: TextField(
+              key: const Key('telemetry-find'),
+              controller: _find,
+              autocorrect: false,
+              textInputAction: TextInputAction.search,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Find among ${contacts.length} contacts',
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ),
+        if (shownContacts.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Gap.m),
+            child: Text('No contact matches "${_find.text.trim()}".', key: const Key('telemetry-find-none'), style: t.textTheme.bodyMedium),
+          ),
         RadioGroup<String>(
           groupValue: _picked,
           onChanged: (v) => setState(() => _picked = v),
           child: Column(key: const Key('telemetry-contacts'), children: [
-            for (final c in contacts)
+            for (final c in shownContacts)
               RadioListTile<String>(
                 key: Key('telemetry-contact-${c.publicKeyHex.substring(0, 8)}'),
+                contentPadding: EdgeInsets.zero,
                 value: c.publicKeyHex,
                 title: Text(c.name.isEmpty ? 'Node ${c.publicKeyHex.substring(0, 8)}' : c.name),
                 subtitle: Text('${_typeWord(c.type)} · ${c.publicKeyHex.substring(0, 8)}'),
@@ -200,16 +250,13 @@ class _TelemetryBodyState extends State<_TelemetryBody> {
           ]),
         ),
         const SizedBox(height: Gap.s),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: CooldownButton(
-            key: const Key('telemetry-ask'),
-            label: 'Ask for telemetry',
-            icon: Icons.sensors,
-            cooldown: _t.cooldown,
-            busy: _t.busy,
-            onPressed: _picked == null ? null : _ask,
-          ),
+        CooldownButton(
+          key: const Key('telemetry-ask'),
+          label: pickedName == null ? 'Ask for telemetry' : 'Ask $pickedName',
+          icon: Icons.sensors,
+          cooldown: _t.cooldown,
+          busy: _t.busy,
+          onPressed: _picked == null ? null : _ask,
         ),
         if (_picked == null) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text('Pick a contact first.', style: t.textTheme.bodySmall)),
         const SizedBox(height: Gap.s),
@@ -227,16 +274,33 @@ class _TelemetryBodyState extends State<_TelemetryBody> {
     return Column(key: const Key('telemetry-latest'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       const ToolHeading('Latest answers'),
       for (final r in items)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-          child: Semantics(
-            container: true,
-            label: '${r.who}: ${_summaryLine(r, units.temperatureImperial)}, ${fmtAgo(now.difference(r.at))}',
-            excludeSemantics: true,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(r.who, style: t.textTheme.titleSmall),
-              Text('${_summaryLine(r, units.temperatureImperial)} · ${fmtAgo(now.difference(r.at))}', style: t.textTheme.bodyMedium),
-            ]),
+        Semantics(
+          container: true,
+          button: true,
+          label: '${r.who}: ${_summaryLine(r, units.temperatureImperial)}, ${fmtAgo(now.difference(r.at))}. Shows the whole answer.',
+          excludeSemantics: true,
+          child: InkWell(
+            key: Key('telemetry-latest-${r.isSelf ? 'self' : r.who}'),
+            onTap: () => setState(() {
+              _self = r.isSelf;
+              _shown = r;
+              if (!r.isSelf && _contacts == null && !_loadingContacts) _loadContacts();
+            }),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: kToolTarget),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Text(r.who, style: t.textTheme.titleSmall),
+                      Text('${_summaryLine(r, units.temperatureImperial)} · ${fmtAgo(now.difference(r.at))}', style: t.textTheme.bodyMedium),
+                    ]),
+                  ),
+                  Icon(Icons.chevron_right, size: 20, color: t.colorScheme.onSurfaceVariant),
+                ]),
+              ),
+            ),
           ),
         ),
     ]);

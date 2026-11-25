@@ -32,23 +32,34 @@ class AnalyticsTab {
 
 /// Same order as the site. Keep the two lists in step when the site adds a tab.
 const List<AnalyticsTab> analyticsTabs = [
-  AnalyticsTab('overview', 'Overview', 'Packets, nodes and growth for the region at a glance'),
-  AnalyticsTab('rf-signal', 'RF / Signal', 'SNR and RSSI spread, packets over time, noise floor'),
+  AnalyticsTab('overview', 'Overview', 'Packets, nodes and growth at a glance'),
+  AnalyticsTab('rf-signal', 'RF / Signal', 'How strong packets arrive, and the background noise'),
   AnalyticsTab('topology', 'Topology', 'Which repeaters carry the traffic and how they link'),
-  AnalyticsTab('channels', 'Channels', 'Channel activity: messages and senders per channel'),
-  AnalyticsTab('hash-stats', 'Hash Stats', 'Hash sizes in use and how often prefixes repeat'),
-  AnalyticsTab('hash-issues', 'Hash Issues', 'Repeaters whose hash prefixes collide'),
-  AnalyticsTab('route-patterns', 'Route Patterns', 'The paths packets take most and hop counts'),
+  AnalyticsTab('channels', 'Channels', 'Messages and senders per channel'),
+  AnalyticsTab('hash-stats', 'Hash Stats', 'How long the short IDs on packets are, how often they repeat'),
+  AnalyticsTab('hash-issues', 'Hash Issues', 'Repeaters whose short IDs clash'),
+  AnalyticsTab('route-patterns', 'Route Patterns', 'The paths packets take most, and how many hops'),
   AnalyticsTab('nodes', 'Nodes', 'Node counts by role and status, busiest nodes'),
-  AnalyticsTab('my-repeaters', 'My Repeaters', 'Repeaters starred on the site page; stars are kept in that page'),
-  AnalyticsTab('repeater-metrics', 'Repeater Metrics', 'Per repeater: traffic share, relays, quiet ones'),
-  AnalyticsTab('distance', 'Distance', 'Link and hop distances, the longest links'),
-  AnalyticsTab('neighbor-graph', 'Neighbor Graph', 'Who hears whom, drawn as a graph'),
-  AnalyticsTab('rf-health', 'RF Health', 'Noise floor and airtime per observer'),
+  AnalyticsTab('my-repeaters', 'My Repeaters', 'Repeaters you starred on the website'),
+  AnalyticsTab('repeater-metrics', 'Repeater Metrics', 'Each repeater: share of traffic, relays, quiet ones'),
+  AnalyticsTab('distance', 'Distance', 'How far links and hops reach, and the longest'),
+  AnalyticsTab('neighbor-graph', 'Neighbor Graph', 'Who hears whom, as a drawing'),
+  AnalyticsTab('rf-health', 'RF Health', 'Noise and airtime at each observer'),
   AnalyticsTab('clock-health', 'Clock Health', 'Nodes whose clocks are wrong, and by how much'),
   AnalyticsTab('roles', 'Roles', 'Repeaters, rooms, sensors and companions over time'),
-  AnalyticsTab('scopes', 'Scopes', 'Region scopes seen on packets and who forwards them'),
-  AnalyticsTab('prefix-tool', 'Prefix Tool', 'Find a free hash prefix for a new repeater'),
+  AnalyticsTab('scopes', 'Scopes', 'Region tags on packets and who forwards them'),
+  AnalyticsTab('prefix-tool', 'Prefix Tool', 'Find a free short ID for a new repeater'),
+];
+
+/// How the list is shown on the phone (build 76): the same 17 pages under four plain headings instead of one long
+/// run, so a person can find "signal" or "repeaters" without reading every row. Each slug appears exactly once
+/// (test: analytics groups cover every tab). Overview sits with the native rows under "Start here".
+const String analyticsStartSlug = 'overview';
+const List<(String header, List<String> slugs)> analyticsGroups = [
+  ('Signal and traffic', ['rf-signal', 'rf-health', 'channels', 'distance']),
+  ('Repeaters and nodes', ['nodes', 'my-repeaters', 'repeater-metrics', 'roles', 'clock-health']),
+  ('Routes and links', ['topology', 'route-patterns', 'neighbor-graph', 'scopes']),
+  ('Short IDs (hashes)', ['hash-stats', 'hash-issues', 'prefix-tool']),
 ];
 
 AnalyticsTab? analyticsTabOf(String? slug) {
@@ -132,26 +143,28 @@ class _AnalyticsSectionState extends State<AnalyticsSection> {
         onClose: () => setState(() => _shown = null),
       );
     }
-    return ListView(
+    InsetRow siteRow(AnalyticsTab tab) => InsetRow(key: Key('analytics-tab-${tab.slug}'), title: tab.label, subtitle: tab.about, onTap: () => _open(tab));
+    // Every row is built (19 short rows), so a row far down can be scrolled to by name.
+    return SingleChildScrollView(
       key: const Key('analytics-section'),
       padding: const EdgeInsets.only(top: 12, bottom: 24),
-      children: [
-        if (widget.nativeRows.isNotEmpty)
-          InsetGroup(
-            header: 'This region',
-            rows: [
-              for (final r in widget.nativeRows)
-                InsetRow(key: Key('analytics-tab-${r.slug}'), title: r.label, subtitle: r.about, onTap: () => setState(() => _native = r)),
-            ],
-          ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         InsetGroup(
-          header: 'Analytics',
-          footer: 'These are the website\'s Analytics pages, shown inside the app. They need a connection.',
+          header: 'Start here',
           rows: [
-            for (final tab in analyticsTabs) InsetRow(key: Key('analytics-tab-${tab.slug}'), title: tab.label, subtitle: tab.about, onTap: () => _open(tab)),
+            for (final r in widget.nativeRows)
+              InsetRow(key: Key('analytics-tab-${r.slug}'), title: r.label, subtitle: r.about, onTap: () => setState(() => _native = r)),
+            siteRow(analyticsTabOf(analyticsStartSlug)!),
           ],
         ),
-      ],
+        for (final (header, slugs) in analyticsGroups)
+          InsetGroup(
+            groupKey: Key('analytics-group-${slugs.first}'),
+            header: header,
+            footer: identical(slugs, analyticsGroups.last.$2) ? 'Website pages shown in the app. They need a connection.' : null,
+            rows: [for (final slug in slugs) siteRow(analyticsTabOf(slug)!)],
+          ),
+      ]),
     );
   }
 }

@@ -3,6 +3,7 @@
 // arrows; a parse error shows under the field. A candidate under the server's threshold is labelled Speculative in
 // words. Tapping a hop opens the node.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard;
 
 import '../../../core/v1/tools_api.dart';
 import '../../design/state_views.dart';
@@ -105,51 +106,102 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
       frameKey: const Key('tool-path'),
       title: 'Path Inspector',
       onClose: widget.onClose,
-      body: ListView(padding: kToolPagePadding, children: [
-          Text('Type the hop prefixes from a packet, in order. The app shows the full routes they most likely stand for.', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: Gap.m),
+      body: ListView(padding: kToolPagePadding, keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, children: [
           TextField(
             key: const Key('path-hops'),
             controller: _text,
             autocorrect: false,
             enableSuggestions: false,
             textInputAction: TextInputAction.search,
+            onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _run(),
             style: const TextStyle(fontFamily: 'monospace'),
             decoration: InputDecoration(
-              labelText: 'Hop prefixes',
-              hintText: 'a1 3f c4   or   a1 > 3f > c4',
+              labelText: 'Hops from a packet, in order',
+              hintText: 'a1 3f c4',
+              helperText: 'The short IDs in a packet\'s path. Spaces, commas or > between them.',
+              helperMaxLines: 2,
               border: const OutlineInputBorder(),
               errorText: _inputError,
               errorMaxLines: 3,
+              suffixIcon: _text.text.isEmpty
+                  ? IconButton(
+                      key: const Key('path-paste'),
+                      tooltip: 'Paste',
+                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                      onPressed: _paste,
+                      icon: const Icon(Icons.content_paste),
+                    )
+                  : IconButton(
+                      key: const Key('path-clear'),
+                      tooltip: 'Clear',
+                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                      onPressed: () => setState(() {
+                        _text.clear();
+                        _inputError = null;
+                      }),
+                      icon: const Icon(Icons.close),
+                    ),
             ),
           ),
-          const SizedBox(height: Gap.m),
-          Text('Hash size (used when the hops are typed with no spaces)', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: Gap.xs),
-          SegmentedButton<int>(
-            key: const Key('path-hash-size'),
-            showSelectedIcon: false,
-            style: const ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(44, 44))),
-            segments: const [
-              ButtonSegment(value: 1, label: Text('1 byte')),
-              ButtonSegment(value: 2, label: Text('2 bytes')),
-              ButtonSegment(value: 3, label: Text('3 bytes')),
-            ],
-            selected: {_hashSize},
-            onSelectionChanged: (s) => setState(() => _hashSize = s.first),
-          ),
+          // The size of a hop is read from the spacing; it has to be asked only when the hops are typed as one run.
+          if (_needsSize) ...[
+            const SizedBox(height: Gap.m),
+            Text('No spaces between the hops: how long is each one?', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: Gap.xs),
+            SegmentedButton<int>(
+              key: const Key('path-hash-size'),
+              showSelectedIcon: false,
+              style: const ButtonStyle(minimumSize: WidgetStatePropertyAll(Size(44, 44))),
+              segments: const [
+                ButtonSegment(value: 1, label: Text('2 characters')),
+                ButtonSegment(value: 2, label: Text('4')),
+                ButtonSegment(value: 3, label: Text('6')),
+              ],
+              selected: {_hashSize},
+              onSelectionChanged: (s) => setState(() => _hashSize = s.first),
+            ),
+          ],
           const SizedBox(height: Gap.m),
           FilledButton(
             key: const Key('path-inspect'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             onPressed: _busy ? null : _run,
-            child: Text(_busy ? 'Inspecting…' : 'Inspect'),
+            child: Text(_busy ? 'Finding routes…' : 'Find routes'),
           ),
-          if (_error != null) ToolErrorLine(_error!, key: const Key('path-error')),
+          if (_busy && r == null) const Padding(padding: EdgeInsets.only(top: Gap.xl), child: SizedBox(height: 160, child: AppLoadingView(label: 'Matching the hops to repeaters'))),
+          if (_error != null) ...[
+            ToolErrorLine(_error!, key: const Key('path-error')),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(key: const Key('path-retry'), style: TextButton.styleFrom(minimumSize: const Size(44, 44)), onPressed: _busy ? null : _run, child: const Text('Try again')),
+            ),
+          ],
+          if (r == null && !_busy && _error == null)
+            Padding(
+              padding: const EdgeInsets.only(top: Gap.l),
+              child: Text('You get the most likely full routes, best first, each on a map. Tap a repeater in a route to open it.',
+                  key: const Key('path-idle'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ),
           if (r != null) ..._results(context, r),
         ]),
     );
+  }
+
+  /// One run of hex with no separator, too long to be a single hop: only then does the hop length have to be asked.
+  bool get _needsSize {
+    final x = _text.text.trim();
+    return x.length > 2 && !x.contains(RegExp(r'[^0-9a-fA-F]'));
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (!mounted || text.isEmpty) return;
+    setState(() {
+      _text.text = text;
+      _inputError = null;
+    });
   }
 
   List<Widget> _results(BuildContext context, PathInspectResult r) {
@@ -161,7 +213,7 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
           key: Key('path-none'),
           symbol: AppSymbols.exclamationCircle,
           title: 'No route found',
-          message: 'No known repeaters in this region match these prefixes in this order. Check the hops and the hash size.',
+          message: 'No known repeaters in this region match these hops in this order. Check for a typo, or a hop that is out of order.',
         ),
       ];
     }
@@ -171,7 +223,7 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
       if (r.unknownHops.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(top: Gap.xs),
-          child: Text('No known node for: ${r.unknownHops.join(', ')}', key: const Key('path-unknown'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          child: Text('No known repeater for: ${r.unknownHops.join(', ')}', key: const Key('path-unknown'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       for (final c in r.candidates) _candidate(context, c),
     ];
@@ -256,8 +308,8 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
               regionSlug: widget.regionSlug,
               leading: c.hops[i].prefix,
               node: c.hops[i].node,
-              missing: 'No known node',
-              detail: c.hops[i].hopScore == null ? null : '${(c.hops[i].hopScore! * 100).round()}% for this hop',
+              missing: 'No known repeater',
+              detail: c.hops[i].hopScore == null ? null : '${(c.hops[i].hopScore! * 100).round()}% sure',
             ),
         if (open) const SizedBox(height: Gap.xs),
       ]),

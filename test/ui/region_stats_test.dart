@@ -60,6 +60,10 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(const Key('regions-compare')), findsOneWidget);
     expect(find.text('Viewing'), findsOneWidget);
+    // Build 76: the screen is named as the row that opens it, and the sort chips say what they sort by.
+    expect(find.text('Every region'), findsOneWidget);
+    expect(find.byKey(const Key('regions-sort-heardPct')), findsOneWidget);
+    expect(find.textContaining('Pings heard %'), findsOneWidget);
     await t.tap(find.byKey(const Key('regions-tile-BBB')));
     expect(picked.single.code, 'BBB');
   });

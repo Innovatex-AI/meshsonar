@@ -40,10 +40,10 @@ class ChannelMessageTile extends StatelessWidget {
     final m = message;
     final muted = t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant);
     final sender = m.sender ?? 'Unknown sender';
+    // Short and plain; the signal figure is in the actions sheet and on the packet page (a tap).
     final facts = [
-      'heard by ${m.heardBy}',
       '${m.hops} ${m.hops == 1 ? 'hop' : 'hops'}',
-      if (m.bestSnr != null) 'SNR ${snrText(m.bestSnr)}',
+      'heard by ${m.heardBy} ${m.heardBy == 1 ? 'observer' : 'observers'}',
     ].join(' · ');
     return Semantics(
       container: true,
@@ -71,7 +71,7 @@ class ChannelMessageTile extends StatelessWidget {
                   else if (m.text == null)
                     Text('No readable text.', style: t.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: c.onSurfaceVariant))
                   else
-                    Text.rich(_highlighted(m.text!, m.highlight, t), style: t.textTheme.bodyMedium),
+                    Text.rich(_highlighted(m.text!, m.highlight, t), style: t.textTheme.bodyLarge),
                   const SizedBox(height: 2),
                   Text(facts, style: muted),
                 ]),
@@ -117,8 +117,13 @@ Future<void> showMessageActions(BuildContext context, {required ChannelMessage m
   final m = message;
   final pick = await showAppActionSheet<String>(
     context,
+    title: [
+      '${m.hops} ${m.hops == 1 ? 'hop' : 'hops'}',
+      'heard by ${m.heardBy}',
+      if (m.bestSnr != null) 'best signal ${snrText(m.bestSnr)}',
+    ].join(' · '),
     actions: [
-      const AppAction('Open packet', 'packet', key: Key('channel-msg-open-packet')),
+      const AppAction('How it travelled (packet)', 'packet', key: Key('channel-msg-open-packet')),
       if (onOpenChannel != null) AppAction('Open ${m.channelName ?? 'channel'}', 'channel', key: const Key('channel-msg-open-channel')),
       if (!m.hidden && m.text != null) const AppAction('Copy text', 'copy', key: Key('channel-msg-copy')),
       if (!m.hidden) const AppAction('Report this message', 'report', destructive: true, key: Key('channel-msg-report')),

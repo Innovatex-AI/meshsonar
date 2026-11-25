@@ -164,6 +164,10 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
   /// one is open and they never stack. A drawn packet and the Layers panel share the same spot, so one closes the other.
   final MapPanelHostController _host = MapPanelHostController();
 
+  /// True while the map's transient panel (Layers, Legend, a tapped map item) is open: the Live panel is hidden then, so
+  /// two sheets never sit on top of each other on a phone (build 76). Closing that panel brings the Live header back.
+  bool _hostOpen = false;
+
   /// What the one Layers panel reads and writes on this map (remembered under page `live`).
   PageLayersModel? _layers;
   RepeaterMapSource? _source;
@@ -265,6 +269,8 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
 
   void _onHost() {
     if (_host.isOpen && _c.focus != null) _c.clearFocus();
+    // One sheet at a time (build 76): the Live panel steps aside while Layers, the legend or a tapped map item is open.
+    if (mounted && _host.isOpen != _hostOpen) setState(() => _hostOpen = _host.isOpen);
   }
 
   /// Runs the ticker only while something moves (it sleeps when idle).
@@ -645,6 +651,8 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
               layerState: layers,
               baseStyle: base,
               panelHost: _host,
+              // While a transient panel is open it sits at the bottom of the map, in the Live panel's place.
+              panelInset: _hostOpen ? MediaQuery.paddingOf(context).bottom : null,
               onLayers: () =>
                   showGeneratedLayersSheet(context, model, host: _host),
               legend: LegendCard(
@@ -678,8 +686,14 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
           // The panels listen to the controller themselves: a packet rebuilds them, never the map.
           ListenableBuilder(
             listenable: _c,
-            builder: (context, _) =>
-                Positioned.fill(child: _mainPanel(context)),
+            builder: (context, _) => Positioned.fill(
+              // Kept in the tree (its state and the stream stay), not drawn and not touchable while another sheet is open.
+              child: Offstage(
+                key: const Key('live-panel-offstage'),
+                offstage: _hostOpen,
+                child: _mainPanel(context),
+              ),
+            ),
           ),
           ListenableBuilder(
             listenable: _c,
@@ -898,6 +912,15 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(
+                          'Look back',
+                          style: t.textTheme.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
                       for (final w in liveWindows.keys)
                         Padding(
                           padding: const EdgeInsets.only(right: 6),
@@ -928,8 +951,9 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
                       key: const Key('live-map-speed'),
                       onPressed: _cycleSpeed,
                       child: Text(
-                        replaySpeedLabel(_c.speed),
-                        semanticsLabel: 'Replay speed ${_c.speed} times',
+                        'Speed ${replaySpeedLabel(_c.speed)}',
+                        semanticsLabel:
+                            'Replay speed ${_c.speed} times. Tap to change',
                       ),
                     ),
                     if (_c.mode != LiveMode.live)
@@ -946,7 +970,9 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
                             ? Icons.filter_list
                             : Icons.filter_list_alt,
                       ),
-                      label: const Text('Filters'),
+                      label: Text(
+                        _c.filter.isEmpty ? 'Filters' : 'Filters on',
+                      ),
                       onPressed: () => _openFilters(context),
                     ),
                     TextButton.icon(
@@ -970,13 +996,27 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
                 Semantics(
                   header: true,
                   child: Text(
+                    // The heading says what a tap does (one line: the first packet stays on screen on a small phone).
                     feed.isEmpty
                         ? 'Waiting for packets'
-                        : 'Feed · newest first',
+                        : 'Latest packets · tap one for details',
                     key: const Key('live-feed-heading'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: t.textTheme.titleSmall,
                   ),
                 ),
+                // With nothing yet: what to expect, or that the filters are why.
+                if (feed.isEmpty)
+                  Text(
+                    _c.filter.isEmpty
+                        ? 'Radio messages show here as observers in this region hear them. A quiet region can take a few minutes.'
+                        : 'Nothing matches your filters yet. Tap Filters to change them.',
+                    key: const Key('live-feed-hint'),
+                    style: t.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1178,10 +1218,10 @@ class _Legend extends StatelessWidget {
         spacing: 12,
         runSpacing: 2,
         children: [
-          Text('━ unique hop', style: muted),
+          Text('━ known hop', style: muted),
           Text('╌ likely hop', style: muted),
           Text(
-            '┈ unplaced (ghost) hops',
+            '┈ hop nobody can place',
             style: muted?.copyWith(color: ghostColor(context)),
           ),
         ],
@@ -1267,17 +1307,28 @@ class _ScrubberState extends State<_Scrubber> {
                   head: t.colorScheme.onSurface,
                   base: t.colorScheme.outlineVariant,
                 ),
-                child: Align(
-                  alignment: Alignment.topRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Text(
-                      c.density == null && !c.densityLoading
-                          ? '$label · no density from the server'
-                          : label,
-                      style: t.textTheme.labelSmall,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Says what the bars are for: a first-time user does not know this strip can be dragged.
+                    Expanded(
+                      child: Text(
+                        c.density == null && !c.densityLoading
+                            ? 'Drag to replay · no activity chart yet'
+                            : 'Activity · drag to replay',
+                        key: const Key('live-scrubber-hint'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.textTheme.labelSmall?.copyWith(
+                          color: t.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Text(label, style: t.textTheme.labelSmall),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1383,19 +1434,24 @@ class _FeedRow extends StatelessWidget {
           if (text != null)
             (text.length > 60 ? '${text.substring(0, 60)}…' : text),
           [
-            '${p.hops} hop${p.hops == 1 ? '' : 's'}',
-            '${p.observations.length} heard',
-            if (p.bestSnr != null) 'best ${snrText(p.bestSnr)}',
             ageText(p.firstSeen, now),
+            '${p.hops} hop${p.hops == 1 ? '' : 's'}',
+            'heard by ${p.observations.length}',
+            if (p.bestSnr != null) snrText(p.bestSnr),
           ].join(' · '),
         ].join('\n'),
       ),
       isThreeLine: text != null,
       onTap: onOpen,
-      trailing: IconButton(
+      // A labelled button, not a bare icon: it says what it does (the row itself opens the packet).
+      trailing: TextButton.icon(
         key: Key('live-feed-draw-${p.hash}'),
-        tooltip: 'Draw on the map',
-        icon: const Icon(Icons.route),
+        style: TextButton.styleFrom(
+          minimumSize: const Size(Hit.min, Hit.min),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        icon: const Icon(Icons.route, size: 18),
+        label: const Text('Map', semanticsLabel: 'Draw its route on the map'),
         onPressed: onDraw,
       ),
     );
@@ -1421,15 +1477,42 @@ class _FilterSheet extends StatelessWidget {
       controller: controller,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
-        Semantics(
-          header: true,
-          child: Text('Filters', style: t.textTheme.titleLarge),
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text('Filters', style: t.textTheme.titleLarge),
+              ),
+            ),
+            if (!f.isEmpty)
+              TextButton(
+                key: const Key('live-filter-clear'),
+                onPressed: () => live.setFilter(LiveFilter.none),
+                child: const Text('Show all'),
+              ),
+            FilledButton(
+              key: const Key('live-filter-done'),
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+        // Every change applies at once: the count says what the map and the feed now show.
+        Text(
+          f.isEmpty
+              ? 'Showing every packet. Changes apply straight away.'
+              : 'Showing ${live.feed.length} of ${live.allPackets.length} packets.',
+          key: const Key('live-filter-count'),
+          style: t.textTheme.bodySmall?.copyWith(
+            color: t.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 8),
         SwitchListTile(
           key: const Key('live-filter-mine'),
           contentPadding: EdgeInsets.zero,
-          title: const Text('My nodes'),
+          title: const Text('Only my nodes'),
           subtitle: Text(
             live.myNodes.isEmpty
                 ? 'Star nodes or observers under Nodes, or claim your radio, to use this.'
@@ -1463,7 +1546,7 @@ class _FilterSheet extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        Text('Observer', style: t.textTheme.titleSmall),
+        Text('Heard by', style: t.textTheme.titleSmall),
         if (observers.isEmpty)
           Text(
             'Observers appear here once packets arrive.',
@@ -1495,12 +1578,6 @@ class _FilterSheet extends StatelessWidget {
             ],
           ),
         ),
-        if (!f.isEmpty)
-          TextButton(
-            key: const Key('live-filter-clear'),
-            onPressed: () => live.setFilter(LiveFilter.none),
-            child: const Text('Clear filters'),
-          ),
       ],
     );
   }

@@ -56,6 +56,30 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
   String? _nodeError, _observerError, _hashError, _channelError, _scopeError;
   List<SavedPacketFilter> _saved = const [];
 
+  /// The less-used filters (route, signal, node, observer, hash, scope, the filter language) sit behind "More filters";
+  /// open from the start when one of them is already set.
+  late bool _more = _advancedSet(widget.filter);
+
+  static bool _advancedSet(PacketFilter f) =>
+      f.routes.isNotEmpty ||
+      f.snrMin != null ||
+      f.snrMax != null ||
+      f.nodes.isNotEmpty ||
+      f.prefix != null ||
+      f.observers.isNotEmpty ||
+      (f.hash ?? '').isNotEmpty ||
+      (f.scope ?? '').isNotEmpty ||
+      f.text.trim().isNotEmpty;
+
+  /// Something typed in an "add" field but not added yet is added now (build 76: Apply used to drop it silently).
+  /// False when what was typed is not valid; the field then shows why.
+  bool _addPending() {
+    if (_node.text.trim().isNotEmpty) _addNode();
+    if (_observer.text.trim().isNotEmpty) _addObserver();
+    if (_channel.text.trim().isNotEmpty) _addChannel();
+    return _nodeError == null && _observerError == null && _channelError == null;
+  }
+
   static const _hopsTop = 16.0;
   static const _snrLow = -20.0, _snrHigh = 15.0;
 
@@ -180,6 +204,7 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
             padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.l),
             children: [
               Text('Filter packets', style: t.textTheme.titleLarge),
+              Text('Pick what to show, then tap Show packets.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
               if (_saved.isNotEmpty) ...[
                 _title(context, 'Saved filters'),
                 chips([
@@ -196,7 +221,7 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                     ),
                 ]),
               ],
-              _title(context, 'Type'),
+              _title(context, 'Kind of packet'),
               chips([
                 for (final e in packetTypeWireNames.values)
                   FilterChip(
@@ -206,16 +231,18 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                     onSelected: (v) => setState(() => _f = _f.copyWith(types: v ? {..._f.types, e} : ({..._f.types}..remove(e)))),
                   ),
               ]),
-              _title(context, 'Route'),
+              _title(context, 'Channel'),
               chips([
-                for (final r in packetRouteWireNames)
-                  FilterChip(
-                    key: Key('filter-route-$r'),
-                    label: Text(packetRouteLabel(r)),
-                    selected: _f.routes.contains(r),
-                    onSelected: (v) => setState(() => _f = _f.copyWith(routes: v ? {..._f.routes, r} : ({..._f.routes}..remove(r)))),
-                  ),
+                FilterChip(
+                  key: const Key('filter-channel-public'),
+                  label: const Text('Public'),
+                  selected: _f.channels.contains('public'),
+                  onSelected: (v) => setState(() => _f = _f.copyWith(channels: v ? {..._f.channels, 'public'} : ({..._f.channels}..remove('public')))),
+                ),
+                for (final c in _f.channels.where((c) => c != 'public'))
+                  InputChip(label: Text(c.startsWith('tag:') ? '#${c.substring(4)}' : c), onDeleted: () => setState(() => _f = _f.copyWith(channels: {..._f.channels}..remove(c)))),
               ]),
+              _entry(context, _channel, 'filter-channel', '#hashtag or enc:62', _channelError, _addChannel),
               _title(context, 'Heard by'),
               SegmentedButton<PacketSourceFilter>(
                 key: const Key('filter-source'),
@@ -244,7 +271,39 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                     )),
               ),
               Text(_f.hopsMin == null && _f.hopsMax == null ? 'Any number of hops' : 'From ${_f.hopsMin ?? 0} to ${_f.hopsMax ?? 'any'} hops', style: t.textTheme.bodySmall),
-              _title(context, 'Best SNR'),
+              const SizedBox(height: Gap.m),
+              // One 48 pt row: the filters most people never need stay out of the way until asked for.
+              Semantics(
+                button: true,
+                child: InkWell(
+                  key: const Key('filter-more'),
+                  onTap: () => setState(() => _more = !_more),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Text('More filters', style: t.textTheme.titleSmall),
+                          Text('Route, signal, a node, an observer, a packet hash, or write your own', style: t.textTheme.bodySmall),
+                        ]),
+                      ),
+                      Icon(_more ? Icons.expand_less : Icons.expand_more),
+                    ]),
+                  ),
+                ),
+              ),
+              if (_more) ...[
+              _title(context, 'How it was sent'),
+              chips([
+                for (final r in packetRouteWireNames)
+                  FilterChip(
+                    key: Key('filter-route-$r'),
+                    label: Text(packetRouteLabel(r)),
+                    selected: _f.routes.contains(r),
+                    onSelected: (v) => setState(() => _f = _f.copyWith(routes: v ? {..._f.routes, r} : ({..._f.routes}..remove(r)))),
+                  ),
+              ]),
+              _title(context, 'Signal (best SNR)'),
               RangeSlider(
                 key: const Key('filter-snr'),
                 values: snr,
@@ -259,7 +318,7 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                       clearSnrMax: v.end >= _snrHigh,
                     )),
               ),
-              Text(_f.snrMin == null && _f.snrMax == null ? 'Any SNR' : 'From ${_f.snrMin?.round() ?? 'any'} to ${_f.snrMax?.round() ?? 'any'} dB', style: t.textTheme.bodySmall),
+              Text(_f.snrMin == null && _f.snrMax == null ? 'Any signal strength' : 'From ${_f.snrMin?.round() ?? 'any'} to ${_f.snrMax?.round() ?? 'any'} dB', style: t.textTheme.bodySmall),
               _title(context, 'Node or hop code'),
               _entry(context, _node, 'filter-node', 'Node key or hop code (a7, 3cd0)', _nodeError, _addNode),
               chips([
@@ -273,18 +332,6 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                 for (final o in _f.observers)
                   InputChip(label: Text(o.length > 14 ? '${o.substring(0, 10)}…' : o), onDeleted: () => setState(() => _f = _f.copyWith(observers: [..._f.observers]..remove(o)))),
               ]),
-              _title(context, 'Channel'),
-              chips([
-                FilterChip(
-                  key: const Key('filter-channel-public'),
-                  label: const Text('Public'),
-                  selected: _f.channels.contains('public'),
-                  onSelected: (v) => setState(() => _f = _f.copyWith(channels: v ? {..._f.channels, 'public'} : ({..._f.channels}..remove('public')))),
-                ),
-                for (final c in _f.channels.where((c) => c != 'public'))
-                  InputChip(label: Text(c.startsWith('tag:') ? '#${c.substring(4)}' : c), onDeleted: () => setState(() => _f = _f.copyWith(channels: {..._f.channels}..remove(c)))),
-              ]),
-              _entry(context, _channel, 'filter-channel', '#hashtag or enc:62', _channelError, _addChannel),
               _title(context, 'Packet hash'),
               TextField(
                 key: const Key('filter-hash'),
@@ -292,13 +339,13 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                 style: AppType.mono.copyWith(fontSize: 16),
                 decoration: InputDecoration(hintText: '8 to 16 hex characters', errorText: _hashError, border: const OutlineInputBorder()),
               ),
-              _title(context, 'Scope'),
+              _title(context, 'Region tag (scope)'),
               TextField(
                 key: const Key('filter-scope'),
                 controller: _scope,
                 decoration: InputDecoration(hintText: '#cmh, unscoped or unmatched', errorText: _scopeError, border: const OutlineInputBorder()),
               ),
-              _title(context, 'Filter text'),
+              _title(context, 'Write your own filter'),
               TextField(
                 key: const Key('filter-text'),
                 controller: _text,
@@ -338,6 +385,7 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
                   onPressed: () => _text.text = ex,
                   child: Text(ex, style: AppType.mono.copyWith(fontSize: 14)),
                 ),
+              ],
               _title(context, 'Save this filter on the phone'),
               _entry(context, _saveName, 'filter-save-name', 'Name, e.g. Traces near me', _saveError, () => unawaited(_save()), icon: Icons.bookmark_add_outlined, tip: 'Save'),
             ],
@@ -347,19 +395,35 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.s),
-            child: Wrap(alignment: WrapAlignment.end, spacing: Gap.s, runSpacing: Gap.s, children: [
-              OutlinedButton(
-                key: const Key('filter-clear'),
-                onPressed: () => Navigator.pop(context, (filter: PacketFilter.none, window: null)),
-                child: const Text('Clear all'),
+            // Two thumb-sized buttons across the sheet: the main one is wide and says what it does.
+            child: Row(children: [
+              SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  key: const Key('filter-clear'),
+                  onPressed: () => Navigator.pop(context, (filter: PacketFilter.none, window: null)),
+                  child: const Text('Clear all'),
+                ),
               ),
-              FilledButton(
-                key: const Key('filter-apply'),
-                onPressed: () {
-                  final f = _collect();
-                  if (f != null) Navigator.pop(context, (filter: f, window: null));
-                },
-                child: const Text('Apply'),
+              const SizedBox(width: Gap.s),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: FilledButton(
+                    key: const Key('filter-apply'),
+                    onPressed: () {
+                      final pending = _addPending();
+                      final f = _collect();
+                      if (!pending || f == null) {
+                        // The mistake may be in the folded part: open it so the message under the field shows.
+                        setState(() => _more = true);
+                        return;
+                      }
+                      Navigator.pop(context, (filter: f, window: null));
+                    },
+                    child: const Text('Show packets'),
+                  ),
+                ),
               ),
             ]),
           ),
