@@ -166,7 +166,6 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
   }
 
   List<Widget> _mainPage(BuildContext context) {
-    final t = Theme.of(context);
     final st = model.layerState;
     // The Filters section is the Drive map's (pings, cells, the growth timeline): a map without them does not get the section.
     final m = model;
@@ -210,10 +209,10 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
             const ColourByControl(),
             const _SectionLabel('Palette', key: Key('layers-group-palette')),
             const Padding(padding: EdgeInsets.symmetric(horizontal: Gap.l), child: Align(alignment: Alignment.centerLeft, child: PaletteSwitch(keyPrefix: 'layers-palette'))),
-            const _SectionLabel(''),
+            const _SectionLabel('More'),
             _NavRow(
               key: const Key('layers-credits'),
-              title: 'Map credits and sources',
+              title: 'Map credits',
               onTap: () => showMapCredits(
                 context,
                 style: model.baseStyle,
@@ -223,18 +222,12 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
             ),
             _NavRow(
               key: const Key('layers-legend'),
-              title: 'What do the symbols mean?',
+              title: 'Map guide',
               symbol: AppSymbols.infoCircle,
               onTap: () => showMapLegend(context, pingColors: model.pingColors),
             ),
+            // What Reset leaves alone is said where it matters, in its confirmation (build 76; it was a footnote here).
             _NavRow(key: const Key('layers-reset'), title: 'Reset layers', destructive: true, chevron: false, onTap: () => _confirmReset(context)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
-              child: Text(
-                'The base map, filter and timeline position are not layers: Reset leaves them alone.',
-                style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
-              ),
-            ),
           ],
         ),
       ),
@@ -245,7 +238,7 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
     final ok = await showAppActionSheet<bool>(
       context,
       title: 'Reset layers?',
-      message: 'Layers, ping colours and the coverage options go back to the defaults.',
+      message: 'Layers, ping colours and the coverage options go back to the defaults. The base map and your filters stay as they are.',
       sheetKey: const Key('layers-reset-sheet'),
       actions: const [AppAction('Reset layers', true, destructive: true, key: Key('layers-reset-confirm'))],
     );
@@ -450,9 +443,12 @@ class _BaseMapPicker extends StatelessWidget {
     return Padding(
       key: const Key('layers-base-map'),
       padding: const EdgeInsets.symmetric(horizontal: Gap.l),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Wrap(
-        spacing: Gap.m,
-        runSpacing: Gap.s,
+      // One row (build 76): four tiles fit an iPhone SE without wrapping to a second line; more scroll sideways.
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: Gap.s,
         children: [
           for (final s in model.availableBaseStyles)
             Semantics(
@@ -491,7 +487,7 @@ class _BaseMapPicker extends StatelessWidget {
               ),
             ),
         ],
-      ),
+      )),
       if (satNote != null) Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(satNote, key: const Key('layers-base-map-note'), style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant))),
       ]),
     );

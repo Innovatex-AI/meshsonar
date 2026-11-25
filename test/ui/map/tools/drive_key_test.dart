@@ -27,9 +27,9 @@ void main() {
       final c = CoverageBandColors.of(ColourPalette.standard, b, definition: def);
       expect(discs(t, 'drive-key-bands'), [for (var i = 1; i <= 5; i++) c[i]]);
       expect(discs(t, 'drive-key-noreply'), [c.noReplyPoint]);
-      expect(find.text('Ping a repeater answered: its colour is the SNR band, the same as the cells'), findsOneWidget);
-      expect(find.text('Ping nobody answered'), findsOneWidget);
-      expect(find.text('Outlined: this drive'), findsOneWidget);
+      expect(find.text('Heard: weak → strong'), findsOneWidget);
+      expect(find.text('Not heard'), findsOneWidget);
+      expect(find.text('This drive'), findsOneWidget);
       expect(find.text('Hidden from the public: faded and dashed'), findsOneWidget);
       expect(find.text('Privacy zone'), findsOneWidget);
       expect(find.byKey(const Key('drive-key-hidden')), findsOneWidget);

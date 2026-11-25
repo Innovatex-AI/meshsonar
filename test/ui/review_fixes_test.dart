@@ -16,7 +16,7 @@ import 'package:meshsonar/core/model.dart';
 import 'fakes.dart';
 import 'fakes_m1.dart';
 
-const reasonLine = 'Pick a mount, enter the height, and a gain or Don\'t know';
+final reasonLine = find.byKey(const Key('antenna-save-hint'));
 const setupHint = 'Set up this radio\'s antenna';
 const appKey = 'secretkey-abcdef-1234';
 
@@ -49,7 +49,7 @@ void main() {
       expect(sheet, findsOneWidget);
       expect(dontKnowOn(tester), isTrue);
       expect(isEnabled(tester, find.byKey(const Key('antenna-save'))), isTrue, reason: 'nothing to fix: saved as it was');
-      expect(find.text(reasonLine), findsNothing);
+      expect(reasonLine, findsNothing);
       await drain(tester);
     });
 
@@ -86,20 +86,23 @@ void main() {
       await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
       await tester.pumpAndSettle();
       expect(isEnabled(tester, find.byKey(const Key('antenna-save'))), isFalse);
-      expect(find.text(reasonLine), findsOneWidget);
+      expect(find.text('Pick how the antenna is mounted'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('mount-roofMagMount')));
       await tester.pumpAndSettle();
+      // Build 76: the mount's usual height is filled in, so only the gain is left to say.
+      expect(tester.widget<TextField>(find.byKey(const Key('antenna-height-field'))).controller!.text, '1.5');
+      expect(find.text('Enter the gain, or turn on Don\'t know'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('antenna-height-field')), '1.8');
       await tester.pumpAndSettle();
-      expect(find.text(reasonLine), findsOneWidget, reason: 'still no gain and Don\'t know is off');
+      expect(reasonLine, findsOneWidget, reason: 'still no gain and Don\'t know is off');
       await tester.enterText(find.byKey(const Key('antenna-gain-field')), '5.8');
       await tester.pumpAndSettle();
       expect(isEnabled(tester, find.byKey(const Key('antenna-save'))), isTrue);
-      expect(find.text(reasonLine), findsNothing);
+      expect(reasonLine, findsNothing);
       await tester.enterText(find.byKey(const Key('antenna-height-field')), '400');
       await tester.pumpAndSettle();
-      expect(find.text(reasonLine), findsOneWidget, reason: 'a height out of range disables Save again');
+      expect(reasonLine, findsOneWidget, reason: 'a height out of range disables Save again');
       await drain(tester);
     });
   });

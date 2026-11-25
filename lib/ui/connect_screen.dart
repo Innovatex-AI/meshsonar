@@ -3,6 +3,7 @@
 // star: saved_radios_screen.dart), nearby radios (signal bars, a spinner on the one being connected), the Simulator, a tip.
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../alerts/alerts_runtime.dart';
@@ -111,10 +112,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final l = e.toString().toLowerCase();
     _permissionProblem = l.contains('permission');
     if (l.contains('permission')) {
-      return 'MeshSonar needs Bluetooth permission to find your radio. Allow Bluetooth (and Nearby devices on Android) in your phone\'s settings.';
+      return 'MeshSonar is not allowed to use Bluetooth. Allow it in Settings to find your radio.';
     }
     if (l.contains('off') || l.contains('unavailable') || l.contains('not supported') || l.contains('adapter')) {
-      return 'Bluetooth looks off or unavailable. Turn it on and scan again.';
+      return 'Bluetooth is off. Turn it on, then scan again.';
     }
     return 'Bluetooth scan didn\'t work. Turn Bluetooth on and try again.';
   }
@@ -159,11 +160,26 @@ class _ConnectScreenState extends State<ConnectScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Connect a radio')),
       body: SafeArea(
-        child: ListView(
+        // Pull down to scan again (build 76), as every iPhone list refreshes.
+        child: RefreshIndicator(
+          key: const Key('connect-pull-scan'),
+          onRefresh: () async {
+            if (!busy && !_scanning) _scan();
+          },
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xl),
           children: [
             if (s.connected) _ConnectedCard(state: s),
-            if (s.connectError != null) ErrorBanner(s.connectError!),
+            if (s.connectError != null) ...[
+              ErrorBanner(s.connectError!),
+              // The usual cause, right under the failure (it was a grey footnote at the very bottom of the page).
+              Padding(
+                key: const Key('connect-error-tip'),
+                padding: const EdgeInsets.fromLTRB(Gap.xs, Gap.xs, Gap.xs, 0),
+                child: Text('Close the MeshCore app (only one app can use the radio at a time), then tap the radio again.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+              ),
+            ],
             if (saved != null && !saved.isEmpty)
               Column(
                 key: const Key('saved-radios-section'),
@@ -210,32 +226,41 @@ class _ConnectScreenState extends State<ConnectScreen> {
             ),
             if (_scanError != null) ...[
               ErrorBanner(_scanError!),
-              if (_permissionProblem) ...[
+              // Build 76: the button shows for every Bluetooth problem (it used to show for a permission problem only, so
+              // "Bluetooth looks off" was a dead end), and the path is this phone's, not both platforms'.
+              if (_permissionProblem)
                 Padding(
                   padding: const EdgeInsets.only(top: Gap.xs, left: Gap.xs),
                   child: Text(
-                    'On iPhone: Settings → MeshSonar → Bluetooth. On Android: Settings → Apps → MeshSonar → Permissions.',
+                    defaultTargetPlatform == TargetPlatform.android ? 'Settings → Apps → MeshSonar → Permissions → Nearby devices.' : 'Settings → MeshSonar → Bluetooth.',
                     style: t.textTheme.bodySmall,
                   ),
                 ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
+              Wrap(
+                spacing: Gap.s,
+                runSpacing: Gap.xs,
+                children: [
+                  FilledButton.tonalIcon(
                     key: const Key('open-app-settings'),
+                    style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                     onPressed: () => unawaited(openAppSettingsPage()),
                     icon: const Icon(Icons.settings_outlined),
                     label: const Text('Open Settings'),
                   ),
-                ),
-              ],
+                  TextButton(
+                    key: const Key('scan-retry'),
+                    style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                    onPressed: busy ? null : _scan,
+                    child: const Text('Scan again'),
+                  ),
+                ],
+              ),
             ],
             if (_found.isEmpty && !_scanning && _scannedOnce && _scanError == null)
               _InfoCard(
                 icon: Icons.bluetooth_searching_rounded,
                 title: 'No MeshCore radios found',
-                body:
-                    'Make sure your companion radio is on, has Bluetooth enabled, '
-                    'and isn\'t connected to another app (like the MeshCore app), then scan again.',
+                body: 'Turn the radio on, keep it close, and close the MeshCore app: only one app can use the radio at a time.',
               ),
             if (_found.isEmpty && _scanning)
               const _InfoCard(
@@ -261,15 +286,15 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 onTap: () => _connect(d, RadioKind.bluetooth),
               ),
             if (simulatorAvailable) ...[
-                const SectionLabel('No radio?'),
+                const SectionLabel('No radio yet?'),
                 Card(
                   child: ListTile(
                     key: const Key('simulator'),
                     minTileHeight: 72,
                     contentPadding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.xs),
-                    leading: _IconBadge(icon: Icons.science_rounded, color: MeshSonarColors.of(context).beacon),
+                    leading: _IconBadge(icon: Icons.science_rounded, color: t.colorScheme.onSurfaceVariant),
                     title: const Text('Simulator (no radio)'),
-                    subtitle: const Text('A pretend radio and drive around Westerville, for trying the app out. Simulated drives stay on this phone and are never uploaded.'),
+                    subtitle: const Text('Try the app with a pretend drive. Nothing is uploaded.'),
                     trailing: _connectingId == 'simulator' && s.connecting
                         ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
                         : const Icon(Icons.chevron_right_rounded),
@@ -279,21 +304,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   ),
                 ),
             ],
-            const SizedBox(height: Gap.l),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.info_outline_rounded, size: 20, color: t.colorScheme.onSurfaceVariant),
-                const SizedBox(width: Gap.s),
-                Expanded(
-                  child: Text(
-                    'Only one app can talk to the radio at a time. Close the MeshCore app first.',
-                    style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
-                  ),
-                ),
-              ],
-            ),
           ],
+        ),
         ),
       ),
     );

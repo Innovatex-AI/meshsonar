@@ -49,14 +49,14 @@ class DriveKey extends StatelessWidget {
         item(
           const Key('drive-key-bands'),
           ExcludeSemantics(child: Row(mainAxisSize: MainAxisSize.min, children: [for (var b = 1; b <= 5; b++) _Disc(bands[b], t.colorScheme.onSurface)])),
-          'Ping a repeater answered: its colour is the SNR band, the same as the cells',
+          'Heard: weak → strong',
         ),
-      if (dots) item(const Key('drive-key-noreply'), ExcludeSemantics(child: _Disc(bands.noReplyPoint, t.colorScheme.onSurface)), 'Ping nobody answered'),
+      if (dots) item(const Key('drive-key-noreply'), ExcludeSemantics(child: _Disc(bands.noReplyPoint, t.colorScheme.onSurface)), 'Not heard'),
       if (dots && outlined)
         item(
           const Key('drive-key-outlined'),
           ExcludeSemantics(child: _Disc(const Color(0x00000000), t.colorScheme.onSurface, ringOnly: true)),
-          'Outlined: this drive',
+          'This drive',
         ),
       if (hiddenPart && tool != null)
         item(const Key('drive-key-hidden'), ExcludeSemantics(child: _DashSwatch(tool.hiddenTrack, dark)), tool.hiddenTrack.label),

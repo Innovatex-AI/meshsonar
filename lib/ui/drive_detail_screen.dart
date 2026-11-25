@@ -78,33 +78,29 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
                 icon: const Icon(Icons.insights),
                 label: const Text('Report'),
               ),
-              IconButton(
-                key: const Key('detail-rename'),
-                tooltip: 'Rename',
-                onPressed: () => renameDrive(context, summary),
-                icon: const Icon(Icons.edit_outlined),
-              ),
-              IconButton(
-                key: const Key('detail-delete'),
-                tooltip: 'Delete drive',
-                onPressed: active
-                    ? null
-                    : () async {
-                        final nav = Navigator.of(context);
-                        if (await runDriveAction(context, 'delete', summary)) nav.maybePop();
-                      },
-                icon: const Icon(Icons.delete_outline),
-              ),
+              // Build 76: Rename and Delete moved into the one menu (four app-bar buttons squeezed the title to "Dri…" on a
+              // 375 pt phone, and a bin sat one slip away from the pencil).
               IconButton(
                 key: const Key('detail-more'),
                 tooltip: 'More',
                 icon: const AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24),
                 onPressed: () async {
+                  final nav = Navigator.of(context);
                   final v = await showAppActionSheet<String>(
                     context,
-                    actions: const [AppAction('Report a problem with this drive', 'report', key: Key('detail-more-report'))],
+                    actions: [
+                      const AppAction('Rename', 'rename', key: Key('detail-rename')),
+                      const AppAction('Report a problem with this drive', 'report', key: Key('detail-more-report')),
+                      if (!active) const AppAction('Delete drive', 'delete', destructive: true, key: Key('detail-delete')),
+                    ],
                   );
-                  if (v == 'report' && context.mounted) openReportProblem(context, driveId: ses.id);
+                  if (!context.mounted) return;
+                  if (v == 'report') openReportProblem(context, driveId: ses.id);
+                  if (v == 'rename') await renameDrive(context, summary);
+                  if (v == 'delete') {
+                    if (!context.mounted) return;
+                    if (await runDriveAction(context, 'delete', summary)) nav.maybePop();
+                  }
                 },
               ),
             ],
@@ -198,22 +194,17 @@ class _Header extends StatelessWidget {
       if (label != null) formatDateTime(ses.startedAt),
       if (ses.channel != null) ses.channel!,
       if (ses.companion.name != null) ses.companion.name!,
-      if (ses.antenna.type != null) 'Antenna: ${ses.antenna.type}',
+      if (ses.antenna.type != null) '${ses.antenna.type == 'external' ? 'External' : 'Internal'} antenna',
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label ?? formatDateTime(ses.startedAt),
-                style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 2),
-            Text(lines.join(' · '), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        // Bounded, so the badge's text can ellipsize (e.g. "Synced · 2 rejected" on a narrow phone).
-        Flexible(child: Align(alignment: Alignment.topRight, child: SyncBadge(summary: summary))),
+      // The name gets the full width (build 76: the sync badge beside it broke the date over two lines).
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label ?? formatDateTime(ses.startedAt), maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 2),
+        if (lines.isNotEmpty) Text(lines.join(' · '), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        SyncBadge(summary: summary),
       ]),
     );
   }

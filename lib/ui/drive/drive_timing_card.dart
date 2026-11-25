@@ -51,12 +51,27 @@ class DriveTimingView extends StatelessWidget {
               Text('Ping timing', style: t.textTheme.titleSmall),
               const SizedBox(height: Gap.xs),
               Text(s.line, key: const Key('timing-line'), style: t.textTheme.bodyMedium),
-              Text(
-                'Gap between pings: typical ${_s(s.gapP50S)}, 95% under ${_s(s.gapP95S)}, worst ${_s(s.gapMaxS)}. '
-                'Late against schedule: typical ${_s(s.lateP50S)}, worst ${_s(s.lateMaxS)}.'
-                '${s.firstPingS == null ? '' : ' First ping after ${_s(s.firstPingS)}.'}',
-                key: const Key('timing-detail'),
-                style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+              // The percentiles are for whoever wants them: one tap away, not a paragraph on every drive (build 76).
+              Theme(
+                data: t.copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  key: const Key('timing-more'),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  minTileHeight: 44,
+                  expandedAlignment: Alignment.centerLeft,
+                  title: Text('Timing details', style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary)),
+                  children: [
+                    Text(
+                      'Gap between pings: usually ${_s(s.gapP50S)}, longest ${_s(s.gapMaxS)} (95% under ${_s(s.gapP95S)}).\n'
+                      'Sent late: usually by ${_s(s.lateP50S)}, at most ${_s(s.lateMaxS)}.'
+                      '${s.firstPingS == null ? '' : '\nFirst ping after ${_s(s.firstPingS)}.'}',
+                      key: const Key('timing-detail'),
+                      style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
               ),
               if (held != null) Text(held, key: const Key('timing-held'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
               if (s.lowAccuracyPings > 0)

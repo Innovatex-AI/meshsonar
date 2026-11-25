@@ -82,6 +82,10 @@ void main() {
 
   testWidgets('detail: delete returns to the list', (tester) async {
     final h = await openDetail(tester);
+    // Build 76: Delete lives in the More menu (the app bar holds Report and the menu only).
+    await tester.tap(find.byKey(const Key('detail-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-rename')), findsOneWidget);
     await tester.tap(find.byKey(const Key('detail-delete')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-delete')));

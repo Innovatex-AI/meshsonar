@@ -265,7 +265,7 @@ void main() {
     h.bt.scanError = Exception('Bluetooth permission denied');
     await tester.tap(find.byKey(const Key('scan')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('needs Bluetooth permission'), findsOneWidget);
+    expect(find.textContaining('not allowed to use Bluetooth'), findsOneWidget);
     await drain(tester);
   });
 
@@ -318,7 +318,7 @@ void main() {
     await h.pumpApp(tester);
     await tester.tap(find.byKey(const Key('connection-chip')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('needs Bluetooth permission'), findsOneWidget);
+    expect(find.textContaining('not allowed to use Bluetooth'), findsOneWidget);
     expect(find.byKey(const Key('open-app-settings')), findsOneWidget);
     expect(tester.getSize(find.byKey(const Key('open-app-settings'))).height, greaterThanOrEqualTo(44));
     await drain(tester);
