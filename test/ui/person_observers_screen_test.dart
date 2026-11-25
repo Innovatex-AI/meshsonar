@@ -62,15 +62,15 @@ void main() {
       await _open(tester, data: PersonObservers([_fixed(), _phone()], [_offer]));
       expect(find.text('Needs your answer'), findsOneWidget);
       expect(
-          find.textContaining('Barn Observer (CMH) says it belongs to you, because its login names your radio Hilltop as its owner. Is that observer yours?'), findsOneWidget);
-      expect(find.textContaining('Named you since 20'), findsOneWidget);
+          find.text('Is Barn Observer (CMH) yours?'), findsOneWidget, reason: 'the question comes first, alone on its line');
+      expect(find.textContaining('Its login names your radio Hilltop as its owner, since Tue 10 Nov 2026'), findsOneWidget);
       expect(find.byKey(Key('offer-accept-$_offerKey')), findsOneWidget);
       expect(find.byKey(Key('offer-decline-$_offerKey')), findsOneWidget);
 
       expect(find.text('Hilltop North'), findsOneWidget);
       expect(find.textContaining("Proof: Proved with the radio's own key"), findsOneWidget);
       expect(find.text('Area CMH'), findsOneWidget);
-      expect(find.textContaining('Last heard 20'), findsNWidgets(2));
+      expect(find.textContaining('Last heard Sun 22 Nov 2026'), findsNWidgets(2));
       expect(find.text('It calls itself "HT1".'), findsOneWidget);
       expect(find.textContaining('Deaf'), findsOneWidget);
       expect(find.textContaining('Battery 3.63 V (low), falling'), findsOneWidget);
@@ -80,7 +80,16 @@ void main() {
       expect(find.text('On iPhone'), findsOneWidget);
       expect(find.text('Mode: Drive'), findsOneWidget);
       expect(find.textContaining('installed 2 times. It also publishes through its radio. It counts as one observer.'), findsOneWidget);
+      expect(find.text('Reports through the app and its radio (MQTT)'), findsOneWidget, reason: 'plain words, not "the MQTT broker through its radio"');
+      expect(find.text('Off: listed as "MeshSonar phone 212DE2".'), findsOneWidget);
       expect(find.textContaining('Show my radio\'s name in public (Truck Radio)'), findsOneWidget);
+      // the long privacy text is folded behind one line; a tap opens it
+      expect(find.textContaining('A phone is listed under a pseudonym'), findsNothing);
+      expect(find.text('Never your name. Never a phone\'s exact position.'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('person-observers-public-toggle')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('person-observers-public-toggle')));
+      await tester.pumpAndSettle();
       expect(find.textContaining('A phone is listed under a pseudonym'), findsOneWidget);
     });
 

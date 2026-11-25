@@ -19,7 +19,29 @@ import 'person_devices_screen.dart';
 
 const Duration keyRevealFor = Duration(seconds: 30);
 
-String _day(DateTime? t) => t == null ? 'never' : t.toLocal().toIso8601String().substring(0, 10);
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// "30 Oct 2026", in the phone's time zone.
+String _day(DateTime t) {
+  final l = t.toLocal();
+  return '${l.day} ${_months[l.month - 1]} ${l.year}';
+}
+
+/// One line for a key row: what it is doing now first, then the dates, then how to recognise it.
+String keyLine(DriverKeyStatus status, {DateTime? createdAt, DateTime? lastSeenAt, String? keyHint}) => [
+      statusWords(status),
+      lastSeenAt == null ? 'no uploads yet' : 'last upload ${_day(lastSeenAt)}',
+      if (createdAt != null) 'made ${_day(createdAt)}',
+      if (keyHint != null) 'ends in $keyHint',
+    ].join(' · ');
+
+/// What the person should do about this phone's key, or null when it simply works.
+String? keyNextStep(DriverKeyStatus s) => switch (s) {
+      DriverKeyStatus.pending => 'Pull down to check again.',
+      DriverKeyStatus.rejected => 'The server turned this key down. Make a new key below.',
+      DriverKeyStatus.revoked => 'This key was switched off. Make a new key below.',
+      _ => null,
+    };
 
 String statusWords(DriverKeyStatus s) => switch (s) {
       DriverKeyStatus.approved => 'Works',
@@ -52,7 +74,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   void _load() {
     final s = AppScope.read(context);
-    final f = s.accountAvailable ? s.loadDriverDevices() : null;
+    final f = s.accountAvailable ? (s.loadDriverDevices()..ignore()) : null; // the FutureBuilder shows a failure
     setState(() {
       _future = f;
     });
@@ -73,31 +95,46 @@ class _DevicesScreenState extends State<DevicesScreen> {
             padding: const EdgeInsets.all(Gap.l),
             children: [
               Text(
-                'A driver key links MeshSonar on a phone to its drives. Use one key per phone. The key works the moment it is made; '
-                'no account or sign-in is needed.',
+                'One key per phone. No account or sign-in needed.',
                 key: const Key('devices-intro'),
-                style: t.textTheme.bodyMedium,
+                style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: Gap.m),
               _ThisPhone(onChanged: _load),
               const SizedBox(height: Gap.l),
               if (!s.hasKey)
-                const Text('This phone has no driver key. Create one under Account & driver key.', key: Key('devices-nokey'))
+                EmptyState(
+                  key: const Key('devices-nokey'),
+                  icon: Icons.key_off_outlined,
+                  title: 'No driver key on this phone',
+                  body: 'Go back to Account & driver key and create one.',
+                  action: FilledButton.tonal(key: const Key('devices-nokey-back'), onPressed: () => Navigator.of(context).maybePop(), child: const Text('Back')),
+                )
               else if (_future == null)
                 const _Note(
                     key: Key('devices-unavailable'),
-                    text: 'This server does not offer the account lists yet, or the key is not confirmed. Your key above still works.')
+                    text: 'Your other phones cannot be listed on this server yet. The key above still works.')
               else
                 FutureBuilder<DriverDevices>(
                   future: _future,
                   builder: (context, snap) {
                     if (snap.connectionState != ConnectionState.done) {
-                      return const Center(child: Padding(padding: EdgeInsets.all(Gap.l), child: CircularProgressIndicator()));
+                      return const Padding(
+                        key: Key('devices-loading'),
+                        padding: EdgeInsets.all(Gap.l),
+                        child: Column(children: [CircularProgressIndicator(), SizedBox(height: Gap.s), Text('Loading your keys…')]),
+                      );
                     }
                     if (snap.hasError) {
-                      return Column(children: [
-                        ErrorBanner(friendlyError(snap.error!, action: 'Loading your devices')),
-                        TextButton(key: const Key('devices-retry'), onPressed: _load, child: const Text('Try again')),
+                      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        ErrorBanner(friendlyError(snap.error!, action: 'Loading your keys')),
+                        FilledButton.tonalIcon(
+                          key: const Key('devices-retry'),
+                          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try again'),
+                        ),
                       ]);
                     }
                     return _Account(devices: snap.data!, onChanged: _load);
@@ -107,8 +144,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
               TextButton.icon(
                 key: const Key('devices-website'),
                 onPressed: () => s.openWebPage('/me/devices'),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text('View this page on the website'),
+                label: const Text('Open on the website'),
               ),
             ],
           ),
@@ -135,9 +173,11 @@ class _ThisPhone extends StatefulWidget {
 
 class _ThisPhoneState extends State<_ThisPhone> {
   bool _show = false;
+  int _left = 0;
   Timer? _timer;
   bool _busy = false;
   String? _msg;
+  bool _failed = false;
 
   @override
   void dispose() {
@@ -147,10 +187,19 @@ class _ThisPhoneState extends State<_ThisPhone> {
 
   void _toggle(bool on) {
     _timer?.cancel();
-    setState(() => _show = on);
+    setState(() {
+      _show = on;
+      _left = keyRevealFor.inSeconds;
+    });
     if (on) {
-      _timer = Timer(keyRevealFor, () {
-        if (mounted) setState(() => _show = false);
+      // Ticks once a second so the card can say how long the key stays on screen.
+      _timer = Timer.periodic(const Duration(seconds: 1), (tm) {
+        if (!mounted) return tm.cancel();
+        setState(() => _left--);
+        if (_left <= 0) {
+          tm.cancel();
+          setState(() => _show = false);
+        }
       });
     }
   }
@@ -159,8 +208,8 @@ class _ThisPhoneState extends State<_ThisPhone> {
     final ok = await confirmSettingsChange(context,
         dialogKey: 'rotate-key-dialog',
         title: 'Make a new key for this phone?',
-        body: 'This phone gets a new key and the old one stops working at once. Your drives stay and keep their history. '
-            'Anything else using the old key, such as the same key pasted into another phone, stops uploading until you paste the new one.',
+        body: 'The old key stops working at once. Your drives stay. '
+            'Another phone using the old key stops uploading until you paste the new one into it.',
         confirmLabel: 'Make a new key',
         destructive: true);
     if (!ok || !mounted) return;
@@ -173,6 +222,7 @@ class _ThisPhoneState extends State<_ThisPhone> {
     if (!mounted) return;
     setState(() {
       _busy = false;
+      _failed = err != null;
       _msg = err ?? 'Done. This phone now uses the new key.';
     });
     widget.onChanged();
@@ -185,6 +235,10 @@ class _ThisPhoneState extends State<_ThisPhone> {
     final t = Theme.of(context);
     if (!s.hasKey) return const SizedBox.shrink();
     final canRotate = s.accountAvailable;
+    final works = st.keyStatus == DriverKeyStatus.approved;
+    final bad = st.keyStatus == DriverKeyStatus.rejected || st.keyStatus == DriverKeyStatus.revoked;
+    final next = keyNextStep(st.keyStatus);
+    final statusColor = works ? t.colorScheme.primary : (bad ? t.colorScheme.error : t.colorScheme.onSurfaceVariant);
     return Card(
       key: const Key('devices-this-phone'),
       child: Padding(
@@ -192,7 +246,18 @@ class _ThisPhoneState extends State<_ThisPhone> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('This phone', style: t.textTheme.titleMedium),
           const SizedBox(height: Gap.xs),
-          Text('${statusWords(st.keyStatus)}${st.display == null ? '' : ' · shown as ${st.display}'}', key: const Key('devices-this-status')),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(works ? Icons.check_circle_outline : (bad ? Icons.error_outline : Icons.hourglass_empty), size: 20, color: statusColor),
+            const SizedBox(width: Gap.s),
+            Expanded(
+              child: Text('${statusWords(st.keyStatus)}${st.display == null ? '' : ' · shown as ${st.display}'}', key: const Key('devices-this-status')),
+            ),
+          ]),
+          if (next != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Gap.xs),
+              child: Text(next, key: const Key('devices-this-next'), style: t.textTheme.bodyMedium?.copyWith(color: bad ? t.colorScheme.error : null)),
+            ),
           const SizedBox(height: Gap.s),
           Row(children: [
             Expanded(
@@ -206,36 +271,44 @@ class _ThisPhoneState extends State<_ThisPhone> {
               icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
               onPressed: () => _toggle(!_show),
             ),
-            if (_show)
-              IconButton(
-                key: const Key('devices-key-copy'),
-                tooltip: 'Copy key',
-                icon: const Icon(Icons.copy_rounded),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: st.driverKey ?? ''));
-                  if (context.mounted) showAppToast(context, 'Key copied', kind: AppToastKind.success);
-                },
-              ),
+            // Always there: copying does not need the key on screen first (one tap, not two).
+            IconButton(
+              key: const Key('devices-key-copy'),
+              tooltip: 'Copy key',
+              icon: const Icon(Icons.copy_rounded),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: st.driverKey ?? ''));
+                if (context.mounted) showAppToast(context, 'Key copied', kind: AppToastKind.success);
+              },
+            ),
           ]),
-          Text('Hides itself after 30 seconds. Anyone with the key can upload drives as you.', style: t.textTheme.bodySmall),
+          Text(_show ? 'Hides in $_left s. Keep it private.' : 'Keep it private: anyone with the key can upload as you.',
+              key: const Key('devices-key-note'), style: t.textTheme.bodySmall),
           if (st.pendingDriverKey != null)
             Padding(
               padding: const EdgeInsets.only(top: Gap.s),
               child: Text('A key change is being checked with the server.', key: const Key('devices-pending'), style: t.textTheme.bodySmall),
             ),
-          if (_msg != null) Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(_msg!, key: const Key('devices-rotate-result'))),
+          if (_msg != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Gap.s),
+              child: Text(_msg!, key: const Key('devices-rotate-result'), style: TextStyle(color: _failed ? t.colorScheme.error : t.colorScheme.primary)),
+            ),
           const SizedBox(height: Gap.s),
-          OutlinedButton.icon(
-            key: const Key('devices-rotate'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
-            onPressed: (!canRotate || _busy || s.keyBusy) ? null : () => _rotate(s),
-            icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.autorenew),
-            label: const Text('Make a new key for this phone'),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('devices-rotate'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: (!canRotate || _busy || s.keyBusy) ? null : () => _rotate(s),
+              icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.autorenew),
+              label: const Text('Make a new key'),
+            ),
           ),
           if (!canRotate)
             Padding(
               padding: const EdgeInsets.only(top: Gap.xs),
-              child: Text('Needs a server that offers it and a confirmed key.', style: t.textTheme.bodySmall),
+              child: Text('Not available yet: this server has not confirmed the key.', key: const Key('devices-rotate-why'), style: t.textTheme.bodySmall),
             ),
         ]),
       ),
@@ -257,7 +330,7 @@ class _Account extends StatelessWidget {
       const SizedBox(height: Gap.xs),
       if (!devices.linked)
         Text(
-          'This key is not linked to a website account, so it is the only one listed. That is normal: MeshSonar needs no account.',
+          'Only this phone is listed: the key has no website account. That is fine.',
           key: const Key('devices-unlinked'),
           style: t.textTheme.bodyMedium,
         ),
@@ -266,37 +339,50 @@ class _Account extends StatelessWidget {
           key: const Key('devices-row-self'),
           leading: const Icon(Icons.smartphone),
           title: Text('${devices.driver.display} (this phone)'),
-          subtitle: Text('${statusWords(devices.driver.status)} · created ${_day(devices.driver.createdAt)} · last upload ${_day(devices.driver.lastSeenAt)}'
-              '${devices.driver.keyHint == null ? '' : ' · ends in ${devices.driver.keyHint}'}'),
+          subtitle: Text(keyLine(devices.driver.status, createdAt: devices.driver.createdAt, lastSeenAt: devices.driver.lastSeenAt, keyHint: devices.driver.keyHint)),
         ),
       ),
       for (final d in others) _OtherPhone(device: d),
       const SizedBox(height: Gap.l),
       Text('MeshMapper forwarding', style: t.textTheme.titleMedium),
       const SizedBox(height: Gap.xs),
-      Text(
-        'Drive with the MeshMapper app and have each batch also sent here: MeshMapper\'s Custom API Endpoint takes a link made from a forward key. '
-        'Those drives join the coverage map, marked as MeshMapper.',
-        style: t.textTheme.bodyMedium,
-      ),
+      Text('Send drives from the MeshMapper app here too.', key: const Key('devices-mm-intro'), style: t.textTheme.bodyMedium),
       const SizedBox(height: Gap.s),
       if (!devices.linked)
         const _Note(
             key: Key('devices-mm-needs-account'),
-            text: 'A forward key belongs to a website account, and this key has none. Sign in on the website with your email once, '
-                'and keys made in the app with that email can be linked to it.')
+            text: 'Needs a website account. Sign in on the website with your email once to link this key.')
       else if (devices.mmKeys.isEmpty)
-        const _Note(key: Key('devices-mm-none'), text: 'No forward key yet. Make one on the website; it then shows here.')
+        const _Note(key: Key('devices-mm-none'), text: 'No forward key yet. Make one on the website and it shows here.')
       else
         for (final k in devices.mmKeys) _MmKeyTile(k: k),
+      if (!devices.linked || devices.mmKeys.isEmpty)
+        _WebButton(key: const Key('devices-mm-website'), label: devices.linked ? 'Make a forward key on the website' : 'Sign in on the website'),
       if (devices.linked) ...[
         const SizedBox(height: Gap.l),
         Text('Your account', style: t.textTheme.titleMedium),
         const SizedBox(height: Gap.xs),
-        const _Note(key: Key('devices-profile'), text: 'The name on your drives and whether you are on the leaderboard are account settings. Change them on the website.'),
+        const _Note(key: Key('devices-profile'), text: 'Your public name and the leaderboard choice are changed on the website.'),
+        const _WebButton(key: Key('devices-profile-website'), label: 'Change on the website'),
       ],
     ]);
   }
+}
+
+/// Opens the website's devices page: the place for the things this page only describes (forward keys, name, leaderboard).
+class _WebButton extends StatelessWidget {
+  final String label;
+  const _WebButton({super.key, required this.label});
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: () => AppScope.read(context).openWebPage('/me/devices'),
+          icon: const Icon(Icons.open_in_new, size: 18),
+          label: Text(label),
+        ),
+      );
 }
 
 class _OtherPhone extends StatelessWidget {
@@ -308,8 +394,7 @@ class _OtherPhone extends StatelessWidget {
           key: ValueKey('devices-row-${device.id}'),
           leading: const Icon(Icons.phone_iphone_outlined),
           title: Text(device.display),
-          subtitle: Text('${statusWords(device.status)} · created ${_day(device.createdAt)} · last upload ${_day(device.lastSeenAt)}'
-              '${device.keyHint == null ? '' : ' · ends in ${device.keyHint}'}'),
+          subtitle: Text(keyLine(device.status, createdAt: device.createdAt, lastSeenAt: device.lastSeenAt, keyHint: device.keyHint)),
           trailing: device.status == DriverKeyStatus.approved && device.revealable ? _RevealButton(kind: 'driver', id: device.id, label: 'Driver key for ${device.display}') : null,
         ),
       );
@@ -323,9 +408,14 @@ class _MmKeyTile extends StatelessWidget {
         child: ListTile(
           key: ValueKey('devices-mm-${k.id}'),
           leading: const Icon(Icons.send_outlined),
-          title: Text('MeshMapper forward key${k.label == null ? '' : ': ${k.label}'}'),
-          subtitle: Text('${k.active ? 'Active' : 'Switched off ${_day(k.revokedAt)}'} · created ${_day(k.createdAt)} · last batch ${_day(k.lastBatchAt)} · '
-              '${k.items24h} items in 24 h, ${k.items} in all · ends in ${k.keyHint}'),
+          title: Text(k.label == null ? 'Forward key' : 'Forward key: ${k.label}'),
+          subtitle: Text([
+            k.active ? 'Works' : 'Switched off${k.revokedAt == null ? '' : ' ${_day(k.revokedAt!)}'}',
+            k.lastBatchAt == null ? 'nothing received yet' : 'last received ${_day(k.lastBatchAt!)}',
+            '${k.items24h} items in 24 h, ${k.items} in all',
+            if (k.createdAt != null) 'made ${_day(k.createdAt!)}',
+            'ends in ${k.keyHint}',
+          ].join(' · ')),
           isThreeLine: true,
           trailing: k.active && k.revealable ? _RevealButton(kind: 'mm', id: k.id, label: 'MeshMapper link') : null,
         ),
@@ -356,12 +446,12 @@ class _RevealButtonState extends State<_RevealButton> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (err != null || r == null || !r.revealable) {
-      showAppToast(context, err ?? 'This key was made before keys could be viewed, so it cannot be shown. Make a new key.', kind: AppToastKind.error);
+      showAppToast(context, err ?? 'This older key cannot be shown. Make a new key instead.', kind: AppToastKind.error);
       return;
     }
     await showAppSheet<void>(
       context,
-      detents: const [0.5],
+      detents: [MediaQuery.textScalerOf(context).scale(10) > 13 ? 0.92 : 0.5], // large text: the key, both buttons and the title need the room
       builder: (_, controller) => _RevealDialog(title: widget.label, revealed: r!, controller: controller),
     );
   }
@@ -369,7 +459,7 @@ class _RevealButtonState extends State<_RevealButton> {
   @override
   Widget build(BuildContext context) => IconButton(
         key: ValueKey('reveal-${widget.kind}-${widget.id}'),
-        tooltip: 'Show key',
+        tooltip: widget.kind == 'mm' ? 'Show the MeshMapper link' : 'Show key',
         onPressed: _busy ? null : _go,
         icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.visibility_outlined),
       );
@@ -386,11 +476,17 @@ class _RevealDialog extends StatefulWidget {
 
 class _RevealDialogState extends State<_RevealDialog> {
   Timer? _timer;
+  int _left = keyRevealFor.inSeconds;
   @override
   void initState() {
     super.initState();
-    _timer = Timer(keyRevealFor, () {
-      if (mounted) Navigator.of(context).maybePop();
+    _timer = Timer.periodic(const Duration(seconds: 1), (tm) {
+      if (!mounted) return tm.cancel();
+      setState(() => _left--);
+      if (_left <= 0) {
+        tm.cancel();
+        Navigator.of(context).maybePop();
+      }
     });
   }
 
@@ -403,25 +499,28 @@ class _RevealDialogState extends State<_RevealDialog> {
   @override
   Widget build(BuildContext context) {
     final r = widget.revealed;
-    final text = r.configLink ?? r.key!;
+    final text = r.configLink ?? r.key ?? '';
+    final small = Theme.of(context).textTheme.bodySmall;
     return AppSheetScaffold(
       key: const Key('reveal-dialog'),
       controller: widget.controller,
       title: widget.title,
-      primaryAction: FilledButton(key: const Key('reveal-close'), onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
-      secondaryAction: TextButton(
+      // Copy is what the person came for, so it is the big button; Close is the quiet one.
+      primaryAction: FilledButton.icon(
         key: const Key('reveal-copy'),
         onPressed: () async {
           await Clipboard.setData(ClipboardData(text: text));
           if (context.mounted) showAppToast(context, 'Copied', kind: AppToastKind.success);
         },
-        child: const Text('Copy'),
+        icon: const Icon(Icons.copy_rounded),
+        label: Text(r.configLink != null ? 'Copy link' : 'Copy key'),
       ),
+      secondaryAction: TextButton(key: const Key('reveal-close'), onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
       children: [
         SelectableText(text, key: const Key('reveal-text'), style: const TextStyle(fontFamily: 'monospace')),
         const SizedBox(height: Gap.s),
-        Text(r.configLink != null ? 'Copy the link, then paste it into MeshMapper\'s Custom API Endpoint. ' : '', style: Theme.of(context).textTheme.bodySmall),
-        Text('This closes by itself after 30 seconds.', style: Theme.of(context).textTheme.bodySmall),
+        if (r.configLink != null) Text('Paste it into MeshMapper > Custom API Endpoint.', key: const Key('reveal-how'), style: small),
+        Text('Closes in $_left s. Keep it private.', key: const Key('reveal-countdown'), style: small),
       ],
     );
   }
