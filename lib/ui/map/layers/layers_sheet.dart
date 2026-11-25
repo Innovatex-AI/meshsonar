@@ -193,6 +193,15 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
             if (_hasNames) ...[
               const _SectionLabel('Labels', key: Key('layers-group-labels')),
               ..._layer(context, layerSpec(kLabelsLayerId)!, st),
+              // The Drive map shows fewer names while a drive runs (build 76); this brings every name back.
+              if (drive != null)
+                AppSwitchTile(
+                  title: 'All names while driving',
+                  subtitle: 'Off: fewer names during a drive, so the road stays readable.',
+                  switchKey: const Key('layer-all-names-driving'),
+                  value: drive.allNamesWhileDriving,
+                  onChanged: repeatersOn(st) && st.isOn(kLabelsLayerId) ? (v) => drive.allNamesWhileDriving = v : null,
+                ),
             ],
             if (drive != null) ...[
               _SectionLabel(filterCount == 0 ? 'Filters' : 'Filters · $filterCount', key: const Key('layers-group-filters')),
@@ -444,7 +453,11 @@ class _BaseMapPicker extends StatelessWidget {
       key: const Key('layers-base-map'),
       padding: const EdgeInsets.symmetric(horizontal: Gap.l),
       // One row (build 76): four tiles fit an iPhone SE without wrapping to a second line; more scroll sideways.
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [SingleChildScrollView(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [LayoutBuilder(builder: (context, box) {
+        // Up to four tiles share the row's width (bigger targets on a bigger phone); more than four scroll sideways.
+        final n = model.availableBaseStyles.length;
+        final w = n <= 4 && box.maxWidth.isFinite ? ((box.maxWidth - (n - 1) * Gap.s) / n).clamp(72.0, 120.0) : 72.0;
+        return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,11 +474,11 @@ class _BaseMapPicker extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: () => model.setBaseStyle(s),
                   child: SizedBox(
-                    width: 72,
+                    width: w,
                     child: Column(
                       children: [
                         Container(
-                          width: 72,
+                          width: w,
                           height: 56,
                           decoration: BoxDecoration(
                             color: _tint(s, t.brightness),
@@ -479,7 +492,8 @@ class _BaseMapPicker extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(s.labelIn(ActiveMapDefinition.current), style: t.textTheme.labelMedium, maxLines: 1),
+                        // The chosen map's name is bold in the accent colour, so the choice reads without the tick too.
+                        Text(s.labelIn(ActiveMapDefinition.current), style: t.textTheme.labelMedium?.copyWith(fontWeight: s == sel ? FontWeight.w700 : null, color: s == sel ? t.colorScheme.primary : null), maxLines: 1),
                       ],
                     ),
                   ),
@@ -487,7 +501,8 @@ class _BaseMapPicker extends StatelessWidget {
               ),
             ),
         ],
-      )),
+      ));
+      }),
       if (satNote != null) Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(satNote, key: const Key('layers-base-map-note'), style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant))),
       ]),
     );

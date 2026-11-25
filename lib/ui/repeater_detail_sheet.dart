@@ -105,8 +105,9 @@ class RepeaterDetailSheet extends StatelessWidget {
       if (ref != null) ('Position', '${ref.lat.toStringAsFixed(5)}, ${ref.lon.toStringAsFixed(5)}'),
       if (distNow != null) ('Distance now', formatDistanceBearing(AppScope.unitsOf(context), distNow, brgNow)),
       ('Times heard', '${hs.length}'),
-      ('Last SNR', last?.snrDb == null ? '—' : formatSnrShort(last!.snrDb!)),
-      ('Best SNR', best == null ? '—' : formatSnrShort(best)),
+      // Not measured = left out (build 76; they were rows of dashes).
+      if (last?.snrDb != null) ('Last SNR', formatSnrShort(last!.snrDb!)),
+      if (best != null) ('Best SNR', formatSnrShort(best)),
       if (last != null) ('Last heard', '${formatTime(last.ts)}${last.hops == null ? '' : ' · ${hopsLabel(last.hops)}'}'),
       if (m.source != RepeaterSource.none) ('Listed by', m.source == RepeaterSource.cmat ? 'MeshSonar' : 'map.meshcore.io'),
     ];
@@ -130,6 +131,25 @@ class RepeaterDetailSheet extends StatelessWidget {
           const SizedBox(width: Gap.s),
           RepeaterIdChip(id),
         ]),
+        // The answer first (build 76): one line with how often, how well and how far, before the chart and the table.
+        Padding(
+          padding: const EdgeInsets.only(top: Gap.s),
+          child: Text(
+            [
+              'Heard ${hs.length} time${hs.length == 1 ? '' : 's'}',
+              if (best != null) 'best ${formatSnrShort(best)}',
+              if (distNow != null) formatDistanceBearing(AppScope.unitsOf(context), distNow, brgNow),
+            ].join('  ·  '),
+            key: const Key('repeater-detail-summary'),
+            style: t.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+        // What you can do with it sits here, not under two long sections at the very bottom.
+        if (ref != null)
+          NodeActionBar(
+            node: NodeRef.fromRepeaterRef(ref, name: repeaterTitle(m)),
+            onOpenPage: _regionPage(context, m),
+          ),
         const SizedBox(height: Gap.l),
         Text('SNR each time it was heard', style: t.textTheme.labelLarge),
         const SizedBox(height: Gap.s),
@@ -174,10 +194,6 @@ class RepeaterDetailSheet extends StatelessWidget {
         if (ref != null) ...[
           const SizedBox(height: Gap.l),
           RepeaterReachSection(repeaterKey: ref.key, lat: ref.lat, lon: ref.lon),
-          NodeActionBar(
-            node: NodeRef.fromRepeaterRef(ref, name: repeaterTitle(m)),
-            onOpenPage: _regionPage(context, m),
-          ),
         ],
       ],
     );

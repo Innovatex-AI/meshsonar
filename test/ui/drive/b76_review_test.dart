@@ -12,6 +12,7 @@ import 'package:meshsonar/ui/design/tokens.dart';
 import 'package:meshsonar/ui/drive/dock_strip.dart';
 import 'package:meshsonar/ui/drive/drive_controls.dart';
 import 'package:meshsonar/ui/drive_screen.dart';
+import 'package:meshsonar/ui/map/map_info_panel.dart';
 
 import '../fakes.dart';
 
@@ -148,5 +149,42 @@ void main() {
     expect(fixed, 1);
     await tester.tap(find.text('Open Settings'));
     expect(fixed, 2);
+  });
+
+  testWidgets('Stop: the sheet says how many pings, offers Stop and view report, and Keep driving keeps the drive', (tester) async {
+    final h = await pump(tester, const Size(375, 667), connect: true);
+    await h.state.startDrive();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(find.byKey(const Key('start-stop'))), const Size(116, 56), reason: 'Stop is the largest target of the live Dock');
+    await tester.tap(find.byKey(const Key('start-stop')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('stop-drive-dialog')), findsOneWidget);
+    expect(find.textContaining('No ping has been sent yet'), findsOneWidget);
+    expect(find.byKey(const Key('stop-drive-report')), findsNothing, reason: 'no report for an empty drive');
+    await tester.tap(find.byKey(const Key('stop-drive-keep')));
+    await tester.pumpAndSettle();
+    expect(h.state.driving, isTrue);
+    await h.state.stopDrive();
+    await end(tester);
+  });
+
+  testWidgets('inspector: the fit action is a full-width 48 pt button in the open panel', (tester) async {
+    var fit = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.bottomCenter,
+          child: MapInfoPanel(title: 'Otterbein Hill', summary: 'Heard in 3 cells', busy: false, body: const Text('BODY'), onFit: () => fit++, onClose: () {}),
+        ),
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('info-panel-header')));
+    await tester.pumpAndSettle();
+    final b = find.byKey(const Key('link-fit-button'));
+    expect(b, findsOneWidget);
+    expect(tester.getSize(b).height, greaterThanOrEqualTo(48));
+    expect(tester.getSize(b).width, greaterThan(250));
+    await tester.tap(b);
+    expect(fit, 1);
   });
 }

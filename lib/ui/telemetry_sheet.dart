@@ -45,6 +45,13 @@ class _CollectionSheet extends StatefulWidget {
 
 class _CollectionSheetState extends State<_CollectionSheet> {
   Map<String, bool>? _on;
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   Map<String, bool> _state(BuildContext context) {
     final s = AppScope.read(context);
@@ -87,18 +94,30 @@ class _CollectionSheetState extends State<_CollectionSheet> {
         );
     Widget block(DataCategory c) {
       final full = c.eraseFromServer != null; // shared off the phone today: every item listed here
-      return Padding(
-        padding: const EdgeInsets.only(top: Gap.m),
+      // Build 76 (layout only, every word unchanged): each category is its own card, and the whole title row flips its
+      // switch (it was the 51 pt switch alone).
+      return Container(
+        margin: const EdgeInsets.only(top: Gap.m),
+        padding: const EdgeInsets.fromLTRB(Gap.m, Gap.xs, Gap.m, Gap.m),
+        decoration: BoxDecoration(color: t.colorScheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(Corners.chip)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           MergeSemantics(
-            child: Row(children: [
-              Expanded(child: Text(c.title, style: t.textTheme.titleMedium)),
-              Switch(
-                key: Key('disclosure-switch-${c.id}'),
-                value: on[c.id] ?? true,
-                onChanged: (v) => setState(() => on[c.id] = v),
+            child: InkWell(
+              key: Key('disclosure-row-${c.id}'),
+              borderRadius: BorderRadius.circular(Corners.small),
+              onTap: () => setState(() => on[c.id] = !(on[c.id] ?? true)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Row(children: [
+                  Expanded(child: Text(c.title, style: t.textTheme.titleMedium)),
+                  Switch(
+                    key: Key('disclosure-switch-${c.id}'),
+                    value: on[c.id] ?? true,
+                    onChanged: (v) => setState(() => on[c.id] = v),
+                  ),
+                ]),
               ),
-            ]),
+            ),
           ),
           if (full) ...[
             Text(c.disclosureLead, style: t.textTheme.bodyMedium),
@@ -126,7 +145,12 @@ class _CollectionSheetState extends State<_CollectionSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Flexible(
-          child: SingleChildScrollView(
+          // A scrollbar that is always there says the text goes on below the fold (build 76).
+          child: Scrollbar(
+            controller: _scroll,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,21 +169,26 @@ class _CollectionSheetState extends State<_CollectionSheet> {
               ],
             ),
           ),
+          ),
         ),
+        // A line between the text and the two pinned choices, both 52 pt tall and equal in weight.
+        Divider(height: 1, color: t.colorScheme.outlineVariant),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
               FilledButton(
                 key: const Key('telemetry-keep'),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 onPressed: () => _choose(context, allOff: false),
                 child: const Text('Continue'),
               ),
               const SizedBox(height: Gap.s),
               OutlinedButton(
                 key: const Key('telemetry-off'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 onPressed: () => _choose(context, allOff: true),
                 child: const Text('Turn all off'),
               ),

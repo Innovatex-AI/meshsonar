@@ -99,8 +99,11 @@ class _RepeaterReachSectionState extends State<RepeaterReachSection> {
       body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Once your driver key is ready (Settings), you can see where all MeshSonar drivers heard this repeater.',
             key: const Key('reach-needs-key'), style: t.textTheme.bodyMedium),
-        TextButton.icon(
+        const SizedBox(height: Gap.s),
+        // A real 48 pt button (build 76; it was a text link).
+        FilledButton.tonalIcon(
           key: const Key('reach-open-key-settings'),
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DriverKeyScreen())),
           icon: const Icon(Icons.vpn_key_outlined),
           label: const Text('Open driver key settings'),
@@ -151,7 +154,7 @@ class _RepeaterReachSectionState extends State<RepeaterReachSection> {
               Icon(Icons.cloud_off, size: 16, color: t.colorScheme.onSurfaceVariant),
               const SizedBox(width: 6),
               Expanded(child: Text('${asOfLabel(res.fetchedAt, now, offline: true)}. Retry when back online.', style: muted)),
-              TextButton(key: const Key('reach-retry'), onPressed: () => setState(_ask), child: const Text('Retry')),
+              TextButton(key: const Key('reach-retry'), style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: () => setState(_ask), child: const Text('Retry')),
             ]),
           )
         : const SizedBox.shrink();

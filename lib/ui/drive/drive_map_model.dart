@@ -343,6 +343,16 @@ class DriveMapModel extends ChangeNotifier implements MapLayersModel {
   set repeatersAll(bool all) => layerState = withRepeaterScope(_layerState, all: all);
 
   /// How the Pings and Your-coverage layers colour (By SNR / Heard).
+  /// While a drive runs the map shows about a third of the repeater names (build 76); this is the person's "show them all"
+  /// for this session (Layers > Labels). Not saved: every launch starts with the readable map.
+  bool get allNamesWhileDriving => _allNamesWhileDriving;
+  bool _allNamesWhileDriving = false;
+  set allNamesWhileDriving(bool v) {
+    if (v == _allNamesWhileDriving) return;
+    _allNamesWhileDriving = v;
+    notifyListeners();
+  }
+
   @override
   PingColorMode get pingColors => pingColorModeOf(_layerState);
   @override

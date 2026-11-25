@@ -99,7 +99,7 @@ class ObserverSheet extends StatelessWidget {
                 Icon(Icons.change_history_rounded, color: o.online ? t.colorScheme.primary : mc.silent),
                 const SizedBox(width: Gap.s),
                 Expanded(
-                  child: Text(o.displayName, key: const Key('observer-sheet-name'), style: t.textTheme.titleLarge, overflow: TextOverflow.ellipsis),
+                  child: Text(o.displayName, key: const Key('observer-sheet-name'), style: t.textTheme.titleLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
@@ -109,13 +109,16 @@ class ObserverSheet extends StatelessWidget {
               key: const Key('observer-sheet-online'),
               style: t.textTheme.bodyMedium?.copyWith(color: o.online ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
             ),
+            // Actions right under the name (build 76).
+            NodeActionBar(node: nodeRefOfObserver(o)),
             const SizedBox(height: Gap.s),
             stat('Last seen', agoText(o.lastSeen, now: ctx.clock()), key: const Key('observer-sheet-seen')),
             if (o.noiseFloorDbm != null) stat('Noise floor', '${o.noiseFloorDbm!.round()} dBm', key: const Key('observer-sheet-noise')),
             if (o.packetsPerHour != null) stat('Packets per hour', groupInt(o.packetsPerHour!)),
             if (o.nodesHeard24h != null) stat('Nodes heard (24 h)', groupInt(o.nodesHeard24h!)),
             if (model.isNotEmpty) stat('Radio', model),
-            if (o.batteryMv != null) stat('Battery (reported)', '${o.batteryMv} mV'),
+            // Volts, as a battery is read (build 76; it was "4012 mV").
+            if (o.batteryMv != null) stat('Battery', '${(o.batteryMv! / 1000).toStringAsFixed(2)} V'),
             stat(
               'Distance from you',
               distance == null ? 'No position fix' : units.distance(distance, approx: true),
@@ -128,7 +131,6 @@ class ObserverSheet extends StatelessWidget {
               key: const Key('observer-sheet-source'),
               style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
-            NodeActionBar(node: nodeRefOfObserver(o)),
           ],
         ),
       ),

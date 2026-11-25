@@ -56,7 +56,20 @@ class ImmersivePill extends StatelessWidget {
               key: const Key('pill-nub'),
               behavior: HitTestBehavior.opaque,
               onTap: () => controller.settleTo(PanelDetent.dock),
-              child: SizedBox(width: 64, height: 24, child: Center(child: Container(width: 36, height: 5, decoration: BoxDecoration(color: c.textMuted.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(3))))),
+              // A visible "bring the controls back" chevron on its own chip, 72 x 36 to hit (build 76; it was a faint 36 x 5 bar
+              // that vanished on a busy map).
+              child: SizedBox(
+                width: 72,
+                height: 36,
+                child: Center(
+                  child: Container(
+                    width: 48,
+                    height: 24,
+                    decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: c.outline)),
+                    child: Icon(Icons.keyboard_arrow_up_rounded, size: 22, color: c.textPrimary),
+                  ),
+                ),
+              ),
             ),
             Semantics(
               button: true,

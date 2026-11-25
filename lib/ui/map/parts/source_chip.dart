@@ -53,17 +53,18 @@ class SourceChipState extends State<SourceChip> {
     final mc = MeshSonarColors.of(context);
     final (icon, text, color) = switch (_source) {
       MapSource.online => (Icons.cloud_done_outlined, 'Online map', mc.textMuted),
-      MapSource.cachedOffline => (Icons.sd_storage_outlined, 'Saved map (no signal)', mc.beacon),
-      MapSource.none => (Icons.cloud_off_rounded, 'No map here (no signal)', mc.beacon),
+      // Build 76: plain words, and the saved map (which works) is not drawn in the warning colour.
+      MapSource.cachedOffline => (Icons.sd_storage_outlined, 'Offline: saved map', mc.textMuted),
+      MapSource.none => (Icons.cloud_off_rounded, 'Offline: no map here', mc.beacon),
     };
     return MapPill(
       key: _source == MapSource.cachedOffline || _source == MapSource.none ? const Key('map-offline') : const Key('map-source'),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
-          Flexible(child: Text(text, overflow: TextOverflow.ellipsis, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 5),
+          Flexible(child: Text(text, overflow: TextOverflow.ellipsis, style: t.textTheme.labelSmall?.copyWith(fontSize: 12.5, fontWeight: FontWeight.w600))),
         ],
       ),
     );

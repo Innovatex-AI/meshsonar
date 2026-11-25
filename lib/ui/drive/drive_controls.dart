@@ -27,10 +27,34 @@ Future<void> openFinishedDriveReport(BuildContext context, String sessionId) => 
 
 /// Asks "Stop this drive?" and, on confirm, stops it. The Start/Stop button and the mini bar both go through here.
 Future<bool> confirmAndStopDrive(BuildContext context, AppState s) async {
-  if (!await confirmStopDrive(context, pings: s.pingCount)) return false;
-  unawaited(s.stopDrive());
+  // Build 76: "Stop and view report" does in one tap what took three (Stop, confirm, then find View report).
+  final v = await showAppActionSheet<String>(
+    context,
+    title: 'Stop this drive?',
+    message: _stopMessage(s.pingCount),
+    actions: [
+      const AppAction<String>('Stop drive', 'stop', destructive: true, key: Key('stop-drive-confirm')),
+      if (s.pingCount > 0) const AppAction<String>('Stop and view report', 'report', destructive: true, key: Key('stop-drive-report')),
+    ],
+    cancelLabel: 'Keep driving',
+    cancelKey: const Key('stop-drive-keep'),
+    sheetKey: const Key('stop-drive-dialog'),
+  );
+  if (v == null) return false;
+  if (v != 'report') {
+    unawaited(s.stopDrive());
+    return true;
+  }
+  await s.stopDrive();
+  final id = s.lastFinishedSessionId;
+  if (id != null && context.mounted) unawaited(openFinishedDriveReport(context, id));
   return true;
 }
+
+String _stopMessage(int? pings) => pings == null
+    ? 'It is saved on this phone.'
+    // A drive stopped before its first ping is empty: say so before the tap, not after.
+    : (pings == 0 ? 'No ping has been sent yet, so this drive will be empty.' : '$pings ${pings == 1 ? 'ping' : 'pings'} so far. The drive is saved on this phone.');
 
 /// "Stop this drive?" so a bump in the car can't end a drive. An iOS action sheet: the red Stop drive row, then a
 /// separate Keep driving (cancel). Returns true to stop; dismissing the sheet keeps driving.
@@ -39,7 +63,7 @@ Future<bool> confirmStopDrive(BuildContext context, {int? pings}) async {
     context,
     title: 'Stop this drive?',
     // One short line that says what is kept (build 76; two sentences nobody read in a moving car).
-    message: pings == null ? 'It is saved on this phone.' : '$pings ${pings == 1 ? 'ping' : 'pings'} so far. The drive is saved on this phone.',
+    message: _stopMessage(pings),
     actions: const [AppAction<bool>('Stop drive', true, destructive: true, key: Key('stop-drive-confirm'))],
     cancelLabel: 'Keep driving',
     cancelKey: const Key('stop-drive-keep'),

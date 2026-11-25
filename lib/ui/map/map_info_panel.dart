@@ -71,6 +71,18 @@ class MapInfoPanel extends StatelessWidget {
         children: [
           // The header's one line in full.
           Padding(padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs), child: Text(summary, style: dim)),
+          // The one thing to do here as a full-width 48 pt button (build 76; it was only the small icon in the header).
+          if (onFit != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Gap.l, Gap.xs, Gap.l, Gap.s),
+              child: FilledButton.tonalIcon(
+                key: const Key('link-fit-button'),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: onFit,
+                icon: const Icon(Icons.fit_screen_rounded, size: 20),
+                label: const Text('Show all links on the map'),
+              ),
+            ),
           Flexible(child: body),
         ],
       ),
@@ -93,7 +105,7 @@ class RepeaterReachStats extends StatelessWidget {
     final t = Theme.of(context);
     final tot = totals;
     Widget row(String label, String value) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
           Expanded(child: Text(label, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant))),
@@ -118,9 +130,11 @@ class RepeaterReachStats extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Heard by MeshSonar drivers', style: t.textTheme.titleSmall),
-          row('Cells heard in', '$cells'),
+          row('Cells', '$cells'),
           row('Pings heard', '${tot.heardPings}'),
-          row('Drives / drivers', '${tot.drives} / ${tot.drivers}'),
+          // Two plain rows (build 76; "Drives / drivers  3 / 2" took a second read).
+          row('Drives', '${tot.drives}'),
+          row('Drivers', '${tot.drivers}'),
           row('Best SNR', tot.bestSnr == null ? '-' : '${formatSnrShort(tot.bestSnr!)} dB'),
           row('Median SNR', tot.medianSnr == null ? '-' : '${formatSnrShort(tot.medianSnr!)} dB'),
           if (tot.farthestKm != null) row('Farthest heard', distance(tot.farthestKm!)),

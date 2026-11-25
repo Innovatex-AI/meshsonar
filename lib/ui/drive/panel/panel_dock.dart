@@ -187,8 +187,8 @@ class _StartStopButton extends StatelessWidget {
     final stopBg = dark ? const Color(0xFFFF8A80) : t.colorScheme.error;
     final stopFg = dark ? const Color(0xFF2A0A08) : t.colorScheme.onError;
     return SizedBox(
-      width: fullWidth ? double.infinity : (driving ? 104 : 148),
-      height: fullWidth ? 56 : 52,
+      width: fullWidth ? double.infinity : (driving ? 116 : 148),
+      height: fullWidth || driving ? 56 : 52,
       child: FilledButton(
         key: const Key('start-stop'),
         style: FilledButton.styleFrom(
@@ -284,7 +284,11 @@ class _ConnectingDock extends StatelessWidget {
         onTap: _cancel,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48, minWidth: 72),
-          child: Center(child: Text('Cancel', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.accent))),
+          // Looks like the button it is (build 76; it was bare accent text).
+          child: DecoratedBox(
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: c.outline, width: 1.5)),
+            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Center(widthFactor: 1, child: Text('Cancel', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.accent)))),
+          ),
         ),
       ),
     );
@@ -294,7 +298,7 @@ class _ConnectingDock extends StatelessWidget {
         SizedBox(height: 56, child: cancel),
       ]);
     }
-    return Row(children: [Expanded(child: text), const MeshTrackDockButton(), const SizedBox(width: 4), cancel]);
+    return Row(children: [Expanded(child: text), const MeshTrackDockButton(), const SizedBox(width: 8), cancel]);
   }
 }
 
@@ -317,7 +321,7 @@ class _FinishedDock extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Drive saved', key: Key('status-line'), maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          const FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text('Drive saved', key: Key('status-line'), maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600))),
           const SizedBox(height: 2),
           Text(total == 0 ? 'No pings this drive' : '$total ${total == 1 ? 'ping' : 'pings'}, $heard heard', key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
         ],
@@ -327,9 +331,9 @@ class _FinishedDock extends StatelessWidget {
       return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         SizedBox(height: 64, child: Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: text)), const MeshTrackDockButton()])),
         Row(children: [
-          Expanded(child: SizedBox(height: 56, child: OutlinedButton(key: const Key('view-report'), onPressed: () => openFinishedDriveReport(context, sessionId), child: const Text('Report', maxLines: 1)))),
+          Expanded(child: SizedBox(height: 56, child: OutlinedButton(key: const Key('view-report'), onPressed: () => openFinishedDriveReport(context, sessionId), child: const Text('View report', maxLines: 1)))),
           const SizedBox(width: 8),
-          Expanded(child: SizedBox(height: 56, child: FilledButton(key: const Key('start-stop'), onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context), child: Text(s.connected ? 'Start new' : 'Connect radio', maxLines: 1)))),
+          Expanded(child: SizedBox(height: 56, child: FilledButton(key: const Key('start-stop'), onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context), child: Text(s.connected ? 'New drive' : 'Connect radio', maxLines: 1)))),
         ]),
       ]);
     }
@@ -337,26 +341,28 @@ class _FinishedDock extends StatelessWidget {
       children: [
         // With the MeshTrack button the row is full on an iPhone SE: the two buttons shrink their labels before the
         // summary gives way (flex 3 : 2 : 3), so nothing overflows at any width.
+        // Build 76: the two buttons say what they do ("View report", "New drive"; they were "Report" and "Start new") and
+        // are the same width, 52 pt tall.
         Expanded(flex: 3, child: text),
         const MeshTrackDockButton(),
         const SizedBox(width: 8),
-        Flexible(flex: 2, child: SizedBox(
-          height: 48,
+        Flexible(flex: 3, child: SizedBox(
+          height: 52,
           child: OutlinedButton(
             key: const Key('view-report'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48), padding: const EdgeInsets.symmetric(horizontal: 10)),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 8)),
             onPressed: () => openFinishedDriveReport(context, sessionId),
-            child: const FittedBox(fit: BoxFit.scaleDown, child: Text('Report', maxLines: 1)),
+            child: const FittedBox(fit: BoxFit.scaleDown, child: Text('View report', maxLines: 1)),
           ),
         )),
         const SizedBox(width: 8),
         Flexible(flex: 3, child: SizedBox(
-          height: 48,
+          height: 52,
           child: FilledButton(
             key: const Key('start-stop'),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 48), padding: const EdgeInsets.symmetric(horizontal: 12)),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 8)),
             onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context),
-            child: FittedBox(fit: BoxFit.scaleDown, child: Text(s.connected ? 'Start new' : 'Connect radio', maxLines: 1)),
+            child: FittedBox(fit: BoxFit.scaleDown, child: Text(s.connected ? 'New drive' : 'Connect radio', maxLines: 1)),
           ),
         )),
       ],
@@ -399,7 +405,8 @@ class _DrivingDock extends StatelessWidget {
           PingCircle(state: s, debounce: debounce, onPing: onPing),
         ],
         const MeshTrackDockButton(),
-        const SizedBox(width: 8),
+        // Stop is the largest target in the row (116 x 56, build 76; it was 104 x 52) and stands 14 pt clear of its neighbour.
+        const SizedBox(width: 14),
         _StartStopButton(state: s, busy: s.busy),
       ],
     );
@@ -430,7 +437,7 @@ class _DockHeroState extends State<DockHero> with DriveClock {
         child: Semantics(
           label: 'Listening, no ping yet',
           excludeSemantics: true,
-          child: Text('Listening', key: const Key('dock-hero-listening'), maxLines: 1, style: TextStyle(fontSize: 15, color: c.textMuted)),
+          child: Text('Listening', key: const Key('dock-hero-listening'), maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
         ),
       );
     }
@@ -445,14 +452,19 @@ class _DockHeroState extends State<DockHero> with DriveClock {
         label: none ? 'No repeater heard the last ping, $ago ago' : '$n ${n == 1 ? 'repeater' : 'repeaters'} heard the last ping, $ago ago',
         value: s.heardPercent == null ? null : '${s.heardCount} of ${s.pingCount} pings heard',
         excludeSemantics: true,
-        child: Column(
+        // The bigger figures scale down as one block on a narrow or large-text Dock, never overflow.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('$n', key: const Key('dock-hero'), style: TextStyle(fontSize: 34, height: 1.0, fontWeight: FontWeight.w600, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
+                Text('$n', key: const Key('dock-hero'), style: TextStyle(fontSize: 38, height: 1.0, fontWeight: FontWeight.w600, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
                 if (streak >= 5) ...[const SizedBox(width: 4), Icon(Icons.warning_amber_rounded, key: const Key('dock-hero-streak'), size: 18, color: c.warning)],
               ],
             ),
@@ -460,9 +472,10 @@ class _DockHeroState extends State<DockHero> with DriveClock {
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(none ? 'No echo · $ago' : 'heard · $ago', key: const Key('dock-hero-caption'), maxLines: 1, style: TextStyle(fontSize: 12, color: none ? c.warning : c.textMuted)),
+              child: Text(none ? 'No echo · $ago' : 'heard · $ago', key: const Key('dock-hero-caption'), maxLines: 1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: none ? c.warning : c.textPrimary)),
             ),
           ],
+        ),
         ),
       ),
     );

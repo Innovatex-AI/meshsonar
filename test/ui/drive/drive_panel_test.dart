@@ -116,7 +116,7 @@ void main() {
       expect(r.width, greaterThanOrEqualTo(48), reason: k);
     }
     expect(tester.getSize(find.byKey(const Key('ping-now'))), const Size(64, 64));
-    expect(tester.getSize(find.byKey(const Key('start-stop'))), const Size(104, 52));
+    expect(tester.getSize(find.byKey(const Key('start-stop'))), const Size(116, 56));
 
     // A tap on Ping does not toggle the panel.
     await tester.tap(find.byKey(const Key('ping-now')));
@@ -267,7 +267,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Drive saved'), findsOneWidget);
       expect(find.byKey(const Key('view-report')), findsOneWidget);
-      expect(find.text('Start new'), findsOneWidget);
+      expect(find.text('New drive'), findsOneWidget);
+      expect(find.text('View report'), findsOneWidget);
       await tester.pump(const Duration(seconds: 25));
     });
   });

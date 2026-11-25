@@ -482,6 +482,8 @@ class _MapPane extends StatelessWidget {
           mapKey: MapKey(model: model),
           regionBorders: model.regionBorders,
           takesFocusRequests: true,
+          // While a drive runs the map shows about a third of the repeater names (heard and nearest first).
+          fewerNames: s.driving && !model.allNamesWhileDriving,
           // MeshTrack: friends' pins, trails, the meet-up point and my last sent position (additive, above the other layers).
           extraLayers: [if (model.friendsOn) ...friendsLayerWidgets(s.meshTrack!)],
           // Long-press with a group: "Meet here" (the only long-press on the Drive map).

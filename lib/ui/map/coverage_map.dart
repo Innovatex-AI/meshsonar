@@ -351,6 +351,10 @@ class CoverageMap extends StatefulWidget {
   /// This is the main map (the Drive tab's): it answers "Open the map here" from previews (main_map_focus.dart).
   final bool takesFocusRequests;
 
+  /// A drive is running on this map (the Drive tab's): repeater names use the smaller driving budget so the road reads at a
+  /// glance. The Names switch in Layers still turns them all off or back on.
+  final bool fewerNames;
+
   /// "What do the colours mean?" in the Credits sheet. Null = no button.
   final VoidCallback? openLegend;
 
@@ -457,6 +461,7 @@ class CoverageMap extends StatefulWidget {
     this.regionBorders = const [],
     this.legend,
     this.takesFocusRequests = false,
+    this.fewerNames = false,
     this.openLegend,
     this.viewController,
     this.banner,
@@ -2243,6 +2248,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 listenable: Listenable.merge([?rosterSource, ?networkSource]),
                 builder: (context, _) => RepeaterNameLabels(
                   showNames: layerState.isOn(kLabelsLayerId),
+                  fewer: widget.fewerNames,
                   badges: _badgesFor(rosterSource, networkSource, layerState.isOn('heard'), latest?.id, legacyLit),
                   sources: [
                     if (rosterSource != null) (rosterSource, kRosterLayerId),
@@ -2405,7 +2411,7 @@ class _CoverageMapState extends State<CoverageMap> {
                       children: [
                         Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
                         const SizedBox(width: 4),
-                        Flexible(child: Text('No connection. The map shows only places you have looked at before.', overflow: TextOverflow.ellipsis, maxLines: 2, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
+                        Flexible(child: Text('No connection. Only places you have already seen are drawn.', overflow: TextOverflow.ellipsis, maxLines: 2, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
                       ],
                     ),
                   ),

@@ -213,7 +213,7 @@ void main() {
       await tester.tap(find.byWidgetPredicate((w) => w is DropdownMenuItem<String?> && w.value == 'a1').last);
       await settleLive(tester);
       expect(find.text('Showing 1 of 2 of your pings, 0 of 0 network cells.'), findsOneWidget);
-      expect(find.textContaining('Network cells list no repeaters'), findsOneWidget);
+      expect(find.textContaining('Network cells are hidden while one is picked'), findsOneWidget);
       await stop(tester, h);
     });
   });

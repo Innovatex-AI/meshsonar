@@ -154,12 +154,22 @@ class RepeaterSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: Gap.s),
                 Expanded(
-                  child: Text(p.name, key: const Key('repeater-sheet-name'), style: t.textTheme.titleLarge, overflow: TextOverflow.ellipsis),
+                  child: Text(p.name, key: const Key('repeater-sheet-name'), style: t.textTheme.titleLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
             const SizedBox(height: Gap.xs),
             Text(roleText(p.isRoom), key: const Key('repeater-sheet-role'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            // What you can do with it comes right under its name (build 76; it was below every figure, off screen on an SE).
+            NodeActionBar(
+              node: nodeRefOfPoint(p),
+              onOpenPage: open != null && p.region != null
+                  ? () {
+                      if (dismissOnOpen) Navigator.of(context).pop();
+                      open(context, p);
+                    }
+                  : null,
+            ),
             const SizedBox(height: Gap.s),
             _KeyRow(keyHex: p.key),
             const SizedBox(height: Gap.xs),
@@ -175,19 +185,10 @@ class RepeaterSheet extends StatelessWidget {
               if (r.signalGrade != null) stat('Signal grade', r.signalGrade!),
               if (r.adverts24h != null) stat('Adverts (24 h)', '${r.adverts24h}'),
               if (r.neighbours != null) stat('Neighbours', '${r.neighbours}'),
-              stat('Hash prefix', r.hashPrefix.toUpperCase() + (r.ambiguous ? ' (shared)' : '')),
+              stat('Short ID', r.hashPrefix.toUpperCase() + (r.ambiguous ? ' (shared)' : '')),
             ],
             const SizedBox(height: Gap.s),
             Text(sourceText(p), key: const Key('repeater-sheet-source'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            NodeActionBar(
-              node: nodeRefOfPoint(p),
-              onOpenPage: open != null && p.region != null
-                  ? () {
-                      if (dismissOnOpen) Navigator.of(context).pop();
-                      open(context, p);
-                    }
-                  : null,
-            ),
           ],
         ),
       ),
@@ -253,7 +254,10 @@ class RepeaterListSheet extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
-          child: Text('${points.length} repeaters at this spot', style: t.textTheme.titleLarge),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${points.length} repeaters at this spot', style: t.textTheme.titleLarge),
+            Text('Tap one for its details.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          ]),
         ),
         Flexible(
           child: ListView(
@@ -263,7 +267,10 @@ class RepeaterListSheet extends StatelessWidget {
                 ListTile(
                   key: ValueKey('repeater-list-${p.key}'),
                   leading: Icon(p.isRoom ? Icons.meeting_room_outlined : Icons.cell_tower, color: _dotColor(context, p)),
-                  title: Text(p.name),
+                  minTileHeight: 56,
+                  title: Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  // A row that opens something shows a chevron (build 76).
+                  trailing: const Icon(Icons.chevron_right_rounded),
                   subtitle: Text('${roleText(p.isRoom)} · ${p.key.substring(0, p.key.length >= 8 ? 8 : p.key.length)}'),
                   onTap: () => onPick(p),
                 ),

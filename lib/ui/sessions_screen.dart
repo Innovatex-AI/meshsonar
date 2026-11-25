@@ -347,11 +347,12 @@ class _SessionCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      [if (label != null) formatDateTime(ses.startedAt), if (ses.channel != null) ses.channel!].join(' · '),
-                      style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant),
-                    ),
+                    // Build 76: the second line is the date of a named drive, nothing else. The channel ("#wardriving" on every
+                    // card) is on the drive's own page, so an unnamed drive's card is one line shorter.
+                    if (label != null) ...[
+                      const SizedBox(height: 2),
+                      Text(formatDateTime(ses.startedAt), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+                    ],
                   ]),
                 ),
                 if (active)
