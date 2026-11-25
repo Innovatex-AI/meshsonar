@@ -2,8 +2,6 @@
 // sitting directly above the map's persistent panel. It opens COLLAPSED to its header (what was tapped and what the link
 // lines found) so the map stays the focus, and the person opens it for the figures. Fit and Close live in its header.
 // It stays as the person left it until they close it or tap something else: the car moving never locks it (build 76).
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../core/map_links.dart';
@@ -13,7 +11,7 @@ import '../theme.dart';
 import 'cell_sheet.dart' show lastSeenText;
 import 'map_layers.dart' show formatSnrShort;
 
-class MapInfoPanel extends StatefulWidget {
+class MapInfoPanel extends StatelessWidget {
   final String title;
 
   /// One line under the title: the link result, "Finding links…", or the failure.
@@ -26,13 +24,6 @@ class MapInfoPanel extends StatefulWidget {
   /// A small marker next to the title (the "Owned by you" chip), shown even while the panel is collapsed.
   final Widget? badge;
 
-  /// Ignored since build 76 (the "Open when stopped" lock is gone: the panel always opens when the person taps it). The
-  /// argument stays only until its last caller, coverage_map.dart, stops passing it.
-  final bool locked;
-
-  /// Clears itself this long after the last touch; null = stays until closed. Nothing in the app passes it since build 76.
-  final Duration? autoClear;
-
   /// False when the panel sits on top of another panel that already clears the tab bar and the home indicator.
   final bool bottomSafe;
   const MapInfoPanel({
@@ -44,72 +35,33 @@ class MapInfoPanel extends StatefulWidget {
     required this.onClose,
     this.onFit,
     this.badge,
-    this.locked = false,
-    this.autoClear,
     this.bottomSafe = true,
   });
 
   @override
-  State<MapInfoPanel> createState() => _MapInfoPanelState();
-}
-
-class _MapInfoPanelState extends State<MapInfoPanel> {
-  Timer? _clear;
-
-  @override
-  void initState() {
-    super.initState();
-    _arm();
-  }
-
-  @override
-  void didUpdateWidget(MapInfoPanel old) {
-    super.didUpdateWidget(old);
-    if (old.autoClear != widget.autoClear) _arm();
-  }
-
-  void _arm() {
-    _clear?.cancel();
-    final d = widget.autoClear;
-    _clear = d == null ? null : Timer(d, () {
-      if (mounted) widget.onClose();
-    });
-  }
-
-  @override
-  void dispose() {
-    _clear?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Listener(behavior: HitTestBehavior.translucent, onPointerDown: (_) => _arm(), child: _panel(context));
-  }
-
-  Widget _panel(BuildContext context) {
     final t = Theme.of(context);
     final dim = t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant);
     return MapPanel(
       id: kInspectPanelId,
-      title: widget.title,
-      badge: widget.badge,
-      leading: widget.busy
+      title: title,
+      badge: badge,
+      leading: busy
           ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
           : Icon(Icons.share_location_rounded, size: 18, color: MeshSonarColors.of(context).linkLine),
-      status: Text(widget.summary, key: const Key('info-panel-summary')),
-      action: widget.onFit == null
+      status: Text(summary, key: const Key('info-panel-summary')),
+      action: onFit == null
           ? null
           : IconButton(
               key: const Key('link-fit'),
               tooltip: 'Show all links',
               constraints: const BoxConstraints(minWidth: kMapPanelRow, minHeight: kMapPanelRow),
               icon: const Icon(Icons.fit_screen_rounded, size: 20),
-              onPressed: widget.onFit,
+              onPressed: onFit,
             ),
-      onClose: widget.onClose,
+      onClose: onClose,
       initialState: MapPanelState.collapsed,
-      bottomSafe: widget.bottomSafe,
+      bottomSafe: bottomSafe,
       headerKey: const Key('info-panel-header'),
       bodyKey: const Key('info-panel-body'),
       closeKey: const Key('link-clear'),
@@ -118,8 +70,8 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // The header's one line in full.
-          Padding(padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs), child: Text(widget.summary, style: dim)),
-          Flexible(child: widget.body),
+          Padding(padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs), child: Text(summary, style: dim)),
+          Flexible(child: body),
         ],
       ),
     );

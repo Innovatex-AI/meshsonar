@@ -22,9 +22,8 @@ void main() {
     expect(closed, 0);
   });
 
-  testWidgets('nothing locks the inspector: it opens on a tap whatever the caller passes, and never says "Open when stopped"', (tester) async {
-    // `locked` is still accepted (coverage_map.dart passes it) and ignored.
-    await tester.pumpWidget(host(MapInfoPanel(title: 'Otterbein Hill', summary: 's', busy: false, body: const Text('BODY'), onClose: () {}, locked: true)));
+  testWidgets('nothing locks the inspector: it opens on a tap and never says "Open when stopped"', (tester) async {
+    await tester.pumpWidget(host(MapInfoPanel(title: 'Otterbein Hill', summary: 's', busy: false, body: const Text('BODY'), onClose: () {})));
     expect(find.text('Open when stopped'), findsNothing);
     expect(find.byKey(const Key('info-panel-summary')), findsOneWidget);
     await tester.tap(find.byKey(const Key('info-panel-header')));
@@ -32,17 +31,6 @@ void main() {
     expect(find.text('BODY'), findsOneWidget);
     // Close stays a 48 pt target.
     expect(tester.getSize(find.byKey(const Key('link-clear'))).height, greaterThanOrEqualTo(48));
-  });
-
-  testWidgets('autoClear (no caller in the app since build 76): clears 12 s after the last touch; a touch resets the timer', (tester) async {
-    var closed = 0;
-    await tester.pumpWidget(host(MapInfoPanel(title: 't', summary: 's', busy: false, body: const Text('B'), onClose: () => closed++, autoClear: const Duration(seconds: 12))));
-    await tester.pump(const Duration(seconds: 8));
-    await tester.tap(find.byKey(const Key('info-panel-header')));
-    await tester.pump(const Duration(seconds: 8));
-    expect(closed, 0, reason: 'the touch at 8 s restarted the 12 s');
-    await tester.pump(const Duration(seconds: 5));
-    expect(closed, 1);
   });
 
   test('nearestRepeaters: nearest first, only placed repeaters and rooms, three at most', () {
