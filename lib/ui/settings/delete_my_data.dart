@@ -1,4 +1,4 @@
-// Settings > Privacy & data sharing > Delete my collected data (stream 7 WP5). One clearly worded action for the server
+// Settings > Sharing & privacy > Delete my collected data (stream 7 WP5). One clearly worded action for the server
 // ("Delete my data on the server": all drive context through `DELETE drive-context?category=all`, and the packet
 // headers this phone shared) and, separately and never by default, one for the context saved on this phone. The
 // drives themselves (ping positions and signal) are not touched here.
@@ -23,7 +23,7 @@ const String deleteMyDataLead =
     'pressure, altitude and direction, phone and radio readings, phone and app details, the weather lookup for your '
     'drives) and the observer packets this phone shared (with the positions they were shared with). Your drives themselves (where each ping was sent and what '
     'it heard) are not touched here: delete a drive from its own screen. Collection continues as the switches in '
-    'Privacy & data sharing say; turn a switch off to stop it.';
+    'Sharing & privacy say; turn a switch off to stop it.';
 
 /// Account deletion (App Store guideline 5.1.1(v)) from inside the app: `DELETE driver-delete` removes this driver key and
 /// everything tied to it on the server. A website account linked to the key (if you made one) is separate and is deleted
@@ -278,7 +278,7 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
     final String? serverWhyNot = !s.hasKey
         ? 'This phone has no driver key, so there is nothing of yours on the server to delete.'
         : (caps != null && !caps.driveContextErase)
-        ? '$serverCannotEraseText Observer packets can still be erased with "Erase shared observer packets" in Privacy & data sharing.'
+        ? '$serverCannotEraseText Observer packets can still be erased with "Erase shared observer packets" in Settings > Sharing & privacy.'
         : null;
 
     const spinner = SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2));
@@ -349,7 +349,7 @@ class _DeleteMyDataScreenState extends State<DeleteMyDataScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  s.hasKey ? 'Not available yet: the server has not confirmed your driver key.' : 'Needs a driver key. Add one in Settings > Account & driver key.',
+                  s.hasKey ? 'Not available yet: the server has not confirmed your driver key.' : 'Needs a driver key. Add one in Settings > Account.',
                   key: const Key('export-whynot'),
                 ),
               ),

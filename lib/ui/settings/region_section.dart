@@ -9,15 +9,11 @@ import '../region/preset_info.dart';
 import '../region/region_switcher.dart';
 import 'settings_kit.dart';
 
-const String regionHelp = 'The app opens on the region your phone is in. Pick any region to view its coverage, repeaters '
-    'and activity. This never changes your radio.';
-
-/// The section's rows. The two server rows exist only once `GET /api/cmh/site-config` has answered; a slow or failing
-/// fetch leaves them out and nothing else is affected.
-List<Widget> regionSectionRows(BuildContext context) {
+/// Account > Server (advanced): what the server says about its region. Both rows exist only once
+/// `GET /api/cmh/site-config` has answered; a slow or failing fetch leaves them out and nothing else is affected.
+List<Widget> serverRegionRows(BuildContext context) {
   final s = AppScope.of(context);
   return [
-    const SettingsAnchor(id: 'region-pick', child: RegionPickTile()),
     if (s.siteConfig != null) const SettingsAnchor(id: 'site-region', child: RegionTile()),
     if (s.siteConfig != null) const SettingsAnchor(id: 'site-radio-preset', child: RadioPresetTile()),
   ];
@@ -40,7 +36,6 @@ class RegionTile extends StatelessWidget {
       title: const Text('Connected to'),
       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(host),
-        const Text('The region your server answers for. Change it with Server URL.'),
         if (s.viewingTimezone != null) Text('Time zone of ${s.viewingRegion?.name ?? 'this region'}: ${s.viewingTimezone}', key: const Key('site-region-timezone')),
       ]),
     );
@@ -123,7 +118,7 @@ class RadioPresetTile extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.only(left: 40, top: 8),
-          child: Text('Information only. MeshSonar never changes your radio by itself; to change it yourself, use More > Radio setup.',
+          child: Text('Information only. To change your radio, use More > Radio setup.',
               style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
         ),
       ]),
@@ -156,8 +151,8 @@ class RegionPickTile extends StatelessWidget {
       leading: const Icon(Icons.map_outlined),
       title: const Text('Region'),
       subtitle: Text(v == null
-          ? 'Not loaded yet. It appears once the region list downloads.'
-          : '${v.name} (${v.code}) · ${s.viewingIsManual ? 'picked by you' : 'following your location'}'),
+          ? 'Loading the region list…'
+          : '${v.name} (${v.code}) · ${s.viewingIsManual ? 'picked by you' : 'follows your location'}'),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => showRegionSwitcher(context),
     );

@@ -17,8 +17,8 @@ Widget pingFeedbackRows(BuildContext context) {
         SwitchListTile(
           key: const Key('ping-haptics'),
           secondary: const Icon(Icons.vibration),
-          title: const Text('Haptic tap when a ping finishes'),
-          subtitle: const Text('A light tap when a repeater heard the ping, a firmer one when nothing did.'),
+          title: const Text('Tap when a ping finishes'),
+          subtitle: const Text('Light when heard, firmer when not.'),
           value: st.pingHaptics,
           onChanged: (v) => s.updateSettings(st.copyWith(pingHaptics: v)),
         ),
@@ -26,8 +26,7 @@ Widget pingFeedbackRows(BuildContext context) {
           key: const Key('ping-sound'),
           secondary: const Icon(Icons.volume_up_outlined),
           title: const Text('Sound when a ping finishes'),
-          subtitle: const Text('Off by default. A click when heard, a different tone when nothing was heard. Uses the phone\'s '
-              'system sounds, so the ring/silent switch and volume apply.'),
+          subtitle: const Text('A click when heard, another tone when not. Follows the ring/silent switch.'),
           value: st.pingSound,
           onChanged: (v) {
             s.updateSettings(st.copyWith(pingSound: v));

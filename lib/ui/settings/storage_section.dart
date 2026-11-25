@@ -13,8 +13,7 @@ import '../app.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String storageHelp = 'What MeshSonar keeps on this phone. Clearing frees space; each item says what it costs '
-    'first. Drives not fully uploaded are never removed here.';
+const String storageHelp = 'Drives not fully uploaded are never removed here.';
 
 List<Widget> storageSectionRows(BuildContext context) => const [StorageRows()];
 
@@ -212,7 +211,7 @@ class _StorageRowsState extends State<StorageRows> {
         child: Row(children: [
           Expanded(
             child: Text(
-              total == null ? 'Measuring space used…' : 'About ${formatStorageBytes(total)} in use by the items below.',
+              total == null ? 'Measuring space used…' : 'About ${formatStorageBytes(total)} in use.',
               key: const Key('storage-total'),
               style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
@@ -229,8 +228,7 @@ class _StorageRowsState extends State<StorageRows> {
         id: 'storage-drives',
         icon: Icons.route_outlined,
         text: drivesText,
-        explain: 'Only fully uploaded drives can be removed here. A drive with pings waiting or rejected stays; delete it '
-            'from Drives if you really mean to.',
+        explain: 'Only fully uploaded drives can be removed here.',
         whyNot: split.removable.isNotEmpty
             ? null
             : split.total == 0
@@ -248,7 +246,7 @@ class _StorageRowsState extends State<StorageRows> {
             : z.region == 0
                 ? 'Nothing saved yet.'
                 : 'Coverage and region pages${size(z.region)}.',
-        explain: 'Kept so region screens open with no signal, labelled with their age. Downloads again after clearing.',
+        explain: 'For use with no signal. Downloads again after clearing.',
         whyNot: z.region == null || z.region == 0 ? 'Nothing to clear.' : null,
         action: z.region == null || z.region == 0 ? null : clearButton('storage-region-clear', 'Clear', _clearRegion),
       ),
@@ -261,10 +259,10 @@ class _StorageRowsState extends State<StorageRows> {
           title: Text(settingsEntry('refresh-repeaters').title),
           subtitle: !s.hasKey
               ? SettingsWhyNot('${repeaterCount == 0 ? 'None saved yet.' : '$repeaterCount saved for offline use.'} '
-                  'Downloading names needs a driver key: create one in Account & driver key at the top.')
+                  'Downloading names needs a driver key: create one in Settings > Account.')
               : Text(repeaterCount == 0
-                  ? 'None saved yet. Tap to download them; this needs a working key and signal.'
-                  : '$repeaterCount saved for offline use. Tap to download them again.'),
+                  ? 'None saved yet. Tap to download them.'
+                  : '$repeaterCount saved. Tap to download them again.'),
           trailing: const Icon(Icons.refresh),
           onTap: s.hasKey ? () => s.refreshRepeaters() : null,
         ),
@@ -285,7 +283,7 @@ class _StorageRowsState extends State<StorageRows> {
           text: z.nodeMap == null || z.nodeMap == 0
               ? 'Not downloaded.'
               : '${_count(s.directory?.repeaters.length ?? 0, 'repeater')} near your drives${size(z.nodeMap)}.',
-          explain: 'From map.meshcore.io, for names your server does not know. Refreshed weekly.',
+          explain: 'From map.meshcore.io. Refreshed weekly.',
           whyNot: z.nodeMap == null || z.nodeMap == 0 ? 'Nothing to clear. It downloads around the start of a drive.' : null,
           action: z.nodeMap == null || z.nodeMap == 0 ? null : clearButton('storage-node-map-clear', 'Clear', _clearNodeMap),
         ),
@@ -296,7 +294,7 @@ class _StorageRowsState extends State<StorageRows> {
           id: 'storage-report-draft',
           icon: Icons.outbox_outlined,
           text: 'One report not sent yet.',
-          explain: 'Kept until it is sent or you discard it. It is never sent on its own.',
+          explain: 'Never sent on its own.',
           action: clearButton('storage-report-discard', 'Discard', _discardReport),
         ),
       ],

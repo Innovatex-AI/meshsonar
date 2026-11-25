@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 
 import 'fakes.dart';
+import 'settings_test_kit.dart';
 
 void main() {
   testWidgets('settings are grouped into sections', (tester) async {
@@ -11,61 +12,84 @@ void main() {
     await h.pumpApp(tester);
     await openSettingsTab(tester);
     await tester.pumpAndSettle();
-    final scroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
     // Stream 6 restructure: Wardriving + Antenna became Radio, Upload became Drives & uploads, the heard-list hold moved
     // to Units & display, Report a problem to Diagnostics. Build 76: Map & offline maps became Map (the offline maps were removed).
-    for (final (section, field) in [
-      ('driver', 'key-request'),
-      ('driver', 'server-url'),
-      ('region', 'region-pick'),
-      ('display', 'units-tile'),
-      ('display', 'heard-hold'),
-      ('maps', 'map-follow-options'),
-      ('privacy', 'telemetry-toggle'),
-      ('privacy', 'privacy-what-shared'),
-      ('privacy', 'privacy-location'),
-      ('privacy', 'privacy-zones-website'),
-      ('radio', 'radio-tab-link'),
-      ('wardriving', 'channel'),
-      ('wardriving', 'send-pings'),
-      ('wardriving', 'ping-message'),
-      ('wardriving', 'ping-airtime'),
-      ('wardriving', 'interval'),
-      ('wardriving', 'min-distance'),
-      ('wardriving', 'listen-window'),
-      ('wardriving', 'wardrive-counters'),
-      ('radio', 'antenna-profile-abcdef0123'), // 0.4.0: one row per radio replaces the global type and gain
-      ('drives', 'auto-sync'),
-      ('drives', 'sync-during-drive'),
-      ('drives', 'sync-every'),
-      ('drives', 'last-upload'),
-      ('storage', 'storage-drives'),
-      ('storage', 'storage-region'),
-      ('storage', 'refresh-repeaters'),
-      ('diagnostics', 'diagnostics-log'),
-      ('diagnostics', 'report-problem'),
-      ('about-section', 'about'),
-      ('about-section', 'show-intro'),
+    // Build 76 (Andy: "simplify the settings and group appropriately"): eight sections; rare rows are on a page of
+    // their section (the third value), opened from the row `page-<id>`.
+    for (final (section, page, field) in <(String, String?, String)>[
+      ('driver', null, 'key-request'),
+      ('driver', null, 'page-claims'),
+      ('driver', null, 'delete-my-data'),
+      ('driver', 'account-advanced', 'server-url'),
+      ('radio', null, 'radio-tab-link'),
+      ('radio', null, 'auto-connect'),
+      ('radio', null, 'saved-radios'),
+      ('radio', null, 'antenna-profile-abcdef0123'), // 0.4.0: one row per radio replaces the global type and gain
+      ('wardriving', null, 'send-pings'),
+      ('wardriving', null, 'channel'),
+      ('wardriving', null, 'interval'),
+      ('wardriving', null, 'min-distance'),
+      ('wardriving', null, 'ping-feedback'),
+      ('wardriving', null, 'battery-mode'),
+      ('wardriving', 'uploads', 'auto-sync'),
+      ('wardriving', 'uploads', 'sync-during-drive'),
+      ('wardriving', 'uploads', 'sync-every'),
+      ('wardriving', 'uploads', 'last-upload'),
+      ('wardriving', 'battery', 'battery-running'),
+      ('wardriving', 'battery', 'battery-gps'),
+      ('wardriving', 'driving-advanced', 'listen-window'),
+      ('wardriving', 'driving-advanced', 'ping-message'),
+      ('wardriving', 'driving-advanced', 'ping-airtime'),
+      ('wardriving', 'driving-advanced', 'wardrive-counters'),
+      ('display', null, 'region-pick'),
+      ('display', null, 'map-follow-options'),
+      ('display', null, 'units-tile'),
+      ('display', null, 'colour-palette'),
+      ('display', null, 'heard-hold'),
+      ('display', 'units', 'unit-distance'),
+      ('privacy', null, 'telemetry-toggle'),
+      ('privacy', null, 'privacy-location'),
+      ('privacy', null, 'privacy-zones'),
+      ('privacy', null, 'privacy-policy'),
+      ('privacy', 'observer', 'observer-status'),
+      ('privacy', 'observer', 'mqtt-add-feed'),
+      ('privacy', 'sharing', 'collect-motion-toggle'),
+      ('privacy', 'sharing', 'privacy-what-shared'),
+      ('storage', null, 'diagnostics-log'),
+      ('storage', null, 'report-problem'),
+      ('storage', 'storage-items', 'storage-drives'),
+      ('storage', 'storage-items', 'storage-region'),
+      ('storage', 'storage-items', 'refresh-repeaters'),
+      ('storage', 'diagnostics-advanced', 'map-health-overlay'),
+      ('storage', 'diagnostics-advanced', 'diagnostics-power-counters'),
+      ('about-section', null, 'about'),
+      ('about-section', null, 'show-intro'),
+      ('about-section', null, 'terms-of-service-link'),
     ]) {
-      await tester.scrollUntilVisible(find.byKey(Key(field)), 120, scrollable: scroll);
-      expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(Key(field))), findsOneWidget,
-          reason: '$field should be in $section');
+      if (page == null) {
+        await closeSettingsPage(tester);
+        await tester.scrollUntilVisible(find.byKey(Key(field)), 120, scrollable: settingsList);
+        expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(Key(field))), findsOneWidget,
+            reason: '$field should be in $section');
+      } else {
+        await closeSettingsPage(tester);
+        await tester.scrollUntilVisible(find.byKey(Key('page-$page')), 120, scrollable: settingsList);
+        expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(Key('page-$page'))), findsOneWidget,
+            reason: 'the page $page opens from $section');
+        await openSettingsPageRow(tester, page);
+        expect(find.byKey(Key(field)), findsOneWidget, reason: '$field should be on the page $page');
+      }
     }
-    await tester.scrollUntilVisible(find.text('ACCOUNT & DRIVER KEY'), -120, scrollable: scroll);
-    for (final title in [
-      'ACCOUNT & DRIVER KEY',
-      'REGION',
-      'UNITS & DISPLAY',
-      'MAP',
-      'PRIVACY & DATA SHARING',
-      'RADIO',
-      'DRIVES & UPLOADS',
-      'DATA & STORAGE',
-      'DIAGNOSTICS',
-      'ABOUT',
-    ]) {
-      await tester.scrollUntilVisible(find.text(title), 120, scrollable: scroll);
+    await closeSettingsPage(tester);
+    final titles = ['ACCOUNT', 'RADIO', 'DRIVING', 'MAP & DISPLAY', 'SHARING & PRIVACY', 'NOTIFICATIONS', 'STORAGE & DIAGNOSTICS', 'ABOUT'];
+    await tester.scrollUntilVisible(find.text(titles.first), -120, scrollable: settingsList);
+    for (final title in titles) {
+      await tester.scrollUntilVisible(find.text(title), 120, scrollable: settingsList);
       expect(find.text(title), findsOneWidget);
+    }
+    // The removed features left no row behind.
+    for (final gone in ['Offline maps', 'Simple basemap while driving']) {
+      expect(find.textContaining(gone), findsNothing);
     }
   });
 

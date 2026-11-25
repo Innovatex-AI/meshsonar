@@ -10,14 +10,79 @@ import 'package:meshsonar/core/region_cache.dart';
 import 'package:meshsonar/core/repeater_directory.dart';
 import 'package:meshsonar/core/telemetry_uploader.dart';
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/settings/settings_index.dart';
+import 'package:meshsonar/ui/settings/settings_pages.dart';
 
 import 'fakes.dart';
 
 Finder get settingsList =>
     find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
 
-/// Scrolls [key] into view, clear of the bottom bar.
+/// The Settings page (one level down, build 76) that holds the row with widget key [key]; null = on the first level.
+String? settingsPageOfKey(String key) {
+  for (final e in settingsEntries) {
+    if (e.id == key) return e.page;
+  }
+  if (key.startsWith('battery-mode')) return null;
+  for (final (prefix, page) in const [
+    ('battery-', 'battery'),
+    ('meshtrack-', 'meshtrack'),
+    ('collect-', 'sharing'),
+    ('mqtt-', 'observer'),
+    ('observer-status', 'observer'),
+    ('telemetry-location', 'observer'),
+    ('telemetry-erase', 'observer'),
+    ('storage-', 'storage-items'),
+    ('unit-', 'units'),
+    ('profile-', 'profile'),
+    ('site-', 'account-advanced'),
+    ('auto-sync', 'uploads'),
+    ('sync-', 'uploads'),
+    ('diagnostics-power', 'diagnostics-advanced'),
+    ('power-counter', 'diagnostics-advanced'),
+    ('ble-diagnostics', 'diagnostics-advanced'),
+    ('claim-', 'claims'),
+    ('ping-preview', 'driving-advanced'),
+    ('wardrive-counters', 'driving-advanced'),
+    ('listen-window', 'driving-advanced'),
+  ]) {
+    if (key.startsWith(prefix)) return page;
+  }
+  return null;
+}
+
+/// Opens Settings page [id] from the first level (going back first when another page is open).
+Future<void> openSettingsPageRow(WidgetTester tester, String id) async {
+  if (find.byKey(Key('settings-page-$id')).evaluate().isNotEmpty) return;
+  if (find.byType(SettingsPageScreen).evaluate().isNotEmpty) {
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+  }
+  final row = find.byKey(Key('page-$id'));
+  await tester.scrollUntilVisible(row, 200, scrollable: settingsList);
+  await tester.ensureVisible(row);
+  await tester.pumpAndSettle();
+  await tester.tap(row);
+  await tester.pumpAndSettle();
+}
+
+/// Back from a Settings page to the first level (no-op when none is open).
+Future<void> closeSettingsPage(WidgetTester tester) async {
+  if (find.byType(SettingsPageScreen).evaluate().isEmpty) return;
+  await tester.pageBack();
+  await tester.pumpAndSettle();
+}
+
+/// Scrolls [key] into view, clear of the bottom bar. A row that lives on a page one level down opens that page first.
 Future<void> showSetting(WidgetTester tester, String key, {double step = 200}) async {
+  if (find.byKey(Key(key)).evaluate().isEmpty) {
+    final page = settingsPageOfKey(key);
+    if (page != null) {
+      await openSettingsPageRow(tester, page);
+    } else {
+      await closeSettingsPage(tester);
+    }
+  }
   await tester.scrollUntilVisible(find.byKey(Key(key)), step, scrollable: settingsList);
   await tester.ensureVisible(find.byKey(Key(key)));
   await tester.pumpAndSettle();

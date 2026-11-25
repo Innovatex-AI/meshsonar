@@ -493,9 +493,12 @@ void main() {
     await step(t, 'settings-meshtrack', () async {
       await popToRoots(t);
       await openTab(t, 'Settings');
-      final row = find.byKey(const Key('meshtrack-groups'));
-      if (!await scrollToFind(t, row, find.byType(SettingsScreen))) _fail('no MeshTrack section in Settings');
-      await Scrollable.ensureVisible(t.element(find.byKey(const Key('section-meshtrack')).first), alignment: 0.02);
+      // Build 76: MeshTrack is a page of Sharing & privacy (the row `page-meshtrack` opens it).
+      final open = find.byKey(const Key('page-meshtrack'));
+      if (!await scrollToFind(t, open, find.byType(SettingsScreen))) _fail('no MeshTrack row in Settings > Sharing & privacy');
+      await t.tap(open);
+      await pumpFor(t, const Duration(seconds: 1));
+      if (!await waitFor(t, find.byKey(const Key('meshtrack-groups')))) _fail('the MeshTrack page has no Groups row');
       await pumpFor(t, const Duration(milliseconds: 600));
       await shot(t, 'mt-24-settings-meshtrack');
       final ids = [for (final e in find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key as ValueKey).value}'.startsWith('section-')).evaluate()) '${(e.widget.key as ValueKey).value}'];
@@ -508,7 +511,7 @@ void main() {
       await popToRoots(t);
       await openTab(t, 'Settings');
       await tapKey(t, 'settings-sections-action', why: 'no Jump to a section button');
-      if (!await waitFor(t, find.byKey(const Key('jump-meshtrack')))) _fail('MeshTrack is not in the section list');
+      if (!await waitFor(t, find.byKey(const Key('jump-privacy')))) _fail('Sharing & privacy (where MeshTrack lives) is not in the section list');
       await shot(t, 'mt-24a-settings-sections-meshtrack-high');
       await backRoot(t);
       await popToRoots(t);

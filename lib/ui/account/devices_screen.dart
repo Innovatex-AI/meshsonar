@@ -107,7 +107,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   key: const Key('devices-nokey'),
                   icon: Icons.key_off_outlined,
                   title: 'No driver key on this phone',
-                  body: 'Go back to Account & driver key and create one.',
+                  body: 'Go back to Settings > Account and create one.',
                   action: FilledButton.tonal(key: const Key('devices-nokey-back'), onPressed: () => Navigator.of(context).maybePop(), child: const Text('Back')),
                 )
               else if (_future == null)

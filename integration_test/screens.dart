@@ -675,6 +675,21 @@ final List<ScreenStep> screens = [
     await openTab(t, 'Settings');
     await shootFullScroll(t, 'settings');
   }),
+  // Build 76: the rare rows of each section are one level down. One shot per page (each opens from its `page-<id>` row).
+  ScreenStep('settings-pages', (t) async {
+    final list = find.byKey(const Key('settings-list'));
+    for (final id in ['claims', 'account-advanced', 'uploads', 'battery', 'driving-advanced', 'units', 'observer', 'sharing', 'meshtrack', 'storage-items', 'diagnostics-advanced']) {
+      final row = find.byKey(Key('page-$id'));
+      if (!await scrollToFind(t, row, list.first)) continue; // a page this build does not have (MeshTrack off)
+      await t.ensureVisible(row);
+      await pumpFor(t, const Duration(milliseconds: 400));
+      await t.tap(row);
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'settings-page-$id');
+      await t.pageBack();
+      await pumpFor(t, const Duration(seconds: 1));
+    }
+  }, optional: true),
   ScreenStep('about', (t) async {
     final f = find.text('About MeshSonar');
     await t.ensureVisible(f);
@@ -693,7 +708,9 @@ final List<ScreenStep> screens = [
     await openShellTab(t, 'More');
     if (find.byKey(const Key('more-observer')).evaluate().isNotEmpty) _stepFail('observer: More still has an Observer row (it only jumped into Settings)');
     await openSettingsSection(t, MoreItem.observer);
-    expect(await waitFor(t, find.byKey(const Key('observer-share-toggle'))), isTrue, reason: 'Settings > Observer: Share with MeshSonar');
+    // Build 76: More > Observer lands on Settings > Sharing & privacy > Observer and MQTT feeds (status and feeds; the one
+    // Share with MeshSonar switch is the first row of Sharing & privacy, behind this page).
+    expect(await waitFor(t, find.byKey(const Key('observer-status'))), isTrue, reason: 'Settings > Sharing & privacy > Observer: status');
     await shot(t, 'observer');
     final feeds = find.byKey(const Key('mqtt-add-feed'));
     await t.ensureVisible(feeds);

@@ -16,52 +16,51 @@ import '../design/app_surfaces.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String batteryHelp = 'How much power MeshSonar uses. Balanced suits most drives; Max data records everything as '
-    'often as it can; Saver stretches a long day. The observer always stays on: only how often it uploads changes.';
+const String batteryHelp = 'Each power setting on its own. Changing one makes the mode Custom.';
 
 const List<String> _kw = ['battery', 'power', 'energy', 'drain', 'saver'];
 
 /// The Settings entries of this section, spread into settings_index.dart in display order.
 const List<SettingsEntry> batterySettingsEntries = [
-  SettingsEntry('battery-running', 'battery', 'What\'s running now',
+  SettingsEntry('battery-running', 'wardriving', 'What\'s running now',
       'A live list of what is using power at this moment, each with the setting that changes it.',
-      keywords: [..._kw, 'running', 'now', 'live', 'what uses', 'gps', 'compass', 'mqtt', 'meshtrack', 'screen on']),
-  SettingsEntry('battery-mode', 'battery', 'Battery mode',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'running', 'now', 'live', 'what uses', 'gps', 'compass', 'mqtt', 'meshtrack', 'screen on']),
+  SettingsEntry('battery-mode', 'wardriving', 'Battery mode',
       'Max data, Balanced or Saver: sets every setting below at once. Changing one of them shows Custom.',
-      keywords: [..._kw, 'mode', 'max data', 'balanced', 'custom', 'preset', 'battery life', 'low power']),
-  SettingsEntry('battery-low-power', 'battery', 'Use Saver when iPhone Low Power Mode is on',
+      was: 'Battery', keywords: [..._kw, 'mode', 'max data', 'balanced', 'custom', 'preset', 'battery life', 'low power']),
+  SettingsEntry('battery-low-power', 'wardriving', 'Use Saver when iPhone Low Power Mode is on',
       'While Low Power Mode is on, MeshSonar uses Saver; your own choice comes back when it is off.',
-      keywords: [..._kw, 'low power', 'low power mode', 'iphone', 'ios', 'follow', 'automatic']),
-  SettingsEntry('battery-screen-on', 'battery', 'Keep screen on during a drive',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'low power', 'low power mode', 'iphone', 'ios', 'follow', 'automatic']),
+  SettingsEntry('battery-screen-on', 'wardriving', 'Keep screen on during a drive',
       'Never lets the phone lock normally; the map and the drive keep running.',
-      keywords: [..._kw, 'screen on', 'screen', 'wakelock', 'awake', 'lock', 'display', 'sleep']),
-  SettingsEntry('battery-map-fps', 'battery', 'Map smoothness',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'screen on', 'screen', 'wakelock', 'awake', 'lock', 'display', 'sleep']),
+  SettingsEntry('battery-map-fps', 'wardriving', 'Map smoothness',
       'How many times a second the map and your position dot are redrawn while they move.',
-      keywords: [..._kw, 'fps', 'frames', 'hz', 'smooth', 'refresh rate', '120', 'promotion', 'animation']),
-  SettingsEntry('battery-gps', 'battery', 'Drive GPS precision',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'fps', 'frames', 'hz', 'smooth', 'refresh rate', '120', 'promotion', 'animation']),
+  SettingsEntry('battery-gps', 'wardriving', 'Drive GPS precision',
       'How hard the GPS works during a drive. Every ping still asks for a fresh position.',
-      keywords: [..._kw, 'gps', 'location', 'accuracy', 'precision', 'track', 'navigation']),
-  SettingsEntry('battery-gps-pause', 'battery', 'Pause GPS when parked',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'gps', 'location', 'accuracy', 'precision', 'track', 'navigation']),
+  SettingsEntry('battery-gps-pause', 'wardriving', 'Pause GPS when parked',
       'After this long without moving, the GPS drops to low accuracy until the phone moves off again.',
-      keywords: [..._kw, 'gps', 'parked', 'stopped', 'idle', 'pause', 'still']),
-  SettingsEntry('battery-end-drive', 'battery', 'End a drive left open',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'gps', 'parked', 'stopped', 'idle', 'pause', 'still']),
+  SettingsEntry('battery-end-drive', 'wardriving', 'End a drive left open',
       'Ends and saves a drive that was left running while parked or with no radio. Nothing is deleted.',
-      keywords: [..._kw, 'auto stop', 'forgot', 'left open', 'end drive', 'stop drive', 'parked', 'no radio', 'timeout']),
-  SettingsEntry('battery-compass', 'battery', 'Compass on the map',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'auto stop', 'forgot', 'left open', 'end drive', 'stop drive', 'parked', 'no radio', 'timeout']),
+  SettingsEntry('battery-compass', 'wardriving', 'Compass on the map',
       'Turns the map and the position dot with the phone\'s compass. Off uses the GPS direction of travel.',
-      keywords: [..._kw, 'compass', 'heading', 'magnetometer', 'direction', 'rotate', 'sensor']),
-  SettingsEntry('battery-radio-checks', 'battery', 'Check radio for messages',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'compass', 'heading', 'magnetometer', 'direction', 'rotate', 'sensor']),
+  SettingsEntry('battery-radio-checks', 'wardriving', 'Check radio for messages',
       'A backup check for new messages. The radio\'s own alert still delivers a message right away.',
-      keywords: [..._kw, 'radio', 'messages', 'poll', 'check', 'bluetooth', 'ble', 'sync', 'push']),
-  SettingsEntry('battery-observer-uploads', 'battery', 'Observer uploads when locked',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'radio', 'messages', 'poll', 'check', 'bluetooth', 'ble', 'sync', 'push']),
+  SettingsEntry('battery-observer-uploads', 'wardriving', 'Observer uploads when locked',
       'How often heard packets upload while the phone is locked. Nothing is lost; they wait in a queue.',
-      keywords: [..._kw, 'observer', 'upload', 'telemetry', 'packets', 'locked', 'background', 'queue']),
-  SettingsEntry('battery-drive-upload', 'battery', 'Drive data upload',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'observer', 'upload', 'telemetry', 'packets', 'locked', 'background', 'queue']),
+  SettingsEntry('battery-drive-upload', 'wardriving', 'Drive data upload',
       'Off waits until the drive ends to upload its pings, so the phone radio stays quiet while you drive.',
-      keywords: [..._kw, 'upload', 'sync', 'during', 'while driving', 'cellular', 'data']),
-  SettingsEntry('battery-stats', 'battery', 'Radio and phone stats',
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'upload', 'sync', 'during', 'while driving', 'cellular', 'data']),
+  SettingsEntry('battery-stats', 'wardriving', 'Radio and phone stats',
       'How often the drive report records radio and phone readings (battery, temperature, pressure).',
-      keywords: [..._kw, 'stats', 'telemetry', 'samples', 'radio battery', 'report', 'interval']),
+      page: 'battery', was: 'Battery', keywords: [..._kw, 'stats', 'telemetry', 'samples', 'radio battery', 'report', 'interval']),
 ];
 
 // ---------------------------------------------------------------- the knobs: one description each
@@ -307,6 +306,8 @@ class _PowerProfileBuilderState extends State<PowerProfileBuilder> {
 
 // ---------------------------------------------------------------- the section
 
+/// Driving > Battery details: what is running now, the Low Power Mode switch and every knob. The mode picker itself is on
+/// the first level of Driving (BatteryModePicker).
 List<Widget> batterySectionRows(BuildContext context) => [
       SettingsAnchor(
         id: 'battery-running',
@@ -314,12 +315,11 @@ List<Widget> batterySectionRows(BuildContext context) => [
           key: const Key('battery-running'),
           leading: const Icon(Icons.bolt),
           title: Text(settingsEntry('battery-running').title),
-          subtitle: Text(settingsEntry('battery-running').summary),
+          subtitle: const Text('What is using power at this moment.'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WhatsRunningScreen())),
         ),
       ),
-      const SettingsAnchor(id: 'battery-mode', child: BatteryModePicker()),
       SettingsAnchor(
         id: 'battery-low-power',
         child: PowerProfileBuilder(
@@ -327,7 +327,7 @@ List<Widget> batterySectionRows(BuildContext context) => [
             key: const Key('battery-low-power'),
             secondary: const Icon(Icons.battery_saver_outlined),
             title: Text(settingsEntry('battery-low-power').title),
-            subtitle: Text(settingsEntry('battery-low-power').summary),
+            subtitle: const Text('Your own choice comes back when it is off.'),
             value: PowerProfile.chosen.followLowPower,
             onChanged: (v) => unawaited(PowerProfile.set(PowerProfile.chosen.copyWith(followLowPower: v))),
           ),
@@ -349,7 +349,7 @@ List<Widget> batterySectionRows(BuildContext context) => [
           label: 'Upload during a drive',
           read: (s) => s.uploadDuringDrive,
           write: (s, v) => s.copyWith(uploadDuringDrive: v),
-          extra: 'Works with Settings > Drives & uploads: both must be on to upload while you drive.',
+          extra: 'Uploads (Driving > Uploads) must also be on.',
         ),
       ),
       SettingsAnchor(id: 'battery-stats', child: KnobTile(knob: statsKnob)),
@@ -360,9 +360,10 @@ class BatteryModePicker extends StatelessWidget {
   const BatteryModePicker({super.key});
 
   static const _hints = {
-    BatteryMode.maxData: 'Everything as often as it can: screen on, best GPS, compass, 120 Hz map.',
-    BatteryMode.balanced: 'The default. Full coverage data, less waste: the screen stays on only on the Drive tab.',
-    BatteryMode.saver: 'For a long day: the phone locks, standard GPS, no compass, uploads at the end of the drive.',
+    BatteryMode.maxData: 'Everything as often as it can: screen on, best GPS, 120 Hz map.',
+    BatteryMode.balanced: 'Full coverage data, less waste. The default.',
+    BatteryMode.saver: 'For a long day: the phone locks, standard GPS, uploads when the drive ends.',
+    BatteryMode.custom: 'You changed a setting in Battery details. Pick a mode to set them all again.',
   };
 
   @override
@@ -370,58 +371,44 @@ class BatteryModePicker extends StatelessWidget {
         final t = Theme.of(context);
         final chosen = PowerProfile.chosen;
         final cur = chosen.mode;
-        return Column(key: const Key('battery-mode'), crossAxisAlignment: CrossAxisAlignment.start, children: [
-          ListTile(
-            leading: const Icon(Icons.battery_charging_full),
-            title: Text(settingsEntry('battery-mode').title),
-            subtitle: Text('Now: ${batteryModeLabel(cur)}. ${settingsEntry('battery-mode').summary}',
-                key: const Key('battery-mode-now')),
-          ),
-          if (PowerProfile.lowPowerOverride)
+        // One row: the three modes side by side, and what the picked one does under them. Custom selects none.
+        return ListTile(
+          key: const Key('battery-mode'),
+          leading: const Icon(Icons.battery_charging_full),
+          title: Text(settingsEntry('battery-mode').title),
+          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
-              key: const Key('battery-low-power-active'),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Row(children: [
-                Icon(Icons.battery_alert, size: 18, color: t.colorScheme.tertiary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('iPhone Low Power Mode is on, so MeshSonar is using Saver. '
-                      '${batteryModeLabel(cur)} comes back when Low Power Mode is off.',
-                      style: t.textTheme.bodySmall),
-                ),
-              ]),
-            ),
-          for (final m in const [BatteryMode.maxData, BatteryMode.balanced, BatteryMode.saver])
-            Semantics(
-              inMutuallyExclusiveGroup: true,
-              checked: m == cur,
-              child: ListTile(
-                key: Key('battery-mode-${m.name}'),
-                minTileHeight: 56,
-                leading: Icon(
-                  m == cur ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                  color: m == cur ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant,
-                ),
-                title: Text(batteryModeLabel(m)),
-                subtitle: Text(_hints[m]!),
-                selected: m == cur,
-                onTap: m == cur ? null : () => unawaited(setBatteryMode(m)),
+              padding: const EdgeInsets.only(top: 6, bottom: 6),
+              child: SegmentedButton<BatteryMode>(
+                key: const Key('battery-mode-selector'),
+                showSelectedIcon: false,
+                emptySelectionAllowed: true,
+                segments: [
+                  for (final m in const [BatteryMode.maxData, BatteryMode.balanced, BatteryMode.saver])
+                    ButtonSegment(value: m, label: Text(batteryModeLabel(m), key: Key('battery-mode-${m.name}'), textAlign: TextAlign.center)),
+                ],
+                selected: {if (cur != BatteryMode.custom) cur},
+                onSelectionChanged: (v) {
+                  if (v.isNotEmpty) unawaited(setBatteryMode(v.first));
+                },
               ),
             ),
-          if (cur == BatteryMode.custom)
-            Semantics(
-              inMutuallyExclusiveGroup: true,
-              checked: true,
-              child: ListTile(
-                key: const Key('battery-mode-custom'),
-                minTileHeight: 56,
-                leading: Icon(Icons.radio_button_checked, color: t.colorScheme.primary),
-                title: const Text('Custom'),
-                subtitle: const Text('You changed a setting below. Pick a mode above to set them all again.'),
-                selected: true,
+            Text('Now: ${batteryModeLabel(cur)}. ${_hints[cur] ?? ''}',
+                key: Key(cur == BatteryMode.custom ? 'battery-mode-custom' : 'battery-mode-now')),
+            if (PowerProfile.lowPowerOverride)
+              Padding(
+                key: const Key('battery-low-power-active'),
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(Icons.battery_alert, size: 18, color: t.colorScheme.tertiary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('iPhone Low Power Mode is on, so MeshSonar is using Saver for now.', style: t.textTheme.bodySmall),
+                  ),
+                ]),
               ),
-            ),
-        ]);
+          ]),
+        );
       });
 }
 
@@ -507,7 +494,10 @@ class RunningItem {
 
   /// Opens the setting that changes it; null for lines that only inform.
   final void Function(BuildContext context)? open;
-  const RunningItem(this.id, this.icon, this.title, this.status, {this.open});
+
+  /// Using power at this moment (the screen lists these first).
+  final bool active;
+  const RunningItem(this.id, this.icon, this.title, this.status, {this.open, this.active = true});
 }
 
 /// What is using power now, in plain words, from the profile the components obey ([PowerProfile.current]) and what
@@ -538,16 +528,17 @@ List<RunningItem> whatsRunning(AppState s, PowerSettings p) {
   final sharing = mt?.state.sharingNames ?? const <String>[];
   return [
     RunningItem('running-drive', Icons.directions_car_outlined, 'Drive',
-        driving ? 'Running${p.uploadDuringDrive ? '' : ', uploads at the end'}' : 'Not running'),
+        driving ? 'Running${p.uploadDuringDrive ? '' : ', uploads at the end'}' : 'Not running',
+        active: driving),
     RunningItem('running-gps', Icons.gps_fixed, 'GPS',
         driving
             ? '$gps${p.pauseGpsParkedMin == 0 ? '' : ', low accuracy after ${p.pauseGpsParkedMin} min parked'}'
             : 'Idle: no drive running',
-        open: pick(gpsKnob)),
+        open: pick(gpsKnob), active: driving),
     RunningItem('running-screen', Icons.light_mode_outlined, 'Screen kept on', driving ? screen : 'No: no drive running',
-        open: pick(screenOnKnob)),
+        open: pick(screenOnKnob), active: driving && p.screenOn != ScreenOnMode.never),
     RunningItem('running-compass', Icons.explore_outlined, 'Compass', driving ? compass : 'Off: no drive running',
-        open: pick(compassKnob)),
+        open: pick(compassKnob), active: driving && p.compass != CompassMode.off),
     RunningItem('running-map', Icons.animation_outlined, 'Map drawing', 'Up to ${p.mapFps} times a second while it moves',
         open: pick(mapFpsKnob)),
     RunningItem(
@@ -558,7 +549,7 @@ List<RunningItem> whatsRunning(AppState s, PowerSettings p) {
             ? '${_secs(p.radioPollFrontS).replaceAll('Never', 'Off')} with the app open, '
                 '${p.radioPollBackS == 0 ? 'radio alert only' : _secs(p.radioPollBackS)} when locked'
             : 'Off: no radio connected',
-        open: pick(radioFrontKnob)),
+        open: pick(radioFrontKnob), active: radio),
     RunningItem(
         'running-observer',
         Icons.cloud_upload_outlined,
@@ -566,12 +557,12 @@ List<RunningItem> whatsRunning(AppState s, PowerSettings p) {
         radio
             ? 'Every ${_secs(p.observerUploadBackS)} when locked${s.telemetryQueued > 0 ? ', ${s.telemetryQueued} waiting' : ''}'
             : 'Off: no radio connected',
-        open: pick(observerUploadKnob)),
+        open: pick(observerUploadKnob), active: radio),
     RunningItem('running-mqtt', Icons.hub_outlined, 'MQTT feeds',
-        feeds == 0 ? 'None open' : '$feeds open'),
+        feeds == 0 ? 'None open' : '$feeds open', active: feeds > 0),
     if (mt != null)
       RunningItem('running-meshtrack', Icons.people_alt_outlined, 'MeshTrack sharing',
-          sharing.isEmpty ? 'Not sharing' : 'Sharing with ${sharing.join(', ')}'),
+          sharing.isEmpty ? 'Not sharing' : 'Sharing with ${sharing.join(', ')}', active: sharing.isNotEmpty),
   ];
 }
 
@@ -588,25 +579,35 @@ class WhatsRunningScreen extends StatelessWidget {
           final t = Theme.of(context);
           final p = PowerProfile.current;
           final items = whatsRunning(s, p);
-          return ListView(key: const Key('whats-running'), padding: const EdgeInsets.only(bottom: 24), children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Text(
-                  'Mode: ${batteryModeLabel(p.mode)}'
-                  '${PowerProfile.lowPowerOverride ? ' (iPhone Low Power Mode is on)' : ''}. '
-                  'Tap a line to change it.',
-                  key: const Key('whats-running-mode'),
-                  style: t.textTheme.bodyMedium),
-            ),
-            for (final i in items)
-              ListTile(
+          final on = [for (final i in items) if (i.active) i];
+          final off = [for (final i in items) if (!i.active) i];
+          Widget head(String text, Key key) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Semantics(header: true, child: Text(text, key: key, style: t.textTheme.titleSmall?.copyWith(color: t.colorScheme.primary))),
+              );
+          Widget line(RunningItem i) => ListTile(
                 key: Key(i.id),
-                leading: Icon(i.icon),
+                minTileHeight: 56,
+                leading: Icon(i.icon, color: i.active ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
                 title: Text(i.title),
                 subtitle: Text(i.status, key: Key('${i.id}-status')),
                 trailing: i.open == null ? null : const Icon(Icons.chevron_right),
                 onTap: i.open == null ? null : () => i.open!(context),
-              ),
+              );
+          return ListView(key: const Key('whats-running'), padding: const EdgeInsets.only(bottom: 24), children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Text(
+                  'Mode: ${batteryModeLabel(p.mode)}'
+                  '${PowerProfile.lowPowerOverride ? ' (iPhone Low Power Mode is on)' : ''}. '
+                  'Tap a line with an arrow to change it.',
+                  key: const Key('whats-running-mode'),
+                  style: t.textTheme.bodyMedium),
+            ),
+            head('Using power now (${on.length})', const Key('whats-running-on')),
+            for (final i in on) line(i),
+            if (off.isNotEmpty) head('Not running', const Key('whats-running-off')),
+            for (final i in off) line(i),
           ]);
         }),
       ),

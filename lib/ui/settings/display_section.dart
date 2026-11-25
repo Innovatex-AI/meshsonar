@@ -14,21 +14,17 @@ import '../design/app_widgets.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String displayHelp =
-    'How numbers and lists look. Nothing stored changes: drives keep metres and m/s, and the '
-    'server receives the same data whatever you pick here.';
+const String displayHelp = 'How the map, numbers and lists look. Stored data is unchanged.';
 
 /// What the Units choice means, including what Auto resolves to on this phone right now, and which quantities have
 /// their own unit. The only wording for it.
 String unitsExplanation(UnitsPreference pref, Units now) {
   final base = Units(now.system); // the setting itself, without the per-quantity choices
   final current = '${base.isImperial ? 'imperial' : 'metric'} (${base.lengthUnit}, ${base.longDistanceUnit}, ${base.speedUnit})';
-  final own = now.isMixed ? ' Own choice below: ${joinAnd(now.exceptions)}.' : '';
+  final own = now.isMixed ? ' Own unit: ${joinAnd(now.exceptions)}.' : '';
   return switch (pref) {
-    UnitsPreference.auto =>
-      'Auto follows your phone\'s region: imperial in the US, Liberia and Myanmar, metric '
-          'elsewhere. Showing $current.$own',
-    _ => 'Showing $current everywhere: distances, speeds, antenna heights and reports.$own',
+    UnitsPreference.auto => 'Auto follows your phone\'s region. Showing $current.$own',
+    _ => 'Showing $current everywhere.$own',
   };
 }
 
@@ -111,16 +107,12 @@ final List<UnitQuantity> unitQuantities = [
 String unitOverrideState(UnitQuantity q, Units now) =>
     q.current(now.overrides) == 'follow' ? 'Follows Units: ${q.unitWords(now)}.' : 'Always ${q.unitWords(now)}, whatever Units says.';
 
+/// Map & display, first level, after the region and the follow switches: units, palette, haptics, heard list hold.
 List<Widget> displaySectionRows(BuildContext context) {
   final s = AppScope.of(context);
   final st = s.settings;
   return [
     const SettingsAnchor(id: 'units-tile', child: UnitsTile()),
-    for (final q in unitQuantities)
-      SettingsAnchor(
-        id: q.id,
-        child: UnitOverrideTile(quantity: q),
-      ),
     const SettingsAnchor(id: 'colour-palette', child: ColourPaletteTile()),
     SettingsAnchor(
       id: 'ui-haptics',
@@ -128,7 +120,7 @@ List<Widget> displaySectionRows(BuildContext context) {
         key: const Key('ui-haptics'),
         symbol: AppSymbols.waveform,
         title: settingsEntry('ui-haptics').title,
-        subtitle: settingsEntry('ui-haptics').summary,
+        subtitle: 'Small taps on switches, lists and sends.',
         value: st.haptics,
         onChanged: (v) => s.updateSettings(st.copyWith(haptics: v)),
       ),
@@ -143,9 +135,7 @@ List<Widget> displaySectionRows(BuildContext context) {
         stops: holdStops,
         value: st.heardHoldPings,
         label: (v) => '$v ping${v == 1 ? '' : 's'}',
-        caption:
-            'Keep repeaters in the heard list for this many pings after they were last heard, then grey '
-            'them out (they never disappear during a drive).',
+        caption: 'A repeater stays bright this long after it was last heard, then greys out.',
         minLabel: '1',
         maxLabel: '10',
         onChanged: (v) => s.updateSettings(s.settings.copyWith(heardHoldPings: v)),
@@ -154,8 +144,16 @@ List<Widget> displaySectionRows(BuildContext context) {
   ];
 }
 
+/// Map & display > Units per quantity: one row per quantity, each "Follows Units" unless changed.
+List<Widget> unitPageRows(BuildContext context) => [
+      for (final q in unitQuantities) SettingsAnchor(id: q.id, child: UnitOverrideTile(quantity: q)),
+    ];
+
 /// Metric, imperial, or follow the phone's locale; with per-quantity choices set, a one-tap way back to "all follow".
 class UnitsTile extends StatelessWidget {
+  /// Opens the per-quantity page (set by the Settings shell; null hides nothing, the button just does nothing in a
+  /// place with no such page).
+  static void Function(BuildContext context)? openPerQuantity;
   const UnitsTile({super.key});
 
   Future<void> _resetOverrides(BuildContext context) async {
@@ -201,16 +199,21 @@ class UnitsTile extends StatelessWidget {
               onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(units: v.first)),
             ),
           ),
-          if (mixed)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                key: const Key('units-reset-overrides'),
-                style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                onPressed: () => _resetOverrides(context),
-                child: const Text('Make every quantity follow Units'),
-              ),
+          Wrap(spacing: Gap.s, children: [
+            TextButton(
+              key: const Key('units-per-quantity'),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(48, 48)),
+              onPressed: () => UnitsTile.openPerQuantity?.call(context),
+              child: const Text('A different unit for one thing'),
             ),
+            if (mixed)
+              TextButton(
+                key: const Key('units-reset-overrides'),
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(48, 48)),
+                onPressed: () => _resetOverrides(context),
+                child: const Text('All follow Units'),
+              ),
+          ]),
         ],
       ),
     );
@@ -231,7 +234,7 @@ class UnitOverrideTile extends StatelessWidget {
       key: Key(q.id),
       leading: Icon(q.icon),
       title: Text(e.title),
-      subtitle: Text('${unitOverrideState(q, s.units)} ${e.summary}', key: Key('${q.id}-state')),
+      subtitle: Text(unitOverrideState(q, s.units), key: Key('${q.id}-state')),
       trailing: const Icon(Icons.chevron_right),
       onTap: () async {
         final v = await pickUnit(context, q);
@@ -317,48 +320,33 @@ class ColourPaletteTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
-    final t = Theme.of(context);
     final cur = s.settings.colourPalette;
     final e = settingsEntry('colour-palette');
-    return Column(
+    return ListTile(
       key: const Key('colour-palette'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ListTile(
-          leading: const Icon(Icons.palette_outlined),
-          title: Text(e.title),
-          subtitle: Text(
-            'How signal strength is coloured on every map and chart. No reply (nothing heard) and grey (heard, no direct signal) '
-            'stay distinct in both.',
-            key: const Key('colour-palette-explanation'),
+      leading: const Icon(Icons.palette_outlined),
+      title: Text(e.title),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(paletteSummary(cur), key: const Key('colour-palette-explanation')),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 6),
+          child: SegmentedButton<ColourPalette>(
+            key: const Key('colour-palette-selector'),
+            showSelectedIcon: false,
+            segments: [
+              for (final p in ColourPalette.values)
+                ButtonSegment(value: p, label: Text(p.label, key: Key('colour-palette-${p.id}'), textAlign: TextAlign.center)),
+            ],
+            selected: {cur},
+            onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(colourPalette: v.first)),
           ),
         ),
-        for (final p in ColourPalette.values)
-          Semantics(
-            inMutuallyExclusiveGroup: true,
-            checked: p == cur,
-            child: ListTile(
-              key: Key('colour-palette-${p.id}'),
-              minTileHeight: 56,
-              leading: Icon(
-                p == cur ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: p == cur ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant,
-              ),
-              title: Text(p.label),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(paletteSummary(p)),
-                  const SizedBox(height: 6),
-                  PaletteStrip(palette: p),
-                ],
-              ),
-              selected: p == cur,
-              onTap: () => s.updateSettings(s.settings.copyWith(colourPalette: p)),
-            ),
-          ),
+        PaletteStrip(palette: cur),
         const SizedBox(height: Gap.xs),
-      ],
+      ]),
     );
   }
 }

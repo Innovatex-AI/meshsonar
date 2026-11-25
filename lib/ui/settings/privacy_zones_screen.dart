@@ -1,4 +1,4 @@
-// Settings > Privacy & data sharing > Privacy zones: the map editor. Circles where the pings of this driver are hidden from
+// Settings > Sharing & privacy > Privacy zones: the map editor. Circles where the pings of this driver are hidden from
 // every public view (past and future drives); the start and end of each drive are also trimmed by the trim distance.
 //
 // Behaviour (mirrors the website's /me/privacy editor, meshcore-insights zone-editor.tsx):

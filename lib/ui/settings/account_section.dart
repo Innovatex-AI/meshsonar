@@ -1,4 +1,4 @@
-// Settings > Account & driver key: the driver key (request, paste, reveal, remove), the server it works on, and the
+// Settings > Account: the driver key (request, paste, reveal, remove), the server it works on, and the
 // website links for the account. DriverKeyScreen shows the key part on its own over screens that need a key.
 import 'dart:async';
 
@@ -17,9 +17,7 @@ import '../widgets.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String driverHelp =
-    'Your driver key lets this phone upload drives to the coverage map. Without one, drives stay on this phone (you '
-    'can still export them).';
+const String driverHelp = 'Your driver key lets this phone upload drives. Without one, drives stay on this phone.';
 
 /// The section's rows, for the Settings shell.
 List<Widget> accountSectionRows(BuildContext context) => const [
@@ -39,7 +37,7 @@ class ServerUrlTile extends StatelessWidget {
       key: const Key('server-url'),
       leading: const Icon(Icons.dns_outlined),
       title: Text(e.title),
-      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(st.serverUrl), Text(e.summary)]),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(st.serverUrl), const Text('Changing server removes your key: keys only work where they were made.')]),
       trailing: const Icon(Icons.chevron_right),
       onTap: () async {
         final v = await editSettingText(context,
@@ -389,16 +387,15 @@ class _DriverKeySectionState extends State<DriverKeySection> {
             alignment: Alignment.centerRight,
             child: TextButton(
               key: const Key('forget-key'),
-              style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+              style: TextButton.styleFrom(foregroundColor: t.colorScheme.error, minimumSize: const Size(48, 48)),
               onPressed: () async {
                 final ok = await showConfirmSheet(
                   context,
                   sheetKey: const Key('forget-key-dialog'),
                   title: 'Remove this driver key?',
                   body:
-                      'Make sure you can get it again before you remove it: the website\'s Devices page shows keys made after it was updated, otherwise you\'ll need a new one.\n\n'
-                      'Without a key, drives stay on this phone and nothing uploads; packet headers stop being collected. '
-                      'The app keeps no copy: to undo, paste the same key again with "I already have a key".',
+                      'Without a key, drives stay on this phone and nothing uploads. The app keeps no copy: copy the key '
+                      'first if you want it back, then paste it with "I already have a key".',
                   confirmLabel: 'Remove',
                   destructive: true,
                   confirmKey: const Key('forget-key-confirm'),
@@ -446,9 +443,7 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                 Text(
                   s.keyBusy
                       ? 'Setting up your driver key…'
-                      : 'MeshSonar sets up a driver key for you on its own. If that did not happen (you may have been '
-                          'offline), tap Create my key. Your callsign (or "Driver N") is shown publicly; your name and '
-                          'email are optional and only seen by whoever runs the server.',
+                      : 'Tap Create my key to upload your drives. All three fields are optional; only the callsign is public.',
                   style: t.textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
@@ -462,7 +457,10 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                 TextFormField(
                   key: const Key('key-callsign'),
                   controller: _callsign,
-                  decoration: const InputDecoration(labelText: 'Callsign (optional)'),
+                  decoration: const InputDecoration(labelText: 'Callsign (optional)', helperText: 'Shown in public. Empty: "Driver N".'),
+                  textCapitalization: TextCapitalization.characters,
+                  autocorrect: false,
+                  enableSuggestions: false,
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 10),
@@ -471,6 +469,9 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                   controller: _email,
                   decoration: const InputDecoration(labelText: 'Email (optional)'),
                   keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  autofillHints: const [AutofillHints.email],
+                  textInputAction: TextInputAction.done,
                   validator: (v) =>
                       (v != null && v.trim().isNotEmpty && !v.contains('@')) ? 'That doesn\'t look like an email' : null,
                 ),
@@ -509,7 +510,25 @@ class _DriverKeySectionState extends State<DriverKeySection> {
                     key: const Key('key-paste'),
                     controller: _pasted,
                     autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Paste your driver key'),
+                    decoration: InputDecoration(
+                      labelText: 'Paste your driver key',
+                      // One tap fills the field from the clipboard: no long-press Paste menu on a small field.
+                      suffixIcon: IconButton(
+                        key: const Key('key-paste-clipboard'),
+                        tooltip: 'Paste from the clipboard',
+                        icon: const Icon(Icons.content_paste_rounded),
+                        onPressed: () async {
+                          final d = await Clipboard.getData(Clipboard.kTextPlain);
+                          final text = d?.text?.trim() ?? '';
+                          if (!context.mounted) return;
+                          if (text.isEmpty) {
+                            showAppToast(context, 'The clipboard is empty. Copy your key first.');
+                          } else {
+                            setState(() => _pasted.text = text);
+                          }
+                        },
+                      ),
+                    ),
                     autocorrect: false,
                     enableSuggestions: false,
                     textInputAction: TextInputAction.done,
