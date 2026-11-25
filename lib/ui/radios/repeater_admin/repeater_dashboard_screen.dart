@@ -466,7 +466,7 @@ class _TelemetryPageState extends State<_TelemetryPage> {
         LppValue.typeVoltage => '${v.value.toStringAsFixed(2)} V',
         LppValue.typeTemperature => units.temperature(v.value),
         LppValue.typeHumidity => '${v.value.toStringAsFixed(0)} %',
-        LppValue.typePressure => '${v.value.toStringAsFixed(0)} hPa',
+        LppValue.typePressure => units.pressure(v.value),
         _ => v.value.toStringAsFixed(2),
       };
 

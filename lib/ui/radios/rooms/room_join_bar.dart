@@ -89,14 +89,13 @@ class RoomJoinBar extends StatelessWidget {
           margin: const EdgeInsets.fromLTRB(Gap.l, Gap.xs, Gap.l, 0),
           decoration: BoxDecoration(color: t.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(Corners.chip)),
           clipBehavior: Clip.antiAlias,
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              key: const Key('room-bar-tap'),
-              onTap: () => _login(context),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Gap.m),
-                child: Row(children: [
+          child: GestureDetector(
+            key: const Key('room-bar-tap'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _login(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+              child: Row(children: [
             ExcludeSemantics(child: AppSymbolIcon(AppSymbols.lock, size: 16, color: t.colorScheme.onSecondaryContainer)),
             const SizedBox(width: Gap.s),
             Expanded(child: Text('Log in to read and post here.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSecondaryContainer))),
@@ -107,8 +106,7 @@ class RoomJoinBar extends StatelessWidget {
               onPressed: () => _login(context),
               child: const Text('Log in to post'),
             ),
-                ]),
-              ),
+              ]),
             ),
           ),
         );

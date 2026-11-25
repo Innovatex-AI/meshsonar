@@ -16,6 +16,7 @@ import 'package:meshsonar/ui/claims/my_radios_screen.dart';
 import 'package:meshsonar/ui/connect_screen.dart';
 import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/ui/saved_radios_screen.dart';
+import 'package:meshsonar/ui/settings/settings_index.dart';
 
 import '../alerts/fakes.dart';
 import 'fakes.dart';
@@ -300,7 +301,10 @@ void main() {
       // Build 71: More has no "Claimed radios" row any more (it only jumped into Settings); the Settings row names it.
       expect(find.byKey(const Key('more-myRadios')), findsNothing);
       expect(find.text('My radios and claims'), findsNothing);
-      expect(find.descendant(of: find.byKey(const Key('more-settings')), matching: find.textContaining('claimed radios')), findsOneWidget);
+      // Build 76: the Settings row's line is short ("Pings, alerts, privacy, maps, storage") and no longer lists claimed
+      // radios; a person still gets there from the Settings row: by the search box, and by Account > Claimed radios below.
+      expect(find.byKey(const Key('more-settings')), findsOneWidget);
+      expect(searchSettings('claimed radios').map((e) => e.id), contains('my-radios'));
       await openSettingsTab(tester);
       // Build 76: Claimed radios is a page of Account, behind a row of that name; no section of its own.
       await showSetting(tester, 'page-claims');

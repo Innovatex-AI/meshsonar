@@ -320,7 +320,9 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const ValueKey('server-ping-p1')), 300, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('Hill 4.5 dB'), findsOneWidget);
     expect(find.text('Pings (2)'), findsOneWidget);
-    expect(find.text('Not heard'), findsOneWidget);
+    // Build 76: the drive key on the map says "Not heard" too, so look in the unheard ping's own row.
+    expect(find.descendant(of: find.byKey(const ValueKey('server-ping-p2')), matching: find.text('Not heard')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('server-ping-p1')), matching: find.text('Not heard')), findsNothing);
     expect(find.byKey(const Key('server-drive-hidden-note')), findsNothing);
     await tester.tap(find.byKey(const Key('server-drive-hide')));
     await tester.pumpAndSettle();

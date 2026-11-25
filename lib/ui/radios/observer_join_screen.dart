@@ -150,10 +150,10 @@ class ObserverJoinScreen extends StatelessWidget {
                     // Build 76: a button, not directions to another tab.
                     action: p.radioConnected
                         ? null
-                        : FilledButton.tonalIcon(
+                        : OutlinedButton.icon(
                             key: const Key('observer-connect'),
-                            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                            icon: const Icon(Icons.bluetooth_searching),
+                            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                            icon: const AppSymbolIcon(AppSymbols.antenna, size: 18),
                             label: const Text('Connect radio'),
                             onPressed: () => openConnect(context))),
                 step(2, 'claim-radio', 'Claim your radio (optional)',

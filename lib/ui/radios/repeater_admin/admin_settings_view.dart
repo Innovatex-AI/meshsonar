@@ -1,9 +1,11 @@
 // Settings form, grouped. Every row shows the value read from the repeater; a tap opens the editor sheet, which is the only
 // way anything is written. Radio settings are compared with the region's preset; the observer uplink is read-only.
+import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 
 import '../../../radio/repeater_admin.dart';
 import '../../../radio/repeater_settings.dart';
+import '../../design/app_symbols.dart';
 import '../../theme.dart';
 import 'admin_common.dart';
 import 'admin_controller.dart';
@@ -95,11 +97,12 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
         // still asks for the typed word.
         Align(
           alignment: Alignment.centerRight,
-          child: TextButton(
+          child: CupertinoButton(
             key: const Key('reboot-banner-go'),
-            style: TextButton.styleFrom(minimumSize: kTarget, foregroundColor: t.colorScheme.onTertiaryContainer),
+            minimumSize: kTarget,
+            padding: const EdgeInsets.symmetric(horizontal: Gap.s),
             onPressed: () => _reboot(context),
-            child: const Text('Reboot now…'),
+            child: Text('Reboot now…', style: TextStyle(color: t.colorScheme.onTertiaryContainer, fontWeight: FontWeight.w600)),
           ),
         ),
       ]),
@@ -262,7 +265,7 @@ class _AdminSettingsViewState extends State<AdminSettingsView> {
                 tooltip: 'Read again',
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: c.loadingSettings ? null : () => c.loadSettings(force: true),
-                icon: const Icon(Icons.refresh),
+                icon: const AppSymbolIcon(AppSymbols.arrowClockwise),
               )
             : Icon(d.danger.index >= Danger.disruptive.index ? Icons.warning_amber_rounded : Icons.chevron_right, color: d.danger.index >= Danger.disruptive.index ? const Color(0xFFB26A00) : null),
         onTap: enabled ? () => showSettingEditor(context, c, d) : null,

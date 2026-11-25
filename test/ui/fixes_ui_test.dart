@@ -49,12 +49,15 @@ void main() {
         tester.widget<Text>(find.byKey(const ValueKey('unsynced-d1'))).data,
         'Synced',
       );
-      expect(
-        tester
-            .widget<IconButton>(find.byKey(const ValueKey('sync-d1')))
-            .onPressed,
-        isNull,
-      );
+      // Build 76: with nothing waiting there is no Sync at all (it used to sit greyed out), on the card or in its menu.
+      expect(find.byKey(const ValueKey('sync-d1')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('menu-d1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('menu-sync-d1')), findsNothing);
+      expect(find.byKey(const ValueKey('rename-d1')), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rename-d1')), findsNothing);
       expect(find.byKey(const Key('sync-all')), findsNothing);
       expect(find.text('Everything is uploaded.'), findsOneWidget);
 
@@ -67,12 +70,14 @@ void main() {
         '1 not synced',
       );
       expect(find.text('· 2 rejected'), findsOneWidget);
+      // Build 76: a labelled "Sync" button (it was a bare icon).
       expect(
         tester
-            .widget<IconButton>(find.byKey(const ValueKey('sync-d1')))
+            .widget<ButtonStyleButton>(find.byKey(const ValueKey('sync-d1')))
             .onPressed,
         isNotNull,
       );
+      expect(find.descendant(of: find.byKey(const ValueKey('sync-d1')), matching: find.text('Sync')), findsOneWidget);
 
       // The detail screen agrees.
       await tester.tap(find.byKey(const ValueKey('open-d1')));
@@ -98,12 +103,15 @@ void main() {
         tester.widget<Text>(find.byKey(const ValueKey('unsynced-d1'))).data,
         'All synced',
       );
-      expect(
-        tester
-            .widget<IconButton>(find.byKey(const ValueKey('sync-d1')))
-            .onPressed,
-        isNull,
-      );
+      // Build 76: with nothing waiting there is no Sync at all (it used to sit greyed out), on the card or in its menu.
+      expect(find.byKey(const ValueKey('sync-d1')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('menu-d1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('menu-sync-d1')), findsNothing);
+      expect(find.byKey(const ValueKey('rename-d1')), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('rename-d1')), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('menu-d1')));
       await tester.pumpAndSettle();

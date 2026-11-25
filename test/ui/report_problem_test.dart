@@ -86,15 +86,17 @@ bool counterInError(WidgetTester tester) {
 void main() {
   group('AC-2 entry points and the key rule', () {
     // Settings restructure (stream 6): Report a problem moved from About to the Diagnostics section, which sits
-    // directly above About, so it is still above "About MeshSonar".
-    testWidgets('Settings → Diagnostics has "Report a problem", above "About MeshSonar"', (tester) async {
+    // directly above About, so it is still above "About MeshSonar". Build 76: that section is "Storage & diagnostics"
+    // (section-storage) and Report a problem is a first-level row of it.
+    testWidgets('Settings → Storage & diagnostics has "Report a problem", above "About MeshSonar"', (tester) async {
       useTallScreen(tester);
       final h = M1Harness()..approveKey();
       await h.pumpApp(tester);
       await openSettings(tester);
       await scrollSettingsTo(tester, find.byKey(const Key('about')));
       final row = find.byKey(const Key('report-problem'));
-      expect(find.descendant(of: find.byKey(const Key('section-diagnostics')), matching: row), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('section-storage')), matching: row), findsOneWidget);
+      expect(find.byKey(const Key('section-diagnostics')), findsNothing);
       expect(find.descendant(of: row, matching: find.text('Report a problem')), findsOneWidget);
       expect(tester.getTopLeft(row).dy, lessThan(tester.getTopLeft(find.byKey(const Key('about'))).dy));
       await tester.tap(row);
