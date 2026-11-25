@@ -25,7 +25,11 @@ class ChannelSearchScreen extends StatefulWidget {
 
   /// Tests shorten the typing delay.
   final Duration debounce;
-  const ChannelSearchScreen({super.key, required this.baseUrl, required this.regionSlug, this.channelId, this.channelName, this.debounce = const Duration(milliseconds: 300)});
+
+  /// Text to search for straight away ("Search every channel" from a one-channel search).
+  final String? initialQuery;
+  const ChannelSearchScreen(
+      {super.key, required this.baseUrl, required this.regionSlug, this.channelId, this.channelName, this.debounce = const Duration(milliseconds: 300), this.initialQuery});
 
   @override
   State<ChannelSearchScreen> createState() => _ChannelSearchScreenState();
@@ -49,6 +53,13 @@ class _ChannelSearchScreenState extends State<ChannelSearchScreen> {
     _scroll.addListener(() {
       if (_scroll.hasClients && _scroll.position.pixels >= _scroll.position.maxScrollExtent - 300) unawaited(_more());
     });
+    final q = widget.initialQuery;
+    if (q != null && q.isNotEmpty) {
+      _text.text = q;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_run(q));
+      });
+    }
   }
 
   @override
@@ -61,6 +72,7 @@ class _ChannelSearchScreenState extends State<ChannelSearchScreen> {
   }
 
   void _changed(String v) {
+    setState(() {}); // the clear button shows with the first letter, not after the pause
     _debounce?.cancel();
     _debounce = Timer(widget.debounce, () => unawaited(_run(v)));
   }
@@ -132,7 +144,7 @@ class _ChannelSearchScreenState extends State<ChannelSearchScreen> {
         title: TextField(
           key: const Key('channel-search-field'),
           controller: _text,
-          autofocus: true,
+          autofocus: widget.initialQuery == null,
           maxLength: messageSearchMaxChars,
           textInputAction: TextInputAction.search,
           onChanged: _changed,
@@ -140,13 +152,14 @@ class _ChannelSearchScreenState extends State<ChannelSearchScreen> {
             _debounce?.cancel();
             unawaited(_run(v));
           },
+          autocorrect: false,
           decoration: InputDecoration(hintText: 'Search $where', border: InputBorder.none, counterText: ''),
         ),
         actions: [
           if (_text.text.isNotEmpty)
             IconButton(
               key: const Key('channel-search-clear'),
-              tooltip: 'Clear',
+              tooltip: 'Clear the search',
               icon: const Icon(Icons.close),
               onPressed: () {
                 _text.clear();
@@ -160,26 +173,61 @@ class _ChannelSearchScreenState extends State<ChannelSearchScreen> {
     );
   }
 
-  Widget _hint(String text, Key key) =>
-      ListView(children: [Padding(padding: const EdgeInsets.all(Gap.xl), child: Text(text, key: key, textAlign: TextAlign.center))]);
+  Widget _hint(String text, Key key, {List<Widget> actions = const []}) => ListView(keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, children: [
+        Padding(
+          padding: const EdgeInsets.all(Gap.xl),
+          child: Column(children: [
+            Text(text, key: key, textAlign: TextAlign.center),
+            if (actions.isNotEmpty) const SizedBox(height: Gap.m),
+            ...actions,
+          ]),
+        ),
+      ]);
 
   Widget _body(ThemeData t) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: Gap.m),
+          Text('Searching…', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        ]),
+      );
+    }
     final e = _error;
     if (e != null) {
       if (e is V1Error && e.offline) return SingleChildScrollView(child: RegionOfflineEmpty(what: 'the search', onRetry: () => _run(_q)));
-      return _hint(e is V1NotLive ? 'Message search is not available on this server yet.' : (e is V1Error ? e.message : 'The search did not work.'), const Key('channel-search-error'));
+      return _hint(e is V1NotLive ? 'Message search is not available on this server yet.' : (e is V1Error ? e.message : 'The search did not work.'), const Key('channel-search-error'),
+          actions: [if (e is! V1NotLive) FilledButton(key: const Key('channel-search-retry'), onPressed: () => _run(_q), child: const Text('Try again'))]);
     }
     if (_q.length < messageSearchMinChars) {
-      return _hint('Type at least $messageSearchMinChars characters. Search covers readable channel text from the last 30 days.', const Key('channel-search-hint'));
+      return _hint('Type $messageSearchMinChars or more letters. The search covers readable channel messages from the last 30 days.', const Key('channel-search-hint'));
     }
-    if (_rows.isEmpty) return _hint('No messages match "$_q".', const Key('channel-search-empty'));
+    if (_rows.isEmpty) {
+      return _hint('No messages match "$_q" in the last 30 days.${widget.channelId == null ? '' : ' Only this channel was searched.'}', const Key('channel-search-empty'), actions: [
+        if (widget.channelId != null)
+          OutlinedButton(
+            key: const Key('channel-search-everywhere'),
+            onPressed: () => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => ChannelSearchScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialQuery: _q))),
+            child: const Text('Search every channel'),
+          ),
+      ]);
+    }
+    final count = '${_rows.length}${_next == null ? '' : '+'} ${_rows.length == 1 && _next == null ? 'result' : 'results'}';
     return ListView.builder(
       key: const Key('channel-search-results'),
       controller: _scroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      itemCount: _rows.length + 1,
+      itemCount: _rows.length + 2,
       itemBuilder: (context, i) {
+        if (i == 0) {
+          // The count first (it used to be under the last row), and what a tap does.
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xs),
+            child: Text('$count, newest first. Tap one to see how it travelled.', key: const Key('channel-search-count'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          );
+        }
+        i -= 1;
         if (i == _rows.length) {
           return Padding(
             padding: const EdgeInsets.all(Gap.m),

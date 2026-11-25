@@ -52,6 +52,9 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
   late Future<RegionFetch<RegionReportExport>> _future = _load();
   bool _busy = false;
 
+  /// The single-table CSV files (rarely wanted) stay folded away until asked for.
+  bool _tablesOpen = false;
+
   Future<RegionFetch<RegionReportExport>> _load() =>
       fetchRegionDataset(regionDatasetUri(widget.baseUrl, 'region-report'), RegionReportExport.new, client: widget.client);
 
@@ -112,20 +115,26 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
               return Padding(
                 key: const Key('export-error'),
                 padding: const EdgeInsets.all(Gap.l),
-                child: Row(children: [
-                  const Icon(Icons.cloud_off),
-                  const SizedBox(width: Gap.m),
-                  Expanded(
-                    child: Text(r?.notFound == true
-                        ? 'The region report is not published for ${widget.regionSlug.toUpperCase()}.'
-                        : 'Couldn\'t load the region report. ${r?.error ?? ''}'),
-                  ),
-                  if (r?.notFound != true)
-                    TextButton(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.cloud_off),
+                    const SizedBox(width: Gap.m),
+                    Expanded(
+                      child: Text(r?.notFound == true
+                          ? 'There is no report for ${widget.regionSlug.toUpperCase()} yet.'
+                          : 'The report did not load. Check your connection and try again.${r?.error == null ? '' : ' (${r!.error})'}'),
+                    ),
+                  ]),
+                  if (r?.notFound != true) ...[
+                    const SizedBox(height: Gap.m),
+                    // A full-width button under the message (it was a small text button squeezed beside it).
+                    FilledButton(
+                        key: const Key('export-retry'),
                         onPressed: () => setState(() {
                               _future = _load();
                             }),
-                        child: const Text('Retry')),
+                        child: const Text('Try again')),
+                  ],
                 ]),
               );
             }
@@ -137,57 +146,76 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l),
               children: [
-                Text('Export ${e.name} report', style: t.textTheme.titleLarge),
+                Semantics(header: true, child: Text('Export ${e.name} report', style: t.textTheme.titleLarge)),
                 const SizedBox(height: 4),
                 Text(
                   [
-                    if (g != null) 'Generated ${agoWords(widget.now().toUtc().difference(g))} ago',
+                    'Pick a format to share or save',
+                    if (g != null) 'made ${agoWords(widget.now().toUtc().difference(g))} ago',
                     if (r.offlineAsOf != null) asOfLabel(r.offlineAsOf!, widget.now().toUtc(), offline: true),
-                    'Times in the files are UTC, like the website.',
+                    'times are UTC',
                   ].join(' · '),
                   key: const Key('export-asof'),
                   style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
                 ),
-                if (_busy) const LinearProgressIndicator(),
-                ListTile(
-                  key: const Key('export-text'),
-                  leading: const Icon(Icons.notes),
-                  title: const Text('Text summary'),
-                  onTap: _busy ? null : () => _share(e.textName, e.toText),
-                ),
+                if (_busy)
+                  const Padding(
+                    key: Key('export-busy'),
+                    padding: EdgeInsets.only(top: Gap.s),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [LinearProgressIndicator(), SizedBox(height: 4), Text('Preparing the file…')]),
+                  ),
+                // Build 76: the format most people want first; each row says what the file is for, not its file name.
                 ListTile(
                   key: const Key('export-pdf'),
                   leading: const Icon(Icons.picture_as_pdf_outlined),
                   title: const Text('PDF report'),
-                  subtitle: Text('${e.slug}-region-report.pdf · charts and every table row'),
+                  subtitle: const Text('To read or print: charts and every table'),
+                  trailing: const Icon(Icons.ios_share, size: 18),
                   onTap: _busy ? null : () => _sharePdf(e),
                 ),
                 ListTile(
-                  key: const Key('export-json'),
-                  leading: const Icon(Icons.data_object),
-                  title: const Text('JSON (the full report)'),
-                  subtitle: Text(e.jsonName),
-                  onTap: _busy ? null : () => _share(e.jsonName, e.toJsonFile),
+                  key: const Key('export-text'),
+                  leading: const Icon(Icons.notes),
+                  title: const Text('Text summary'),
+                  subtitle: const Text('Short enough to paste into a message'),
+                  trailing: const Icon(Icons.ios_share, size: 18),
+                  onTap: _busy ? null : () => _share(e.textName, e.toText),
                 ),
                 ListTile(
                   key: const Key('export-csv-all'),
                   leading: const Icon(Icons.table_chart_outlined),
-                  title: const Text('CSV, every table in one file'),
-                  subtitle: const Text('First column says which table a row is from'),
+                  title: const Text('Spreadsheet (CSV)'),
+                  subtitle: const Text('Every table in one file'),
+                  trailing: const Icon(Icons.ios_share, size: 18),
                   onTap: _busy ? null : () => _share(e.allTablesName, e.allTablesCsv),
                 ),
+                ListTile(
+                  key: const Key('export-json'),
+                  leading: const Icon(Icons.data_object),
+                  title: const Text('Data file (JSON)'),
+                  subtitle: const Text('The full report, for other programs'),
+                  trailing: const Icon(Icons.ios_share, size: 18),
+                  onTap: _busy ? null : () => _share(e.jsonName, e.toJsonFile),
+                ),
                 const Divider(),
-                Text('One table as CSV (the website\'s file)', style: t.textTheme.titleSmall),
-                for (final x in tables)
-                  ListTile(
-                    key: Key('export-table-${x.id}'),
-                    dense: true,
-                    enabled: !x.isEmpty && !_busy,
-                    title: Text(x.label),
-                    subtitle: Text(x.isEmpty ? 'No rows' : '${x.rows.length} row${x.rows.length == 1 ? '' : 's'} · ${e.csvName(x.id)}'),
-                    trailing: const Icon(Icons.ios_share, size: 18),
-                    onTap: () => _share(e.csvName(x.id), x.toCsv),
-                  ),
+                ListTile(
+                  key: const Key('export-tables-toggle'),
+                  leading: const Icon(Icons.view_list_outlined),
+                  title: const Text('One table at a time (CSV)'),
+                  subtitle: Text('${tables.where((x) => !x.isEmpty).length} of ${tables.length} tables have rows'),
+                  trailing: Icon(_tablesOpen ? Icons.expand_less : Icons.expand_more),
+                  onTap: () => setState(() => _tablesOpen = !_tablesOpen),
+                ),
+                if (_tablesOpen)
+                  for (final x in tables)
+                    ListTile(
+                      key: Key('export-table-${x.id}'),
+                      enabled: !x.isEmpty && !_busy,
+                      title: Text(x.label),
+                      subtitle: Text(x.isEmpty ? 'No rows' : '${x.rows.length} row${x.rows.length == 1 ? '' : 's'} · ${e.csvName(x.id)}'),
+                      trailing: const Icon(Icons.ios_share, size: 18),
+                      onTap: () => _share(e.csvName(x.id), x.toCsv),
+                    ),
               ],
             );
           },

@@ -40,6 +40,11 @@ void main() {
       await tester.tap(find.byKey(const Key('export-text')));
       await tester.pumpAndSettle();
       expect(shared.last.$2, startsWith('MeshSonar region report: Columbus, US (CMH)'));
+      // Build 76: the single-table files are folded away until asked for.
+      expect(find.byKey(const Key('export-table-coverage')), findsNothing);
+      await tester.scrollUntilVisible(find.byKey(const Key('export-tables-toggle')), 200);
+      await tester.tap(find.byKey(const Key('export-tables-toggle')));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byKey(const Key('export-table-coverage')), 200);
       await tester.tap(find.byKey(const Key('export-table-coverage')));
       await tester.pumpAndSettle();
@@ -57,6 +62,9 @@ void main() {
       await tester.pumpWidget(_app(RegionReportExportSheet(
           baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh', client: _json(b), now: () => _now, share: (n, b) async {})));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.byKey(const Key('export-tables-toggle')), 200);
+      await tester.tap(find.byKey(const Key('export-tables-toggle')));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.byKey(const Key('export-table-hash-collisions')), 200);
       expect(tester.widget<ListTile>(find.byKey(const Key('export-table-hash-collisions'))).enabled, isFalse);
     });
@@ -70,7 +78,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('export-error')), findsOneWidget);
       fail = false;
-      await tester.tap(find.text('Retry'));
+      await tester.tap(find.byKey(const Key('export-retry')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Offline - as of 2h ago'), findsOneWidget);
     });

@@ -57,6 +57,14 @@ void main() {
       });
     }
 
+    testWidgets('build 76: the gate says what the tool does, and a link that cannot run it offers another radio', (tester) async {
+      final host = FakeToolsHost()..linkState = LinkState.connected;
+      await pumpTool(tester, ToolPage(id: 'x', title: 'X', about: 'X measures things.', builder: (c, h, t) => const Text('body')), host);
+      expect(find.text('X measures things.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('tool-connect-other')));
+      expect(host.connectOpened, 1);
+    });
+
     testWidgets('a radio appearing replaces the gate with the tool', (tester) async {
       final (rig, host) = await connectedRig(tester);
       final tools = rig.tools;

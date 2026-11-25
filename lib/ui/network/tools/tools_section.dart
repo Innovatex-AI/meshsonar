@@ -1,4 +1,5 @@
-// Network > Tools (build 71, stream D). One list, three groups:
+// Network > Tools (build 71, stream D; build 76: a "Find a tool" field, plain descriptions, the radio group second and
+// saying whether a radio is connected). One list, three groups:
 // - Network tools, native on `/v1`: Path Inspector, Trace Viewer, Prefix Tool, Decode a packet.
 // - Site pages shown inside the app ([SitePageView]): Scope Audit, Compare observers, Region definition, Status, and the
 //   site tools with no native twin (Airtime and load, Point-to-point link, Coverage painter).
@@ -8,12 +9,16 @@
 // arrow to the list; an unknown id shows the list. A row tapped in the list opens the tool as its own page.
 import 'package:flutter/material.dart';
 
+import '../../../radio/session.dart' show LinkState;
+import '../../app.dart' show AppScope;
+import '../../design/tokens.dart';
 import '../../radio/inset_list.dart';
 import '../../tools/adverts_screen.dart';
 import '../../tools/discover_screen.dart';
 import '../../tools/noise_screen.dart';
 import '../../tools/rx_log_screen.dart';
 import '../../tools/telemetry_screen.dart';
+import '../../tools/tools_host.dart';
 import '../../tools/trace_screen.dart';
 import '../analytics/in_place_header.dart';
 import '../analytics/site_page_view.dart';
@@ -33,25 +38,35 @@ class ToolEntry {
 }
 
 const List<ToolEntry> toolEntries = [
-  ToolEntry('path', 'Path Inspector', 'Hop prefixes to the routes they most likely stand for', ToolGroup.network, aliases: ['path-inspector']),
-  ToolEntry('trace', 'Trace Viewer', 'One trace: SNR at each hop and who heard it', ToolGroup.network, aliases: ['trace-viewer']),
-  ToolEntry('prefix', 'Prefix Tool', 'Find a free hash prefix for a new repeater', ToolGroup.network, aliases: ['prefix-tool']),
-  ToolEntry('decode', 'Decode a packet', 'Paste packet bytes and read every field', ToolGroup.network),
-  ToolEntry('scope-audit', 'Scope Audit', 'Which repeaters carry which region scopes', ToolGroup.site),
+  ToolEntry('path', 'Path Inspector', 'See which repeaters a packet went through', ToolGroup.network, aliases: ['path-inspector']),
+  ToolEntry('trace', 'Trace Viewer', 'How far a trace got and the signal at each repeater', ToolGroup.network, aliases: ['trace-viewer']),
+  ToolEntry('prefix', 'Prefix Tool', 'Find an unused ID for a new repeater', ToolGroup.network, aliases: ['prefix-tool']),
+  ToolEntry('decode', 'Decode a packet', 'Paste a packet and read what is in it', ToolGroup.network),
+  ToolEntry('scope-audit', 'Scope Audit', 'Which repeaters pass on which regions', ToolGroup.site),
   ToolEntry('compare', 'Compare observers', 'What two observers both hear, and what only one does', ToolGroup.site, aliases: ['observers-compare']),
-  ToolEntry('definition', 'Region definition', 'The regions and scope names covering a point', ToolGroup.site, aliases: ['region', 'region-def']),
-  ToolEntry('status', 'Status', 'Whether packets are arriving and the summaries are current', ToolGroup.site),
+  ToolEntry('definition', 'Region definition', 'Which regions cover a spot on the map', ToolGroup.site, aliases: ['region', 'region-def']),
+  ToolEntry('status', 'Status', 'Is the network data arriving and up to date', ToolGroup.site),
   // Site tools with no native twin here: the link parser passes `/tools/<name>` through with these ids.
-  ToolEntry('airtime', 'Airtime and load', 'Time on air for a packet and how busy the channel is', ToolGroup.site),
-  ToolEntry('link', 'Point-to-point link', 'Will two points hear each other: terrain and link budget', ToolGroup.site),
-  ToolEntry('painter', 'Coverage painter', 'Estimated coverage from a site you pick', ToolGroup.site),
-  ToolEntry('radio-trace', 'Trace path', 'Send a trace from your radio along a chain of repeaters', ToolGroup.radio, aliases: ['trace-path']),
-  ToolEntry('discover', 'Discover', 'Ask nearby repeaters to answer your radio', ToolGroup.radio),
-  ToolEntry('adverts', 'Adverts', 'Adverts your radio has heard', ToolGroup.radio),
+  ToolEntry('airtime', 'Airtime and load', 'How long a packet is on air and how busy the channel is', ToolGroup.site),
+  ToolEntry('link', 'Point-to-point link', 'Will two places hear each other', ToolGroup.site),
+  ToolEntry('painter', 'Coverage painter', 'Estimated coverage from a spot you pick', ToolGroup.site),
+  ToolEntry('radio-trace', 'Trace path', 'Send a test packet along repeaters you choose', ToolGroup.radio, aliases: ['trace-path']),
+  ToolEntry('discover', 'Discover', 'Find repeaters in direct range of your radio', ToolGroup.radio),
+  ToolEntry('adverts', 'Adverts', 'Announce your radio and see who else announced', ToolGroup.radio),
   ToolEntry('rx-log', 'Rx log', 'Every packet your radio hears, live', ToolGroup.radio, aliases: ['rxlog', 'rx_log']),
   ToolEntry('noise', 'Noise floor', 'How quiet the channel is at your radio', ToolGroup.radio, aliases: ['noise-floor']),
   ToolEntry('telemetry', 'Telemetry', 'Battery and sensor readings from a node', ToolGroup.radio),
 ];
+
+/// The tools whose name or description holds every word of [query] (any case), in list order. An empty query = all.
+List<ToolEntry> toolsMatching(String query) {
+  final words = [for (final w in query.toLowerCase().split(RegExp(r'\s+'))) if (w.isNotEmpty) w];
+  if (words.isEmpty) return toolEntries;
+  return [
+    for (final e in toolEntries)
+      if (words.every((w) => '${e.title} ${e.about} ${e.id}'.toLowerCase().contains(w))) e,
+  ];
+}
 
 ToolEntry? toolEntryOf(String? id) {
   if (id == null) return null;
@@ -109,6 +124,15 @@ class _ToolsSectionState extends State<ToolsSection> {
   /// list. Radio tools are never link targets; asked for by id they open as their own page.
   ToolEntry? _shown;
   String? _shownArg;
+
+  /// "Find a tool": what is typed over the list.
+  final TextEditingController _find = TextEditingController();
+
+  @override
+  void dispose() {
+    _find.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -174,10 +198,48 @@ class _ToolsSectionState extends State<ToolsSection> {
     Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: '/tools/${e.id}'), builder: (_) => _page(e, null)));
   }
 
-  List<Widget> _rows(ToolGroup g) => [
-        for (final e in toolEntries)
-          if (e.group == g) InsetRow(key: Key('tool-row-${e.id}'), title: e.title, subtitle: e.about, onTap: () => _open(e)),
+  List<Widget> _rowsOf(Iterable<ToolEntry> entries) => [
+        for (final e in entries) InsetRow(key: Key('tool-row-${e.id}'), title: e.title, subtitle: e.about, onTap: () => _open(e)),
       ];
+
+  List<Widget> _rows(ToolGroup g) => _rowsOf(toolEntries.where((e) => e.group == g));
+
+  /// The radio behind the radio tools, when the app (or a test) provides one; null in a bare widget test.
+  ToolsHost? _host(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<ToolsHostScope>();
+    if (scope != null) return scope.host;
+    final app = AppScope.maybeOf(context);
+    return app == null ? null : AppStateToolsHost.of(app);
+  }
+
+  /// The radio group: says whether a radio is connected, and offers Connect as its first row when none is, so a
+  /// person does not open six tools to read "Radio not connected" six times.
+  Widget _radioGroup(BuildContext context) {
+    final host = _host(context);
+    final rows = _rows(ToolGroup.radio);
+    if (host == null) return InsetGroup(header: 'With your radio', footer: 'These use your connected radio.', rows: rows);
+    return ListenableBuilder(
+      listenable: host,
+      builder: (context, _) {
+        final ready = host.tools != null;
+        final name = host.radioName;
+        final waiting = host.linkState == LinkState.connecting || host.linkState == LinkState.reconnecting;
+        return InsetGroup(
+          header: 'With your radio',
+          footer: ready
+              ? 'Using ${name == null || name.isEmpty ? 'your connected radio' : name}.'
+              : waiting
+                  ? 'Connecting to your radio. These work as soon as it is back.'
+                  : 'No radio is connected. Connect one to use these.',
+          rows: [
+            if (!ready && !waiting)
+              InsetRow(key: const Key('tools-connect-radio'), title: 'Connect a radio', subtitle: 'Bluetooth, to a MeshCore radio', onTap: () => host.openConnect(context)),
+            ...rows,
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -185,13 +247,52 @@ class _ToolsSectionState extends State<ToolsSection> {
     if (shown != null) {
       return KeyedSubtree(key: ValueKey('tools-in-place-${widget.baseUrl}-${shown.id}-$_shownArg'), child: _page(shown, _shownArg, onClose: _close));
     }
+    final t = Theme.of(context);
+    final query = _find.text.trim();
+    final found = query.isEmpty ? const <ToolEntry>[] : toolsMatching(query);
     return ListView(
       key: const Key('tools-section'),
-      padding: const EdgeInsets.only(top: 12, bottom: 24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
       children: [
-        InsetGroup(header: 'Network tools', rows: _rows(ToolGroup.network)),
-        InsetGroup(header: 'Site pages', footer: 'Website pages shown inside the app. They need a connection.', rows: _rows(ToolGroup.site)),
-        InsetGroup(header: 'Radio tools', footer: 'These use your connected radio.', rows: _rows(ToolGroup.radio)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, 12),
+          child: TextField(
+            key: const Key('tools-find'),
+            controller: _find,
+            autocorrect: false,
+            textInputAction: TextInputAction.search,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Find a tool',
+              prefixIcon: const Icon(Icons.search),
+              isDense: true,
+              border: const OutlineInputBorder(),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      key: const Key('tools-find-clear'),
+                      tooltip: 'Clear',
+                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                      onPressed: () => setState(_find.clear),
+                      icon: const Icon(Icons.close),
+                    ),
+            ),
+          ),
+        ),
+        if (query.isNotEmpty && found.isEmpty)
+          Padding(
+            key: const Key('tools-find-none'),
+            padding: const EdgeInsets.fromLTRB(Layout.screenMargin + Gap.l, 0, Layout.screenMargin, 0),
+            child: Text('No tool matches "$query". Clear the search to see all ${toolEntries.length}.', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          )
+        else if (query.isNotEmpty)
+          InsetGroup(header: '${found.length} of ${toolEntries.length} tools', rows: _rowsOf(found))
+        else ...[
+          InsetGroup(header: 'Look things up', rows: _rows(ToolGroup.network)),
+          _radioGroup(context),
+          InsetGroup(header: 'More tools', footer: 'Web pages that open inside the app. They need an internet connection.', rows: _rows(ToolGroup.site)),
+        ],
       ],
     );
   }

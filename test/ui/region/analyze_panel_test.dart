@@ -57,6 +57,10 @@ Future<void> pump(WidgetTester t, AnalyzeApi a, {String? tz = 'America/New_York'
     ),
   );
   await t.pumpAndSettle();
+  // Build 76: "Node list check" starts closed (rarely needed); the tests read it open.
+  expect(find.byKey(const Key('an-gate-ready')), findsNothing, reason: 'the node-list check starts closed');
+  await t.tap(find.byKey(const Key('an-gate-toggle')));
+  await t.pumpAndSettle();
 }
 
 String statText(WidgetTester t, String label) => t.widget<Text>(find.byKey(Key('stat-value:$label'))).data!;
@@ -91,7 +95,7 @@ void main() {
       expect(statText(t, 'Packets'), '61,234');
       expect(statText(t, 'Observations'), '640,000');
       expect(statText(t, 'Observers'), '41');
-      expect(statText(t, 'Mean SNR'), '4.2 dB');
+      expect(statText(t, 'Average SNR'), '4.2 dB');
       expect(statText(t, 'Flooded'), '75%');
       expect(t.widget<Text>(find.byKey(const Key('source-chip'))).data, 'Heard by ours 38% · outside 60% · phones 2%');
       // health: the endpoint's counts, not a recount

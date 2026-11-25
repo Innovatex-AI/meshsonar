@@ -56,25 +56,25 @@ class RegionStatusChip extends StatelessWidget {
     final m = MeshSonarColors.of(context);
     final (label, bg, fg, icon) = switch (status.state) {
       RegionDataState.ready => (
-        'Ready',
+        'Up to date',
         c.primaryContainer,
         c.onPrimaryContainer,
         Icons.check_circle_outline,
       ),
       RegionDataState.partial => (
-        'Partial',
+        'Partly ready',
         m.beacon.withValues(alpha: .22),
         c.onSurface,
         Icons.timelapse,
       ),
       RegionDataState.pending => (
-        'Pending',
+        'Not ready yet',
         c.surfaceContainerHigh,
         c.onSurfaceVariant,
         Icons.hourglass_empty,
       ),
       RegionDataState.stale => (
-        'Stale',
+        'Out of date',
         m.beacon.withValues(alpha: .22),
         c.onSurface,
         Icons.history,
@@ -214,8 +214,7 @@ class RegionOfflineEmpty extends StatelessWidget {
         child: EmptyState(
           icon: Icons.cloud_off,
           title: 'No connection',
-          body: "Can't load $what: the server can't be reached and nothing for this region is saved on this phone yet. "
-              'Connect to the internet and tap Retry.',
+          body: "Can't load $what. Nothing for this region is saved on this phone yet: connect to the internet, then tap Retry.",
           action: FilledButton.icon(
             key: const Key('region-offline-retry'),
             onPressed: onRetry,

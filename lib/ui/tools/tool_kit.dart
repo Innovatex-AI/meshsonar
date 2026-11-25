@@ -29,7 +29,10 @@ class ToolPage extends StatelessWidget {
   final String title;
   final Widget Function(BuildContext context, ToolsHost host, RadioTools tools) builder;
   final List<Widget> Function(BuildContext context, ToolsHost host, RadioTools tools)? actions;
-  const ToolPage({super.key, required this.id, required this.title, required this.builder, this.actions});
+
+  /// One sentence on what the tool does, shown with the "no radio" page so the person knows what connecting gets them.
+  final String? about;
+  const ToolPage({super.key, required this.id, required this.title, required this.builder, this.actions, this.about});
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +44,7 @@ class ToolPage extends StatelessWidget {
         return Scaffold(
           key: Key('tool-$id'),
           appBar: AppBar(title: Text(title), actions: tools == null ? null : actions?.call(context, host, tools)),
-          body: SafeArea(child: tools == null ? ToolUnavailable(host: host) : builder(context, host, tools)),
+          body: SafeArea(child: tools == null ? ToolUnavailable(host: host, about: about) : builder(context, host, tools)),
         );
       },
     );
@@ -51,36 +54,39 @@ class ToolPage extends StatelessWidget {
 /// Why a tool cannot run right now, in plain language, with the one thing to do about it.
 class ToolUnavailable extends StatelessWidget {
   final ToolsHost host;
-  const ToolUnavailable({super.key, required this.host});
+  final String? about;
+  const ToolUnavailable({super.key, required this.host, this.about});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final state = host.linkState;
+    // A dead end has a way out: a link that cannot run the tools offers another radio.
+    final otherRadio = state == LinkState.connected;
     final (IconData icon, String title, String body, bool canConnect) = switch (state) {
       LinkState.reconnecting => (
           Icons.bluetooth_searching,
           'Getting your radio back',
-          'The Bluetooth link dropped and MeshSonar is reconnecting. This screen comes back by itself when the radio does.',
+          'The Bluetooth link dropped. MeshSonar is reconnecting; this screen comes back by itself.',
           false
         ),
       LinkState.connecting => (Icons.bluetooth_searching, 'Connecting', 'MeshSonar is connecting to your radio.', false),
       LinkState.handedOver => (
           Icons.swap_horiz,
           'Radio handed to another app',
-          'You gave your radio to another app on purpose, so MeshSonar left it alone. Connect again to use these tools.',
+          'You gave your radio to another app, so MeshSonar left it alone. Connect again to use this tool.',
           true
         ),
       LinkState.connected => (
           Icons.link_off,
           'This radio connection cannot run the tools',
-          'The tools need a MeshCore companion radio. This connection does not offer them.',
+          'This tool needs a MeshCore companion radio over Bluetooth. The radio connected now does not offer it.',
           false
         ),
       LinkState.disconnected => (
           Icons.bluetooth_disabled,
           'Radio not connected',
-          'Connect a MeshCore radio and these tools work with it. Nothing is sent to the mesh until you ask.',
+          'This tool works through your MeshCore radio. Nothing is sent to the mesh until you ask.',
           true
         ),
     };
@@ -98,11 +104,25 @@ class ToolUnavailable extends StatelessWidget {
               Text(title, style: t.textTheme.titleLarge, textAlign: TextAlign.center),
               const SizedBox(height: Gap.s),
               Text(body, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
+              if (about != null) ...[
+                const SizedBox(height: Gap.m),
+                Text(about!, key: const Key('tool-about'), style: t.textTheme.bodyMedium, textAlign: TextAlign.center),
+              ],
+              if (otherRadio) ...[
+                const SizedBox(height: Gap.l),
+                OutlinedButton.icon(
+                  key: const Key('tool-connect-other'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+                  onPressed: () => host.openConnect(context),
+                  icon: const Icon(Icons.bluetooth),
+                  label: const Text('Choose another radio'),
+                ),
+              ],
               if (canConnect) ...[
                 const SizedBox(height: Gap.l),
                 FilledButton.icon(
                   key: const Key('tool-connect'),
-                  style: FilledButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(kToolTarget)),
                   onPressed: () => host.openConnect(context),
                   icon: const Icon(Icons.bluetooth),
                   label: const Text('Connect a radio'),

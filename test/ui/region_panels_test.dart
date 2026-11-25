@@ -63,12 +63,18 @@ void main() {
     c.complete(http.Response(jsonEncode(overview()), 200));
     await tester.pumpAndSettle();
     expect(find.text('612'), findsOneWidget);
-    expect(find.text('1 / 9'), findsOneWidget);
+    expect(find.text('1 of 9'), findsOneWidget);
     expect(find.text('326'), findsOneWidget);
     expect(find.text('64'), findsOneWidget);
     expect(find.byKey(const Key('sparkline')), findsOneWidget);
-    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('Up to date'), findsOneWidget);
     expect(find.byKey(const Key('region-status-reason')), findsNothing);
+    // Build 76: the panel has no second title (the header above it says "Region overview"), and with no shell above the
+    // figures are plain (nothing to open).
+    expect(find.text('Region overview'), findsNothing);
+    expect(find.text('Repeaters known'), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('overview-refresh'))).height, greaterThanOrEqualTo(48));
+    expect(tester.widget<InkWell>(find.byKey(const Key('stat-packets-open'))).onTap, isNull);
   });
 
   testWidgets('overview: partial shows the server reason verbatim', (
@@ -90,7 +96,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Partial'), findsOneWidget);
+    expect(find.text('Partly ready'), findsOneWidget);
     expect(find.text(reason), findsOneWidget);
     expect(find.text('0'), findsWidgets);
     expect(find.textContaining('No packets in the last 2 h'), findsOneWidget);
@@ -114,7 +120,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Pending'), findsOneWidget);
+      expect(find.text('Not ready yet'), findsOneWidget);
       expect(find.text('Region is being set up.'), findsOneWidget);
       expect(find.text('No overview data yet'), findsOneWidget);
     },
@@ -134,6 +140,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('per region'), findsOneWidget);
+    expect(find.text('The overview did not load'), findsOneWidget);
     fail = false;
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();

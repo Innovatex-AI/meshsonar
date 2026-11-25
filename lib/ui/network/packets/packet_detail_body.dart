@@ -240,7 +240,7 @@ class PacketDetailBody extends StatelessWidget {
         if (cross.networkObservers != null && cross.onOpenNetwork != null)
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(key: const Key('packet-open-network'), onPressed: cross.onOpenNetwork, child: const Text("Open the network's copy")),
+            child: TextButton(key: const Key('packet-open-network'), onPressed: cross.onOpenNetwork, child: const Text('See who else heard it')),
           ),
         if (d.anomaly != null) PacketNote(d.anomaly!, icon: Icons.warning_amber_rounded),
         for (final m in d.missing) PacketNote(m, key: ValueKey('packet-missing-$m')),
@@ -253,7 +253,7 @@ class PacketDetailBody extends StatelessWidget {
         if (d.paths.isNotEmpty || d.type == 9) _paths(context),
         PacketFold(
           id: 'bytes',
-          title: 'Bytes',
+          title: 'Raw bytes',
           subtitle: inspect?.raw == null ? 'Not sent by this source' : '${inspect!.raw!.length ~/ 2} bytes, every field labelled',
           initiallyExpanded: expandSections,
           children: [
@@ -262,6 +262,18 @@ class PacketDetailBody extends StatelessWidget {
               if (inspect.source == PacketSource.v1 && !inspect.rawVerified)
                 const PacketNote('The server could not confirm these bytes against the packet hash.', icon: Icons.warning_amber_rounded),
               ByteInspector(key: ValueKey('inspector-${inspect.hash}'), raw: inspect.raw!, ranges: inspect.bytes),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const Key('packet-copy-hex-inline'),
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: const Text('Copy the packet as hex'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: inspect.raw!));
+                    showAppToast(context, 'Packet hex copied');
+                  },
+                ),
+              ),
             ] else
               const PacketNote('No bytes to show for this packet from this source.', key: Key('packet-no-bytes')),
           ],
@@ -282,43 +294,57 @@ class PacketDetailBody extends StatelessWidget {
       PacketSource.serverDecode => 'Pasted, decoded by the MeshSonar server',
       _ => srcNames.isEmpty ? 'MeshSonar' : srcNames.join(', '),
     };
+    // What people look for first stays in view; the rest (size, route kind, hop code size, source, scope) is one tap away.
     final facts = <(String, String)>[
-      ('Type', packetTypeLabel(d.typeName)),
-      ('Route', packetRouteLabel(d.route)),
-      if (d.firstSeen != null) ('Heard', '${dayUtc(d.firstSeen)} (${ageText(d.firstSeen!, now)} ago)'),
-      if (d.size != null) ('Size', '${d.size} bytes'),
+      if (d.firstSeen != null) ('Heard', '${ageText(d.firstSeen!, now)} ago · ${dayUtc(d.firstSeen)}'),
       ('Hops', d.type == 9 ? '${(d.decodedFields['hopsCompleted'] ?? d.hops)} completed' : (d.hops == 0 ? 'none (heard direct)' : '${d.hops}')),
-      if (d.hashSize != null && d.hashSize! > 0) ('Hop code size', '${d.hashSize} byte${d.hashSize == 1 ? '' : 's'}'),
-      if (d.source == PacketSource.v1 || d.source == PacketSource.legacy) ('Observers', '${d.observerCount}'),
-      if (d.localSnr != null) ('SNR here', snrText(d.localSnr)),
-      ('Source', sourceText),
-      if (d.scope != null) ('Scope', d.scope!.label),
+      if (d.source == PacketSource.v1 || d.source == PacketSource.legacy) ('Heard by', '${d.observerCount} observer${d.observerCount == 1 ? '' : 's'}'),
+      if (d.localSnr != null) ('Signal here', snrText(d.localSnr)),
       if (d.channel != null) ('Channel', d.channel!.label),
     ];
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(_title(), key: const Key('packet-detail-title'), style: t.textTheme.titleLarge),
-      const SizedBox(height: Gap.xs),
-      Row(children: [
-        Expanded(child: SelectableText(d.hash, key: const Key('packet-detail-hash'), style: t.textTheme.bodyMedium?.copyWith(fontFamily: 'Menlo', fontFamilyFallback: const ['Courier', 'monospace']))),
-        IconButton(
-          key: const Key('packet-copy-hash'),
-          tooltip: 'Copy the packet hash',
-          icon: const Icon(Icons.copy, size: 20),
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: d.hash));
-            showAppToast(context, 'Hash copied');
-          },
-        ),
-      ]),
-      const SizedBox(height: Gap.xs),
-      for (final f in facts)
-        Padding(
+    final more = <(String, String)>[
+      ('Kind', packetTypeLabel(d.typeName)),
+      ('Sent as', packetRouteLabel(d.route)),
+      if (d.size != null) ('Size', '${d.size} bytes'),
+      if (d.hashSize != null && d.hashSize! > 0) ('Hop code size', '${d.hashSize} byte${d.hashSize == 1 ? '' : 's'}'),
+      ('Source', sourceText),
+      if (d.scope != null) ('Scope', d.scope!.label),
+    ];
+    Widget fact((String, String) f) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             SizedBox(width: 120, child: Text(f.$1, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant))),
             Expanded(child: Text(f.$2, style: t.textTheme.bodyMedium)),
           ]),
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(_title(), key: const Key('packet-detail-title'), style: t.textTheme.titleLarge),
+      const SizedBox(height: Gap.xs),
+      // One row: the packet's ID, small, with a labelled Copy (44 pt).
+      Row(children: [
+        Text('ID ', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        Expanded(
+            child: SelectableText(d.hash,
+                key: const Key('packet-detail-hash'), maxLines: 1, style: t.textTheme.bodyMedium?.copyWith(fontFamily: 'Menlo', fontFamilyFallback: const ['Courier', 'monospace']))),
+        TextButton.icon(
+          key: const Key('packet-copy-hash'),
+          style: TextButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: Gap.s)),
+          icon: const Icon(Icons.copy, size: 18),
+          label: const Text('Copy', semanticsLabel: 'Copy the packet ID'),
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: d.hash));
+            showAppToast(context, 'Packet ID copied');
+          },
         ),
+      ]),
+      for (final f in facts) fact(f),
+      PacketFold(
+        id: 'facts',
+        title: 'More about this packet',
+        subtitle: [packetTypeLabel(d.typeName), packetRouteLabel(d.route), if (d.size != null) '${d.size} bytes'].join(' · '),
+        initiallyExpanded: expandSections,
+        children: [for (final f in more) fact(f)],
+      ),
     ]);
   }
 

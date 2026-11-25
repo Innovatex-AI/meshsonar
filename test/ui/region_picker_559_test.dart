@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/region_lookup.dart';
+import 'package:meshsonar/core/region_search.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/region/region_switcher.dart';
 import 'package:meshsonar/ui/region/regions_screen.dart';
@@ -109,6 +110,62 @@ void main() {
       await tester.tap(find.byKey(const Key('region-follow')));
       await tester.pumpAndSettle();
       expect(h.state.viewingIsManual, isFalse);
+    });
+
+    testWidgets('build 76: the region on screen carries the tick while following; no match offers the full list again', (tester) async {
+      final h = await pumpSheet(tester);
+      expect(h.state.viewingIsManual, isFalse);
+      expect(find.byKey(const Key('region-follow-on')), findsOneWidget, reason: 'Follow my location says it is on');
+      final v = h.state.viewingRegion;
+      if (v != null) {
+        expect(find.byKey(Key('region-viewing-near-${v.code}')), findsOneWidget, reason: 'the viewed region is marked, not an empty circle');
+        expect(find.textContaining('viewing now'), findsWidgets);
+      }
+      for (final e in find.byType(ListTile).evaluate()) {
+        expect(tester.getSize(find.byWidget(e.widget)).height, greaterThanOrEqualTo(48), reason: 'every row is a full tap target');
+      }
+      await tester.enterText(find.byKey(const Key('region-search')), 'zzzzqq');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('region-search-reset')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('region-search-reset')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('region-all')), findsOneWidget, reason: 'the full list is back');
+      expect(tester.widget<TextField>(find.byKey(const Key('region-search'))).controller!.text, isEmpty);
+    });
+
+    testWidgets('build 76: the keyboard Search key views the one region left', (tester) async {
+      final h = await pumpSheet(tester);
+      final index = h.state.regionIndex;
+      // A query that leaves exactly one region (a code, a name, or both together).
+      RegionIndexEntry? one;
+      var query = '';
+      for (final r in index.take(60)) {
+        if (r.code == h.state.viewingRegion?.code) continue;
+        for (final q in [r.code, r.name, '${r.name} ${r.code}']) {
+          final hits = RegionSearchIndex.of(index).search(q);
+          if (hits.length == 1 && hits.single.code == r.code) {
+            one = r;
+            query = q;
+            break;
+          }
+        }
+        if (one != null) break;
+      }
+      expect(one, isNotNull, reason: 'the synthetic index has a region one query finds alone');
+      final only = one!;
+      await tester.pumpWidget(MaterialApp(
+        theme: meshSonarTheme(Brightness.dark),
+        home: Scaffold(body: Builder(builder: (c) => TextButton(key: const Key('open'), onPressed: () => showModalBottomSheet<void>(context: c, isScrollControlled: true, builder: (_) => RegionSwitcherSheet(state: h.state)), child: const Text('open')))),
+      ));
+      await tester.tap(find.byKey(const Key('open')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('region-search')), query);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Press Search to view'), findsOneWidget);
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.byType(RegionSwitcherSheet), findsNothing);
+      expect(h.state.viewingRegion!.code, only.code);
     });
 
     testWidgets('building the sheet with 559 regions takes a frame or two, not seconds', (tester) async {

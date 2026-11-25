@@ -63,6 +63,13 @@ void main() {
     tall(tester);
     expect(find.byKey(const Key('telemetry-latest')), findsOneWidget);
     expect(find.text('This radio'), findsWidgets);
+    // Build 76: a row under Latest answers opens the whole answer again (nothing is asked over the air).
+    expect(find.byKey(const Key('telemetry-result')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('telemetry-latest-self')));
+    await tester.tap(find.byKey(const Key('telemetry-latest-self')));
+    await tester.pump();
+    expect(find.byKey(const Key('telemetry-result')), findsOneWidget);
+    expect(find.text('Battery voltage'), findsOneWidget);
     await leave(tester);
   });
 

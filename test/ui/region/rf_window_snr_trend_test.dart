@@ -27,8 +27,8 @@ void main() {
       expect(find.textContaining('13 of 14 days with readings'), findsOneWidget);
       expect(find.byKey(const Key('snrtrend-sentence')), findsOneWidget);
       expect(find.textContaining('about 3.0 dB stronger'), findsOneWidget);
-      expect(find.bySemanticsLabel(RegExp(r'Mean SNR per day \(dB\)\. 13 of 14 days with readings, 39 adverts')), findsOneWidget);
-      expect(find.textContaining('Days are UTC dates'), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r'Average signal per day \(SNR, dB\)\. 13 of 14 days with readings, 39 adverts')), findsOneWidget);
+      expect(find.textContaining('a gap is a day with no reading'), findsOneWidget);
       await tester.tap(find.text('Table'));
       await tester.pumpAndSettle();
       expect(find.text('no reading'), findsOneWidget);
@@ -42,7 +42,7 @@ void main() {
       expect(find.byKey(const Key('snrtrend-summary')), findsOneWidget);
       await tester.pumpWidget(_app(SingleChildScrollView(child: SnrTrendCard(daily: days([null, null, null])))));
       expect(find.byKey(const Key('snrtrend-empty')), findsOneWidget);
-      expect(find.textContaining('No direct readings in the last 30 days'), findsOneWidget);
+      expect(find.textContaining('No readings in the last 30 days'), findsOneWidget);
       await tester.pumpWidget(_app(SingleChildScrollView(child: SnrTrendCard(daily: days([5]))), b: Brightness.dark, text: 2));
       expect(find.text('Table'), findsOneWidget); // one point: starts on the table, no one-dot chart
       expect(tester.takeException(), isNull);

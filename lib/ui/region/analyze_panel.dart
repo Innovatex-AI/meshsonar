@@ -91,7 +91,7 @@ class _AnalyzePanelState extends State<AnalyzePanel> {
           _Section<InsightsRead>(
             id: 'an-findings',
             title: 'What needs attention',
-            lead: 'Findings the analysis engine rebuilds every night from this region\'s own figures. Nothing is listed unless the data backs it.',
+            lead: 'Checked every night from this region\'s own numbers.',
             read: _insights,
             statuses: _statuses,
             datasetKey: 'network.findings',
@@ -109,7 +109,7 @@ class _AnalyzePanelState extends State<AnalyzePanel> {
           _Section<RepeaterHealthRead>(
             id: 'an-health',
             title: 'Network health',
-            lead: 'Repeaters heard, which ones carry the traffic and how reliable they are, from every source.',
+            lead: 'Which repeaters are heard and which carry the traffic.',
             read: _health,
             statuses: _statuses,
             datasetKey: 'network.snapshots',
@@ -126,7 +126,7 @@ class _AnalyzePanelState extends State<AnalyzePanel> {
           _Section<TrafficRead>(
             id: 'an-traffic',
             title: 'Traffic',
-            lead: 'Packets heard in the last 24 closed hours by our observers, phones and outside feeds, each packet counted once.',
+            lead: 'Packets heard in the last 24 full hours, each counted once.',
             read: _traffic,
             statuses: _statuses,
             datasetKey: 'network.packets',
@@ -144,10 +144,12 @@ class _AnalyzePanelState extends State<AnalyzePanel> {
           _Section<NodeGateRead>(
             id: 'an-gate',
             title: 'Node list check',
-            lead: 'Whether the repeaters this page names are enough to place the relays seen in recent packets.',
+            lead: 'For repeater owners: can the relays in recent packets be matched to known repeaters?',
             read: _gate,
             statuses: _statuses,
             datasetKey: null,
+            // Rarely needed: closed until asked for, so the three sections people read come first on a phone.
+            startClosed: true,
             region: name,
             tz: tz,
             now: now,
@@ -183,7 +185,11 @@ class _Section<T extends Object> extends StatefulWidget {
   final (EngineStatus, DateTime?) Function(T data) judge;
   final VoidCallback onRetry;
   final Widget Function(BuildContext context, T data) body;
+
+  /// True: only the title and the one-line lead show until the header is tapped.
+  final bool startClosed;
   const _Section({
+    this.startClosed = false,
     required this.id,
     required this.title,
     required this.lead,
@@ -204,6 +210,7 @@ class _Section<T extends Object> extends StatefulWidget {
 
 class _SectionState<T extends Object> extends State<_Section<T>> {
   late Future<(AnalyzeRead<T>, List<DatasetStatus>)> _both = _join();
+  late bool _open = !widget.startClosed;
 
   Future<(AnalyzeRead<T>, List<DatasetStatus>)> _join() async =>
       (await widget.read, (await widget.statuses).data ?? const <DatasetStatus>[]);
@@ -237,10 +244,34 @@ class _SectionState<T extends Object> extends State<_Section<T>> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: t.textTheme.titleMedium),
-            const SizedBox(height: Gap.xs),
-            Text(lead, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            const SizedBox(height: Gap.m),
+            if (!w.startClosed) ...[
+              Semantics(header: true, child: Text(title, style: t.textTheme.titleMedium)),
+              const SizedBox(height: Gap.xs),
+              Text(lead, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ] else
+              Semantics(
+                button: true,
+                expanded: _open,
+                child: InkWell(
+                  key: Key('$id-toggle'),
+                  onTap: () => setState(() => _open = !_open),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                          Text(title, style: t.textTheme.titleMedium),
+                          const SizedBox(height: Gap.xs),
+                          Text(lead, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                        ]),
+                      ),
+                      Icon(_open ? Icons.expand_less : Icons.expand_more, color: t.colorScheme.onSurfaceVariant),
+                    ]),
+                  ),
+                ),
+              ),
+            if (_open) const SizedBox(height: Gap.m),
+            if (_open)
             FutureBuilder<(AnalyzeRead<T>, List<DatasetStatus>)>(
               future: _both,
               builder: (context, snap) {
@@ -263,15 +294,14 @@ class _SectionState<T extends Object> extends State<_Section<T>> {
                     context,
                     'error',
                     'This did not load',
-                    rd.error ?? v.reason ?? 'The analysis engine reported an error for this section.',
+                    rd.error ?? v.reason ?? 'The server reported an error for this part. Check your connection and try again.',
                     onRetry: onRetry,
                   ),
                   SectionState.none => _stateBox(
                     context,
                     'none',
                     'Not available in $region yet',
-                    v.reason ??
-                        'Nothing has been built for this region yet. It appears here after the next engine run.',
+                    v.reason ?? 'Nothing has been worked out for this region yet. It shows up here after tonight\'s run.',
                   ),
                   SectionState.stale => Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,11 +522,22 @@ class _RepeaterLink extends StatelessWidget {
     key: Key('repeater-link:$repeaterKey'),
     behavior: HitTestBehavior.opaque,
     onTap: () => openNetworkNode(context, baseUrl: baseUrl, regionSlug: slug, nodeKey: repeaterKey),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Text(
-        label,
-        style: TextStyle(color: Theme.of(context).colorScheme.primary, decoration: TextDecoration.underline),
+    // A full 44 pt row to tap (it was a 30 pt line of text), and the name is cut with an ellipsis instead of wrapping
+    // under the figures beside it.
+    child: Semantics(
+      link: true,
+      hint: 'Opens this repeater',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Theme.of(context).colorScheme.primary, decoration: TextDecoration.underline),
+          ),
+        ),
       ),
     ),
   );
@@ -578,18 +619,6 @@ class _FindingsBody extends StatelessWidget {
                     child: Icon(findingIcon(rows[i]), key: Key('finding-icon:${rows[i].code}'), size: 20, color: tone(rows[i].severity)),
                   ),
                 ),
-                Container(
-                  margin: const EdgeInsets.only(right: Gap.s, top: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: tone(rows[i].severity).withValues(alpha: .2),
-                    borderRadius: BorderRadius.circular(Corners.chip),
-                  ),
-                  child: Text(
-                    severityWord[rows[i].severity] ?? 'Note',
-                    style: t.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -605,19 +634,40 @@ class _FindingsBody extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Text(
-                        sectionWord[rows[i].section] ?? rows[i].section,
-                        style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                      // The severity word sits under the text with the topic, so the finding itself has the full
+                      // width of a phone (it used to share the line with the chip and wrapped into a narrow column).
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(children: [
+                          Container(
+                            margin: const EdgeInsets.only(right: Gap.s),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: tone(rows[i].severity).withValues(alpha: .2),
+                              borderRadius: BorderRadius.circular(Corners.chip),
+                            ),
+                            child: Text(
+                              severityWord[rows[i].severity] ?? 'Note',
+                              style: t.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          Flexible(
+                            child: Text(
+                              sectionWord[rows[i].section] ?? rows[i].section,
+                              style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ]),
                       ),
                       for (final k in rows[i].refs.take(5))
                         _RepeaterLink(
                           repeaterKey: k,
-                          label: '${k.length > 8 ? k.substring(0, 8) : k}…',
+                          label: 'Repeater ${k.length > 8 ? k.substring(0, 8) : k}…',
                           baseUrl: baseUrl,
                           slug: slug,
                         ),
                       if (rows[i].refs.length > 5)
-                        Text('and ${rows[i].refs.length - 5} more', style: t.textTheme.labelSmall),
+                        Text('and ${rows[i].refs.length - 5} more repeaters', style: t.textTheme.labelSmall),
                     ],
                   ),
                 ),
@@ -712,7 +762,7 @@ class _HealthBody extends StatelessWidget {
             final list = r.data;
             if (list == null) {
               return Text(
-                'Recent changes did not load: ${r.error}',
+                'Recent changes did not load. Pull down to try again. (${r.error})',
                 key: const Key('events-error'),
                 style: t.textTheme.bodySmall,
               );
@@ -790,8 +840,8 @@ class _TrafficBody extends StatelessWidget {
           _Stat('Packets', f.packets, hint: 'Each counted once'),
           _Stat('Observations', f.observations, hint: 'Every observer\'s copy'),
           _Stat('Observers', f.observers),
-          _Stat('Mean SNR', d.snrMeanDb == null ? f.snr : '${f.snr} dB'),
-          _Stat('Flooded', flood == null ? '—' : formatPct(flood, 0), hint: 'Repeated by every repeater that hears it'),
+          _Stat('Average SNR', d.snrMeanDb == null ? f.snr : '${f.snr} dB', hint: 'Signal above the noise'),
+          _Stat('Flooded', flood == null ? '—' : formatPct(flood, 0), hint: 'Sent to everyone, not one route'),
         ]),
         if (series.length > 1) ...[
           _H3('Packets per ${d.bucket}'),

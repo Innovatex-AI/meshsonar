@@ -26,8 +26,7 @@ class SnrTrendCard extends StatelessWidget {
     Widget body;
     if (daily.isEmpty || !s.hasData) {
       body = Text(
-        'No direct readings in the last 30 days. Our observers have not heard this repeater\'s adverts directly '
-        '(no relay in between) in that time, or it is out of their range.',
+        'No readings in the last 30 days: no MeshSonar observer has heard this repeater directly (it may be out of their range).',
         key: const Key('snrtrend-empty'),
         style: muted,
       );
@@ -53,13 +52,12 @@ class SnrTrendCard extends StatelessWidget {
         const SizedBox(height: Gap.s),
         ChartFrame(
           id: 'snr-trend',
-          title: 'Mean SNR per day (dB)',
+          title: 'Average signal per day (SNR, dB)',
           summary: summary,
           height: 170,
           startWithTable: pts.length < 2,
-          caption: 'What MeshSonar\'s own observers hear: this repeater\'s adverts received directly (no relay), averaged per UTC day '
-              'from observers placed in this region. A day without a reading is a gap, not a zero. Days are UTC dates.',
-          table: ChartTable(head: const ['Day (UTC)', 'Mean SNR (dB)', 'Adverts'], rows: [
+          caption: 'How well MeshSonar\'s observers hear this repeater directly, averaged per UTC day. Higher is better; a gap is a day with no reading.',
+          table: ChartTable(head: const ['Day (UTC)', 'Average SNR (dB)', 'Times heard'], rows: [
             for (final d in daily) [_day(d.day), d.meanDb == null ? 'no reading' : d.meanDb!.toStringAsFixed(1), '${d.n}'],
           ]),
           chart: pts.length < 2

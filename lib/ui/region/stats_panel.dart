@@ -22,7 +22,7 @@ class LeaderboardView extends StatelessWidget {
       return const EmptyState(
         icon: Icons.emoji_events_outlined,
         title: 'No one on the leaderboard yet',
-        body: 'Drivers appear here when they opt in and have driven in the last 30 days.',
+        body: 'Drivers show up here after they turn the leaderboard on and drive. Turn yours on in Settings.',
       );
     }
     return Column(
@@ -30,11 +30,11 @@ class LeaderboardView extends StatelessWidget {
       children: [
         for (final r in board.rows)
           ListTile(
-            dense: true,
+            // Full-height rows (they were dense) and a name that is cut with an ellipsis, never wrapped under the distance.
             selected: highlight != null && r.callsign.toLowerCase() == highlight,
             leading: CircleAvatar(radius: 14, child: Text('${r.rank}')),
-            title: Text(highlight != null && r.callsign.toLowerCase() == highlight ? '${r.callsign} (you)' : r.callsign),
-            subtitle: Text('${r.drives} drives · ${r.cells} cells · ${r.repeatersHeard} repeaters'),
+            title: Text(highlight != null && r.callsign.toLowerCase() == highlight ? '${r.callsign} (you)' : r.callsign, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text('${r.drives} ${r.drives == 1 ? 'drive' : 'drives'} · ${r.cells} map cells · ${r.repeatersHeard} repeaters heard', maxLines: 2, overflow: TextOverflow.ellipsis),
             trailing: Text(AppScope.unitsOf(context).distance(r.km * 1000)),
           ),
       ],

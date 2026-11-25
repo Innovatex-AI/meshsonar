@@ -145,7 +145,7 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
             IconButton(
               key: const Key('packet-copy-hex'),
               tooltip: 'Copy the packet as hex',
-              icon: const Icon(Icons.data_object),
+              icon: const Icon(Icons.copy_all_outlined),
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: raw));
                 showAppToast(context, 'Packet hex copied');
@@ -199,8 +199,13 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
       }
       if (e.offline) return ListView(children: [RegionOfflineEmpty(what: 'this packet', onRetry: _load)]);
       if (e.notFound) {
-        return const AppEmptyView(
-            key: Key('packet-not-found'), symbol: AppSymbols.globe, title: 'Packet not found', message: 'No observer on this server heard this packet, or it is older than 90 days.');
+        return AppEmptyView(
+            key: const Key('packet-not-found'),
+            symbol: AppSymbols.globe,
+            title: 'Packet not found',
+            message: 'Nobody reporting to this server heard this packet, or it is older than 90 days.',
+            actionLabel: 'Go back',
+            onAction: () => Navigator.of(context).maybePop());
       }
       return AppErrorView(key: const Key('packet-error'), title: 'The packet did not load', message: e.message, onRetry: _load);
     }

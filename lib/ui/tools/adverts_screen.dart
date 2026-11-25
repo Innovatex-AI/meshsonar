@@ -21,6 +21,7 @@ class AdvertsScreen extends StatelessWidget {
   Widget build(BuildContext context) => ToolPage(
         id: 'adverts',
         title: 'Adverts',
+        about: 'Adverts announces your radio to others and lists every radio that has announced itself to yours.',
         builder: (context, host, tools) => _AdvertsBody(host: host, tools: tools),
       );
 }
@@ -76,8 +77,9 @@ class _AdvertsBodyState extends State<_AdvertsBody> {
     ];
     final r = _result;
     final header = <Widget>[
-      const ToolHeading('Send your advert'),
-      Wrap(spacing: Gap.m, runSpacing: Gap.s, children: [
+      const ToolHeading('Announce your radio'),
+      // Each button says how far it reaches right under it (was one paragraph for both, further down).
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         CooldownButton(
           key: const Key('adverts-send-local'),
           label: 'Send local advert',
@@ -85,6 +87,10 @@ class _AdvertsBodyState extends State<_AdvertsBody> {
           cooldown: () => _adverts.cooldown(flood: false),
           busy: _sending,
           onPressed: () => _send(flood: false),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: Gap.xs, bottom: Gap.m),
+          child: Text('Reaches radios in direct range. One every 30 s.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
         CooldownButton(
           key: const Key('adverts-send-flood'),
@@ -95,14 +101,15 @@ class _AdvertsBodyState extends State<_AdvertsBody> {
           busy: _sending,
           onPressed: () => _send(flood: true),
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: Gap.xs),
+          child: Text('Every repeater passes it on. One every 5 min.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        ),
       ]),
-      const SizedBox(height: Gap.s),
-      Text('A local advert is heard only by radios in direct range (one every 30 s). A whole-mesh advert is repeated by every repeater (one every 5 min).',
-          style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-      const SizedBox(height: Gap.s),
+      const SizedBox(height: Gap.m),
       AirtimeNote(tools: widget.tools, ms: _adverts.estimateAirtimeMs(), action: 'An advert'),
-      const SizedBox(height: Gap.s),
-      Text('Your advert includes your radio’s stored position only if Radio setup says so.',
+      const SizedBox(height: Gap.xs),
+      Text('It carries your radio’s stored position only if Radio setup says so.',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       if (r != null) ...[
         const SizedBox(height: Gap.m),
@@ -113,7 +120,7 @@ class _AdvertsBodyState extends State<_AdvertsBody> {
               title: r.ok ? 'Advert sent' : (r.status == AdvertSendStatus.cooldown ? 'Not yet' : 'Not sent')),
         ),
       ],
-      const ToolHeading('Heard'),
+      const ToolHeading('Heard by your radio'),
       if (heard.isNotEmpty) ...[
         ToolMap(
           pins: pins,
@@ -136,12 +143,12 @@ class _AdvertsBodyState extends State<_AdvertsBody> {
             label: const Text('Clear'),
           ),
         ]),
-        Text('A heard advert is a hint, not proof of who sent it.',
+        Text('Tap a node for its details. A heard advert is a hint, not proof of who sent it.',
             style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         const SizedBox(height: Gap.s),
       ] else
-        const NoteCard('Nothing heard yet. On a quiet mesh this can take minutes. Adverts only show up when a node sends one.',
-            key: Key('adverts-empty')),
+        const NoteCard('On a quiet mesh this can take minutes: a node shows up here when it next announces itself. Leave this screen open.',
+            key: Key('adverts-empty'), title: 'Nothing heard yet'),
     ];
     return ListView.builder(
       key: const Key('adverts-list'),
@@ -183,12 +190,11 @@ class _AdvertRow extends StatelessWidget {
     final dist = (here != null && a.hasPosition) ? haversineM(here!.lat, here!.lon, a.lat!, a.lon!) : null;
     final skewBig = a.clockSkewSecs != null && a.clockSkewSecs!.abs() > 120;
     final snr = a.snrDb;
+    // Three short lines; the coordinates, dBm and first-heard time are one tap away in the details.
     final lines = <String>[
-      '${_cap(advertTypeName(a.nodeType))}${a.inContacts ? ', in your contacts' : ''}',
-      _where(a),
-      '${fmtSnr(snr)}${a.rssiDbm == null ? '' : ', ${a.rssiDbm!.toStringAsFixed(0)} dBm'}',
-      'Seen ${fmtAgo(now.difference(a.lastSeen))}, ${a.count} ${a.count == 1 ? 'time' : 'times'}, first ${fmtAgo(now.difference(a.firstSeen))}',
-      if (a.hasPosition) '${a.lat!.toStringAsFixed(4)}, ${a.lon!.toStringAsFixed(4)}${dist == null ? '' : ', ${units.distance(dist, approx: true)} from you'}',
+      '${_cap(advertTypeName(a.nodeType))}${a.inContacts ? ', in your contacts' : ''} · ${_where(a)}',
+      'Signal ${fmtSnr(snr)}${dist == null ? '' : ' · ${units.distance(dist, approx: true)} from you'}',
+      'Heard ${fmtAgo(now.difference(a.lastSeen))}${a.count == 1 ? '' : ' · ${a.count} times'}',
     ];
     return Card(
       key: Key('adverts-row-${a.shortKey}'),
@@ -207,7 +213,10 @@ class _AdvertRow extends StatelessWidget {
                 label: '${a.displayName}. ${lines.join('. ')}. Last heard at ${fmtClock(a.lastSeen)}. ${skewBig ? '${_skewText(a.clockSkewSecs!)}. ' : ''}Opens details.',
                 excludeSemantics: true,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(a.displayName, style: t.textTheme.titleMedium),
+                  Row(children: [
+                    Expanded(child: Text(a.displayName, style: t.textTheme.titleMedium)),
+                    Icon(Icons.chevron_right, size: 20, color: t.colorScheme.onSurfaceVariant),
+                  ]),
                   for (final l in lines) Text(l, style: t.textTheme.bodyMedium),
                   if (skewBig)
                     Padding(
@@ -230,7 +239,7 @@ class _AdvertRow extends StatelessWidget {
             style: TextButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
             onPressed: () => _scopeSheet(context),
             icon: Icon(_scopeIcon(a.scope.verdict)),
-            label: Text('Region scope check: ${a.scope.label}'),
+            label: Text('Region: ${a.scope.label}'),
           ),
         ),
       ]),
@@ -259,6 +268,7 @@ class _AdvertRow extends StatelessWidget {
         ('Route', routeLabel),
         ('Path', a.hops == 0 ? 'Direct, no repeater in between' : '${a.path.join(' > ')} (${a.hashSize}-byte hashes)'),
         ('Signal', '${fmtSnr(a.snrDb)}${a.rssiDbm == null ? '' : ', ${a.rssiDbm!.toStringAsFixed(0)} dBm'}'),
+        if (here != null && a.hasPosition) ('Distance', '${units.distance(haversineM(here!.lat, here!.lon, a.lat!, a.lon!), approx: true)} from you'),
         ('Best signal', fmtSnr(a.bestSnrDb)),
         ('First heard', fmtClock(a.firstSeen)),
         ('Last heard', fmtClock(a.lastSeen)),

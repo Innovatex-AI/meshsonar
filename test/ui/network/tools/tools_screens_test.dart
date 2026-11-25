@@ -1,6 +1,10 @@
 // Network > Tools (build 71, stream D), dark theme, 375 pt wide: the list and its three groups, initialTool / initialArg,
 // Path Inspector (parse error inline, results, speculative in words), Trace Viewer (recent list, detail, "no server
 // copy" on 404, the radio's own result), Prefix Tool (overview, a taken prefix with its conflicts, a suggestion chip).
+import 'package:meshsonar/radio/session.dart' show LinkState;
+import 'package:meshsonar/ui/tools/tools_host.dart';
+
+import '../../../support/tools_ui_rig.dart' show FakeToolsHost;
 import 'dart:convert';
 import 'dart:io';
 
@@ -88,7 +92,8 @@ void main() {
 
   testWidgets('the list: three groups, every tool once, 44 pt rows, no overflow at 375', (tester) async {
     await pump(tester, const Scaffold(body: ToolsSection(baseUrl: base, regionSlug: 'cmh')));
-    expect(find.text('NETWORK TOOLS'), findsOneWidget);
+    expect(find.text('LOOK THINGS UP'), findsOneWidget);
+    expect(find.text('WITH YOUR RADIO'), findsOneWidget);
     for (final e in toolEntries) {
       await tester.ensureVisible(find.byKey(Key('tool-row-${e.id}')));
       expect(find.byKey(Key('tool-row-${e.id}')), findsOneWidget);
@@ -97,6 +102,50 @@ void main() {
     expect(toolEntries.where((e) => e.group == ToolGroup.radio).map((e) => e.title), ['Trace path', 'Discover', 'Adverts', 'Rx log', 'Noise floor', 'Telemetry']);
     expect(toolEntries.map((e) => e.id).toSet().length, toolEntries.length);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('build 76: Find a tool narrows the list; no match says so; clearing brings every tool back', (tester) async {
+    await pump(tester, const Scaffold(body: ToolsSection(baseUrl: base, regionSlug: 'cmh')));
+    await tester.enterText(find.byKey(const Key('tools-find')), 'repeater id');
+    await tester.pump();
+    expect(find.byKey(const Key('tool-row-prefix')), findsOneWidget);
+    expect(find.byKey(const Key('tool-row-status')), findsNothing);
+    await tester.enterText(find.byKey(const Key('tools-find')), 'zzzz');
+    await tester.pump();
+    expect(find.byKey(const Key('tools-find-none')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('tools-find-clear')));
+    await tester.pump();
+    for (final e in toolEntries) {
+      expect(find.byKey(Key('tool-row-${e.id}')), findsOneWidget);
+    }
+    expect(toolsMatching('').length, toolEntries.length);
+    expect(toolsMatching('RADIO hears').map((e) => e.id), contains('rx-log'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('build 76: Path Inspector asks the hop length only for a run with no spaces, and an error has Try again', (tester) async {
+    await pump(tester, PathInspectorScreen(baseUrl: base, regionSlug: 'cmh', api: server.api));
+    expect(find.byKey(const Key('path-idle')), findsOneWidget);
+    expect(find.byKey(const Key('path-paste')), findsOneWidget);
+    expect(find.byKey(const Key('path-hash-size')), findsNothing);
+    await tester.enterText(find.byKey(const Key('path-hops')), 'a1 3f');
+    await tester.pump();
+    expect(find.byKey(const Key('path-hash-size')), findsNothing);
+    await tester.enterText(find.byKey(const Key('path-hops')), 'a13fc4');
+    await tester.pump();
+    expect(find.byKey(const Key('path-hash-size')), findsOneWidget);
+    expect(find.byKey(const Key('path-clear')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('build 76: with no radio the radio group says so and its first row connects one', (tester) async {
+    final host = FakeToolsHost()..linkState = LinkState.disconnected;
+    await pump(tester, ToolsHostScope(host: host, child: const Scaffold(body: ToolsSection(baseUrl: base, regionSlug: 'cmh'))));
+    expect(find.textContaining('No radio is connected'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('tools-connect-radio')));
+    await tester.tap(find.byKey(const Key('tools-connect-radio')));
+    expect(host.connectOpened, 1);
+    expect(find.byKey(const Key('tool-row-discover')), findsOneWidget, reason: 'the radio tools stay listed');
   });
 
   test('tool ids, aliases and site paths', () {
@@ -246,7 +295,8 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('trace-hop-0')));
     expect(find.text('Nagglepuss2'), findsOneWidget);
     expect(find.text('+9.3 dB'), findsOneWidget);
-    expect(find.text('Several nodes share this prefix'), findsOneWidget);
+    expect(find.text('Unclear which repeater'), findsOneWidget);
+    expect(find.text('Several share this ID'), findsOneWidget);
     expect(find.text('Not reached'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('trace-obs-1')));
     expect(find.text('MS Westside'), findsOneWidget);
@@ -310,6 +360,12 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('prefix-overview')));
     expect(find.textContaining('repeaters and rooms within 200 km'), findsOneWidget);
     expect(find.byKey(const Key('prefix-recommendation')), findsOneWidget);
+    // Build 76: the server's long note is behind "How this is worked out", not a paragraph under every answer.
+    if (find.byKey(const Key('prefix-about')).evaluate().isNotEmpty) {
+      expect(find.byKey(const Key('prefix-note')), findsNothing);
+      await tapKey(tester, 'prefix-about');
+      expect(find.byKey(const Key('prefix-note')), findsOneWidget);
+    }
     final chip = find.byWidgetPredicate((w) => w is ActionChip).first;
     await tester.ensureVisible(chip);
     expect(tester.getSize(chip).height, greaterThanOrEqualTo(44));

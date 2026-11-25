@@ -411,8 +411,8 @@ void main() {
       // Busiest first, each with its code and rate.
       final dayRow = find.byKey(const Key('busy-region-day')), cmhRow = find.byKey(const Key('busy-region-cmh'));
       expect(find.descendant(of: dayRow, matching: find.text('Dayton, US')), findsOneWidget);
-      expect(find.descendant(of: dayRow, matching: find.text('DAY · 41 packets/min')), findsOneWidget);
-      expect(find.descendant(of: cmhRow, matching: find.text('CMH · 3.7 packets/min')), findsOneWidget);
+      expect(find.descendant(of: dayRow, matching: find.text('41 packets a minute · DAY')), findsOneWidget);
+      expect(find.descendant(of: cmhRow, matching: find.text('3.7 packets a minute · CMH')), findsOneWidget);
       expect(tester.getTopLeft(dayRow).dy, lessThan(tester.getTopLeft(cmhRow).dy));
       // The hub sections get the hub host and no region.
       await section(tester, 'channels');

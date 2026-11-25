@@ -37,11 +37,17 @@ void main() {
     final (rig, host) = await connectedRig(tester);
     await pumpTool(tester, const RxLogScreen(), host, device: Device.ipad);
     expect(find.byKey(const Key('rxlog-privacy')), findsOneWidget);
+    // Build 76: one line on the screen; the whole statement opens from "Privacy".
     expect(find.textContaining('headers only'), findsOneWidget);
+    expect(find.textContaining('Your own radio\u2019s sends and replies appear here too'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('rxlog-privacy-more')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rxlog-privacy-sheet')), findsOneWidget);
     expect(find.textContaining('never read or stored'), findsOneWidget);
     expect(find.textContaining('nothing is decrypted'), findsOneWidget);
     expect(find.textContaining('last ${rig.tools.rxLog.capacity} packets'), findsOneWidget);
-    expect(find.textContaining('Your own radio\u2019s sends and replies appear here too'), findsOneWidget);
+    Navigator.of(tester.element(find.byKey(const Key('rxlog-privacy-sheet')))).pop();
+    await tester.pumpAndSettle();
     await end(tester);
   });
 
@@ -111,7 +117,11 @@ void main() {
     await tester.pump();
     await inject(tester, () => rig.radio.injectChatter('Ann', 'three'));
     expect(find.text('3 heard, 2 kept'), findsOneWidget);
+    // Build 76: Clear, Copy as CSV and Reload my channels are in the More menu.
+    await tester.tap(find.byKey(const Key('rxlog-more')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('rxlog-clear')));
+    await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('rxlog-empty')), findsOneWidget);
     expect(find.text('0 heard, 0 kept'), findsOneWidget);
@@ -131,8 +141,10 @@ void main() {
       rig.radio.injectChatter('Ann', 'secret words here');
       rig.radio.injectAdvertHeard('Hill Top', lat: 40.13, lon: -82.93);
     });
+    await tester.tap(find.byKey(const Key('rxlog-more')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('rxlog-export')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Copied 2 rows (headers only, no message text)'), findsOneWidget);
     expect(clip, startsWith('time_utc,route,payload_type'));
     expect(clip, contains('Channel message'));

@@ -162,7 +162,7 @@ void main() {
       await t.pumpWidget(list(s));
       await settle(t);
       expect(find.text('Public: Kestrel-07: anyone hearing Hilltop this morning?'), findsOneWidget);
-      expect(find.textContaining('Flood · 4 hops · 2 observers'), findsOneWidget);
+      expect(find.textContaining('4 hops · heard by 2 observers'), findsOneWidget);
       expect(find.byKey(const ValueKey('packet-row-snr-c4b06ee8fc39b187')), findsOneWidget);
       expect(find.text('1.75 dB'), findsOneWidget);
       expect(s.seen.first.queryParameters['window'], '1h');
@@ -193,6 +193,23 @@ void main() {
       await t.pumpWidget(const SizedBox());
     });
 
+    testWidgets('filter sheet: a channel typed but not added with + is still applied by Show packets', (t) async {
+      tall(t);
+      final s = Server();
+      await t.pumpWidget(list(s));
+      await settle(t);
+      await t.tap(find.byKey(const Key('packets-filters')));
+      await t.pumpAndSettle();
+      expect(find.text('Show packets'), findsOneWidget);
+      await t.scrollUntilVisible(find.byKey(const Key('filter-channel')), 200, scrollable: find.descendant(of: find.byKey(const Key('packet-filter-sheet')), matching: find.byType(Scrollable)).first);
+      await t.enterText(find.byKey(const Key('filter-channel')), '#test');
+      await t.tap(find.byKey(const Key('filter-apply')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('packet-filter-sheet')), findsNothing);
+      expect(s.seen.last.queryParameters['channel'], 'tag:test');
+      await t.pumpWidget(const SizedBox());
+    });
+
     testWidgets('window chips re-ask; 30d and 90d need a narrowing filter', (t) async {
       tall(t);
       final s = Server();
@@ -201,12 +218,20 @@ void main() {
       await t.tap(find.byKey(const Key('packets-window-24h')));
       await settle(t);
       expect(s.seen.last.queryParameters['window'], '24h');
-      expect(t.widget<ChoiceChip>(find.byKey(const Key('packets-window-30d'))).onSelected, isNull);
+      // Build 76: a tap on 30d without a narrowing filter asks nothing and says why, with a way to the filters.
+      final asked = s.seen.length;
+      await t.ensureVisible(find.byKey(const Key('packets-window-30d')));
+      await t.tap(find.byKey(const Key('packets-window-30d')));
+      await settle(t);
+      expect(s.seen.length, asked, reason: 'the long window is not asked for without a filter');
+      expect(find.byKey(const Key('packets-long-hint')), findsOneWidget);
+      expect(find.byKey(const Key('packets-long-hint-filters')), findsOneWidget);
       await t.pumpWidget(const SizedBox());
       final s2 = Server();
       await t.pumpWidget(list(s2, request: NetworkRequest.packetList(const PacketFilter(channels: {'public'}), region: 'cmh')));
       await settle(t);
       expect(t.widget<ChoiceChip>(find.byKey(const Key('packets-window-30d'))).onSelected, isNotNull);
+      expect(find.byKey(const Key('packets-long-hint')), findsNothing);
       await t.pumpWidget(const SizedBox());
     });
 
@@ -250,6 +275,11 @@ void main() {
       await t.tap(find.byKey(const Key('filter-type-TRACE')));
       await t.pump();
       await t.tap(find.text('Ours'));
+      await t.pump();
+      // Build 76: the less-used filters are behind "More filters".
+      expect(find.byKey(const Key('filter-text'), skipOffstage: false), findsNothing);
+      await t.scrollUntilVisible(find.byKey(const Key('filter-more')), 300, scrollable: find.descendant(of: find.byKey(const Key('packet-filter-sheet')), matching: find.byType(Scrollable)).first);
+      await t.tap(find.byKey(const Key('filter-more')));
       await t.pump();
       await t.scrollUntilVisible(find.byKey(const Key('filter-text')), 300, scrollable: find.descendant(of: find.byKey(const Key('packet-filter-sheet')), matching: find.byType(Scrollable)).first);
       await t.enterText(find.byKey(const Key('filter-text')), 'tpye = ADVERT');
@@ -617,7 +647,12 @@ void main() {
       tall(t);
       final s = Server();
       await t.pumpWidget(app(DecodePacketScreen(baseUrl: base, regionSlug: 'cmh', api: s.api)));
+      // Build 76: an empty field offers one step, Paste and decode, and says what the screen is for.
+      expect(find.text('Paste and decode'), findsOneWidget);
+      expect(find.byKey(const Key('decode-intro')), findsOneWidget);
+      expect(find.byKey(const Key('decode-run')), findsNothing);
       await t.enterText(find.byKey(const Key('decode-hex')), data('packet-detail.grp-txt-outside-ambiguous')['raw'] as String);
+      await t.pump();
       await t.tap(find.byKey(const Key('decode-run')));
       await settle(t);
       expect(s.seen, isEmpty, reason: 'decoded locally, no network');

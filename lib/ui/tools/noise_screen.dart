@@ -47,6 +47,7 @@ class _NoiseScreenState extends State<NoiseScreen> {
     return ToolPage(
       id: 'noise',
       title: 'Noise floor and health',
+      about: 'Noise floor shows how quiet the channel is at your radio, live, and whether something nearby is interfering.',
       builder: (context, host, tools) {
         _attach(tools);
         return ToolListener(
@@ -74,28 +75,11 @@ class _NoiseBody extends StatelessWidget {
       key: const Key('noise-list'),
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.m, Gap.l, Gap.xl),
       children: [
-        Text('Sampling only while this screen is open. Reads cost a few bytes on Bluetooth and nothing on air.',
-            key: const Key('noise-sampling-note'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-        const SizedBox(height: Gap.m),
-        Semantics(container: true, header: true, child: Text('Read every', style: t.textTheme.titleSmall)),
-        const SizedBox(height: Gap.xs),
-        Wrap(key: const Key('noise-interval'), spacing: Gap.s, children: [
-          for (final s in _intervals)
-            ChoiceChip(
-              key: Key('noise-interval-$s'),
-              materialTapTargetSize: MaterialTapTargetSize.padded,
-              label: Text('$s s'),
-              tooltip: 'Read every $s seconds',
-              selected: n.interval.inSeconds == s,
-              onSelected: (_) => n.setInterval(Duration(seconds: s)),
-            ),
-        ]),
-        const SizedBox(height: Gap.m),
         if (n.unsupported)
           const NoteCard('This radio’s firmware does not report noise (needs version 8 or newer).',
               key: Key('noise-unsupported'), kind: NoteKind.info, title: 'No noise readings')
         else if (samples.isEmpty)
-          const NoteCard('Waiting for the first reading…', key: Key('noise-waiting'))
+          const NoteCard('The first reading takes a few seconds. Keep this screen open.', key: Key('noise-waiting'), title: 'Waiting for the first reading')
         else ...[
           _verdict(context, n),
           const SizedBox(height: Gap.m),
@@ -109,7 +93,23 @@ class _NoiseBody extends StatelessWidget {
           const SizedBox(height: Gap.m),
           _lastHeard(context, n),
         ],
-        const ToolHeading('Radio counters'),
+        const SizedBox(height: Gap.l),
+        Semantics(container: true, header: true, child: Text('Read every', style: t.textTheme.titleSmall)),
+        const SizedBox(height: Gap.xs),
+        Wrap(key: const Key('noise-interval'), spacing: Gap.s, children: [
+          for (final s in _intervals)
+            ChoiceChip(
+              key: Key('noise-interval-$s'),
+              materialTapTargetSize: MaterialTapTargetSize.padded,
+              label: Text('$s s'),
+              tooltip: 'Read every $s seconds',
+              selected: n.interval.inSeconds == s,
+              onSelected: (_) => n.setInterval(Duration(seconds: s)),
+            ),
+        ]),
+        Text('Only while this screen is open. A reading costs a few bytes on Bluetooth and nothing on air.',
+            key: const Key('noise-sampling-note'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        const ToolHeading('Radio health'),
         _counters(context, n),
         const ToolHeading('MeshSonar’s own airtime'),
         _own(context, n.ownAirtime),
@@ -132,12 +132,7 @@ class _NoiseBody extends StatelessWidget {
     final v = n.verdict;
     if (v == null) return const SizedBox.shrink();
     final kind = switch (v) { NoiseVerdict.normal => NoteKind.good, NoiseVerdict.elevated => NoteKind.info, NoiseVerdict.interference => NoteKind.problem };
-    final t = Theme.of(context);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      NoteCard(n.interpretation!, key: const Key('noise-verdict'), kind: kind, title: n.verdictWord),
-      const SizedBox(height: Gap.xs),
-      Text('Same thresholds as the website’s RF analysis.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-    ]);
+    return NoteCard(n.interpretation!, key: const Key('noise-verdict'), kind: kind, title: n.verdictWord);
   }
 
   Widget _tile(BuildContext context, String label, String value) {
@@ -160,10 +155,15 @@ class _NoiseBody extends StatelessWidget {
 
   Widget _tiles(BuildContext context, NoiseStats s) {
     String d(double v) => '${v.round()} dBm';
-    return Wrap(key: const Key('noise-tiles'), spacing: Gap.s, runSpacing: Gap.s, children: [
-      for (final (l, v) in [('Lowest', d(s.min)), ('Average', d(s.avg)), ('Highest', d(s.max)), ('Readings', '${s.count}')])
-        SizedBox(width: 150, child: _tile(context, l, v)),
-    ]);
+    // Two tiles per row at any phone width (a fixed 150 pt left a ragged right edge); one per row at very large text.
+    return LayoutBuilder(builder: (context, box) {
+      final perRow = MediaQuery.textScalerOf(context).scale(1) > 1.6 ? 1 : (box.maxWidth >= 640 ? 4 : 2);
+      final w = (box.maxWidth - Gap.s * (perRow - 1)) / perRow;
+      return Wrap(key: const Key('noise-tiles'), spacing: Gap.s, runSpacing: Gap.s, children: [
+        for (final (l, v) in [('Average', d(s.avg)), ('Lowest', d(s.min)), ('Highest', d(s.max)), ('Readings', '${s.count}')])
+          SizedBox(width: w.floorToDouble(), child: _tile(context, l, v)),
+      ]);
+    });
   }
 
   Widget _chart(BuildContext context, NoiseMonitor n, NoiseStats stats) {
@@ -222,12 +222,24 @@ class _NoiseBody extends StatelessWidget {
     final air = n.radioAirSinceFirst;
     final flags = noiseErrorWords(c.errFlags);
     String secs(int? v) => v == null ? 'not yet known' : '$v s';
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Semantics(
+            container: true,
+            label: '$label: $value',
+            excludeSemantics: true,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(flex: 3, child: Text(label, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant))),
+              const SizedBox(width: Gap.s),
+              Expanded(flex: 2, child: Text(value, textAlign: TextAlign.end, style: t.textTheme.bodyMedium)),
+            ]),
+          ),
+        );
     return Column(key: const Key('noise-counters'), crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(c.queueLen == null ? 'Send queue: not read yet.' : '${c.queueLen} packet${c.queueLen == 1 ? '' : 's'} waiting to send.', style: t.textTheme.bodyMedium),
-      const SizedBox(height: Gap.xs),
-      Text(c.recvErrors == null ? 'Receive errors: not read yet.' : 'Packets received with errors since boot: ${c.recvErrors}.', style: t.textTheme.bodyMedium),
-      const SizedBox(height: Gap.xs),
-      Text('The radio reports ${secs(air.txSecs)} transmitting and ${secs(air.rxSecs)} receiving since the first reading here.', style: t.textTheme.bodyMedium),
+      row('Waiting to send', c.queueLen == null ? 'not read yet' : '${c.queueLen} packet${c.queueLen == 1 ? '' : 's'}'),
+      row('Received with errors since it started', c.recvErrors == null ? 'not read yet' : '${c.recvErrors} packet${c.recvErrors == 1 ? '' : 's'}'),
+      row('Time sending, since the first reading here', secs(air.txSecs)),
+      row('Time receiving, since the first reading here', secs(air.rxSecs)),
       const SizedBox(height: Gap.s),
       if (flags.isEmpty)
         const NoteCard('No radio error flags are set.', key: Key('noise-flags-none'), kind: NoteKind.good)

@@ -11,6 +11,7 @@ import 'advert_facts.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
 import '../design/app_surfaces.dart';
+import '../design/app_symbols.dart';
 
 class RxLogScreen extends StatelessWidget {
   const RxLogScreen({super.key});
@@ -19,6 +20,7 @@ class RxLogScreen extends StatelessWidget {
   Widget build(BuildContext context) => ToolPage(
         id: 'rx-log',
         title: 'Rx log',
+        about: 'The Rx log lists every packet your radio hears, live: who it is from, how it travelled and how strong it was.',
         builder: (context, host, tools) => _RxLogBody(host: host, tools: tools),
       );
 }
@@ -73,14 +75,25 @@ class _RxLogBodyState extends State<_RxLogBody> {
     final counts = _log.countsByType;
     final typeKeys = counts.keys.toList()..sort();
     final header = <Widget>[
-      NoteCard(
-        'This shows packet headers only. The text of channel messages is never read or stored. Channels you have joined are only '
-        'named, by checking a short code; nothing is decrypted. The log keeps the last ${_log.capacity} packets in memory and '
-        'forgets them when the app closes.',
-        key: const Key('rxlog-privacy'),
-        title: 'Privacy',
+      // One line, not a card that fills a third of a phone screen; the whole statement is one tap away.
+      Semantics(
+        button: true,
+        label: 'Privacy: packet headers only. Message text is never read. Opens the details.',
+        excludeSemantics: true,
+        child: InkWell(
+          key: const Key('rxlog-privacy-more'),
+          onTap: _privacy,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kToolTarget),
+            child: Row(key: const Key('rxlog-privacy'), children: [
+              Icon(Icons.lock_outline, size: 18, color: t.colorScheme.onSurfaceVariant),
+              const SizedBox(width: Gap.s),
+              Expanded(child: Text('Packet headers only. Message text is never read.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant))),
+              Icon(Icons.chevron_right, size: 20, color: t.colorScheme.onSurfaceVariant),
+            ]),
+          ),
+        ),
       ),
-      const SizedBox(height: Gap.m),
       Wrap(spacing: Gap.s, runSpacing: Gap.s, crossAxisAlignment: WrapCrossAlignment.center, children: [
         OutlinedButton.icon(
           key: const Key('rxlog-pause'),
@@ -90,32 +103,41 @@ class _RxLogBodyState extends State<_RxLogBody> {
           label: Text(_log.paused ? 'Resume' : 'Pause'),
         ),
         OutlinedButton.icon(
-          key: const Key('rxlog-clear'),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
-          onPressed: _log.clear,
-          icon: const Icon(Icons.delete_outline),
-          label: const Text('Clear'),
-        ),
-        OutlinedButton.icon(
-          key: const Key('rxlog-export'),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
-          onPressed: _export,
-          icon: const Icon(Icons.copy_all_outlined),
-          label: const Text('Copy as CSV'),
-        ),
-        OutlinedButton.icon(
           key: const Key('rxlog-filter'),
           style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
           onPressed: _openFilter,
           icon: const Icon(Icons.filter_list),
-          label: const Text('Filter'),
+          label: Text(_filter.isEmpty ? 'Filter' : 'Filter on'),
         ),
-        IconButton(
-          key: const Key('rxlog-refresh'),
-          tooltip: 'Reload the channels you have joined',
-          constraints: const BoxConstraints(minWidth: kToolTarget, minHeight: kToolTarget),
-          onPressed: _loadChannels,
-          icon: const Icon(Icons.refresh),
+        // The three things done once in a while sit in one menu, so Pause and Filter fit one line on a phone.
+        // The app's own action sheet (no Material popup menu: test/lint/widget_ban_test.dart).
+        SizedBox(
+          width: kToolTarget,
+          height: kToolTarget,
+          child: IconButton(
+            key: const Key('rxlog-more'),
+            tooltip: 'More: copy, clear, reload channels',
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.more_horiz),
+            onPressed: () async {
+              final v = await showAppActionSheet<String>(
+                context,
+                actions: const [
+                  AppAction('Copy as CSV', 'export', key: Key('rxlog-export'), symbol: AppSymbols.docOnDoc),
+                  AppAction('Reload my channels', 'refresh', key: Key('rxlog-refresh')),
+                  AppAction('Clear the log', 'clear', key: Key('rxlog-clear'), destructive: true),
+                ],
+              );
+              if (!mounted || v == null) return;
+              if (v == 'export') {
+                _export();
+              } else if (v == 'clear') {
+                _log.clear();
+              } else {
+                _loadChannels();
+              }
+            },
+          ),
         ),
       ]),
       if (_copied != null)
@@ -160,8 +182,12 @@ class _RxLogBodyState extends State<_RxLogBody> {
         ),
       const SizedBox(height: Gap.s),
       if (entries.isEmpty)
-        const NoteCard('Nothing heard yet. A quiet mesh can stay silent for minutes. Your own radio’s sends and replies appear here too.',
-            key: Key('rxlog-empty')),
+        NoteCard(
+            _log.length > 0
+                ? 'None of the ${_log.length} packets kept match the filter. Clear the filter to see them.'
+                : 'A quiet mesh can stay silent for minutes. Your own radio’s sends and replies appear here too.',
+            key: const Key('rxlog-empty'),
+            title: _log.length > 0 ? 'Nothing matches' : 'Nothing heard yet'),
     ];
     return ListView.builder(
       key: const Key('rxlog-list'),
@@ -172,6 +198,14 @@ class _RxLogBodyState extends State<_RxLogBody> {
         return _RxRow(entry: entries[i - header.length], host: widget.host);
       },
     );
+  }
+
+  void _privacy() {
+    showToolSheet(context, key: const Key('rxlog-privacy-sheet'), title: 'Privacy', children: [
+      Text('This shows packet headers only. The text of channel messages is never read or stored. Channels you have joined are only '
+          'named, by checking a short code; nothing is decrypted. The log keeps the last ${_log.capacity} packets in memory and '
+          'forgets them when the app closes.'),
+    ]);
   }
 
   void _openFilter() {
@@ -192,7 +226,24 @@ class _RxLogBodyState extends State<_RxLogBody> {
             key: const Key('rxlog-filter-sheet'),
             padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xl),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Semantics(header: true, child: Text('Filter', style: Theme.of(ctx).textTheme.titleLarge)),
+              // A Wrap: at large text on a small phone the buttons drop under the title.
+              Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: Gap.s, children: [
+                Semantics(header: true, child: Text('Filter', style: Theme.of(ctx).textTheme.titleLarge)),
+                if (!_filter.isEmpty)
+                  TextButton(
+                    key: const Key('rxlog-filter-sheet-clear'),
+                    style: TextButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+                    onPressed: () => apply(const RxLogFilter()),
+                    child: const Text('Show all'),
+                  ),
+                FilledButton(
+                  key: const Key('rxlog-filter-done'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Done'),
+                ),
+              ]),
+              Text('${_log.entries(_filter).length} of ${_log.length} packets shown', key: const Key('rxlog-filter-count'), style: Theme.of(ctx).textTheme.bodySmall),
               const ToolHeading('Packet types'),
               Wrap(spacing: Gap.s, children: [
                 for (final k in types)
@@ -213,12 +264,12 @@ class _RxLogBodyState extends State<_RxLogBody> {
                     onSelected: (on) => apply(_filter.copyWith(routes: on ? {..._filter.routes, r} : ({..._filter.routes}..remove(r)))),
                   ),
               ]),
-              const ToolHeading('Fewest hops'),
+              const ToolHeading('Hops, at least'),
               Wrap(spacing: Gap.s, children: [
                 for (final h in [0, 1, 2, 3])
                   ChoiceChip(
                     key: Key('rxlog-filter-hops-$h'),
-                    label: Text(h == 0 ? 'Any' : (h == 3 ? '3 or more' : '$h or more')),
+                    label: Text(h == 0 ? 'Any' : '$h'),
                     selected: _filter.minHops == h,
                     onSelected: (_) => apply(_filter.copyWith(minHops: h)),
                   ),
@@ -289,9 +340,14 @@ class _RxRow extends StatelessWidget {
               button: true,
               label: '${fmtClock(e.at)}. ${e.summary}. ${lines.join('. ')}. Opens details.',
               excludeSemantics: true,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${fmtClock(e.at)}  ${e.summary}', style: t.textTheme.titleSmall),
-                for (final l in lines) Text(l, style: t.textTheme.bodySmall),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${fmtClock(e.at)}  ${e.summary}', style: t.textTheme.titleSmall),
+                    for (final l in lines) Text(l, style: t.textTheme.bodySmall),
+                  ]),
+                ),
+                Icon(Icons.chevron_right, size: 20, color: t.colorScheme.onSurfaceVariant),
               ]),
             ),
           ),

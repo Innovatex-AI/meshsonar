@@ -43,7 +43,8 @@ void main() {
     final (_, host) = await connectedRig(tester);
     await pumpTool(tester, const AdvertsScreen(), host, device: Device.ipad);
     expect(find.byKey(const Key('adverts-empty')), findsOneWidget);
-    expect(find.textContaining('Nothing heard yet. On a quiet mesh this can take minutes'), findsOneWidget);
+    expect(find.text('Nothing heard yet'), findsOneWidget);
+    expect(find.textContaining('On a quiet mesh this can take minutes'), findsOneWidget);
     expect(find.byKey(const Key('airtime-note')), findsOneWidget);
     expect(find.textContaining('uses about'), findsOneWidget);
     expect(find.byKey(const Key('adverts-send-local')), findsOneWidget);
@@ -83,15 +84,16 @@ void main() {
     });
 
     expect(find.textContaining('2 nodes heard since'), findsOneWidget);
-    expect(find.text('A heard advert is a hint, not proof of who sent it.'), findsOneWidget);
+    expect(find.textContaining('A heard advert is a hint, not proof of who sent it.'), findsOneWidget);
     final hill = shortKeyOf('Hill Top'), plain = shortKeyOf('Plain Node');
     await scrollTo(tester, find.byKey(Key('adverts-row-$hill')));
-    expect(find.descendant(of: find.byKey(Key('adverts-scope-$hill')), matching: find.text('Region scope check: in scope: #cmh')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(Key('adverts-scope-$plain')), matching: find.text('Region scope check: unscoped')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(Key('adverts-scope-$hill')), matching: find.text('Region: in scope: #cmh')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(Key('adverts-scope-$plain')), matching: find.text('Region: unscoped')), findsOneWidget);
     expect(find.descendant(of: find.byKey(Key('adverts-row-$hill')), matching: find.textContaining('via aa > bb')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(Key('adverts-row-$plain')), matching: find.text('Direct')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(Key('adverts-row-$plain')), matching: find.textContaining('· Direct')), findsOneWidget);
     expect(find.descendant(of: find.byKey(Key('adverts-row-$hill')), matching: find.textContaining('from you')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(Key('adverts-row-$hill')), matching: find.textContaining('40.1300, -82.9300')), findsOneWidget);
+    // Build 76: a row is three short lines; the coordinates are in the details sheet (checked below).
+    expect(find.descendant(of: find.byKey(Key('adverts-row-$hill')), matching: find.textContaining('40.1300')), findsNothing);
     expect(find.descendant(of: find.byKey(Key('adverts-row-$plain')), matching: find.text('Its clock is 10 min off from yours')), findsOneWidget);
     expect(find.descendant(of: find.byKey(Key('adverts-row-$hill')), matching: find.textContaining('Its clock')), findsNothing);
     expect(find.descendant(of: find.byKey(Key('adverts-row-$hill')), matching: find.textContaining('+5.5 dB, strong')), findsOneWidget);
@@ -108,6 +110,8 @@ void main() {
     expect(find.byKey(const Key('adverts-detail')), findsOneWidget);
     expect(find.textContaining(hill), findsWidgets);
     expect(find.textContaining('Scoped flood'), findsWidgets);
+    expect(find.text('40.13000, -82.93000'), findsOneWidget, reason: 'the coordinates moved from the row to the details');
+    expect(find.text('Distance:'), findsOneWidget);
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
 

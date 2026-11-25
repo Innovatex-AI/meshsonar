@@ -84,6 +84,10 @@ void main() {
     await settleReal(tester, real: const Duration(milliseconds: 50));
     expect(find.byKey(const Key('trace-no-contacts')), findsOneWidget);
     expect(find.textContaining('Use Discover nearby'), findsOneWidget);
+    // Build 76: the next step is a button, and the disabled Send says why.
+    expect(find.byKey(const Key('trace-open-discover')), findsOneWidget);
+    expect(find.byKey(const Key('trace-send-why')), findsOneWidget);
+    expect(find.byKey(const Key('trace-how')), findsOneWidget);
     expect(tester.widget<OutlinedButton>(find.byKey(const Key('trace-add-hop'))).onPressed, isNull);
     expect(tester.widget<FilledButton>(find.descendant(of: find.byKey(const Key('trace-send')), matching: find.byType(FilledButton))).onPressed, isNull);
     expect(find.byKey(const Key('trace-no-result')), findsOneWidget);
@@ -238,6 +242,14 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('trace-saved-02')), findsNothing);
       expect(tools.trace.store.items.length, 1);
+      // Build 76: a deleted trace can be brought back for a few seconds.
+      expect(find.text('Saved trace deleted'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await tester.pump();
+      expect(tools.trace.store.items.length, 2);
+      expect(find.byKey(const Key('trace-saved-02')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pump(const Duration(seconds: 1));
     });
 
     testWidgets('MAP slice 5: with symbols.path the result map is the numbered, named path with its key; without it, build 73', (tester) async {
