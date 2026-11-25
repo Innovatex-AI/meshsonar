@@ -1,7 +1,7 @@
-// Pure panel tests: geometry per device (Drive plan table 4.13), detent chooser and fling table, rubber band, auto-collapse and
-// the ping debounce.
+// Pure panel tests: geometry per device (Drive plan table 4.13), detent chooser and fling table, rubber band and the ping
+// debounce.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/ui/drive/panel/auto_collapse.dart';
+import 'package:meshsonar/ui/drive/panel/panel_dock.dart' show PingDebounce;
 import 'package:meshsonar/ui/drive/panel/panel_physics.dart';
 
 PanelGeometry phone(double h, {required double navBar, required double safeBottom}) =>
@@ -86,57 +86,6 @@ void main() {
       expect(bandedExtent(lo - 100, g), closeTo(lo - rubberBand(100), 1e-9));
       expect(unbandedExtent(bandedExtent(hi + 80, g), g), closeTo(hi + 80, 1e-6));
       expect(unbandedExtent(bandedExtent(lo - 80, g), g), closeTo(lo - 80, 1e-6));
-    });
-  });
-
-  group('auto-collapse (5.3)', () {
-    final t0 = DateTime.utc(2026, 11, 2, 12);
-    DateTime at(int s) => t0.add(Duration(seconds: s));
-
-    test('motion needs 5 mph held for 3 s; cleared after 10 s below 0.5 m/s', () {
-      final a = PanelAutoCollapse();
-      a.onFix(3.0, at(0));
-      expect(a.moving, isFalse);
-      a.onFix(3.0, at(2));
-      expect(a.moving, isFalse);
-      a.onFix(3.0, at(3));
-      expect(a.moving, isTrue);
-      a.onFix(0.2, at(4));
-      a.onFix(0.2, at(13));
-      expect(a.moving, isTrue);
-      a.onFix(0.2, at(14));
-      expect(a.moving, isFalse);
-    });
-    test('a dip below 2.2 m/s restarts the 3 s hold', () {
-      final a = PanelAutoCollapse();
-      a.onFix(3.0, at(0));
-      a.onFix(1.5, at(2));
-      a.onFix(3.0, at(3));
-      a.onFix(3.0, at(5));
-      expect(a.moving, isFalse);
-      a.onFix(3.0, at(6));
-      expect(a.moving, isTrue);
-    });
-    test('collapses after 15 s without touch; every touch resets it; Passenger blocks it', () {
-      final a = PanelAutoCollapse();
-      a.onFix(5, at(0));
-      a.onFix(5, at(3));
-      a.touch(at(3));
-      expect(a.shouldCollapse(at(17), PanelDetent.medium), isFalse);
-      expect(a.shouldCollapse(at(18), PanelDetent.medium), isTrue);
-      a.touch(at(17));
-      expect(a.shouldCollapse(at(18), PanelDetent.medium), isFalse);
-      expect(a.shouldCollapse(at(32), PanelDetent.medium), isTrue);
-      expect(a.shouldCollapse(at(32), PanelDetent.dock), isFalse);
-      a.passenger = true;
-      expect(a.shouldCollapse(at(100), PanelDetent.medium), isFalse);
-      a.reset();
-      expect(a.passenger, isFalse);
-      expect(a.moving, isFalse);
-    });
-    test('not moving: Medium stays open', () {
-      final a = PanelAutoCollapse()..touch(at(0));
-      expect(a.shouldCollapse(at(600), PanelDetent.medium), isFalse);
     });
   });
 

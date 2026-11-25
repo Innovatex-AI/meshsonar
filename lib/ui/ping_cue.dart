@@ -1,6 +1,6 @@
 // What the phone does when a ping finishes (Settings > Wardriving > "Ping feedback"): a haptic tap and/or a short sound,
 // different for "heard" and "heard nothing", so you can drive without looking. Haptics are on by default (they always were);
-// sound is OFF by default (a car radio, a passenger and a phone that suddenly beeps are the person's call to make).
+// sound is OFF by default (a car radio, other people in the car and a phone that suddenly beeps are the person's call to make).
 //
 // The sound is the platform's own system sound (SystemSound.click for heard, SystemSound.alert for heard nothing): no audio
 // file, no new plugin, no new permission. On a platform without one it is silently nothing. [PingCue.player] is the seam widget

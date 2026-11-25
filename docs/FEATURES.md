@@ -141,8 +141,8 @@ build 71 (`now`, `map`, `insights`) and build 71's `home` still resolve (`Networ
 
 One panel kind on every map (Live, Drive, Plan), twin of the site's float panel:
 
-1. Bottom-anchored, directly above the tab bar. Only the person moves it; a connection or data event never does (the two
-   driving-safety rules are the only exceptions: the Drive panel collapses at speed, the inspector clears itself while driving).
+1. Bottom-anchored, directly above the tab bar. Only the person moves it; a connection or data event never does, and neither does the
+   car moving (build 76: the speed-driven collapse of the Drive panel, the inspector's "Open when stopped" lock and its 12 s auto-clear were removed).
 2. The header is always visible and at least 44 pt: grabber, title, one status or count, chevron. Collapsed = header only.
 3. Tap the header or drag it to toggle. Same state names everywhere: Collapsed, Open (at most 60 % of the height), Full only
    for the work panels (Planner, Drive stats).
@@ -321,8 +321,8 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   **Long-press Send** on a direct message (person or room): **Send** (the saved route, searching on the last try) or **Send and search
   for a new route** (every try searches; like the official app's long-press Send). Channels have no such choice (they always reach
   everyone nearby).
-- **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by "Typing is off while the
-  car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work. A stale or missing speed never locks.
+- **Never locked (build 76, Andy Nov 25 2026).** The composer is always available: a running drive or the car's speed never disables typing or
+  sending, and there is no notice or switch about who is holding the phone.
 - **No chat in the Drive tab (build 62, Andy Nov 12 2026).** The Drive tab is for the coverage map and the drive. The old Messages
   row / button and the Chat-in-Drive sheet (`chat_drive_sheet.dart`) are gone; messaging lives only in the Chat tab (its own System /
   wardrive items are unchanged). Incoming-message banners and the Chat tab badge still work while driving.
@@ -474,8 +474,23 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 - **The panel never moves because of the radio (build 62).** The Drive panel always opens at the Dock detent (the last detent is no longer
   restored: a panel left at Medium used to reopen mid-screen on launch and cover the map). A connect attempt, a reconnect or a failed
   connect shows in the Dock ("Connecting…" / "Reconnecting…" with Cancel) and never changes the detent; the map is usable with no radio.
-  Only the person's own drag or tap, or the driving auto-collapse (Medium to Dock), moves the panel. Test:
-  `test/ui/drive/panel_connect_dock_test.dart`.
+  Only the person's own drag or tap moves the panel (build 76: the driving auto-collapse is removed; an open panel stays open at any speed).
+  Test: `test/ui/drive/panel_connect_dock_test.dart`.
+- **One message, one action, on the tab bar (build 76, iPhone bug report "the floating panel").** In every link state the Dock is the one
+  place at the bottom of the Drive tab that says where the radio stands, with one action, and its bottom edge is the top of the tab bar:
+
+  | State | Dock title | Second line | Action |
+  |---|---|---|---|
+  | No radio | Not connected | none | Connect radio |
+  | Manual connect | Connecting… | the radio's name | Cancel |
+  | Automatic reconnect after launch (waiting or trying) | Reconnecting… | the radio's name | Cancel |
+  | Automatic reconnect gave up | Not connected | Could not reach (radio name) | Connect radio |
+  | Mid-drive reconnect | the driving Dock (Ping, Stop) | the 28 pt strip: "Radio lost - reconnecting" | Stop stays where it is |
+
+  The shell's alerts strip (`lib/ui/alerts/alerts_status_strip.dart`) does not show its radio row on the Drive tab (it does on every other
+  tab, with Reconnect). Its waiting-message warning still shows on the Drive tab; `AlertsStripSeat` then ends the Drive page at the top
+  of the strip so the panel rests on it. The panel has the same size in all of these states; the location strip no longer hides during a
+  connect try. Test: `test/ui/drive/panel_link_states_test.dart` (iPhone SE 375x667, 393x852, 430x932, bottom inset 0 and 34, text x1 to x3.1).
 - **One layout (build 70, item 70-2).** The map is full bleed and never resized: the panel slides over it between Dock, Medium
   (pulled further it rubber-bands, "Full", and rests on Medium) and the collapsed pill, by drag or fling. The old footer layout
   (map in a box, the full-screen button `map-fullscreen`, the heard box, the "No pings yet" map hint, the ping result flash, the
@@ -483,7 +498,7 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   the mini bar text stay. Test: `test/ui/drive/panel_detents_test.dart`, `test/ui/drive/drive_panel_test.dart`.
 - **Battery (build 70, battery plan A1/A3/A5/A11/A14).** The screen stays awake per the battery mode's Screen on knob (`PowerProfile.current.screenOn`): always while
   driving (Max data), only while the Drive tab is in front (Balanced), or never (Saver). The drive UI 1 s clocks (Dock hero,
-  Ping circle, mini bar, auto-collapse) run only while a drive runs, the widget is visible and the app is in front; hidden tabs
+  Ping circle, mini bar) run only while a drive runs, the widget is visible and the app is in front; hidden tabs
   get a disabled TickerMode. The puck/camera loop is capped to the profile's fps (30 fps while only the heading turns, and it
   sleeps when parked with under 2° of heading change). Map health is recorded only while Diagnostics > Map and GPS health
   overlay is on. Zoom by speed aims at three zoom bands. Simple basemap (Saver) draws coverage on the plain chart grid while

@@ -115,7 +115,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(lr.active, isTrue);
     expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Reconnecting…');
-    expect(find.text('Looking for Radio One'), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('dock-subtitle'))).data, 'Radio One', reason: 'the radio it is looking for, in one short line');
     await _settle(tester);
     await _expectMapUsableAndPanelAtDock(tester);
     // Collapsible: the person can drag it down to the hidden pill, and back.

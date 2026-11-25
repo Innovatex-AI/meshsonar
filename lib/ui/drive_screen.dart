@@ -3,8 +3,10 @@
 // layout (map in a box with the controls underneath, its full-screen button and the "No pings yet" hint) was deleted in
 // build 70 (item 70-2); this is the only Drive screen.
 //
-// Battery (build 70, battery plan A1/A5): the screen stays awake per PowerProfile.current.screenOn (always while driving,
-// only while the Drive tab is in front, or never), and the 1 s auto-collapse clock runs only while the tab is visible.
+// Battery (build 70, battery plan A1): the screen stays awake per PowerProfile.current.screenOn (always while driving,
+// only while the Drive tab is in front, or never).
+//
+// Only the person moves a panel (build 76): nothing here locks, collapses or clears a panel because the car is moving.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -38,7 +40,6 @@ import 'map/repeater_page_link.dart';
 import 'map/coverage_timeline_slider.dart';
 import 'drive/dock_strip.dart';
 import 'drive/status_capsule.dart';
-import 'drive/panel/auto_collapse.dart';
 import 'drive/panel/drive_panel.dart';
 import 'drive/panel/immersive_pill.dart';
 import 'drive/panel/drive_panel_controller.dart';
@@ -76,11 +77,9 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   final MapPanelGroup _panels = MapPanelGroup();
   final MapPanelHostController _transient = MapPanelHostController();
 
-  // The bottom panel, its auto-collapse and the settled overlay clearance.
+  // The bottom panel and the settled overlay clearance.
   DrivePanelController? _panel;
-  final PanelAutoCollapse _auto = PanelAutoCollapse();
   final PingDebounce _debounce = PingDebounce();
-  Timer? _autoTimer;
   double? _navBar;
   double? _clearance;
   bool _wasDriving = false;
@@ -120,7 +119,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
       shell?.addListener(_shellChanged);
     }
     final s = AppScope.read(context);
-    _panel ??= _makePanel(s);
+    _panel ??= _makePanel();
     _panel!.reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     if (!identical(s, _state)) {
       _state?.removeListener(_onState);
@@ -142,7 +141,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     _syncClocks();
   }
 
-  DrivePanelController _makePanel(AppState s) {
+  DrivePanelController _makePanel() {
     // Always starts at the Dock (Andy, Nov 12 2026): the last detent used to be restored, so a panel left at Medium reopened in the
     // middle of the screen on launch and covered the map while the radio was still reconnecting. Nothing but the person's own
     // drag or tap moves the panel; a connect attempt never does.
@@ -150,7 +149,6 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     c.onDetentChanged = (from, to) {
       // The tab bar follows the panel: Immersive hides it (250 ms, shell), anything else brings it back.
       _shell?.setImmersive(to == PanelDetent.immersive);
-      if (to == PanelDetent.medium) _auto.touch(s.services.clock());
       to == PanelDetent.medium ? _panels.claim(kDrivePanelId) : _panels.release(kDrivePanelId);
       // The map's buttons move to where the panel is GOING, at once (one write per move, never per frame). Waiting for the
       // spring to come to rest left them under the opened panel for more than a second: the panel is visually there in about
@@ -167,20 +165,10 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     return c;
   }
 
-  /// Once a second while driving: feeds speed to the auto-collapse machine and collapses Medium when it says so.
-  void _autoTick() {
-    final s = _state, p = _panel;
-    if (s == null || p == null) return;
-    PowerCounters.inc(PowerCounters.timerWake);
-    final now = s.services.clock();
-    _auto.onFix(_model?.fix?.speedMps, now);
-    if (_auto.shouldCollapse(now, p.detent)) p.settleTo(PanelDetent.dock);
-  }
-
   /// The Drive tab is what the person sees: it is the visible tab and the app is in front.
   bool get _onScreen => _visible && (_shell == null || _shell!.tab == AppTab.drive) && UiForeground.value;
 
-  /// Drive started or ended: the auto-collapse machine, Passenger and the radio queue's background refresh follow it.
+  /// Drive started or ended: the radio queue's background refresh follows it.
   void _syncDriving(AppState s) {
     final driving = s.driving;
     if (driving == _wasDriving) return;
@@ -193,13 +181,12 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     } else {
       queue.autoRefreshEnabled = _remoteWas ?? true;
       _remoteWas = null;
-      _auto.reset();
     }
   }
 
   bool? _wasOnScreen;
 
-  /// The 1 s auto-collapse clock (only while driving with the tab on screen, battery plan A5) and the wakelock (A1).
+  /// The wakelock (battery plan A1), and the panel's listenable when the tab comes on or leaves the screen.
   void _syncClocks() {
     if (!mounted) return;
     final on = _onScreen;
@@ -209,13 +196,6 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     _wasOnScreen = on;
     final s = _state;
     final driving = s?.driving ?? false;
-    final tick = driving && _onScreen;
-    if (tick) {
-      _autoTimer ??= Timer.periodic(const Duration(seconds: 1), (_) => _autoTick());
-    } else {
-      _autoTimer?.cancel();
-      _autoTimer = null;
-    }
     final awake = driving &&
         switch (PowerProfile.current.screenOn) {
           ScreenOnMode.always => true,
@@ -259,7 +239,6 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
 
   @override
   void dispose() {
-    _autoTimer?.cancel();
     UiForeground.notifier.removeListener(_syncClocks);
     PowerProfile.removeListener(_powerChanged);
     final st = _state;
@@ -319,7 +298,10 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
             _clearance = panel.extent.value;
           } else if (panel.geometry != g) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) panel.setGeometry(g);
+              if (!mounted) return;
+              panel.setGeometry(g);
+              // A geometry without an Immersive detent rests the panel on the Dock: the tab bar must be back then.
+              if (panel.detent != PanelDetent.immersive && (_shell?.immersive ?? false)) _shell!.setImmersive(false);
             });
           }
           final axText = DriveDock.isAx(context); // read outside the clamp below
@@ -331,7 +313,6 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                 state: s,
                 model: model,
                 collapseCapsule: axText,
-                inspectorLocked: inspectorLocked(driving: s.driving, moving: _auto.moving, passenger: _auto.passenger),
                 topClearance: mq.padding.top,
                 // The strip is part of the panel surface, so the overlays sit above it too.
                 // Floating card: it sits bottom-left, the controls and attribution are bottom-right, so only the margin is cleared.
@@ -364,15 +345,12 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
                     cardLeft: cardLeft,
                     strip: strip == null ? null : DockStripView(info: strip),
                     controller: panel,
-                    onTouch: () => _auto.touch(s.services.clock()),
                     dock: DriveDock(state: s, debounce: _debounce),
                     mediumChildren: MediumContent.build(
                       context,
                       state: s,
                       liveStats: liveStats,
                       fix: model.fix,
-                      passenger: _auto.passenger,
-                      onPassenger: (v) => setState(() => _auto.passenger = v),
                       openGuide: () => showMapLegend(context, pingColors: model.pingColors),
                       nearby: model.position == null ? const [] : nearestRepeaters(model.regionRepeaters, model.position!.latitude, model.position!.longitude),
                       onPickNearby: (key) {
@@ -410,10 +388,9 @@ class _MapPane extends StatelessWidget {
   final double topClearance, bottomClearance;
   final bool rotatable;
   final bool collapseCapsule;
-  final bool inspectorLocked;
   final MapPanelHostController panelHost;
   final double? panelInset;
-  const _MapPane({required this.state, required this.model, required this.panelHost, this.panelInset, this.collapseCapsule = false, this.inspectorLocked = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable = false});
+  const _MapPane({required this.state, required this.model, required this.panelHost, this.panelInset, this.collapseCapsule = false, this.topClearance = 0, this.bottomClearance = 0, this.rotatable = false});
 
   /// The legend as the map's transient panel (a second tap on the chip closes it).
   void _toggleLegend() {
@@ -521,8 +498,6 @@ class _MapPane extends StatelessWidget {
           fallbackCenter: viewedRegionCenter(s),
           fallbackBounds: viewedRegionBounds(s),
           onLayers: () => showGeneratedLayersSheet(context, model, host: panelHost),
-          inspectorLocked: inspectorLocked,
-          inspectorAutoClear: s.driving ? kInspectorAutoClear : null,
           topLeading: _StateChips(state: s, model: model, maxWidth: box.maxWidth),
           topTrailing: StatusCapsule(state: s, collapsed: collapseCapsule, onPressed: () => openConnect(context)),
           bottom: Align(alignment: Alignment.bottomLeft, child: MapHealthOverlay(model: model)),

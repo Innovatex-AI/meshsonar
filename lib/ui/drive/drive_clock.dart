@@ -1,4 +1,4 @@
-// The 1 s clocks of the drive UI (elapsed time, next-ping countdown, dock hero, ping circle, mini bar, auto-collapse) run only
+// The 1 s clocks of the drive UI (elapsed time, next-ping countdown, dock hero, ping circle, mini bar) run only
 // while they are worth drawing: a drive is running, the widget's tab is the visible one (the shell gives hidden tabs a
 // disabled TickerMode) and the app is in front. They stop otherwise and restart on return (build 70, battery plan A5).
 import 'dart:async';

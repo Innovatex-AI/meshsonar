@@ -271,7 +271,8 @@ class _HomeShellState extends State<HomeShell> {
                       if (_shell.visited.contains(t) || t == AppTab.drive)
                         TickerMode(
                           enabled: t == tab,
-                          child: t == AppTab.drive ? _page(t) : MediaQuery.removePadding(context: context, removeBottom: true, child: _page(t)),
+                          // Drive runs behind the tab bar, except while the alerts strip sits between them (AlertsStripSeat).
+                          child: t == AppTab.drive ? AlertsStripSeat(child: _page(t)) : MediaQuery.removePadding(context: context, removeBottom: true, child: _page(t)),
                         )
                       else
                         const SizedBox.shrink(),
@@ -287,7 +288,8 @@ class _HomeShellState extends State<HomeShell> {
                   child: InAppBannerHost(
                     child: Column(key: _contentKey, children: [
                       Expanded(child: pages),
-                      AlertsStatusStrip(bottomInset: onDrive ? barPad : 0),
+                      // Drive: the Dock says Reconnecting… / Not connected itself, so the strip's radio row is not repeated there.
+                      AlertsStatusStrip(bottomInset: onDrive ? barPad : 0, radioRow: !onDrive),
                       bar,
                       SizedBox(height: onDrive ? 0 : barPad),
                     ]),

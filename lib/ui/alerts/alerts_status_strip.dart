@@ -4,6 +4,12 @@
 // The radio row's icon, spinner and first words are the shared ones (lib/ui/drive/radio_link_status.dart, rule 7 of the map
 // panel rules): "Reconnecting…" with the spinner while it works, "Not connected" with the Dock's glyph when it gave up. The
 // radio's name, or the sentence that says why, follows as the detail.
+//
+// The Drive tab (build 76): its Dock already says Reconnecting… / Not connected with the one action, so the radio row is not
+// shown there ([AlertsStatusStrip.radioRow] false): one message, not two. The waiting-message warning still shows there, and
+// [AlertsStripSeat] makes the Drive page end at the top of the strip, so the Drive panel rests on it. Before that the page
+// kept the tab bar's height as bottom padding while the strip took that room away from it: the panel hung a tab bar's height
+// above the strip with the map showing underneath ("the floating panel", iPhone bug report).
 import 'package:flutter/material.dart';
 
 import '../../alerts/alerts_runtime.dart';
@@ -13,7 +19,13 @@ import '../theme.dart';
 class AlertsStatusStrip extends StatelessWidget {
   /// Space kept under the strip when it shows (the Drive tab runs behind the tab bar, so the strip clears it).
   final double bottomInset;
-  const AlertsStatusStrip({super.key, this.bottomInset = 0});
+
+  /// Show the radio row ("Reconnecting…" / "Not connected … Reconnect"). False on the Drive tab, whose Dock says it.
+  final bool radioRow;
+  const AlertsStatusStrip({super.key, this.bottomInset = 0, this.radioRow = true});
+
+  /// True when the strip shows something on the Drive tab (only the waiting-message warning does).
+  static bool showsOnDrive(AlertsRuntime? rt) => rt?.queue.message != null;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +39,7 @@ class AlertsStatusStrip extends StatelessWidget {
           builder: (context, _) {
             final rows = <Widget>[];
             final status = reconnect?.statusText;
-            if (reconnect != null && status != null) {
+            if (radioRow && reconnect != null && status != null) {
               final active = reconnect.active;
               final link = RadioLinkStatus(active ? RadioLink.reconnecting : RadioLink.notConnected);
               rows.add(_Row(
@@ -55,6 +67,34 @@ class AlertsStatusStrip extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// Wraps the Drive page. While the strip shows on the Drive tab the page no longer runs behind the tab bar (the strip sits
+/// between them), so the page is told it has no bottom inset: the Drive panel then rests directly on the strip. The widget
+/// tree keeps one shape in both cases, so the page's state is never rebuilt.
+class AlertsStripSeat extends StatelessWidget {
+  final Widget child;
+  const AlertsStripSeat({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<AlertsRuntime?>(
+      valueListenable: AlertsHost.runtime,
+      child: child,
+      builder: (context, rt, child) => ListenableBuilder(
+        listenable: Listenable.merge([rt?.queue]),
+        child: child,
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          final seated = AlertsStatusStrip.showsOnDrive(rt);
+          return MediaQuery(
+            data: seated ? mq.copyWith(padding: mq.padding.copyWith(bottom: 0), viewPadding: mq.viewPadding.copyWith(bottom: 0)) : mq,
+            child: child!,
+          );
+        },
+      ),
     );
   }
 }

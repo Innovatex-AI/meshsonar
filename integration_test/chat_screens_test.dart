@@ -55,13 +55,6 @@ void main() {
     await t.tapAt(const Offset(5, 60));
     await pumpFor(t, const Duration(milliseconds: 600));
 
-    // passenger lock
-    kit.controller.updateDrive(driving: true, sessionId: 'x', speedMps: 18, fixAt: DateTime.now());
-    await pumpFor(t, const Duration(milliseconds: 600));
-    await shot(t, 'chat-composer-locked');
-    kit.controller.updateDrive(driving: false);
-    await pumpFor(t, const Duration(milliseconds: 300));
-
     // channel info
     await t.tap(find.byKey(const Key('conv-channel-info')));
     await pumpFor(t, const Duration(seconds: 1));
