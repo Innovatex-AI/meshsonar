@@ -418,12 +418,16 @@ class _MapPane extends StatelessWidget {
                   drivePanel: model.pings.isNotEmpty || s.driving,
                 ),
               ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
+              // "Map guide" everywhere (build 76: it was "Full guide" here, "Map guide" in the panel and "What do the symbols
+              // mean?" in Layers), as a full-width 48 pt button.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
+                child: OutlinedButton.icon(
                   key: const Key('legend-open-guide'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                   onPressed: () => showMapLegend(context, pingColors: model.pingColors),
-                  child: const Text('Full guide'),
+                  icon: const Icon(Icons.help_outline_rounded),
+                  label: const Text('Map guide'),
                 ),
               ),
             ],
