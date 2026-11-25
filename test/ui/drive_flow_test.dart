@@ -34,7 +34,7 @@ void main() {
     final h = Harness();
     await h.pumpApp(tester);
     expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Not connected');
-    expect(find.text('Connect your radio to begin'), findsOneWidget);
+    expect(find.byKey(const Key('dock-subtitle')), findsNothing, reason: 'build 76: the button says what to do; the old second line was cut off on most iPhones');
     expect(find.descendant(of: find.byKey(const Key('start-stop')), matching: find.text('Connect radio')), findsOneWidget);
     expect(find.byKey(const Key('map-hint')), findsNothing, reason: 'the "No pings yet" popup is gone');
     await drain(tester);

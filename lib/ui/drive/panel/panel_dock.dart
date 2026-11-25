@@ -20,7 +20,6 @@ import '../../design/tokens.dart';
 import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport;
 import '../radio_link_status.dart';
 import '../drive_clock.dart';
-import 'auto_collapse.dart';
 import 'panel_meshtrack.dart';
 
 /// Distinct repeaters that heard [p]. A repeater is counted once however many echoes it produced.
@@ -40,6 +39,21 @@ String agoShort(Duration d) {
   if (s < 60) return '$s s';
   final m = s ~/ 60;
   return '${m}m${(s % 60).toString().padLeft(2, '0')}s';
+}
+
+/// Ping debounce: ignored while a ping is in flight and for 2 s after the last accepted tap (airtime protection).
+class PingDebounce {
+  static const Duration quiet = Duration(seconds: 2);
+  DateTime? _last;
+
+  /// True (and starts the quiet period) when a tap at [now] may send a ping.
+  bool accept(DateTime now, {required bool inFlight}) {
+    if (inFlight) return false;
+    final l = _last;
+    if (l != null && now.difference(l) < quiet) return false;
+    _last = now;
+    return true;
+  }
 }
 
 class DriveDock extends StatelessWidget {
@@ -97,12 +111,14 @@ class _IdleDock extends StatelessWidget {
     final t = Theme.of(context);
     final c = AppColors.fromTheme(t);
     final busy = s.busy || s.connecting;
-    // Idle table (plan 4.20): not connected -> "Not connected" / "Connect your radio to begin" + Connect radio; location off ->
+    // Idle table (plan 4.20, simplified in build 76): not connected -> "Not connected" + Connect radio, and nothing else (the
+    // old second line "Connect your radio to begin" repeated the button and was cut off on every iPhone narrower than a
+    // Pro Max); after the automatic reconnect gave up the second line says "Could not reach <radio>". Location off ->
     // "Location is off for MeshSonar" (Start disabled; the strip above carries Allow location / Open Settings).
     final locationOff = s.locationNote != null;
     final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (locationOff ? 'Location is off for MeshSonar' : 'Ready');
-    final String sub = !s.connected
-        ? 'Connect your radio to begin'
+    final String? sub = !s.connected
+        ? RadioLinkStatus.detailOf(s)
         : (s.needsAntennaSetup ? 'Set your antenna first (open the panel)' : (locationOff ? 'Allow location to start a drive' : s.connectionLabel));
     final text = _dockText(
       context,
@@ -111,8 +127,10 @@ class _IdleDock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, key: const Key('status-line'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+          if (sub != null) ...[
+            const SizedBox(height: 2),
+            Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+          ],
         ],
       ),
     );
@@ -192,8 +210,11 @@ class _StartStopButton extends StatelessWidget {
 
 // ------------------------------------------------------------------------------------------------ connecting
 
-/// Wireframe B: spinner + "Connecting…" / "Reconnecting…" (the one wording, [RadioLinkStatus]) and a Cancel text button that returns to
-/// idle with no confirmation. It sits in the Dock like every other state: it never changes the detent and never covers the map.
+/// Wireframe B: spinner + "Connecting…" / "Reconnecting…" (the one wording, [RadioLinkStatus]), the radio's name under it, and a
+/// Cancel text button that returns to idle with no confirmation. It sits in the Dock like every other state: it never changes
+/// the detent and never covers the map. Build 76: the second line is the radio's name (it was "Looking for GPS - step outside
+/// if indoors" while connecting, which is not what a radio connect does and never fitted the row), and the words stay on one
+/// line (two lines overflowed the 72 pt row at large text).
 class _ConnectingDock extends StatelessWidget {
   final AppState state;
   final RadioLinkStatus link;
@@ -208,10 +229,7 @@ class _ConnectingDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.fromTheme(Theme.of(context));
-    final radio = AlertsHost.runtime.value?.reconnect?.radioName;
-    final String sub = link.link == RadioLink.reconnecting
-        ? (radio == null ? 'Looking for your radio' : 'Looking for $radio')
-        : 'Looking for GPS - step outside if indoors';
+    final String? sub = RadioLinkStatus.detailOf(state);
     final text = _dockText(
       context,
       Row(children: [
@@ -222,8 +240,12 @@ class _ConnectingDock extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(link.label, key: const Key('status-line'), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-              Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(link.label, key: const Key('status-line'), maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              ),
+              if (sub != null) Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
             ],
           ),
         ),

@@ -1,9 +1,7 @@
 // The map's inspector for a tapped cell, ping or repeater: the transient MapPanel `drive.inspect` (design/map_panel.dart),
 // sitting directly above the map's persistent panel. It opens COLLAPSED to its header (what was tapped and what the link
 // lines found) so the map stays the focus, and the person opens it for the figures. Fit and Close live in its header.
-//
-// Driving safety (one of the two automatic moves allowed, see rule 1 in map_panel.dart): while the car moves it is locked
-// at its header, and it clears itself [MapInfoPanel.autoClear] after the last touch.
+// It stays as the person left it until they close it or tap something else: the car moving never locks it (build 76).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,11 +26,11 @@ class MapInfoPanel extends StatefulWidget {
   /// A small marker next to the title (the "Owned by you" chip), shown even while the panel is collapsed.
   final Widget? badge;
 
-  /// While the car moves (driving, not Passenger) the panel stays at its one-line peek: tapping it does not expand, Details-style
-  /// content reads "Open when stopped" (Drive plan 4.9, R16, D41).
+  /// Ignored since build 76 (the "Open when stopped" lock is gone: the panel always opens when the person taps it). The
+  /// argument stays only until its last caller, coverage_map.dart, stops passing it.
   final bool locked;
 
-  /// Clears itself this long after the last touch (12 s while driving); null = stays until closed.
+  /// Clears itself this long after the last touch; null = stays until closed. Nothing in the app passes it since build 76.
   final Duration? autoClear;
 
   /// False when the panel sits on top of another panel that already clears the tab bar and the home indicator.
@@ -99,9 +97,7 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
       leading: widget.busy
           ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
           : Icon(Icons.share_location_rounded, size: 18, color: MeshSonarColors.of(context).linkLine),
-      status: widget.locked
-          ? const Text('Open when stopped', key: Key('info-panel-locked'), style: TextStyle(fontWeight: FontWeight.w600))
-          : Text(widget.summary, key: const Key('info-panel-summary')),
+      status: Text(widget.summary, key: const Key('info-panel-summary')),
       action: widget.onFit == null
           ? null
           : IconButton(
@@ -113,7 +109,6 @@ class _MapInfoPanelState extends State<MapInfoPanel> {
             ),
       onClose: widget.onClose,
       initialState: MapPanelState.collapsed,
-      locked: widget.locked,
       bottomSafe: widget.bottomSafe,
       headerKey: const Key('info-panel-header'),
       bodyKey: const Key('info-panel-body'),

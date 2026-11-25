@@ -1,6 +1,6 @@
 // ChatController: the one object chat screens talk to. It owns the ChatService for the open chat store, follows the radio
-// session (bind on connect, unbind on drop; the outbox keeps queued messages until the radio is back), knows the
-// passenger lock, and tells widgets when something changed. No widgets in here (lib/ui/chat has those).
+// session (bind on connect, unbind on drop; the outbox keeps queued messages until the radio is back), and tells
+// widgets when something changed. No widgets in here (lib/ui/chat has those).
 //
 // Chat only uses the local database and the radio: nothing in this file touches the network or the MeshSonar server.
 import 'dart:async';
@@ -12,7 +12,6 @@ import '../chat/conversation_row.dart';
 import '../chat/chat_service.dart';
 import '../chat/events.dart';
 import '../chat/models.dart';
-import '../chat/passenger_lock.dart';
 import '../chat/radio_bridge.dart';
 import '../chat/session_adapter.dart';
 import '../chat/store.dart';
@@ -70,11 +69,6 @@ class ChatController extends ChangeNotifier {
   String? _radioId;
   StreamSubscription<ChatEvent>? _sub;
   StreamSubscription<r.LinkState>? _linkSub;
-  final PassengerLock _lock = PassengerLock();
-  bool _driving = false;
-  String? _driveSessionId;
-  double? _speedMps;
-  DateTime? _fixAt;
   int _unread = 0;
   String? _activeConv;
   bool _disposed = false;
@@ -207,39 +201,11 @@ class ChatController extends ChangeNotifier {
     _changed();
   }
 
-  // ------------------------------------------------------------------ drive safety (design 1.3)
-
-  /// True while the composer must stay off: a drive is running, the car is faster than walking pace and the person has not
-  /// said they are a passenger.
-  bool get composerLocked => _lock.locked;
-  bool get isPassenger => _lock.isPassenger(_driveSessionId);
-  bool get driving => _driving;
-
-  /// Feed the lock with the drive facts (AppState does, on every change). Notifies only when the lock flips.
-  void updateDrive({required bool driving, String? sessionId, double? speedMps, DateTime? fixAt}) {
-    _driving = driving;
-    _driveSessionId = sessionId;
-    _speedMps = speedMps;
-    _fixAt = fixAt;
-    final flipped = _lock.update(driving: driving, sessionId: sessionId, speedMps: speedMps, fixAt: fixAt, now: now());
-    if (flipped) _changed();
-  }
-
-  /// "I'm a passenger": lifts the lock for the rest of this drive.
-  void setPassenger(bool value) {
-    _lock.setPassenger(_driveSessionId, value);
-    _lock.update(driving: _driving, sessionId: _driveSessionId, speedMps: _speedMps, fixAt: _fixAt, now: now());
-    _changed();
-  }
-
   // ------------------------------------------------------------------ sending
 
   /// Queues [text] in [convKey]. Never throws; the composer shows [SendAttempt.error]. [forceFlood]: long-press Send >
   /// "Send by flood" on a direct message.
   SendAttempt send(String convKey, String text, {bool forceFlood = false}) {
-    if (composerLocked) {
-      return const SendAttempt.failed('Sending is off while the car is moving. Tap "I\'m a passenger" if someone else is typing.');
-    }
     final id = _radioId;
     if (id == null) {
       return const SendAttempt.failed('Connect your radio once so MeshSonar knows which radio these messages belong to.');

@@ -1,9 +1,8 @@
 // MapPanel: the one panel that sits on a map (build 71). Twin of the site's float-panel.
 // Rules (meshsonar-infra docs/planning/app-build-71-gateway-plan.md, "One shared panel"):
 //   1. Bottom-anchored, directly above the tab bar. Only the person moves it; a connection or data event never does.
-//      The ONLY automatic moves in the app are the two driving-safety rules: the Drive panel collapses from Open at speed
-//      (lib/ui/drive/panel/auto_collapse.dart) and the map inspector clears itself 12 s after the last touch while driving
-//      (MapInfoPanel.autoClear). Nothing else may move a panel.
+//      Nothing else may move a panel either: since build 76 the car moving does not (the Drive panel's collapse at speed
+//      and the inspector's lock and 12 s auto-clear while driving were removed).
 //   2. The header is always visible and at least 44 pt: grabber, title, one status or count, chevron. Collapsed = header only.
 //   3. Tap the header or drag it to toggle. Same state names everywhere: Collapsed, Open (at most 60 % of the height), Full
 //      (work panels only: Planner, Drive stats).
@@ -229,7 +228,8 @@ class MapPanel extends StatefulWidget {
   /// phone, open on a wide screen (transient panels: open).
   final MapPanelState? initialState;
 
-  /// Stays at its header: a tap or drag does not open it (the inspector while the car moves).
+  /// Stays at its header: a tap or drag does not open it. No caller sets it since build 76 (it was the inspector's lock while
+  /// the car moved).
   final bool locked;
 
   /// The share of the height Open may take.

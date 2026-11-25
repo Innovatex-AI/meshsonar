@@ -1,9 +1,9 @@
 // DrivePanel: the bottom panel of the Drive tab (Drive plan 5.1, 5.4). Hand-rolled, not a DraggableScrollableSheet: its state
-// is tied to speed, the tab bar and a pinned dock. The panel is a sibling above the map, never inside the map's gesture arena,
+// is tied to the tab bar and a pinned dock. Only the person moves it (build 76: no speed-driven collapse). The panel is a sibling above the map, never inside the map's gesture arena,
 // and it never dims or resizes the map. Dragging only moves the panel (its own relayout boundary); the map is not touched.
 //
 // Look and words are the shared map panel's (design/map_panel.dart): the same grabber, chevron and surface, and the state
-// names Collapsed (Dock) and Open (Medium); the engine (physics, detents, auto-collapse) is this panel's own. Hidden (the
+// names Collapsed (Dock) and Open (Medium); the engine (physics, detents) is this panel's own. Hidden (the
 // Immersive pill) exists only here. Id in the map's panel group: [kDrivePanelId].
 //
 //   header   = grabber row (16) + dock row (72): drag it up/down, tap it to toggle Dock <-> Medium. Buttons inside the dock row are
@@ -32,9 +32,6 @@ class DrivePanel extends StatelessWidget {
   /// Medium content, scrolled inside the panel.
   final List<Widget> mediumChildren;
 
-  /// Any touch on the panel (resets the auto-collapse timer).
-  final VoidCallback? onTouch;
-
   /// The reserved strip (plan 4.12, 28 pt) at the top of the panel surface: GPS / radio / permission help with its one fix.
   /// Null = no strip. It is part of the surface, so it rides with the panel and never moves the dock buttons.
   final Widget? strip;
@@ -45,7 +42,7 @@ class DrivePanel extends StatelessWidget {
 
   /// The panel is not drawn (idle Immersive shows only the Start pill); a drag or spring brings it back.
   final bool hidden;
-  const DrivePanel({super.key, required this.controller, required this.dock, this.mediumChildren = const [], this.onTouch, this.strip, this.cardWidth, this.cardLeft = 16, this.hidden = false});
+  const DrivePanel({super.key, required this.controller, required this.dock, this.mediumChildren = const [], this.strip, this.cardWidth, this.cardLeft = 16, this.hidden = false});
 
   /// The shared state of a detent (design/map_panel.dart). Immersive has none: it is this panel's own "Hidden".
   static MapPanelState? stateOf(PanelDetent d) => switch (d) {
@@ -79,7 +76,7 @@ class DrivePanel extends StatelessWidget {
               width: cardWidth,
               bottom: below,
               height: h + stripH,
-              child: _Surface(controller: controller, dock: dock, mediumChildren: mediumChildren, onTouch: onTouch, height: h, strip: strip, floating: cardWidth != null),
+              child: _Surface(controller: controller, dock: dock, mediumChildren: mediumChildren, height: h, strip: strip, floating: cardWidth != null),
             ),
           ],
         );
@@ -92,20 +89,19 @@ class _Surface extends StatelessWidget {
   final DrivePanelController controller;
   final Widget dock;
   final List<Widget> mediumChildren;
-  final VoidCallback? onTouch;
   final double height;
   final Widget? strip;
   final bool floating;
-  const _Surface({required this.controller, required this.dock, required this.mediumChildren, required this.onTouch, required this.height, this.strip, this.floating = false});
+  const _Surface({required this.controller, required this.dock, required this.mediumChildren, required this.height, this.strip, this.floating = false});
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.fromTheme(Theme.of(context));
     final dockH = controller.geometry?.dockHeight ?? kPanelDockHeight;
+    // Opaque to touches: nothing under the panel (the map) is reached through it.
     return Listener(
       key: const Key('drive-panel'),
       behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => onTouch?.call(),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: c.surface,

@@ -1,7 +1,6 @@
 // Medium's content (Drive plan 4.5, 5.2) as a list of widgets for the panel's scroll view, in order: unsaved warning, location
-// note, the ratio line with the Passenger switch, the 2x3 stat grid, "Heard last ping" (2 rows), then the list rows (antenna,
+// note, the ratio line, the 2x3 stat grid, "Heard last ping" (2 rows), then the list rows (antenna,
 // ping settings, log, map guide). WP3b finishes this content; this is the shell with every old footer function kept.
-import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../../../app/app_state.dart';
@@ -53,8 +52,6 @@ class MediumContent {
     required AppState state,
     required DriveLiveStats liveStats,
     required GeoFix? fix,
-    required bool passenger,
-    required ValueChanged<bool> onPassenger,
     required VoidCallback openGuide,
     List<NearbyRepeater> nearby = const [],
     ValueChanged<String>? onPickNearby,
@@ -131,19 +128,11 @@ class MediumContent {
       if (s.locationNote != null && !driving) Padding(padding: const EdgeInsets.only(bottom: 8), child: LocationNoteBanner(state: s)),
       if (s.needsAntennaSetup && !driving) const Padding(padding: EdgeInsets.only(bottom: 8), child: AntennaSetupHint()),
       if (driving) ...[
-        Row(children: [
-          Expanded(
-            child: Text(
-              s.pingCount == 0 ? 'No pings yet' : '${s.heardCount} of ${s.pingCount} pings heard${pct == null ? '' : ' ($pct%)'}',
-              key: const Key('medium-ratio'),
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const Text('Passenger', style: TextStyle(fontSize: 15)),
-          const SizedBox(width: 8),
-          CupertinoSwitch(key: const Key('passenger-switch'), value: passenger, onChanged: onPassenger),
-        ]),
-        Text('Passenger keeps this open while the car moves', style: TextStyle(fontSize: 12, color: c.textMuted)),
+        Text(
+          s.pingCount == 0 ? 'No pings yet' : '${s.heardCount} of ${s.pingCount} pings heard${pct == null ? '' : ' ($pct%)'}',
+          key: const Key('medium-ratio'),
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         Row(children: [
           cell('Distance', s.units.distance(_distanceM(s.drivePings)), const Key('stat-distance')),

@@ -1,6 +1,6 @@
 // The compose bar (chat plan 4.3): a pill that grows to five lines, a send button whose ring fills with the bytes used (the
 // number appears inside it at 20 or fewer left), a quick-replies chip strip, an @mention strip, a one-line "Trimmed to fit"
-// caption after an over-long paste, the offline hint and the passenger lock. No reply feature (cut, R07).
+// caption after an over-long paste and the offline hint. No reply feature (cut, R07).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -430,7 +430,6 @@ class _ComposerState extends State<Composer> {
 
   @override
   Widget build(BuildContext context) {
-    if (c.composerLocked) return _LockedComposer(controller: c);
     final colors = AppColors.of(context);
     final max = c.service.maxTextBytes(widget.convKey);
     final b = ByteBudget.of(_text.text, max);
@@ -717,47 +716,4 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) => old.fraction != fraction || old.color != color || old.track != track;
-}
-
-/// What replaces the composer while the car is moving.
-class _LockedComposer extends StatelessWidget {
-  final ChatController controller;
-  const _LockedComposer({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppColors.of(context);
-    // At the largest text sizes the notice is taller than the room under the messages: cap it and let it scroll.
-    return Container(
-      key: const Key('composer-locked'),
-      color: c.surfaceHigh,
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
-      child: SingleChildScrollView(
-        child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(Gap.m),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                AppSymbolIcon(AppSymbols.carFill, color: c.textPrimary),
-                const SizedBox(width: Gap.m),
-                Expanded(child: Text('Typing is off while the car is moving. Messages still arrive here.', style: AppType.callout.copyWith(color: c.textPrimary))),
-              ]),
-              const SizedBox(height: Gap.s),
-              CupertinoButton.filled(
-                key: const Key('passenger-button'),
-                minimumSize: Size.square(Hit.of(context)),
-                onPressed: () => controller.setPassenger(true),
-                child: const Text("I'm a passenger"),
-              ),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
 }

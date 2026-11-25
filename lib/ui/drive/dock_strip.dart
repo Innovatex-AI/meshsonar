@@ -51,8 +51,10 @@ StripInfo? stripFor(AppState s, GpsHealth h) {
     return null;
   }
   // Idle: location trouble has its one-tap fix here (the old banner row is gone).
+  // Shown whatever the radio is doing (build 76). It used to hide while a connect try ran, so with location off the panel grew
+  // and shrank by 28 pt on every try of the automatic reconnect (eight tries in two minutes).
   final note = s.locationNote;
-  if (note != null && !s.connecting) {
+  if (note != null) {
     final isPrecise = note.access == LocationAccess.approximate;
     return StripInfo(isPrecise ? StripKind.preciseOff : StripKind.permission, isPrecise ? 'Precise Location is off - data is unusable' : 'Location is off for MeshSonar',
         actionLabel: note.action == null ? null : (note.action == LocationAction.ask ? 'Allow location' : 'Open Settings'),
