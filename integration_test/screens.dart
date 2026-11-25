@@ -191,6 +191,11 @@ Future<void> openSettingsSection(WidgetTester t, MoreItem item) async {
 
 /// One step back: the page's Back button, else the site page's close button, else the top route of the root navigator.
 Future<void> backOne(WidgetTester t) async {
+  // The in-app message banner lies over the top bar for a few seconds: a Back tap would land on it and open a chat.
+  final banner = find.byKey(const Key('in-app-banner'));
+  for (var i = 0; i < 40 && banner.evaluate().isNotEmpty; i++) {
+    await pumpFor(t, const Duration(milliseconds: 250));
+  }
   final b = find.byTooltip('Back');
   if (b.evaluate().isNotEmpty) {
     await t.tap(b.last, warnIfMissed: false);
