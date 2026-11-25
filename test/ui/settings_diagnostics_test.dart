@@ -4,6 +4,7 @@ import 'toast_test_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/redact.dart' show redactText;
 import 'package:meshsonar/ui/settings/diagnostics_section.dart';
 
 import 'fakes.dart';
@@ -63,6 +64,48 @@ void main() {
     expect(find.textContaining('positions rounded)'), findsOneWidget);
   });
 
+  // Build 76: the newest event is what a person came for, so it is first; a count line; Copy in thumb reach.
+  testWidgetsT('newest first with a count line; the full-width "Copy log" button copies like the app-bar button', (tester) async {
+    final (h, copied) = await open(tester);
+    await showSetting(tester, 'diagnostics-log');
+    expect(find.descendant(of: find.byKey(const Key('section-storage')), matching: find.byKey(const Key('diagnostics-log'))), findsOneWidget,
+        reason: 'first level of Storage & diagnostics');
+    await tester.tap(find.byKey(const Key('diagnostics-log')));
+    await tester.pumpAndSettle();
+    final all = h.state.diagnostics.lines;
+    expect(all.length, greaterThanOrEqualTo(2));
+    final count = tester.widget<Text>(find.byKey(const Key('diagnostics-count'))).data!;
+    expect(count, startsWith('${all.length} lines, newest first'));
+    expect(count, contains('Secrets hidden, positions rounded'));
+    final shown = tester.widgetList<SelectableText>(find.byType(SelectableText)).map((t) => t.data!).toList();
+    expect(shown.first, redactText(all.last).text, reason: 'the newest line is the first one under the count');
+    for (var i = 0; i < shown.length; i++) {
+      expect(shown[i], redactText(all[all.length - 1 - i]).text, reason: 'line $i: newest first, none skipped');
+    }
+    Finder line(String part) => find.byWidgetPredicate((w) => w is SelectableText && w.data!.contains(part));
+    expect(tester.getTopLeft(find.byKey(const Key('diagnostics-count'))).dy, lessThan(tester.getTopLeft(line('broker.example')).dy));
+    expect(tester.getTopLeft(line('broker.example')).dy, lessThan(tester.getTopLeft(line('39.961,-82.999')).dy),
+        reason: 'the line added last is above the one added before it');
+
+    final button = find.byKey(const Key('diagnostics-copy-button'));
+    expect(find.descendant(of: button, matching: find.text('Copy log')), findsOneWidget);
+    final screen = tester.getSize(find.byType(Scaffold).last);
+    expect(tester.getSize(button).width, screen.width - 32, reason: 'full width');
+    expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(copied, hasLength(1));
+    expect(copied.single, diagnosticsExport(h.state).text);
+    expect(copied.single, isNot(contains(_key)));
+    expect(copied.single, isNot(contains('hunter2')));
+    expect(find.textContaining('Log copied ('), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6)); // the toast goes
+    await tester.tap(find.byKey(const Key('diagnostics-copy')));
+    await tester.pumpAndSettle();
+    expect(copied, hasLength(2));
+    expect(copied.last, diagnosticsExport(h.state).text, reason: 'the app-bar button copies the same text');
+  });
+
   test('redactionSummary', () {
     expect(redactionSummary({'driverKey': 0, 'coords': 0}), isNull);
     expect(redactionSummary({'driverKey': 1, 'secret': 1, 'coords': 1}), '2 secrets hidden, 1 position rounded');
@@ -84,6 +127,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.state.diagnostics.lines, isEmpty);
     expect(find.byKey(const Key('diagnostics-empty')), findsOneWidget);
+    expect(find.byKey(const Key('diagnostics-copy-button')), findsNothing, reason: 'nothing to copy: no Copy log button');
+    expect(find.byKey(const Key('diagnostics-count')), findsNothing);
     expect(tester.widget<IconButton>(find.byKey(const Key('diagnostics-clear'))).onPressed, isNull);
   });
 }

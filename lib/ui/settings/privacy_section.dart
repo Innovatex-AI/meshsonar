@@ -208,9 +208,9 @@ class TelemetryLocationTile extends StatelessWidget {
           SegmentedButton<bool>(
             key: const Key('telemetry-location-selector'),
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: true, label: Text(telemetryLocationRegionLabel)),
-              ButtonSegment(value: false, label: Text(telemetryLocationApproxLabel)),
+            segments: [
+              ButtonSegment(value: true, label: segmentLabel(telemetryLocationRegionLabel)),
+              ButtonSegment(value: false, label: segmentLabel(telemetryLocationApproxLabel)),
             ],
             selected: {regionOnly},
             onSelectionChanged: enabled ? (v) => s.updateSettings(s.settings.copyWith(telemetryRegionOnly: v.first)) : null,

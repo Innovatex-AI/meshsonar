@@ -190,10 +190,10 @@ class UnitsTile extends StatelessWidget {
             child: SegmentedButton<UnitsPreference>(
               key: const Key('units-selector'),
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: UnitsPreference.auto, label: Text('Auto')),
-                ButtonSegment(value: UnitsPreference.metric, label: Text('Metric')),
-                ButtonSegment(value: UnitsPreference.imperial, label: Text('Imperial')),
+              segments: [
+                ButtonSegment(value: UnitsPreference.auto, label: segmentLabel('Auto')),
+                ButtonSegment(value: UnitsPreference.metric, label: segmentLabel('Metric')),
+                ButtonSegment(value: UnitsPreference.imperial, label: segmentLabel('Imperial')),
               ],
               selected: {pref},
               onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(units: v.first)),
@@ -338,7 +338,7 @@ class ColourPaletteTile extends StatelessWidget {
             showSelectedIcon: false,
             segments: [
               for (final p in ColourPalette.values)
-                ButtonSegment(value: p, label: Text(p.label, key: Key('colour-palette-${p.id}'), textAlign: TextAlign.center)),
+                ButtonSegment(value: p, label: segmentLabel(p.label, key: Key('colour-palette-${p.id}'))),
             ],
             selected: {cur},
             onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(colourPalette: v.first)),

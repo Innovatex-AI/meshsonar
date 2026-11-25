@@ -197,10 +197,37 @@ void main() {
 
     testWidgetsT('one switch per category, each with its exact sentence', (tester) async {
       await open(tester);
+      // Build 76: the master switch is on the first level of Sharing & privacy with one short line; the seven drive-data
+      // switches are on the page "What is shared", each with the first sentence of its disclosure. The exact, whole
+      // sentence of every category is on "What MeshSonar shares" (the last row of that page).
+      String first(String text) {
+        final i = text.indexOf('. ');
+        return i < 0 ? text : text.substring(0, i + 1);
+      }
+
       for (final c in dataCategories) {
         await showSetting(tester, c.toggleKey);
-        expect(find.descendant(of: find.byKey(Key(c.toggleKey)), matching: find.textContaining(c.summary)), findsOneWidget,
-            reason: c.id);
+        final sw = find.byKey(Key(c.toggleKey));
+        expect(tester.widget<SwitchListTile>(sw).value, isTrue, reason: c.id);
+        expect(find.descendant(of: sw, matching: find.text(c.title)), findsOneWidget, reason: c.id);
+        if (identical(c, telemetryCategory)) {
+          expect(find.byKey(const Key('settings-page-sharing')), findsNothing, reason: 'the master switch is on the first level');
+          expect(find.descendant(of: sw, matching: find.text('On: the public packets your radio hears go to the live map.')), findsOneWidget);
+        } else {
+          expect(find.descendant(of: find.byKey(const Key('settings-page-sharing')), matching: sw), findsOneWidget, reason: c.id);
+          expect(find.descendant(of: sw, matching: find.textContaining(first(c.summary))), findsOneWidget, reason: c.id);
+          expect(c.summary, startsWith(first(c.summary)));
+        }
+      }
+      await showSetting(tester, 'privacy-what-shared');
+      await tester.tap(find.byKey(const Key('privacy-what-shared')));
+      await tester.pumpAndSettle();
+      final page = find.byKey(const Key('what-shared-screen'));
+      final scroll = find.descendant(of: page, matching: find.byType(Scrollable)).first;
+      for (final c in dataCategories) {
+        await tester.scrollUntilVisible(find.text(c.disclosureLead), 200, scrollable: scroll);
+        expect(find.descendant(of: page, matching: find.text(c.disclosureLead)), findsOneWidget, reason: '${c.id}: its exact sentence');
+        if (!identical(c, telemetryCategory)) expect(c.disclosureLead, c.summary, reason: '${c.id}: one sentence, one source');
       }
     });
 

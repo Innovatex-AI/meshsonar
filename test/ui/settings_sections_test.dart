@@ -68,13 +68,17 @@ void main() {
     ]) {
       if (page == null) {
         await closeSettingsPage(tester);
-        await tester.scrollUntilVisible(find.byKey(Key(field)), 120, scrollable: settingsList);
+        expect(find.byKey(Key(field)), findsOneWidget, reason: '$field should be on the first level');
+        await tester.ensureVisible(find.byKey(Key(field)));
+        await tester.pumpAndSettle();
         expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(Key(field))), findsOneWidget,
             reason: '$field should be in $section');
       } else {
         await closeSettingsPage(tester);
-        await tester.scrollUntilVisible(find.byKey(Key('page-$page')), 120, scrollable: settingsList);
-        expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(Key('page-$page'))), findsOneWidget,
+        final opener = Key(page == 'units' ? 'units-per-quantity' : 'page-$page'); // units opens from a button in the Units row
+        await tester.ensureVisible(find.byKey(opener));
+        await tester.pumpAndSettle();
+        expect(find.descendant(of: find.byKey(Key('section-$section')), matching: find.byKey(opener)), findsOneWidget,
             reason: 'the page $page opens from $section');
         await openSettingsPageRow(tester, page);
         expect(find.byKey(Key(field)), findsOneWidget, reason: '$field should be on the page $page');

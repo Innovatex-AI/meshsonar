@@ -9,7 +9,7 @@ import 'package:meshsonar/radio/airtime.dart';
 import 'package:meshsonar/ui/settings/wardriving_section.dart';
 
 import 'fakes.dart' show settleLive;
-import 'settings_controls_test.dart' show openSettings, show, settingsScroll;
+import 'settings_controls_test.dart' show openSettings, show;
 
 String textOf(WidgetTester t, String key) => t.widget<Text>(find.byKey(Key(key))).data!;
 
@@ -41,13 +41,13 @@ void main() {
     final h = await openSettings(tester);
     await show(tester, 'send-pings');
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('send-pings'))).value, isTrue);
-    expect(find.textContaining('Repeaters repeat it, observers report it'), findsOneWidget);
+    expect(find.textContaining('repeaters and observers can hear each ping'), findsOneWidget);
     await tester.tap(find.byKey(const Key('send-pings')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.discoveryMode, isTrue);
     await show(tester, 'send-pings');
-    expect(find.textContaining('transmits nothing, not even the ping'), findsOneWidget);
-    expect(find.textContaining('No observer can confirm your drive'), findsOneWidget);
+    expect(find.textContaining('Off (listen-only): nothing is transmitted'), findsOneWidget);
+    expect(find.textContaining('no observer can confirm your drive'), findsOneWidget);
   });
 
   testWidgets('with a radio connected the airtime row quotes the radio\'s SF and bandwidth', (tester) async {
@@ -68,7 +68,11 @@ void main() {
         id: 'a', ts: DateTime.utc(2026, 11, 1), lat: 40, lon: -83, kind: PingKind.tx, echoes: [Echo(repeater: '11', hops: 1), Echo(repeater: '22', hops: 1)]));
     h.state.debugOnPing(DrivePing(id: 'b', ts: DateTime.utc(2026, 11, 1), lat: 40, lon: -83, kind: PingKind.tx));
     await settleLive(tester);
-    await tester.scrollUntilVisible(find.byKey(const Key('wardrive-counters')), 100, scrollable: settingsScroll);
+    // Build 76: "This drive" is on Driving > Advanced.
+    await tester.ensureVisible(find.byKey(const Key('page-driving-advanced')));
+    await settleLive(tester);
+    await tester.tap(find.byKey(const Key('page-driving-advanced')));
+    await settleLive(tester);
     await settleLive(tester);
     final t = textOf(tester, 'wardrive-counters-text');
     expect(t, contains('2 pings sent'));

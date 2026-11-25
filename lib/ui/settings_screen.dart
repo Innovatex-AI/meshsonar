@@ -53,7 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _selected = to.section;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final row = to.page != null ? 'page-${to.page}' : to.anchor;
+        final row = to.page != null ? settingsPageRowAnchor(to.page!) : to.anchor;
         if (row == null) {
           _jumpTo('section-${to.section}', to.section, '${sectionInfo(to.section).title} section', tint: false);
         } else {
@@ -102,7 +102,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _jumpTo(e.id, e.section, '${e.title}, in ${e.where}');
       return;
     }
-    _jumpTo('page-${e.page}', e.section, '${e.title}, in ${e.where}', tint: false);
+    _jumpTo(settingsPageRowAnchor(e.page!), e.section, '${e.title}, in ${e.where}', tint: false);
     openSettingsPage(context, e.page!, highlight: e.id);
   }
 

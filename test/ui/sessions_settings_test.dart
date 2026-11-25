@@ -6,6 +6,7 @@ import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/ui/about_screen.dart';
 
 import 'fakes.dart';
+import 'settings_test_kit.dart';
 
 Future<void> drain(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 10));
@@ -22,9 +23,6 @@ Future<void> tapDelete(WidgetTester tester, String id) async {
   await tester.tap(find.byKey(ValueKey('delete-$id')));
   await tester.pumpAndSettle();
 }
-
-final settingsScroll =
-    find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
 
 void main() {
   testWidgets('drives list: empty state', (tester) async {
@@ -170,13 +168,17 @@ void main() {
     await h.pumpApp(tester);
     await openSettingsTab(tester);
     await tester.pumpAndSettle();
+    // Build 76: the server URL is on Account > Server (advanced); its row on the first level names the server.
+    expect(find.text('https://meshsonar.com'), findsNothing);
+    expect(tester.widget<Text>(find.byKey(const Key('page-account-advanced-caption'))).data, 'meshsonar.com');
+    await showSetting(tester, 'server-url');
     expect(find.text('https://meshsonar.com'), findsOneWidget);
-    // The list builds lazily; scroll the channel row in rather than assuming it fits on the first screen.
-    await tester.scrollUntilVisible(find.text('#wardriving'), 100, scrollable: settingsScroll);
+    // Back on the first level: scroll the channel row in rather than assuming it fits on the first screen.
+    await showSetting(tester, 'channel');
     expect(find.text('#wardriving'), findsOneWidget);
 
     Future<void> edit(String key, String value) async {
-      await tester.scrollUntilVisible(find.byKey(Key(key)), 100, scrollable: settingsScroll);
+      await showSetting(tester, key); // opens the page the row is on (server-url), or goes back to the first level (channel)
       await tester.tap(find.byKey(Key(key)));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('edit-field')), value);
@@ -195,7 +197,7 @@ void main() {
     await edit('channel', 'cmh-drive');
     expect(h.settings.saved.channel, '#cmh-drive');
     Future<void> slide(String key, double index) async {
-      await tester.scrollUntilVisible(find.byKey(Key(key)), 100, scrollable: settingsScroll);
+      await showSetting(tester, key);
       final sl = tester.widget<Slider>(find.byKey(Key(key)));
       sl.onChanged!(index);
       sl.onChangeEnd!(index);
@@ -207,7 +209,7 @@ void main() {
     await slide('min-distance-slider', 8); // … 200, 250
     expect(h.settings.saved.minDistanceM, 250);
     // 0.4.0: the antenna is set per radio (spec m1-app-0.4.0 §4), edited from its row in Settings → Antenna.
-    await tester.scrollUntilVisible(find.byKey(const Key('antenna-profile-abcdef0123')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'antenna-profile-abcdef0123');
     await tester.tap(find.byKey(const Key('antenna-profile-abcdef0123')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('mount-roofMagMount')));
@@ -226,7 +228,7 @@ void main() {
     expect(antenna.gainDbi, 5.8);
     expect(antenna.heightM, 1.6);
 
-    await tester.scrollUntilVisible(find.byKey(const Key('auto-sync')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'auto-sync'); // Driving > Uploads
     await tester.tap(find.byKey(const Key('auto-sync')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.autoSync, isFalse);
@@ -247,8 +249,8 @@ void main() {
     await h.pumpApp(tester);
     await openSettingsTab(tester);
     await tester.pumpAndSettle();
-    // About is the last section; the list grew (Privacy, Data & storage, Diagnostics), so scroll to it, not a fixed drag.
-    await tester.scrollUntilVisible(find.byKey(const Key('about')), 300, scrollable: settingsScroll);
+    // About is the last section: scroll to it, not a fixed drag.
+    await showSetting(tester, 'about', step: 300);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('about')));
     await tester.pumpAndSettle();

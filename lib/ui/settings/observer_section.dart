@@ -1018,10 +1018,10 @@ class _SlotSheetState extends State<_SlotSheet> {
             SegmentedButton<MqttAuth>(
               key: const Key('mqtt-field-auth'),
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: MqttAuth.jwt, label: Text('Radio-signed')),
-                ButtonSegment(value: MqttAuth.password, label: Text('Password')),
-                ButtonSegment(value: MqttAuth.none, label: Text('None')),
+              segments: [
+                ButtonSegment(value: MqttAuth.jwt, label: segmentLabel('Radio-signed')),
+                ButtonSegment(value: MqttAuth.password, label: segmentLabel('Password')),
+                ButtonSegment(value: MqttAuth.none, label: segmentLabel('None')),
               ],
               selected: {_auth},
               onSelectionChanged: (v) => setState(() => _auth = v.first),

@@ -9,20 +9,30 @@ import 'package:meshsonar/ui/settings/display_section.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import 'fakes.dart';
-import 'settings_controls_test.dart' show openSettings, show;
+import 'settings_test_kit.dart';
 
 void main() {
   testWidgets('two options, standard selected by default, strips show the real colours', (tester) async {
-    await openSettings(tester);
-    await show(tester, 'colour-palette-standard');
+    useTallScreen(tester);
+    await Harness().pumpApp(tester);
+    await openSettingsTab(tester);
+    await showSetting(tester, 'colour-palette-standard');
+    expect(find.descendant(of: find.byKey(const Key('section-display')), matching: find.byKey(const Key('colour-palette'))), findsOneWidget,
+        reason: 'first level of Map & display');
+    // Build 76: one row; the two palettes side by side, and ONE strip showing the picked palette's real colours.
+    final selector = find.byKey(const Key('colour-palette-selector'));
+    expect(find.descendant(of: find.byKey(const Key('colour-palette')), matching: selector), findsOneWidget);
     for (final p in ColourPalette.values) {
-      expect(find.byKey(Key('colour-palette-${p.id}')), findsOneWidget);
-      expect(tester.getSize(find.byKey(Key('colour-palette-${p.id}'))).height, greaterThanOrEqualTo(56));
+      expect(find.descendant(of: selector, matching: find.byKey(Key('colour-palette-${p.id}'))), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(Key('colour-palette-${p.id}'))).data, p.label);
     }
+    expect(tester.getSize(selector).height, greaterThanOrEqualTo(48), reason: 'a full touch target');
     expect(find.text('Colour-blind safe'), findsOneWidget);
     expect(find.text('High contrast'), findsNothing);
-    expect(tester.widget<ListTile>(find.byKey(const Key('colour-palette-standard'))).selected, isTrue);
-    expect(find.byType(PaletteStrip), findsNWidgets(2));
+    expect(tester.widget<SegmentedButton<ColourPalette>>(selector).selected, {ColourPalette.standard});
+    expect(tester.widget<SegmentedButton<ColourPalette>>(selector).segments.map((s) => s.value), ColourPalette.values);
+    expect(tester.widget<PaletteStrip>(find.byType(PaletteStrip)).palette, ColourPalette.standard);
+    expect(tester.widget<Text>(find.byKey(const Key('colour-palette-explanation'))).data, paletteSummary(ColourPalette.standard));
   });
 
   testWidgets('picking a palette is saved and recolours the map cells at once', (tester) async {
@@ -55,7 +65,9 @@ void main() {
 
     expect(h.settings.saved.colourPalette, ColourPalette.colourBlind);
     expect(theme().palette, ColourPalette.colourBlind);
-    expect(tester.widget<ListTile>(find.byKey(const Key('colour-palette-colour_blind'))).selected, isTrue);
+    expect(tester.widget<SegmentedButton<ColourPalette>>(find.byKey(const Key('colour-palette-selector'))).selected, {ColourPalette.colourBlind});
+    expect(tester.widget<PaletteStrip>(find.byType(PaletteStrip)).palette, ColourPalette.colourBlind, reason: 'the strip follows the pick');
+    expect(tester.widget<Text>(find.byKey(const Key('colour-palette-explanation'))).data, paletteSummary(ColourPalette.colourBlind));
     // Back on the Drive tab the same cell is drawn in the new strength colour.
     await openDriveTab(tester);
     await tester.pumpAndSettle();

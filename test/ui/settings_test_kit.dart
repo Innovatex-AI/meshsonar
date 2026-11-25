@@ -58,7 +58,8 @@ Future<void> openSettingsPageRow(WidgetTester tester, String id) async {
     await tester.pageBack();
     await tester.pumpAndSettle();
   }
-  final row = find.byKey(Key('page-$id'));
+  // The units page opens from a button in the Units row, not from a row of its own.
+  final row = find.byKey(Key(id == 'units' ? 'units-per-quantity' : 'page-$id'));
   await tester.scrollUntilVisible(row, 200, scrollable: settingsList);
   await tester.ensureVisible(row);
   await tester.pumpAndSettle();

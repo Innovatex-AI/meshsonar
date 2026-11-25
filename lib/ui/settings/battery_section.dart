@@ -385,7 +385,7 @@ class BatteryModePicker extends StatelessWidget {
                 emptySelectionAllowed: true,
                 segments: [
                   for (final m in const [BatteryMode.maxData, BatteryMode.balanced, BatteryMode.saver])
-                    ButtonSegment(value: m, label: Text(batteryModeLabel(m), key: Key('battery-mode-${m.name}'), textAlign: TextAlign.center)),
+                    ButtonSegment(value: m, label: segmentLabel(batteryModeLabel(m), key: Key('battery-mode-${m.name}'))),
                 ],
                 selected: {if (cur != BatteryMode.custom) cur},
                 onSelectionChanged: (v) {

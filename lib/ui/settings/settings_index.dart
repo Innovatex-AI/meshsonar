@@ -75,6 +75,10 @@ const List<SettingsPageInfo> settingsPages = [
 
 SettingsPageInfo settingsPage(String id) => settingsPages.firstWhere((p) => p.id == id);
 
+/// The anchor of the first-level row a page opens from: its own row `page-<id>`, except the units page, which opens
+/// from a button in the Units row.
+String settingsPageRowAnchor(String pageId) => pageId == 'units' ? 'units-tile' : 'page-$pageId';
+
 /// Sections that existed before build 76 and were merged into another one. A link that still names one (More > Observer,
 /// More > Claimed radios, a test, an old deep link) lands where its rows went: the section, and the page when they are
 /// one level down. (old id) -> (section, page, the old title for search).

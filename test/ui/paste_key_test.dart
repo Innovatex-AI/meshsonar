@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 
@@ -158,5 +159,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.settings.saved.driverKey, isNull);
     expect(find.textContaining('The server changed while the key was being checked'), findsOneWidget);
+  });
+
+  // Build 76: one tap fills the field from the clipboard (no long-press Paste menu on a small field).
+  group('paste from the clipboard button', () {
+    void clipboard(WidgetTester tester, String? text) {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.getData') return text == null ? null : <String, dynamic>{'text': text};
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    }
+
+    testWidgets('fills the field with the trimmed clipboard text; Use this key then checks and saves it', (tester) async {
+      final h = await openSettings(tester);
+      clipboard(tester, '  ms_clipboardKey0123456789abcdefghijklmnopqrstu4321\n');
+      final button = find.byKey(const Key('key-paste-clipboard'));
+      expect(find.descendant(of: find.byKey(const Key('key-paste')), matching: button), findsOneWidget, reason: 'inside the paste field');
+      expect(tester.widget<IconButton>(button).tooltip, 'Paste from the clipboard');
+      expect(tester.getSize(button).width, greaterThanOrEqualTo(48));
+      expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(find.byKey(const Key('key-paste'))).controller!.text, 'ms_clipboardKey0123456789abcdefghijklmnopqrstu4321');
+      expect(h.client.statusCalls, 0, reason: 'pasting checks nothing yet');
+      expect(h.settings.saved.driverKey, isNull);
+
+      h.client.statusResult = (status: DriverKeyStatus.approved, display: 'KE4BFI');
+      await tester.ensureVisible(find.byKey(const Key('key-use')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('key-use')));
+      await tester.pumpAndSettle();
+      expect(h.client.lastStatusKey, 'ms_clipboardKey0123456789abcdefghijklmnopqrstu4321');
+      expect(h.settings.saved.driverKey, 'ms_clipboardKey0123456789abcdefghijklmnopqrstu4321');
+      expect(find.textContaining('clipboardKey'), findsNothing, reason: 'the full key is never shown');
+    });
+
+    for (final (what, text) in [('empty', null), ('only spaces', '   \n ')]) {
+      testWidgets('an $what clipboard says so and leaves the field as it was', (tester) async {
+        final h = await openSettings(tester);
+        clipboard(tester, text);
+        await tester.enterText(find.byKey(const Key('key-paste')), 'ms_typed');
+        await tester.ensureVisible(find.byKey(const Key('key-paste-clipboard')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('key-paste-clipboard')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('The clipboard is empty. Copy your key first.'), findsOneWidget);
+        expect(tester.widget<TextField>(find.byKey(const Key('key-paste'))).controller!.text, 'ms_typed');
+        expect(h.client.statusCalls, 0);
+        await tester.pump(const Duration(seconds: 6)); // the toast goes
+        await tester.pumpAndSettle();
+      });
+    }
   });
 }

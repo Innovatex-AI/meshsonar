@@ -6,7 +6,6 @@ import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/settings/settings_index.dart';
 import 'package:meshsonar/ui/settings/settings_kit.dart';
 import 'package:meshsonar/ui/settings/settings_pages.dart';
-import 'package:meshsonar/ui/shell/shell_controller.dart';
 
 import 'fakes.dart';
 import 'settings_test_kit.dart';
@@ -76,6 +75,7 @@ void main() {
         for (final gone in ['offline map', 'map pack', 'simple basemap', 'basemap', 'passenger']) {
           expect(text, isNot(contains(gone)), reason: e.id);
         }
+      }
     });
 
     test('matches titles, explanations, keywords and section names; title hits first', () {

@@ -91,8 +91,7 @@ class AutoConnectTile extends StatelessWidget {
                       for (final m in AutoConnectMode.values)
                         ButtonSegment(
                           value: m,
-                          label: Text(m == AutoConnectMode.launchOnly ? 'At launch' : m.label,
-                              key: Key('auto-connect-${m.id}'), textAlign: TextAlign.center),
+                          label: segmentLabel(m == AutoConnectMode.launchOnly ? 'At launch' : m.label, key: Key('auto-connect-${m.id}')),
                         ),
                     ],
                     selected: {cur},
