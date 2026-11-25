@@ -1,4 +1,4 @@
-// Settings > Data & storage: sizes, and every clear action asks first, says what it costs, and never removes a drive
+// Settings > Storage & diagnostics > Storage on this phone (build 76: one level down, a page): sizes, and every clear action asks first, says what it costs, and never removes a drive
 // the server does not fully have.
 import 'toast_test_kit.dart';
 import 'dart:io';
@@ -37,6 +37,10 @@ void main() {
     seed?.call(h);
     await h.pumpDiskApp(tester);
     await openSettingsTab(tester);
+    // The storage rows are on a page; they measure when it opens.
+    expect(find.byKey(const Key('storage-total'), skipOffstage: false), findsNothing);
+    await openSettingsPageRow(tester, 'storage-items');
+    expect(find.byKey(const Key('settings-page-storage-items')), findsOneWidget);
     await settleIo(tester, until: () => !_measuring(tester));
     return h;
   }

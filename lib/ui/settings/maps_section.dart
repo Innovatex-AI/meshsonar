@@ -5,8 +5,7 @@ import '../../core/map_prefs.dart';
 
 import 'settings_kit.dart';
 
-const String mapsHelp = 'The map loads over the network as you look around. Places you have looked at are kept on this '
-    'phone for a while, so they still draw with a weak signal.';
+const String mapsHelp = 'How the map follows you.';
 
 List<Widget> mapsSectionRows(BuildContext context) => [
       SettingsAnchor(id: 'map-follow-options', child: const MapFollowOptions()),
@@ -28,7 +27,7 @@ class MapFollowOptions extends StatelessWidget {
             key: const Key('map-heading-up-setting'),
             secondary: const Icon(Icons.navigation_outlined),
             title: const Text('Heading-up map'),
-            subtitle: const Text('The map turns so the way you are driving is up. Off keeps north at the top.'),
+            subtitle: const Text('The way you are driving is up. Off: north is up.'),
             value: p.headingUp,
             onChanged: (v) => p.headingUp = v,
           ),
@@ -36,7 +35,7 @@ class MapFollowOptions extends StatelessWidget {
             key: const Key('map-zoom-speed-setting'),
             secondary: const Icon(Icons.zoom_out_map_outlined),
             title: const Text('Zoom out at speed'),
-            subtitle: const Text('Eases the map out a little on the highway so more road shows. Off keeps the zoom you set.'),
+            subtitle: const Text('Shows more road on the highway.'),
             value: p.zoomBySpeed,
             onChanged: (v) => p.zoomBySpeed = v,
           ),

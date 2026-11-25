@@ -236,7 +236,13 @@ void main() {
       expect(searchSettings('delete my data').map((e) => e.id), contains('delete-my-data'));
       expect(searchSettings('gdpr erase').map((e) => e.id), contains('delete-my-data'));
       await openScreen(tester);
+      // Build 76: one line on the page; the full text opens under "What this covers".
+      expect(find.text(deleteMyDataShort), findsOneWidget);
+      expect(find.text(deleteMyDataLead), findsNothing);
+      await tester.tap(find.byKey(const Key('delete-details')));
+      await tester.pumpAndSettle();
       expect(find.text(deleteMyDataLead), findsOneWidget);
+      expect(find.text(exportText), findsOneWidget);
     });
 
     testWidgetsT('delete on the server: category=all and the packet headers, with the server\'s counts', (tester) async {

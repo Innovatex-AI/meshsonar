@@ -16,7 +16,7 @@ import 'package:meshsonar/ui/map/tools/zone_layer.dart' show ZonePin;
 import 'package:meshsonar/core/basemap.dart' show BasemapLook;
 import 'package:meshsonar/core/map_styles.dart' show BaseMapStyle;
 import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapLayer;
-import 'package:meshsonar/ui/settings/privacy_zones_screen.dart' show zonesBasemap;
+import 'package:meshsonar/ui/settings/privacy_zones_screen.dart' show privacyZonesEdgeNote, privacyZonesExplain, zonesBasemap;
 import '../support/tool_definition.dart';
 import '../support/zones_harness.dart';
 
@@ -100,6 +100,13 @@ void main() {
     final (h, _) = await pumpZones(tester);
     expect(find.textContaining('never uploaded'), findsOneWidget);
     expect(find.textContaining('start and end of each drive'), findsWidgets);
+    // Build 76: one line on top; the two full paragraphs open under "How zones work".
+    expect(find.textContaining('trimmed'), findsNothing);
+    await scrollTo(tester, k('zones-how'));
+    await tester.tap(k('zones-how'));
+    await tester.pumpAndSettle();
+    expect(find.text(privacyZonesExplain), findsOneWidget);
+    expect(find.text(privacyZonesEdgeNote), findsOneWidget);
     expect(find.textContaining('trimmed'), findsOneWidget);
     await scrollTo(tester, k('zones-empty'));
     expect(k('zones-empty'), findsOneWidget);
@@ -140,7 +147,7 @@ void main() {
     expect(k('zone-editor'), findsNothing, reason: 'a tap on nothing selects nothing');
   });
 
-  testWidgetsT('"Use my location" adds a zone at the phone\'s position, rounded', (tester) async {
+  testWidgetsT('"Add where I am" adds a zone at the phone\'s position, rounded', (tester) async {
     final (h, _) = await pumpZones(tester);
     await scrollTo(tester, k('zone-add-here'));
     await tester.tap(k('zone-add-here'));
@@ -149,7 +156,36 @@ void main() {
     expect((z.lat, z.lon), (39.9612, -82.9988));
   });
 
-  testWidgetsT('"Use my location" with no fix says so and adds nothing', (tester) async {
+  testWidgetsT('the website link is on this screen (build 76: Settings lost its own row) and opens <server>/me/privacy', (tester) async {
+    final (h, _) = await pumpZones(tester);
+    await scrollTo(tester, k('zones-website'));
+    expect(find.descendant(of: k('zones-website'), matching: find.text('Also on the website')), findsOneWidget);
+    await tester.tap(k('zones-website'));
+    await tester.pumpAndSettle();
+    expect(h.openedUrls.single.path, '/me/privacy');
+  });
+
+  testWidgetsT('a tap on a zone brings its editor into view; Done closes it', (tester) async {
+    final (h, _) = await pumpZones(tester);
+    await h.state.privacyZones.load();
+    await h.state.privacyZones.setZones([for (var i = 0; i < 6; i++) PrivacyZone.normalized(lat: 39.9 + i / 100, lon: -83.0)]);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, k('zone-tile-0'));
+    expect(find.textContaining('tap to edit'), findsWidgets);
+    expect(find.textContaining('39.9'), findsNothing, reason: 'no raw coordinates in the list');
+    await tester.tap(k('zone-tile-0'));
+    await tester.pumpAndSettle();
+    final panel = tester.getRect(find.byKey(const Key('zones-panel')));
+    final editor = tester.getRect(find.byKey(const Key('zone-editor')));
+    expect(editor.top, greaterThanOrEqualTo(panel.top - 1));
+    expect(editor.top, lessThan(panel.bottom - 100), reason: 'the editor was below six zone rows, off screen');
+    await tester.tap(find.byKey(const Key('zone-done')));
+    await tester.pumpAndSettle();
+    expect(k('zone-editor'), findsNothing);
+    expect(h.state.privacyZones.zones, hasLength(6));
+  });
+
+  testWidgetsT('"Add where I am" with no fix says so and adds nothing', (tester) async {
     final (h, _) = await pumpZones(tester, withFix: false);
     await scrollTo(tester, k('zone-add-here'));
     await tester.tap(k('zone-add-here'));
@@ -228,7 +264,8 @@ void main() {
       await tester.tap(k('zone-purge-confirm'));
       await tester.pumpAndSettle();
       expect(h.zc.purgeCalls, [true, false]);
-      expect(find.textContaining('7 earlier pings inside'), findsOneWidget);
+      // Build 76: everything that was removed is said (the 2 observer positions used to go unmentioned).
+      expect(find.textContaining('7 earlier pings, 2 observer positions inside this zone were removed'), findsOneWidget);
       expect(h.state.privacyZones.purgeQueue, isEmpty);
     });
 
@@ -268,9 +305,16 @@ void main() {
       expect(h.state.privacyZones.pending, isTrue);
       await scrollTop(tester);
       expect(find.textContaining('sent when the server can be reached'), findsOneWidget);
-      h.zc.error = null;
-      await h.state.privacyZones.sync();
+      // Build 76: "Try again" is on the message. Still down: it says so; back up: the zone goes out.
+      await tester.tap(k('zone-retry'));
       await tester.pumpAndSettle();
+      expect(find.textContaining('Still not sent'), findsOneWidget);
+      expect(h.zc.server, isEmpty);
+      h.zc.error = null;
+      await scrollTop(tester);
+      await tester.tap(k('zone-retry'));
+      await tester.pumpAndSettle();
+      expect(k('zone-retry'), findsNothing);
       expect(h.zc.server.length, 1);
       await scrollTop(tester);
       expect(find.textContaining('Saved.'), findsOneWidget);

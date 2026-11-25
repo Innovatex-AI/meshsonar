@@ -6,12 +6,14 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/settings/settings_index.dart';
 import 'package:meshsonar/ui/settings/settings_kit.dart';
+import 'package:meshsonar/ui/settings_screen.dart';
 import 'package:meshsonar/ui/shell/shell_controller.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;
 import 'package:meshsonar/radio/radio_api.dart';
 
 import 'drive_flow_test.dart' show drain, settle;
 import 'fakes.dart';
+import 'settings_test_kit.dart' show showSetting;
 
 Future<void> slide(WidgetTester tester, String key, int index) async {
   final sl = tester.widget<Slider>(find.byKey(Key(key)));
@@ -38,8 +40,12 @@ void main() {
   test('Wardriving is a Settings section holding channel, discovery, interval, distance, listen window', () {
     expect(settingsSections.map((s) => s.id), contains('wardriving'));
     for (final id in ['channel', 'send-pings', 'interval', 'min-distance', 'listen-window']) {
-      expect(settingsEntries.where((e) => e.id == id).single.section, 'wardriving', reason: id);
+      final e = settingsEntries.where((e) => e.id == id).single;
+      expect(e.section, 'wardriving', reason: id);
+      // Build 76: the listen window is one level down (Driving > Advanced); the other four are on the first level.
+      expect(e.page, id == 'listen-window' ? 'driving-advanced' : isNull, reason: id);
     }
+    expect(settingsSections.firstWhere((s) => s.id == 'wardriving').title, 'Driving');
   });
 
   testWidgets('MoreItem.wardriving (the Drive ping sheet\'s link) opens Settings on the Wardriving section with all five controls', (tester) async {
@@ -51,9 +57,16 @@ void main() {
     expect(find.byKey(const Key('more-wardriving')), findsNothing);
     ShellController.active!.openMore(MoreItem.wardriving);
     await tester.pumpAndSettle();
-    for (final k in ['channel', 'send-pings', 'interval', 'min-distance', 'listen-window']) {
-      expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+    // Build 76: the section is titled Driving; four controls on its first level, the listen window on Driving > Advanced.
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    expect(find.byType(SettingsPageScreen), findsNothing, reason: 'the section itself, not a page');
+    for (final k in ['channel', 'send-pings', 'interval', 'min-distance']) {
+      expect(find.descendant(of: find.byKey(const Key('section-wardriving')), matching: find.byKey(Key(k))), findsOneWidget, reason: k);
     }
+    expect(find.byKey(const Key('listen-window')), findsNothing);
+    await showSetting(tester, 'listen-window');
+    expect(find.descendant(of: find.byKey(const Key('settings-page-driving-advanced')), matching: find.byKey(const Key('listen-window'))),
+        findsOneWidget);
     await slide(tester, 'listen-window-slider', listenStops.indexOf(12));
     expect(h.settings.saved.listenWindowSec, 12, reason: 'saved to disk');
     expect(h.state.settings.listenWindowSec, 12);

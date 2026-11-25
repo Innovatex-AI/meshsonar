@@ -1,4 +1,4 @@
-// Where the privacy-zone map opens (Settings > Privacy & data sharing > Privacy zones). Pure: no widgets, no AppState.
+// Where the privacy-zone map opens (Settings > Sharing & privacy > Privacy zones). Pure: no widgets, no AppState.
 // Order (Andy, Oct 31 2026): the saved zones, framed together; else the phone's last known position (no new permission
 // prompt: the fix the app already holds); else the viewed region's bounds (or its centre); else the middle of every
 // region; and only then a continental view, never the whole world.

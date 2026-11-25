@@ -19,8 +19,7 @@ import 'app_time_pick.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String notificationsHelp = 'Alerts for new messages. They are built on this phone from messages your radio receives: '
-    'nothing goes through a server.';
+const String notificationsHelp = 'Alerts for new messages, made on this phone. Nothing goes through a server.';
 
 /// How the state is worded. Pure, so the copy is tested.
 class AlertsStatus {
@@ -169,8 +168,9 @@ class _NotificationRows extends StatelessWidget {
               id: 'notif-enabled',
               child: SwitchListTile(
                 key: const Key('notif-enabled'),
+                secondary: const Icon(Icons.notifications_active_outlined),
                 title: Text(settingsEntry('notif-enabled').title),
-                subtitle: const Text('Turn off to stop every alert. Messages are still saved.'),
+                subtitle: const Text('Off stops every alert. Messages are still saved.'),
                 value: prefs.enabled,
                 onChanged: (v) async {
                   await prefs.setEnabled(v);
@@ -182,8 +182,9 @@ class _NotificationRows extends StatelessWidget {
               id: 'notif-sound',
               child: SwitchListTile(
                 key: const Key('notif-sound'),
+                secondary: const Icon(Icons.volume_up_outlined),
                 title: Text(settingsEntry('notif-sound').title),
-                subtitle: const Text('Play the system sound with an alert.'),
+                subtitle: const Text('The system sound with an alert.'),
                 value: prefs.sound,
                 onChanged: prefs.setSound,
               ),
@@ -193,6 +194,7 @@ class _NotificationRows extends StatelessWidget {
                 id: 'notif-vibrate',
                 child: SwitchListTile(
                   key: const Key('notif-vibrate'),
+                  secondary: const Icon(Icons.vibration),
                   title: Text(settingsEntry('notif-vibrate').title),
                   subtitle: const Text('Vibrate with an alert. iPhone haptics follow the system.'),
                   value: prefs.vibrate,
@@ -203,11 +205,11 @@ class _NotificationRows extends StatelessWidget {
               id: 'notif-previews',
               child: SwitchListTile(
                 key: const Key('notif-previews'),
+                secondary: const Icon(Icons.visibility_outlined),
                 title: Text(settingsEntry('notif-previews').title),
                 subtitle: Text(prefs.showText
-                    ? 'Alerts show who wrote and what they said, also on a locked screen.'
-                    : 'Alerts show the conversation name and "New message". The words stay hidden on a locked screen. '
-                        'Safer, because a lock screen can be read by anyone nearby.'),
+                    ? 'On: alerts show who wrote and what, also on a locked screen.'
+                    : 'Off: alerts say "New message", so a locked screen shows no words.'),
                 value: prefs.showText,
                 onChanged: prefs.setShowText,
               ),
@@ -219,7 +221,7 @@ class _NotificationRows extends StatelessWidget {
                 key: const Key('notif-conversations'),
                 leading: const Icon(Icons.tune),
                 title: Text(settingsEntry('notif-conversations').title),
-                subtitle: const Text('Mute a conversation, or hear only when you are mentioned. The wardrive channel never alerts.'),
+                subtitle: const Text('Mute one, or hear only mentions.'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ConversationAlertsScreen(rt))),
               ),
@@ -230,7 +232,7 @@ class _NotificationRows extends StatelessWidget {
                 key: const Key('notif-test'),
                 leading: const Icon(Icons.send_outlined),
                 title: Text(settingsEntry('notif-test').title),
-                subtitle: const Text('Shows one alert in 3 seconds. Lock the phone or leave the app to see how it looks.'),
+                subtitle: const Text('One alert in 3 seconds. Lock the phone to see how it looks.'),
                 onTap: () async {
                   await Future<void>.delayed(const Duration(seconds: 3));
                   final why = await c.sendTest();
@@ -274,10 +276,11 @@ class _QuietHoursTile extends StatelessWidget {
       children: [
         SwitchListTile(
           key: const Key('notif-quiet'),
+          secondary: const Icon(Icons.bedtime_outlined),
           title: Text(settingsEntry('notif-quiet').title),
           subtitle: Text(q.enabled
               ? 'From ${fmt(q.startMinute)} to ${fmt(q.endMinute)} alerts arrive without sound.'
-              : 'Alerts still arrive, silently, between the hours you pick. Focus and Do Not Disturb always apply as well.'),
+              : 'Alerts arrive without sound between the hours you pick.'),
           value: q.enabled,
           onChanged: (v) => prefs.setQuiet(q.copyWith(enabled: v)),
         ),
@@ -338,47 +341,69 @@ class _ConversationAlertsScreenState extends State<ConversationAlertsScreen> {
     setState(() {});
   }
 
+  Future<void> _choose(ConversationSummary c) async {
+    final v = await showAppActionSheet<_Choice>(
+      context,
+      title: 'Alerts for ${c.title}',
+      actions: [
+        const AppAction('All messages', _Choice.all),
+        if (c.kind == ConvKind.channel) const AppAction('Only when mentioned', _Choice.mentions),
+        const AppAction('Mute for 1 hour', _Choice.mute1h),
+        const AppAction('Mute for 8 hours', _Choice.mute8h),
+        const AppAction('Mute for 24 hours', _Choice.mute24h),
+        const AppAction('Mute until I turn it back on', _Choice.muteForever),
+      ],
+    );
+    if (v != null) _apply(c, v);
+  }
+
   @override
   Widget build(BuildContext context) {
     final chat = widget.runtime.coordinator.chat;
     final list = chat == null ? <ConversationSummary>[] : chat.conversations(includeEmpty: true).where((c) => !c.isSystem).toList();
     final now = widget.clock();
+    Widget empty(String text, Key key) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.xl),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.forum_outlined, size: 40),
+              const SizedBox(height: Gap.m),
+              Text(text, key: key, textAlign: TextAlign.center),
+            ]),
+          ),
+        );
     return Scaffold(
       appBar: AppBar(title: const Text('Alerts per conversation')),
-      body: chat == null
-          ? const Center(child: Padding(padding: EdgeInsets.all(Gap.xl), child: Text('Chat is not set up yet.', key: Key('notif-no-chat'))))
-          : list.isEmpty
-              ? const Center(child: Padding(padding: EdgeInsets.all(Gap.xl), child: Text('No conversations yet.', key: Key('notif-no-conversations'))))
-              : ListView(
-                  children: [
-                    for (final c in list)
-                      ListTile(
-                        key: Key('notif-conv-${c.key}'),
-                        title: Text(c.title),
-                        subtitle: Text(notifyModeLabel(c, now)),
-                        trailing: IconButton(
-                          key: Key('notif-conv-menu-${c.key}'),
-                          tooltip: 'Alerts for ${c.title}',
-                          icon: const AppSymbolIcon(AppSymbols.ellipsis),
-                          onPressed: () async {
-                            final v = await showAppActionSheet<_Choice>(
-                              context,
-                              title: 'Alerts for ${c.title}',
-                              actions: [
-                                const AppAction('All messages', _Choice.all),
-                                if (c.kind == ConvKind.channel) const AppAction('Only when mentioned', _Choice.mentions),
-                                const AppAction('Mute for 1 hour', _Choice.mute1h),
-                                const AppAction('Mute for 8 hours', _Choice.mute8h),
-                                const AppAction('Mute for 24 hours', _Choice.mute24h),
-                                const AppAction('Mute until I turn it back on', _Choice.muteForever),
-                              ],
-                            );
-                            if (v != null) _apply(c, v);
-                          },
+      body: SafeArea(
+        child: chat == null
+            ? empty('Chat is not set up yet. Connect your radio, then come back.', const Key('notif-no-chat'))
+            : list.isEmpty
+                ? empty('No conversations yet. Join a channel or message a contact in Chat.', const Key('notif-no-conversations'))
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: Gap.xl),
+                    children: [
+                      for (final c in list)
+                        ListTile(
+                          key: Key('notif-conv-${c.key}'),
+                          minTileHeight: 56,
+                          // The state reads from the icon too: muted, mentions only, or everything.
+                          leading: Icon(c.isMutedAt(now.millisecondsSinceEpoch)
+                              ? Icons.notifications_off_outlined
+                              : (c.notifyMode == NotifyMode.mentionsOnly ? Icons.alternate_email : Icons.notifications_outlined)),
+                          title: Text(c.title),
+                          subtitle: Text(notifyModeLabel(c, now)),
+                          // The whole row opens the choices, not only the small button.
+                          onTap: () => _choose(c),
+                          trailing: IconButton(
+                            key: Key('notif-conv-menu-${c.key}'),
+                            tooltip: 'Alerts for ${c.title}',
+                            icon: const AppSymbolIcon(AppSymbols.ellipsis),
+                            onPressed: () => _choose(c),
+                          ),
                         ),
-                      ),
-                  ],
-                ),
+                    ],
+                  ),
+      ),
     );
   }
 }

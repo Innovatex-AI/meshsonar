@@ -17,12 +17,7 @@ import '../design/app_surfaces.dart';
 import '../settings/confirm_sheet.dart';
 import '../widgets.dart';
 
-String _when(DateTime? t) {
-  if (t == null) return 'not yet';
-  final l = t.toLocal();
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
-}
+const _tap = Size(48, 48);
 
 /// How the claim was proved, in the site's words: the one shared wording (lib/ui/claims/claim_proof_label.dart).
 String methodWords(ClaimMethod m) => claimProofWords(m);
@@ -74,7 +69,7 @@ class _PersonObserversScreenState extends State<PersonObserversScreen> {
     final c = AppScope.read(context).personObservers;
     final changes = await showAppSheet<Map<String, Object?>>(
       context,
-      detents: const [0.7],
+      detents: [MediaQuery.textScalerOf(context).scale(10) > 13 ? 0.92 : 0.7], // large text needs the room for the switch and both buttons
       builder: (ctx, controller) => _EditSheet(o, controller: controller),
     );
     if (changes == null || changes.isEmpty) return;
@@ -87,8 +82,8 @@ class _PersonObserversScreenState extends State<PersonObserversScreen> {
       context,
       sheetKey: const Key('observer-release-sheet'),
       title: 'Release this observer?',
-      body: 'You stop managing "${o.name}". Its name and position go back to the defaults. '
-          'It keeps feeding data exactly as before, and anyone who proves control can claim it.',
+      body: 'You stop managing "${o.name}" and its name and position reset. '
+          'It keeps feeding data exactly as before. Anyone who proves control can claim it.',
       confirmLabel: 'Release',
       confirmKey: const Key('observer-release-confirm'),
       cancelKey: const Key('observer-release-cancel'),
@@ -121,22 +116,33 @@ class _PersonObserversScreenState extends State<PersonObserversScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'The radios that listen for you and the phones that report what they hear. Each one is counted once, and you choose what shows in public.',
+                        'Radios and phones that listen for you. You choose what is public.',
                         key: const Key('person-observers-intro'),
-                        style: t.textTheme.bodyMedium,
+                        style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: Gap.m),
                       if (_msg != null) ErrorBanner(_msg!),
                       if (c.error != null) ...[
                         ErrorBanner(c.error!),
-                        TextButton(key: const Key('person-observers-retry'), onPressed: c.refresh, child: const Text('Try again')),
+                        FilledButton.tonalIcon(
+                          key: const Key('person-observers-retry'),
+                          style: FilledButton.styleFrom(minimumSize: _tap),
+                          onPressed: c.refresh,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try again'),
+                        ),
+                        const SizedBox(height: Gap.m),
                       ],
                       if (c.loading && !c.loadedOnce)
                         const Center(
-                          child: Padding(padding: EdgeInsets.all(Gap.l), child: CircularProgressIndicator()),
+                          key: Key('person-observers-loading'),
+                          child: Padding(
+                            padding: EdgeInsets.all(Gap.l),
+                            child: Column(children: [CircularProgressIndicator(), SizedBox(height: Gap.s), Text('Loading your observers…')]),
+                          ),
                         ),
                       if (c.offers.isNotEmpty) ...[
-                        Text('Needs your answer', style: t.textTheme.titleMedium),
+                        Text(c.offers.length == 1 ? 'Needs your answer' : 'Needs your answer (${c.offers.length})', style: t.textTheme.titleMedium),
                         for (final o in c.offers)
                           _OfferCard(
                             o,
@@ -147,35 +153,56 @@ class _PersonObserversScreenState extends State<PersonObserversScreen> {
                       if (c.loadedOnce) ...[
                         Text('Your observers', style: t.textTheme.titleMedium),
                         if (c.observers.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: Gap.m),
-                            child: Text(
-                              'No observers yet. Connect your radio in the MeshSonar app and the phone shows up here by itself. '
-                              'An observer you run on your own radio is added by claiming it under Claimed radios.',
-                              key: Key('person-observers-empty'),
-                            ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: Gap.m),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              const Text(
+                                'No observers yet. Connect your radio and this phone shows up here. '
+                                'To add a fixed observer, claim it under Claimed radios.',
+                                key: Key('person-observers-empty'),
+                              ),
+                              TextButton.icon(
+                                key: const Key('person-observers-empty-refresh'),
+                                style: TextButton.styleFrom(minimumSize: _tap),
+                                onPressed: c.refresh,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Check again'),
+                              ),
+                            ]),
                           ),
                         for (final o in fixed) _FixedCard(o, onEdit: () => _edit(o), onRelease: () => _release(o)),
                         for (final o in phones)
                           _PhoneCard(o, onShowName: (v) => _guard(() => c.setShowRadioName(o.key, v), 'Saving the setting')),
                       ],
                       const SizedBox(height: Gap.m),
-                      Text('What is shown in public', style: t.textTheme.titleMedium),
-                      const SizedBox(height: Gap.xs),
-                      Text(
-                        'A phone is listed under a pseudonym such as "MeshSonar phone 212DE2", never your name. While it is online it appears as a large area '
-                        '(several kilometres across), never as a point. You can choose to show the name of your phone\'s radio instead. '
-                        'A fixed observer shows its own name, or the name you set, and its position only as you allow it. '
-                        'Owning an observer here never changes whether MeshSonar receives or counts what it hears.',
-                        key: const Key('person-observers-public'),
-                        style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                      // Folded: one line says the rule, the detail is a tap away for whoever wants it.
+                      ExpansionTile(
+                        key: const Key('person-observers-public-toggle'),
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(bottom: Gap.s),
+                        shape: const Border(),
+                        collapsedShape: const Border(),
+                        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                        title: const Text('What is shown in public'),
+                        subtitle: const Text('Never your name. Never a phone\'s exact position.'),
+                        children: [
+                          Text(
+                            'A phone is listed under a pseudonym such as "MeshSonar phone 212DE2" and appears as a large area, never a point. '
+                            'You can show your radio\'s name instead.\n'
+                            'A fixed observer shows its own name, or the one you set, and its position only as you allow.\n'
+                            'Owning an observer never changes whether MeshSonar receives or counts what it hears.',
+                            key: const Key('person-observers-public'),
+                            style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: Gap.l),
+                      const SizedBox(height: Gap.s),
                       TextButton.icon(
                         key: const Key('person-observers-website'),
+                        style: TextButton.styleFrom(minimumSize: _tap),
                         onPressed: () => s.openWebPage('/me/observers'),
                         icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text('View this page on the website'),
+                        label: const Text('Open on the website'),
                       ),
                     ],
                   ),
@@ -206,22 +233,33 @@ class _OfferCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // The question first, in bold; the why underneath in one line.
             Text(
-              '${o.label}${o.iata == null ? '' : ' (${o.iata})'} says it belongs to you, because its login names your radio ${o.radioLabel} as its owner. Is that observer yours?',
-              style: t.textTheme.bodyMedium,
+              'Is ${o.label}${o.iata == null ? '' : ' (${o.iata})'} yours?',
+              key: Key('offer-question-${o.key}'),
+              style: t.textTheme.titleSmall,
             ),
             const SizedBox(height: Gap.xs),
-            Text(
-              'Named you since ${_when(o.firstSeenAt)}. Saying yes adds it to your account as a claim with the weakest proof '
-              '(the observer\'s own word and your radio); it never takes an observer that someone else holds.',
-              style: dim,
-            ),
+            Text('Its login names your radio ${o.radioLabel} as its owner${o.firstSeenAt == null ? '' : ', since ${formatDateTime(o.firstSeenAt!)}'}.',
+                key: Key('offer-why-${o.key}'), style: t.textTheme.bodyMedium),
+            Text('Yes adds it to your account. It never takes an observer someone else holds.', style: dim),
             const SizedBox(height: Gap.s),
             Wrap(
               spacing: Gap.s,
+              runSpacing: Gap.xs,
               children: [
-                FilledButton(key: Key('offer-accept-${o.key}'), onPressed: () => onAnswer(true), child: const Text('Yes, it is mine')),
-                OutlinedButton(key: Key('offer-decline-${o.key}'), onPressed: () => onAnswer(false), child: const Text('No, not mine')),
+                FilledButton(
+                  key: Key('offer-accept-${o.key}'),
+                  style: FilledButton.styleFrom(minimumSize: _tap),
+                  onPressed: () => onAnswer(true),
+                  child: const Text('Yes, it is mine'),
+                ),
+                OutlinedButton(
+                  key: Key('offer-decline-${o.key}'),
+                  style: OutlinedButton.styleFrom(minimumSize: _tap),
+                  onPressed: () => onAnswer(false),
+                  child: const Text('No, not mine'),
+                ),
               ],
             ),
           ],
@@ -260,7 +298,7 @@ class _FixedCard extends StatelessWidget {
             if (o.named) Text('It named you as its owner and you agreed', key: Key('observer-proof-${o.key}'), style: dim),
             KeyedSubtree(key: o.named ? null : Key('observer-proof-${o.key}'), child: ClaimProofLabel(o.method, style: ClaimProofStyle.line)),
             Text(o.iata == null ? 'No area yet' : 'Area ${o.iata}', style: dim),
-            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${_when(o.lastHeardAt)}', key: Key('observer-heard-${o.key}'), style: dim),
+            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${formatDateTime(o.lastHeardAt!)}', key: Key('observer-heard-${o.key}'), style: dim),
             if (o.nodeName != null && o.nodeName != o.name) Text('It calls itself "${o.nodeName}".', style: dim),
             if (h != null) ...[
               const SizedBox(height: Gap.xs),
@@ -273,14 +311,24 @@ class _FixedCard extends StatelessWidget {
                 ),
             ],
             const SizedBox(height: Gap.xs),
-            Text('${o.blocked ? 'This observer is blocked by an admin. ' : ''}${positionWords(o.position)}', key: Key('observer-position-${o.key}'), style: dim),
+            if (o.blocked) Text('Blocked by an admin.', key: Key('observer-blocked-${o.key}'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.error)),
+            Text(positionWords(o.position), key: Key('observer-position-${o.key}'), style: dim),
+            const SizedBox(height: Gap.xs),
             Wrap(
+              spacing: Gap.s,
               children: [
-                TextButton(key: Key('observer-edit-${o.key}'), onPressed: onEdit, child: const Text('Edit name and position')),
-                TextButton(
+                OutlinedButton.icon(
+                  key: Key('observer-edit-${o.key}'),
+                  style: OutlinedButton.styleFrom(minimumSize: _tap),
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Name and position'),
+                ),
+                OutlinedButton(
                   key: Key('observer-release-${o.key}'),
+                  style: OutlinedButton.styleFrom(minimumSize: _tap, foregroundColor: t.colorScheme.error),
                   onPressed: onRelease,
-                  child: Text('Release', style: TextStyle(color: t.colorScheme.error)),
+                  child: const Text('Release'),
                 ),
               ],
             ),
@@ -301,7 +349,7 @@ class _PhoneCard extends StatelessWidget {
     final t = Theme.of(context);
     final dim = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
     final can = o.canShowRadioName;
-    final feeds = o.feeds.map((f) => f == 'phone' ? "the app's upload" : 'the MQTT broker through its radio').join(' and ');
+    final feeds = o.feeds.map((f) => f == 'phone' ? 'the app' : 'its radio (MQTT)').join(' and ');
     return Card(
       key: Key('phone-${o.key}'),
       margin: const EdgeInsets.only(top: Gap.s),
@@ -320,11 +368,11 @@ class _PhoneCard extends StatelessWidget {
             ),
             Text('On ${o.deviceName}', style: dim),
             if (o.mode != null) Text('Mode: ${modeWords(o.mode!)}', key: Key('phone-mode-${o.key}'), style: dim),
-            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${_when(o.lastHeardAt)}', style: dim),
+            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${formatDateTime(o.lastHeardAt!)}', style: dim),
             Text('Reports through $feeds', style: dim),
             if (o.countedOnce)
               Text(
-                '${o.installs > 1 ? 'This phone has had the app installed ${o.installs} times. ' : ''}'
+                '${o.installs > 1 ? 'The app was installed ${o.installs} times. ' : ''}'
                 '${o.feeds.contains('broker') ? 'It also publishes through its radio. ' : ''}It counts as one observer.',
                 key: Key('phone-once-${o.key}'),
                 style: dim,
@@ -333,13 +381,11 @@ class _PhoneCard extends StatelessWidget {
               key: Key('phone-show-name-${o.key}'),
               contentPadding: EdgeInsets.zero,
               title: Text('Show my radio\'s name in public${can ? ' (${o.radioName})' : ''}'),
-              subtitle: Text(can
-                  ? 'Off, the phone is listed under the pseudonym above.'
-                  : 'Connect your radio in the app once, so MeshSonar knows which radio this phone uses.'),
+              subtitle: Text(can ? 'Off: listed as "${o.name}".' : 'Connect your radio in the app once to turn this on.'),
               value: o.showRadioName,
               onChanged: can ? onShowName : null,
             ),
-            if (o.blocked) Text('This observer is blocked by an admin.', style: dim),
+            if (o.blocked) Text('Blocked by an admin.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.error)),
           ],
         ),
       ),
@@ -378,25 +424,29 @@ class _EditSheetState extends State<_EditSheet> {
   @override
   Widget build(BuildContext context) => AppSheetScaffold(
         controller: widget.controller,
-        title: 'Edit name and position',
+        title: 'Name and position',
         primaryAction: FilledButton(key: const Key('observer-edit-save'), onPressed: () => Navigator.pop(context, _changes()), child: const Text('Save')),
         secondaryAction: TextButton(key: const Key('observer-edit-cancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         children: [
           TextField(
             key: const Key('observer-edit-name'),
             controller: _name,
-            autofocus: true,
+            // No autofocus: the keyboard would cover the position switch, which is half of what this sheet is for.
             maxLength: 60,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
             decoration: InputDecoration(
-              labelText: 'Name shown on MeshSonar pages',
-              hintText: widget.o.nodeName ?? 'Leave empty to use its own name',
+              labelText: 'Public name',
+              hintText: widget.o.nodeName ?? 'Its own name',
+              helperText: 'Empty uses its own name.',
+              suffixIcon: IconButton(key: const Key('observer-edit-name-clear'), tooltip: 'Clear', icon: const Icon(Icons.clear), onPressed: _name.clear),
             ),
           ),
           SwitchListTile(
             key: const Key('observer-edit-position'),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Show this observer\'s position on the maps and pages'),
-            subtitle: const Text('Off, its position is hidden everywhere on MeshSonar. It is still listed and counted.'),
+            title: const Text('Show its position in public'),
+            subtitle: const Text('Off: hidden everywhere. It is still listed and counted.'),
             value: _shown,
             onChanged: (v) => setState(() => _shown = v),
           ),

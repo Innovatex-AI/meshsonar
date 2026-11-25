@@ -17,7 +17,7 @@ import 'package:meshsonar/ui/settings/data_sharing.dart';
 import 'package:meshsonar/ui/settings/delete_my_data.dart';
 import 'package:meshsonar/ui/settings/observer_section.dart';
 import 'package:meshsonar/ui/settings/privacy_section.dart' show privacySettingsEntries;
-import 'package:meshsonar/ui/settings/settings_index.dart' show settingsEntry, settingsSections;
+import 'package:meshsonar/ui/settings/settings_index.dart';
 import 'package:meshsonar/ui/telemetry_sheet.dart' show disclosureHeading, disclosureLead;
 
 /// The retired terms, as they were written (any case).
@@ -159,7 +159,10 @@ void main() {
 
   test('Settings > Observer, the privacy section and the disclosure use Observer, Share with MeshSonar and MQTT feed', () {
     expect(telemetryCategory.title, 'Share with MeshSonar');
-    expect([for (final e in observerSettingsEntries) e.title], ['Share with MeshSonar', 'Observer status', 'MQTT feeds']);
+    // Build 76: one master switch (Sharing & privacy, first level); the Observer page holds the status and the feeds.
+    expect([for (final e in observerSettingsEntries) e.title], ['Observer status', 'MQTT feeds']);
+    expect(settingsEntry('observer-share').id, 'telemetry-toggle', reason: 'the pre-76 Observer switch is the same row now');
+    expect(settingsEntry('observer-share').title, 'Share with MeshSonar');
     expect(mqttFeedsHelp, contains('An MQTT feed'));
     expect(mqttFeedsHelp, contains('Share with MeshSonar'));
     expect(observerHelp, contains('observer'));
@@ -191,7 +194,7 @@ void main() {
 
   test('the observer guide, More and Settings use one name each: Set up a repeater observer, Observer, Claimed radios', () {
     expect(observerJoinTitle, 'Set up a repeater observer');
-    expect(observerJoinIntro, contains('Settings > Observer'));
+    expect(observerJoinIntro, contains('Settings > '));
     // Build 71: More keeps the guide's row (titled by observerJoinTitle itself); the Observer and Claimed radios rows moved
     // into Settings, so those two names are checked where they live now: the Settings sections.
     final more = File('lib/ui/shell/more_tab.dart').readAsStringSync();
@@ -199,11 +202,17 @@ void main() {
     expect(RegExp(r"row\(MoreItem\.[A-Za-z]+, [A-Za-z_.]+, '(Observer|Claimed radios|My radios|Home observer)'").hasMatch(more), isFalse,
         reason: 'More has no Observer or Claimed radios row under any name (they are Settings sections)');
     expect(settingsEntry('my-radios').title, 'Claimed radios');
-    expect(settingsSections.firstWhere((s) => s.id == 'my-radios-section').title, 'Claimed radios');
-    expect(settingsSections.firstWhere((s) => s.id == 'observer').title, 'Observer');
-    // One name each, everywhere: no section under an older name.
-    final titles = [for (final s in settingsSections) s.title];
-    expect(titles.where((t) => t == 'Observer').length, 1);
+    // Build 76: the two sections became pages one level down (Account > Claimed radios, Sharing & privacy > Observer and
+    // MQTT feeds); the old section ids still resolve to them, under the old names for search.
+    expect(settingsPage('claims').title, 'Claimed radios');
+    expect(settingsPage('observer').title, 'Observer and MQTT feeds');
+    expect(settingsSectionAliases['my-radios-section'], ('driver', 'claims', 'Claimed radios'));
+    expect(settingsSectionAliases['observer'], ('privacy', 'observer', 'Observer'));
+    expect(resolveSettingsTarget('my-radios-section')?.page, 'claims');
+    expect(resolveSettingsTarget('observer')?.page, 'observer');
+    // One name each, everywhere: no section or page under an older name.
+    final titles = [for (final s in settingsSections) s.title, for (final p in settingsPages) p.title];
+    expect(titles.where((t) => t.startsWith('Observer')).length, 1);
     expect(titles.where((t) => t == 'Claimed radios').length, 1);
     for (final old in ['My radios', 'My radios and claims', 'Home observer']) {
       expect(titles, isNot(contains(old)), reason: old);

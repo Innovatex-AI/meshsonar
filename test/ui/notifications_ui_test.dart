@@ -215,6 +215,44 @@ void main() {
       expect(find.textContaining('Muted until'), findsOneWidget);
     });
 
+    // Build 76: the whole row opens the choices, not only the small button at its end.
+    testWidgetsT('tapping the whole row opens the same choices as its button, and a choice from there is applied', (tester) async {
+      final s = await install(tester);
+      final h = chat.Harness();
+      h.bob();
+      final ch = await h.channel(1, 'Ohio', ChannelKind.private);
+      h.service.handleInbound(dmEvent(100, 'hello'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      s.coordinator.attachChat(h.service);
+      h.service.handleInbound(InboundChannelText(radioId: chat.radioA, channelSlot: 1, timestamp: 101, text: 'Al: hi all'));
+      final now = DateTime.fromMillisecondsSinceEpoch(h.clock.ms);
+      await tester.pumpWidget(MaterialApp(home: ConversationAlertsScreen(s.runtime, clock: () => now)));
+      final row = find.byKey(Key('notif-conv-${ch.convKey}'));
+      expect(tester.widget<ListTile>(row).onTap, isNotNull);
+      expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+      // On the title, far from the button.
+      await tester.tap(find.descendant(of: row, matching: find.text('Ohio')));
+      await tester.pumpAndSettle();
+      expect(find.text('Alerts for Ohio'), findsOneWidget);
+      for (final choice in ['Only when mentioned', 'Mute for 1 hour', 'Mute for 8 hours', 'Mute for 24 hours', 'Mute until I turn it back on']) {
+        expect(find.text(choice), findsOneWidget, reason: choice);
+      }
+      await tester.tap(find.text('Mute until I turn it back on'));
+      await tester.pumpAndSettle();
+      expect(h.service.conversation(ch.convKey)!.notifyMode, NotifyMode.muted);
+      expect(find.descendant(of: row, matching: find.text('Muted until you turn it back on')), findsOneWidget);
+      expect(find.descendant(of: row, matching: find.byIcon(Icons.notifications_off_outlined)), findsOneWidget, reason: 'the icon says it too');
+      // A contact's row: the same sheet, without the mentions choice.
+      final bobRow = find.byKey(Key('notif-conv-${h.bobConv}'));
+      await tester.tap(find.descendant(of: bobRow, matching: find.text('Bob')));
+      await tester.pumpAndSettle();
+      expect(find.text('Alerts for Bob'), findsOneWidget);
+      expect(find.text('Only when mentioned'), findsNothing, reason: 'a contact has no mentions');
+      await tester.tap(find.text('Mute for 1 hour'));
+      await tester.pumpAndSettle();
+      expect(h.service.conversation(h.bobConv)!.mutedUntilMs, h.clock.ms + const Duration(hours: 1).inMilliseconds);
+    });
+
     testWidgetsT('without a chat service it says so', (tester) async {
       final s = await install(tester);
       await tester.pumpWidget(MaterialApp(home: ConversationAlertsScreen(s.runtime)));
@@ -492,6 +530,12 @@ void main() {
       await tester.tap(find.byKey(const Key('ble-clear')));
       await tester.pump();
       expect(find.byKey(const Key('ble-line')), findsNothing);
+      // Build 76: an empty log says how to start it, and there is nothing left to clear.
+      expect(find.byKey(const Key('ble-empty')), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(find.byKey(const Key('ble-clear'))).onPressed, isNull);
+      for (final k in ['ble-add-note', 'ble-copy', 'ble-keeper-pull', 'ble-clear']) {
+        expect(tester.getSize(find.byKey(Key(k))).height, greaterThanOrEqualTo(48), reason: k);
+      }
     });
   });
 }

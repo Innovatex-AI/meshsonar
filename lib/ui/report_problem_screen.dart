@@ -104,12 +104,24 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
     final tooLong = length > problemReportMaxDescription;
     final canReview = s.canReport && _category != null && length > 0 && !tooLong && !_building;
     final saved = s.savedReport;
+    // What is still missing, said under the greyed-out button (build 76): a disabled button alone gave no next step.
+    final String? missing = _building || canReview
+        ? null
+        : !s.canReport
+            ? 'Set up your driver key first (see the top of this page).'
+            : _category == null
+                ? (length == 0 ? 'Pick a kind and describe the problem to continue.' : 'Pick a kind of problem to continue.')
+                : length == 0
+                    ? 'Describe the problem to continue.'
+                    : 'Shorten the description to continue.';
     return Scaffold(
       key: const Key('report-screen'),
       appBar: AppBar(title: const Text('Report a problem')),
       body: SafeArea(
         // Not a lazy list: the form is short, and every field stays reachable (e.g. by a screen reader).
         child: SingleChildScrollView(
+          // The description is a multi-line field (Return adds a line), so the keyboard has no Done key: a drag closes it.
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(Gap.l, Gap.m, Gap.l, Gap.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -152,12 +164,14 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 decoration: InputDecoration(
                   labelText: 'What happened?',
                   hintText: 'What you were doing, what you expected, and what happened instead.',
+                  hintMaxLines: 4, // one line cut the hint off at "What you were doing, what you…" on a phone
                   alignLabelWithHint: true,
                   errorText: tooLong
                       ? 'Keep it to ${_thousands(problemReportMaxDescription)} characters or fewer.'
                       : null,
                 ),
                 onChanged: (_) => setState(() {}),
+                onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
               ),
               const SizedBox(height: Gap.xs),
               Align(
@@ -174,7 +188,7 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 key: const Key('report-include-log'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Include app log'),
-                subtitle: const Text('Recent app events and your settings, with keys removed and locations rounded.'),
+                subtitle: const Text('Helps us find the cause. Keys removed, locations rounded.'),
                 value: _includeLog,
                 onChanged: (v) => setState(() => _includeLog = v),
               ),
@@ -182,8 +196,8 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
               _DrivePicker(state: s, value: _driveId, onChanged: (v) => setState(() => _driveId = v)),
               const SizedBox(height: Gap.m),
               Text(
-                'Also sent: the app version, your phone\'s system and language, and the connected radio\'s settings. '
-                'You see everything before it is sent.',
+                'Nothing is sent yet. Next you see the whole report, with the app version, phone system and radio settings.',
+                key: const Key('report-also-sent'),
                 style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: Gap.l),
@@ -191,9 +205,19 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 key: const Key('report-review'),
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 onPressed: canReview ? () => _review(s) : null,
-                icon: const Icon(Icons.preview_outlined),
-                label: const Text('Review report'),
+                icon: _building
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.preview_outlined),
+                label: Text(_building ? 'Preparing…' : 'Review report'),
               ),
+              if (missing != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.s),
+                  child: Text(missing,
+                      key: const Key('report-review-hint'),
+                      textAlign: TextAlign.center,
+                      style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                ),
             ],
           ),
         ),
@@ -212,13 +236,15 @@ class _SavedReport extends StatelessWidget {
     final ok = await showAppConfirm(
       context,
       title: 'Discard the saved report?',
-      message: 'It hasn\'t been sent, and it will be deleted from this phone.',
-      confirmLabel: 'Discard',
+      message: 'It was never sent. Discarding deletes it from this phone.',
+      confirmLabel: 'Discard report',
       cancelLabel: 'Keep',
       destructive: true,
       confirmKey: const Key('report-discard-confirm'),
     );
-    if (ok) await s.discardSavedReport();
+    if (!ok) return;
+    await s.discardSavedReport();
+    if (context.mounted) showAppToast(context, 'Saved report discarded.');
   }
 
   @override
@@ -234,19 +260,18 @@ class _SavedReport extends StatelessWidget {
           children: [
             Text('A report hasn\'t been sent yet', style: t.textTheme.titleMedium),
             const SizedBox(height: Gap.xs),
-            Text(
-              'It is saved on this phone. Send it when you have signal, or discard it.',
-              style: t.textTheme.bodyMedium,
-            ),
+            Text('It is saved on this phone.', style: t.textTheme.bodyMedium),
             const SizedBox(height: Gap.m),
             FilledButton.icon(
               key: const Key('report-send-saved'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               onPressed: onSend,
               icon: const Icon(Icons.send_outlined),
               label: const Text('Send saved report'),
             ),
             TextButton(
               key: const Key('report-discard-saved'),
+              style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               onPressed: () => _discard(context),
               child: const Text('Discard'),
             ),
@@ -265,13 +290,10 @@ class _NeedsKey extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final why = switch (status) {
-      DriverKeyStatus.none =>
-        'Problem reports are sent with your driver key, and this phone doesn\'t have one yet. '
-            'Create a key, or paste one from the website, in Settings.',
+      DriverKeyStatus.none => 'Reports are sent with a driver key, and this phone has none yet.',
       DriverKeyStatus.rejected || DriverKeyStatus.revoked =>
-        'The server won\'t take reports from your driver key (${keyStatusLabel(status).toLowerCase()}). Check the key in Settings.',
-      _ =>
-        'The server doesn\'t recognise this driver key, so it won\'t take reports from it. Check the key in Settings.',
+        'The server won\'t take reports from your driver key (${keyStatusLabel(status).toLowerCase()}).',
+      _ => 'The server doesn\'t recognise your driver key, so it won\'t take reports from it.',
     };
     return Padding(
       key: const Key('report-needs-key'),
@@ -280,13 +302,14 @@ class _NeedsKey extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ErrorBanner(why),
-          TextButton.icon(
+          FilledButton.tonalIcon(
             key: const Key('report-key-settings'),
+            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
             // The key settings open over this form, so what was typed is still here on the way back.
             onPressed: () =>
                 Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DriverKeyScreen())),
             icon: const Icon(Icons.vpn_key_outlined),
-            label: const Text('Open driver key settings'),
+            label: Text(status == DriverKeyStatus.none ? 'Set up a driver key' : 'Check the driver key'),
           ),
         ],
       ),
@@ -396,7 +419,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
                       style: note,
                     ),
                     if (r.logShortened) Text('Log shortened to fit 5 MB.', style: note),
-                    if (r.tooLarge) const ErrorBanner('Description too long'),
+                    if (r.tooLarge) const ErrorBanner('This report is too big to send. Go back and shorten the description.'),
                     const SizedBox(height: Gap.m),
                     DecoratedBox(
                       decoration: BoxDecoration(
@@ -442,6 +465,7 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
                     ),
                     TextButton(
                       key: const Key('report-discard'),
+                      style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                       onPressed: () => _discard(s),
                       child: const Text('Discard'),
                     ),
@@ -452,16 +476,33 @@ class _ReportPreviewScreenState extends State<ReportPreviewScreen> {
                       onPressed: () => Navigator.of(context).pop(true),
                       child: const Text('Done'),
                     )
-                  else
+                  else ...[
                     FilledButton.icon(
                       key: const Key('report-send'),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                       onPressed: r.tooLarge || _sending ? null : () => _send(s),
                       icon: _sending
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.send_outlined),
-                      label: const Text('Send report'),
+                          : Icon(outcome == null ? Icons.send_outlined : Icons.refresh),
+                      // After a failed try the same button says what it now does.
+                      label: Text(_sending ? 'Sending…' : (outcome == null ? 'Send report' : 'Send again')),
                     ),
+                    // Could not be sent (no signal, server busy): the report is saved, so leaving is safe; say so.
+                    if (outcome != null && !_sending)
+                      TextButton(
+                        key: const Key('report-later'),
+                        style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Send later'),
+                      ),
+                    if (r.tooLarge)
+                      TextButton(
+                        key: const Key('report-shorten'),
+                        style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Back to edit'),
+                      ),
+                  ],
                 ],
               ),
             ),

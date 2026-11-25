@@ -1,9 +1,11 @@
 // About: what MeshSonar is, its MIT licence, and third-party notices.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../core/api.dart' show openMeteoCredit;
 import '../core/server_url.dart' show privacyPolicyUrl;
 import 'app.dart';
+import 'design/app_surfaces.dart' show AppToastKind, showAppToast;
 
 const String mitLicenseText = '''MIT License
 
@@ -78,56 +80,90 @@ class AboutScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final t = Theme.of(context);
+    final version = s.services.appInfo.version;
+    final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    // Long legal text sits behind rows that open (build 76): the page is five rows, not a wall of licence text.
+    Widget fold({required String id, required IconData icon, required String title, String? subtitle, required List<Widget> children}) => ExpansionTile(
+          key: Key(id),
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(bottom: 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          expandedAlignment: Alignment.centerLeft,
+          shape: const Border(),
+          collapsedShape: const Border(),
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: subtitle == null ? null : Text(subtitle),
+          children: children,
+        );
     return Scaffold(
       appBar: AppBar(title: const Text('About MeshSonar')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('MeshSonar ${s.services.appInfo.version ?? ''}', style: t.textTheme.headlineSmall),
+            Text('MeshSonar', style: t.textTheme.headlineSmall),
+            const SizedBox(height: 4),
+            const Text('Maps MeshCore radio coverage as you drive. Free and open source.', key: Key('about-summary')),
             const SizedBox(height: 8),
-            const Text(
-              'Open-source MeshCore wardriving. MeshSonar pings a channel from your companion radio, listens for '
-              'repeaters that echo it, and records every ping with GPS. Drives are saved on this phone first, '
-              'can be exported as files, and upload to any server that speaks the MeshSonar Drive Format.',
+            ListTile(
+              key: const Key('about-version'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.info_outline),
+              title: Text(version == null ? 'Version unknown' : 'Version $version'),
+              subtitle: const Text('Tap to copy'),
+              trailing: const Icon(Icons.copy, size: 18),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: 'MeshSonar ${version ?? 'unknown version'}'));
+                if (context.mounted) showAppToast(context, 'Version copied.', kind: AppToastKind.success);
+              },
             ),
-            const SizedBox(height: 16),
             ListTile(
               key: const Key('about-privacy-policy'),
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.policy_outlined),
               title: const Text('Privacy policy'),
-              subtitle: const Text(privacyPolicyUrl),
+              subtitle: const Text('Opens in your browser'),
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
             ),
-            const SizedBox(height: 8),
-            Text('Licence', style: t.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(unwrapParagraphs(mitLicenseText), key: const Key('mit-license'), style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
-            const SizedBox(height: 16),
-            Text('Third-party notices', style: t.textTheme.titleMedium),
-            for (final n in thirdPartyNotices)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                key: Key('notice-${n.name}'),
-                title: Text(n.name),
-                subtitle: Text('${n.license}\n${n.note}'),
-                isThreeLine: true,
-                trailing: thirdPartyNoticeLinks[n.name] == null ? null : const Icon(Icons.open_in_new, size: 18),
-                onTap: thirdPartyNoticeLinks[n.name] == null ? null : () => s.services.openUrl(thirdPartyNoticeLinks[n.name]!),
-              ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
+            fold(
+              id: 'about-licence',
+              icon: Icons.gavel_outlined,
+              title: 'MIT License',
+              subtitle: 'Free to use, copy and change',
+              children: [Text(unwrapParagraphs(mitLicenseText), key: const Key('mit-license'), style: muted)],
+            ),
+            fold(
+              id: 'about-credits',
+              icon: Icons.favorite_border,
+              title: 'Credits',
+              subtitle: '${thirdPartyNotices.length} projects MeshSonar builds on',
+              children: [
+                for (final n in thirdPartyNotices)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    key: Key('notice-${n.name}'),
+                    title: Text(n.name),
+                    subtitle: Text('${n.license}\n${n.note}'),
+                    isThreeLine: true,
+                    trailing: thirdPartyNoticeLinks[n.name] == null ? null : const Icon(Icons.open_in_new, size: 18),
+                    onTap: thirdPartyNoticeLinks[n.name] == null ? null : () => s.services.openUrl(thirdPartyNoticeLinks[n.name]!),
+                  ),
+              ],
+            ),
+            ListTile(
               key: const Key('show-licenses'),
-              onPressed: () => showLicensePage(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('All package licences'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showLicensePage(
                 context: context,
                 applicationName: 'MeshSonar',
-                applicationVersion: s.services.appInfo.version,
-                applicationLegalese: 'MIT License. Adapted code is credited under Third-party notices.',
+                applicationVersion: version,
+                applicationLegalese: 'MIT License. Adapted code is credited under Credits.',
               ),
-              icon: const Icon(Icons.description),
-              label: const Text('All package licences'),
             ),
           ],
         ),

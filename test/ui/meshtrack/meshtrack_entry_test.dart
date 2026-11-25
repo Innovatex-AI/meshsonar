@@ -11,9 +11,9 @@ import 'package:meshsonar/ui/chat/chat_tab_provider.dart';
 import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/ui/design/app_widgets.dart' show MemoryTipStore, appTipStore;
 import 'package:meshsonar/ui/meshtrack/meshtrack_binding.dart';
-import 'package:meshsonar/ui/settings/meshtrack_section.dart' show meshTrackHelp;
+import 'package:meshsonar/ui/settings/meshtrack_section.dart' show meshTrackHelp, meshTrackSettingsEntries;
 import 'package:meshsonar/ui/settings/settings_index.dart';
-import 'package:meshsonar/ui/settings_screen.dart' show settingsSectionHelp;
+import 'package:meshsonar/ui/settings/settings_pages.dart' show settingsPageHelp;
 import 'package:meshsonar/ui/shell/chat_tab.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -125,17 +125,29 @@ void main() {
   });
 
   group('Settings', () {
-    test('MeshTrack comes right after the driving sections (Wardriving, Radio, Claimed radios), high in the list', () {
-      final ids = settingsSections.map((s) => s.id).toList();
-      expect(ids.indexOf('meshtrack'), ids.indexOf('my-radios-section') + 1);
-      expect(ids.indexOf('wardriving'), lessThan(ids.indexOf('meshtrack')));
-      expect(ids.indexOf('radio'), lessThan(ids.indexOf('meshtrack')));
-      expect(ids.indexOf('meshtrack'), lessThan(ids.indexOf('display')));
-      expect(ids.indexOf('meshtrack'), lessThan(ids.length ~/ 2), reason: 'not buried at the bottom');
+    // Build 76 (owner: "simplify the settings and group appropriately"): MeshTrack is no longer a section of its own,
+    // placed after the driving sections; it is a page of Sharing & privacy, behind a row named MeshTrack. What this
+    // test protects is that it is still found by its name and never buried deeper than that one row.
+    test('MeshTrack is one row down from Sharing & privacy, under its own name; the old section id still lands on it', () {
+      expect(settingsSections.map((s) => s.id), isNot(contains('meshtrack')));
+      final page = settingsPage('meshtrack');
+      expect(page.title, 'MeshTrack');
+      expect(page.section, 'privacy');
+      expect(page.summary, startsWith('Friends on the map'));
+      expect(settingsSectionAliases['meshtrack'], ('privacy', 'meshtrack', 'MeshTrack'));
+      final to = resolveSettingsTarget('meshtrack')!;
+      expect((to.section, to.page, to.anchor), ('privacy', 'meshtrack', null), reason: 'an old link opens the page');
+      expect(sectionInfo('meshtrack').title, 'Sharing & privacy');
+      for (final e in meshTrackSettingsEntries) {
+        expect((e.section, e.page, e.was), ('privacy', 'meshtrack', 'MeshTrack'), reason: e.id);
+        expect(e.where, 'Sharing & privacy > MeshTrack', reason: e.id);
+      }
+      expect(meshTrackSettingsEntries.map((e) => e.id), ['meshtrack-groups', 'meshtrack-position', 'meshtrack-rate', 'meshtrack-answer'],
+          reason: 'all four rows kept');
     });
 
-    test('the section header is one plain line', () {
-      expect(settingsSectionHelp('meshtrack'), meshTrackHelp);
+    test('the page header is one plain line', () {
+      expect(settingsPageHelp('meshtrack'), meshTrackHelp);
       expect(meshTrackHelp.length, lessThan(120));
       expect(meshTrackHelp, startsWith('See friends on the map'));
     });
@@ -145,7 +157,7 @@ void main() {
         final hits = searchSettings(q);
         expect(hits.map((e) => e.id), contains('meshtrack-groups'), reason: q);
         // "friends" also matches "Position friends see" by its title; every other word puts Groups first.
-        if (q != 'friends') expect(hits.firstWhere((e) => e.section == 'meshtrack').id, 'meshtrack-groups');
+        if (q != 'friends') expect(hits.firstWhere((e) => e.page == 'meshtrack').id, 'meshtrack-groups');
       });
     }
   });

@@ -6,13 +6,7 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 
 import 'fakes.dart';
-
-final settingsScroll = find
-    .descendant(
-      of: find.byKey(const Key('settings-list')),
-      matching: find.byType(Scrollable),
-    )
-    .first;
+import 'settings_test_kit.dart';
 
 DriveSession ended(String id, {String? label}) => DriveSession(
   id: id,
@@ -154,11 +148,8 @@ void main() {
       expect(find.byKey(const Key('masked-key')), findsOneWidget);
 
       Future<void> enterUrl(String url) async {
-        await tester.scrollUntilVisible(
-          find.byKey(const Key('server-url')),
-          100,
-          scrollable: settingsScroll,
-        );
+        // Build 76: the server URL is on Account > Server (advanced); showSetting opens that page.
+        await showSetting(tester, 'server-url');
         await tester.tap(find.byKey(const Key('server-url')));
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const Key('edit-field')), url);
@@ -216,11 +207,10 @@ void main() {
       expect(h.settings.saved.serverUrl, 'https://other.example');
       expect(h.settings.saved.driverKey, isNull);
       expect(h.settings.saved.keyStatus, DriverKeyStatus.none);
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('key-request')),
-        -100,
-        scrollable: settingsScroll,
-      );
+      // Back on the first level, Account offers a new key.
+      expect(find.byKey(const Key('settings-page-account-advanced')), findsOneWidget);
+      await showSetting(tester, 'key-request');
+      expect(find.byKey(const Key('settings-page-account-advanced')), findsNothing);
       expect(find.byKey(const Key('key-request')), findsOneWidget);
     },
   );
@@ -232,11 +222,9 @@ void main() {
     final h = Harness();
     await h.pumpApp(tester);
     await openSettings(tester);
-    // With no key, the request form above this tile (now with the privacy-zones link too, 0.8.0) can leave it
-    // right at the fold; ensureVisible after the scroll clears it of the bottom navigation bar.
-    await tester.scrollUntilVisible(find.byKey(const Key('server-url')), 100, scrollable: settingsScroll);
-    await tester.ensureVisible(find.byKey(const Key('server-url')));
-    await tester.pumpAndSettle();
+    // Build 76: on Account > Server (advanced).
+    expect(find.byKey(const Key('server-url')), findsNothing);
+    await showSetting(tester, 'server-url');
     await tester.tap(find.byKey(const Key('server-url')));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -266,11 +254,7 @@ void main() {
         hint,
         'Your keys, drives and reports are all in the app. The same pages are on the website at https://mesh.example.org/me if you sign in there.',
       );
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('key-website')),
-        100,
-        scrollable: settingsScroll,
-      );
+      await showSetting(tester, 'key-website');
       expect(find.text('Devices and keys'), findsOneWidget);
       await tester.tap(find.byKey(const Key('key-website')));
       await tester.pumpAndSettle();
@@ -287,11 +271,7 @@ void main() {
       );
       await h.state.init();
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('masked-key')),
-        -100,
-        scrollable: settingsScroll,
-      );
+      await showSetting(tester, 'masked-key');
       expect(find.byKey(const Key('masked-key')), findsOneWidget);
       expect(find.byKey(const Key('account-hint')), findsOneWidget);
       expect(find.byKey(const Key('key-website')), findsOneWidget);
@@ -310,11 +290,7 @@ void main() {
         );
       await h.pumpApp(tester);
       await openSettings(tester);
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('masked-key')),
-        -100,
-        scrollable: settingsScroll,
-      );
+      await showSetting(tester, 'masked-key');
       expect(find.text('k-abcdef123456'), findsNothing);
       expect(find.byKey(const Key('revealed-key')), findsNothing);
       expect(find.byKey(const Key('key-info')), findsOneWidget);

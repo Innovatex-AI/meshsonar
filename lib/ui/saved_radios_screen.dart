@@ -15,6 +15,7 @@ import '../alerts/alerts_runtime.dart';
 import '../alerts/saved_radios_store.dart';
 import '../app/app_state.dart' show RadioKind;
 import 'app.dart';
+import 'connect_screen.dart' show ConnectScreen;
 import 'design/app_surfaces.dart';
 import 'design/app_symbols.dart';
 import 'settings/settings_kit.dart' show editSettingText;
@@ -53,13 +54,14 @@ Future<bool> forgetSavedRadio(BuildContext context, SavedRadiosStore store, Save
 /// Nickname / star / forget for one saved radio (long-press or the info button).
 Future<void> showSavedRadioActions(BuildContext context, SavedRadiosStore store, SavedRadio r) async {
   final starred = store.starredId == r.id;
+  // Two short lines at most on a phone: what it is, then when it was last used. The key prefix (to tell two radios with
+  // the same name apart) goes last.
   final details = [
-    if (r.nickname != null) 'Radio name: ${r.name}',
-    if (r.model != null) r.model!,
-    if (r.publicKeyHex != null && r.publicKeyHex!.length >= 8) 'Key ${r.publicKeyHex!.substring(0, 8)}…',
+    [if (r.nickname != null) r.name, ?r.model].join(' · '),
     lastConnectedText(r.lastConnected, DateTime.now()),
-    if (starred) store.starPinned ? 'Auto-connect radio (your choice).' : 'Auto-connect radio (your most recent).',
-  ].join('\n');
+    if (starred) store.starPinned ? 'Connects automatically (your choice).' : 'Connects automatically (most recent radio).',
+    if (r.publicKeyHex != null && r.publicKeyHex!.length >= 8) 'Radio ID ${r.publicKeyHex!.substring(0, 8)}',
+  ].where((l) => l.isNotEmpty).join('\n');
   final a = await showAppActionSheet<_RadioAction>(
     context,
     title: r.displayName,
@@ -69,11 +71,11 @@ Future<void> showSavedRadioActions(BuildContext context, SavedRadiosStore store,
       AppAction(r.nickname == null ? 'Add a nickname' : 'Change nickname', _RadioAction.nickname,
           symbol: AppSymbols.squareAndPencil, key: const Key('saved-radio-nickname')),
       if (!starred || !store.starPinned)
-        AppAction('Use for auto-connect', _RadioAction.star, symbol: AppSymbols.star, key: const Key('saved-radio-star')),
+        AppAction('Always auto-connect to this radio', _RadioAction.star, symbol: AppSymbols.star, key: const Key('saved-radio-star')),
       if (starred && store.starPinned)
-        AppAction('Follow the most recent radio', _RadioAction.followRecent,
+        AppAction('Auto-connect to my most recent radio', _RadioAction.followRecent,
             symbol: AppSymbols.clock, key: const Key('saved-radio-follow-recent')),
-      AppAction('Forget', _RadioAction.forget, destructive: true, symbol: AppSymbols.trash, key: const Key('saved-radio-forget')),
+      AppAction('Forget this radio', _RadioAction.forget, destructive: true, symbol: AppSymbols.trash, key: const Key('saved-radio-forget')),
     ],
   );
   if (!context.mounted || a == null) return;
@@ -84,7 +86,7 @@ Future<void> showSavedRadioActions(BuildContext context, SavedRadiosStore store,
         title: 'Nickname',
         initial: r.nickname ?? '',
         hint: r.name,
-        help: 'Shown instead of "${r.name}" in MeshSonar. Leave empty to use the radio\'s own name. Nothing is written to the radio.',
+        help: 'Only shown in MeshSonar. Leave empty to use "${r.name}".',
         validate: (v) => v.trim().length > 40 ? 'Keep it to 40 characters' : null,
       );
       if (n != null) await store.setNickname(r.id, n);
@@ -181,8 +183,7 @@ class _SavedRadioCard extends StatelessWidget {
         'Connected'
       else
         '${inRange ? 'In range · ' : ''}${lastConnectedText(r.lastConnected, now)}',
-      [if (r.nickname != null) r.name, ?r.model].join(' · '),
-      if (starred) 'Auto-connect radio',
+      [if (r.nickname != null) r.name, ?r.model, if (starred) 'Auto-connect'].join(' · '),
     ].where((l) => l.isNotEmpty).join('\n');
     final card = Card(
       child: ListTile(
@@ -211,11 +212,13 @@ class _SavedRadioCard extends StatelessWidget {
             : IconButton(
                 key: ValueKey('saved-radio-info-${r.id}'),
                 tooltip: 'Nickname, auto-connect, forget',
-                icon: const AppSymbolIcon(AppSymbols.infoCircle),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                icon: const AppSymbolIcon(AppSymbols.ellipsis),
                 onPressed: () => showSavedRadioActions(context, store, r),
               ),
         enabled: enabled,
-        onTap: connected ? null : onTap,
+        // A tap on the connected radio used to do nothing at all; say why.
+        onTap: connected ? () => showAppToast(context, 'Already connected to ${r.displayName}.') : onTap,
         onLongPress: () => showSavedRadioActions(context, store, r),
       ),
     );
@@ -248,6 +251,15 @@ class SavedRadiosScreen extends StatefulWidget {
 
 class _SavedRadiosScreenState extends State<SavedRadiosScreen> {
   String? _connectingId;
+  final ScrollController _list = ScrollController();
+
+  @override
+  void dispose() {
+    _list.dispose();
+    super.dispose();
+  }
+
+  void _openConnect() => unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ConnectScreen())));
 
   Future<void> _connect(SavedRadio r) async {
     final s = AppScope.read(context);
@@ -259,7 +271,12 @@ class _SavedRadiosScreenState extends State<SavedRadiosScreen> {
     final ok = await s.connect(r.device, RadioKind.bluetooth);
     if (!mounted) return;
     setState(() => _connectingId = null);
-    if (ok) showAppToast(context, 'Connected to ${r.displayName}');
+    if (ok) {
+      showAppToast(context, 'Connected to ${r.displayName}', kind: AppToastKind.success);
+    } else if (_list.hasClients) {
+      // The reason is in the banner at the top of the list: bring it into view.
+      unawaited(_list.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut));
+    }
   }
 
   @override
@@ -270,11 +287,17 @@ class _SavedRadiosScreenState extends State<SavedRadiosScreen> {
       appBar: AppBar(title: const Text('Saved radios')),
       body: SafeArea(
         child: store == null
-            ? const Center(child: Text('Saved radios are not available in this build.'))
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(Gap.xl),
+                  child: Text('Saved radios are not ready yet. Go back and open this page again.', key: Key('saved-radios-unavailable'), textAlign: TextAlign.center),
+                ),
+              )
             : ListenableBuilder(
                 listenable: store,
                 builder: (context, _) => ListView(
                   key: const Key('saved-radios-screen'),
+                  controller: _list,
                   padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
                   children: [
                     if (s.connectError != null && _connectingId == null) ErrorBanner(s.connectError!),
@@ -282,8 +305,22 @@ class _SavedRadiosScreenState extends State<SavedRadiosScreen> {
                       Padding(
                         key: const Key('saved-radios-empty'),
                         padding: const EdgeInsets.all(Gap.l),
-                        child: Text('No saved radios yet. Every radio you connect to over Bluetooth is saved here.',
-                            style: Theme.of(context).textTheme.bodyLarge),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          Icon(Icons.bluetooth_rounded, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          const SizedBox(height: Gap.m),
+                          Text('No saved radios yet', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: Gap.xs),
+                          Text('A radio is saved here the first time you connect to it.',
+                              textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+                          const SizedBox(height: Gap.l),
+                          FilledButton.icon(
+                            key: const Key('saved-radios-connect'),
+                            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                            onPressed: _openConnect,
+                            icon: const Icon(Icons.bluetooth_searching),
+                            label: const Text('Connect a radio'),
+                          ),
+                        ]),
                       )
                     else ...[
                       SavedRadiosList(
@@ -295,10 +332,18 @@ class _SavedRadiosScreenState extends State<SavedRadiosScreen> {
                       ),
                       const SizedBox(height: Gap.m),
                       Text(
-                        'Tap a radio to connect. Swipe left to forget it; hold or tap the info button for a nickname or to choose '
-                        'the auto-connect radio (the star). The star follows your most recent radio unless you choose one.',
+                        'Tap a radio to connect. The star is the one MeshSonar connects to by itself.',
                         key: const Key('saved-radios-footer'),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: Gap.s),
+                      // A radio that is not in the list yet: one tap to the scan, instead of back > back > Connect.
+                      OutlinedButton.icon(
+                        key: const Key('saved-radios-connect'),
+                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                        onPressed: _openConnect,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Connect another radio'),
                       ),
                     ],
                   ],

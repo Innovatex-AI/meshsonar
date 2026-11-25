@@ -1,13 +1,29 @@
-// Settings > Drives & uploads: when drives go to the server. Drives are always saved on this phone first.
+// Settings > Driving > Uploads: when drives go to the server. Drives are always saved on this phone first.
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
+import '../../core/power_profile.dart';
 import '../app.dart';
 import '../widgets.dart';
 import 'settings_kit.dart';
 
-const String drivesHelp = 'Drives are always saved on this phone first. Uploads need a driver key the server accepts, are safe to '
-    'retry, and never send a ping twice.';
+const String drivesHelp = 'Drives are saved on this phone first. Uploads need a driver key.';
+
+/// "End of drive · during drive every 5 min · last upload 14:05 OK": the Uploads row on the first level of Driving.
+String uploadsCaption(AppState s) {
+  final st = s.settings;
+  final when = !st.autoSync
+      ? 'Off: upload from Drives'
+      : (st.syncDuringDrive ? 'While driving, every ${st.syncEveryMin} min' : 'When the drive ends');
+  final last = s.uploading
+      ? 'uploading now'
+      : s.lastUploadError != null
+          ? 'last upload failed'
+          : s.lastUploadAt != null
+              ? 'last ${formatTime(s.lastUploadAt!)}'
+              : null;
+  return last == null ? '$when.' : '$when · $last.';
+}
 
 List<Widget> drivesSectionRows(BuildContext context) {
   final s = AppScope.of(context);
@@ -19,7 +35,7 @@ List<Widget> drivesSectionRows(BuildContext context) {
         key: const Key('auto-sync'),
         secondary: const Icon(Icons.cloud_upload_outlined),
         title: const Text('Upload at end of drive'),
-        subtitle: const Text('Sends the drive when you press Stop. Off: drives wait on this phone until you upload them from Drives.'),
+        subtitle: Text(st.autoSync ? 'Sends the drive when you press Stop.' : 'Off: upload each drive yourself from Drives.'),
         value: st.autoSync,
         onChanged: (v) => s.updateSettings(s.settings.copyWith(autoSync: v)),
       ),
@@ -30,9 +46,14 @@ List<Widget> drivesSectionRows(BuildContext context) {
         key: const Key('sync-during-drive'),
         secondary: const Icon(Icons.sync),
         title: const Text('Upload during the drive'),
-        subtitle: st.autoSync
-            ? const Text('Sends new pings while you drive, so nothing waits for Stop.')
-            : const SettingsWhyNot('Off while "Upload at end of drive" is off. Turn that on first.'),
+        subtitle: !st.autoSync
+            ? const SettingsWhyNot('Off while "Upload at end of drive" is off. Turn that on first.')
+            // The battery profile has its own "upload during a drive" knob (Saver turns it off): say so here, where the
+            // switch would otherwise read On while nothing uploads.
+            : (st.syncDuringDrive && !PowerProfile.current.uploadDuringDrive)
+                ? const SettingsWhyNot('On, but your battery mode holds uploads until the drive ends. Change it in Battery details > Drive data upload.',
+                    key: Key('sync-during-drive-battery'))
+                : const Text('Sends new pings while you drive.'),
         value: st.autoSync && st.syncDuringDrive,
         onChanged: st.autoSync ? (v) => s.updateSettings(s.settings.copyWith(syncDuringDrive: v)) : null,
       ),
@@ -49,7 +70,7 @@ List<Widget> drivesSectionRows(BuildContext context) {
         label: (v) => 'Every $v min',
         minLabel: '1 min',
         maxLabel: '30 min',
-        caption: 'Shorter means the map is fresher; longer saves battery and data.',
+        caption: 'Shorter: fresher map. Longer: saves battery and data.',
         disabledReason: st.autoSync
             ? 'Only used while "Upload during the drive" is on. Turn it on to choose the interval.'
             : 'Only used while "Upload at end of drive" and "Upload during the drive" are on. Turn them on first.',

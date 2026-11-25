@@ -29,10 +29,19 @@ void main() {
 
   testWidgetsT('the Battery section shows the mode (Balanced by default) and every knob', (tester) async {
     await _open(tester);
+    // Build 76: the mode is one row on the first level of Driving (three modes side by side); every knob is one level
+    // down on "Battery details". No Battery section any more.
     await showSetting(tester, 'battery-mode');
-    expect(find.byKey(const Key('section-battery')), findsOneWidget);
+    expect(find.byKey(const Key('section-battery')), findsNothing);
+    expect(find.descendant(of: find.byKey(const Key('section-wardriving')), matching: find.byKey(const Key('battery-mode'))), findsOneWidget);
+    expect(find.byKey(const Key('settings-page-battery')), findsNothing, reason: 'the mode is on the first level');
     expect(tester.widget<Text>(find.byKey(const Key('battery-mode-now'))).data, startsWith('Now: Balanced.'));
     expect(find.byKey(const Key('battery-mode-custom')), findsNothing);
+    expect(tester.widget<SegmentedButton<BatteryMode>>(find.byKey(const Key('battery-mode-selector'))).selected, {BatteryMode.balanced});
+    for (final m in ['maxData', 'balanced', 'saver']) {
+      expect(find.byKey(Key('battery-mode-$m')), findsOneWidget, reason: m);
+    }
+    expect(find.byKey(const Key('page-battery')), findsOneWidget, reason: 'the row that opens Battery details');
     for (final id in [
       'battery-running',
       'battery-low-power',
@@ -48,9 +57,10 @@ void main() {
       'battery-stats',
     ]) {
       await showSetting(tester, id);
-      expect(find.descendant(of: find.byKey(const Key('section-battery')), matching: find.byKey(Key(id))), findsOneWidget,
+      expect(find.descendant(of: find.byKey(const Key('settings-page-battery')), matching: find.byKey(Key(id))), findsOneWidget,
           reason: id);
     }
+    expect(find.byKey(const Key('battery-mode')), findsNothing, reason: 'the mode picker is not repeated on the page');
     expect(tester.widget<Text>(find.byKey(const Key('battery-gps-value'))).data, startsWith('High.'));
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('battery-low-power'))).value, isTrue);
   });
@@ -84,8 +94,10 @@ void main() {
     expect(PowerProfile.chosen.compass, CompassMode.off);
     expect(PowerProfile.chosen.gps, PowerSettings.balanced.gps);
     await showSetting(tester, 'battery-mode');
-    expect(tester.widget<Text>(find.byKey(const Key('battery-mode-now'))).data, startsWith('Now: Custom.'));
-    expect(find.byKey(const Key('battery-mode-custom')), findsOneWidget);
+    // Custom: the line under the modes has its own key, and no mode is selected.
+    expect(find.byKey(const Key('battery-mode-now')), findsNothing);
+    expect(tester.widget<Text>(find.byKey(const Key('battery-mode-custom'))).data, startsWith('Now: Custom.'));
+    expect(tester.widget<SegmentedButton<BatteryMode>>(find.byKey(const Key('battery-mode-selector'))).selected, isEmpty);
 
     // A two-knob row: the locked radio check.
     await showSetting(tester, 'battery-radio-checks-phone-locked');
@@ -108,6 +120,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(PowerProfile.chosen.toJson(), PowerSettings.balanced.toJson());
     expect(find.byKey(const Key('battery-mode-custom')), findsNothing);
+    expect(tester.widget<Text>(find.byKey(const Key('battery-mode-now'))).data, startsWith('Now: Balanced.'));
+    expect(tester.widget<SegmentedButton<BatteryMode>>(find.byKey(const Key('battery-mode-selector'))).selected, {BatteryMode.balanced});
+  });
+
+  testWidgetsT('Uploads page: "Upload during the drive" says when the battery mode holds uploads until the drive ends', (tester) async {
+    final h = await _open(tester);
+    await h.state.updateSettings(h.state.settings.copyWith(autoSync: true, syncDuringDrive: true));
+    await tester.pumpAndSettle();
+    await showSetting(tester, 'sync-during-drive');
+    expect(find.byKey(const Key('settings-page-uploads')), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).value, isTrue);
+    expect(find.byKey(const Key('sync-during-drive-battery')), findsNothing, reason: 'Balanced uploads during a drive');
+    expect(find.text('Sends new pings while you drive.'), findsOneWidget);
+
+    // Saver holds uploads until the drive ends: the switch still reads On, so the row says why nothing uploads.
+    await setBatteryMode(BatteryMode.saver);
+    await tester.pumpAndSettle();
+    expect(PowerProfile.current.uploadDuringDrive, isFalse);
+    expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).value, isTrue);
+    expect(find.byKey(const Key('sync-during-drive-battery')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('sync-during-drive')), matching: find.textContaining('battery mode holds uploads until the drive ends')),
+        findsOneWidget);
+    expect(find.text('Sends new pings while you drive.'), findsNothing);
+
+    // The upload switch off: nothing to explain.
+    await tester.tap(find.byKey(const Key('sync-during-drive')));
+    await tester.pumpAndSettle();
+    expect(h.state.settings.syncDuringDrive, isFalse);
+    expect(find.byKey(const Key('sync-during-drive-battery')), findsNothing);
+
+    // Back on, and the battery mode back to Balanced: the line goes.
+    await tester.tap(find.byKey(const Key('sync-during-drive')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sync-during-drive-battery')), findsOneWidget);
+    await setBatteryMode(BatteryMode.balanced);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sync-during-drive-battery')), findsNothing);
   });
 
   testWidgetsT('Low Power Mode shows the override line; the switch turns following off (mode unchanged)', (tester) async {
@@ -143,6 +192,15 @@ void main() {
     expect(status('running-mqtt'), 'None open');
     expect(status('running-map'), 'Up to 60 times a second while it moves');
     expect(tester.widget<Text>(find.byKey(const Key('whats-running-mode'))).data, startsWith('Mode: Balanced.'));
+    // Build 76: what uses power now first, under its heading; the idle lines under "Not running".
+    expect(tester.widget<Text>(find.byKey(const Key('whats-running-on'))).data, 'Using power now (1)');
+    expect(tester.widget<Text>(find.byKey(const Key('whats-running-off'))).data, 'Not running');
+    double y(String key) => tester.getTopLeft(find.byKey(Key(key))).dy;
+    expect(y('whats-running-on'), lessThan(y('running-map')));
+    expect(y('running-map'), lessThan(y('whats-running-off')), reason: 'the map draws now: it is in the first list');
+    for (final idle in ['running-drive', 'running-gps', 'running-radio-checks', 'running-mqtt']) {
+      expect(y(idle), greaterThan(y('whats-running-off')), reason: '$idle is idle');
+    }
 
     PowerProfile.setLowPowerMode(true);
     await tester.pumpAndSettle();
@@ -157,9 +215,17 @@ void main() {
 
   test('search finds the Battery rows', () {
     for (final q in ['battery', 'power', 'screen on', 'gps', 'compass', 'low power']) {
-      expect(searchSettings(q).any((e) => e.section == 'battery'), isTrue, reason: q);
+      expect(searchSettings(q).any((e) => e.was == 'Battery'), isTrue, reason: q);
     }
     expect(searchSettings('low power').first.id, 'battery-low-power');
+    // Build 76: the rows live in Driving; the mode on the first level, the rest on the page "Battery details".
+    expect(settingsEntry('battery-mode').where, 'Driving');
+    for (final e in batterySettingsEntries) {
+      expect(e.section, 'wardriving', reason: e.id);
+      expect(e.page, e.id == 'battery-mode' ? isNull : 'battery', reason: e.id);
+    }
+    expect(settingsEntry('battery-gps').where, 'Driving > Battery details');
+    expect(resolveSettingsTarget('battery')?.page, 'battery', reason: 'the pre-76 section id opens the page');
   });
 
   test('every knob reads its preset value in words', () {

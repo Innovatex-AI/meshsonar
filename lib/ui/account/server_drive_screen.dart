@@ -51,13 +51,22 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
   Future<void> _rename(ServerDriveDetail d) async {
     final v = await showAppSheet<String>(
       context,
-      detents: const [0.4],
+      detents: [MediaQuery.textScalerOf(context).scale(10) > 13 ? 0.92 : 0.4], // large text needs the room for both buttons
       builder: (ctx, controller) => _NameSheet(initial: _label ?? d.drive.label ?? '', controller: controller),
     );
     if (v == null || !mounted) return;
-    await _run('Renaming', () => AppScope.read(context).updateServerDrive(d.drive.id, label: v, clearLabel: v.isEmpty), then: () => setState(() {
-          _label = v;
-        }));
+    await _run('Renaming', () => AppScope.read(context).updateServerDrive(d.drive.id, label: v, clearLabel: v.isEmpty), then: () {
+      // An emptied name goes back to the date at once (it used to leave a blank title until the page was reopened).
+      setState(() => _label = v);
+      showAppToast(context, v.isEmpty ? 'Name removed.' : 'Renamed.', kind: AppToastKind.success);
+    });
+  }
+
+  void _retry() {
+    final f = AppScope.read(context).loadServerDrive(widget.drive.id)..ignore(); // the FutureBuilder shows a failure
+    setState(() {
+      _future = f;
+    });
   }
 
   Future<void> _hide(ServerDriveDetail d) async {
@@ -72,8 +81,8 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
     final ok = await confirmSettingsChange(context,
         dialogKey: 'server-drive-delete-dialog',
         title: 'Delete this drive from the server?',
-        body: 'The server forgets this drive and all its pings. A copy on this phone stays. This cannot be undone.',
-        confirmLabel: 'Delete on the server',
+        body: 'The server forgets this drive and its pings. A copy on this phone stays. This cannot be undone.',
+        confirmLabel: 'Delete from server',
         destructive: true);
     if (!ok || !mounted) return;
     await _run('Deleting', () => AppScope.read(context).deleteServerDrive(d.drive.id), then: () => Navigator.of(context).pop(true));
@@ -97,20 +106,48 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
     final units = AppScope.unitsOf(context);
     final t = Theme.of(context);
     final x = widget.drive;
+    final name = _label ?? x.label ?? '';
     return Scaffold(
-      appBar: AppBar(title: Text(_label ?? x.label ?? formatDateTime(x.startedAt))),
+      appBar: AppBar(title: Text(name.isEmpty ? formatDateTime(x.startedAt) : name)),
       body: SafeArea(
         child: FutureBuilder<ServerDriveDetail>(
           future: _future,
           builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(
+                key: Key('server-drive-loading'),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: Gap.s), Text('Loading the drive…')]),
+              );
+            }
             if (snap.hasError) {
               final e = snap.error;
+              final gone = e is CmatException && e.status == 404;
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(Gap.l),
-                  child: Text(e is CmatException && e.status == 404 ? 'The server no longer has this drive.' : friendlyError(e!, action: 'Loading the drive'),
-                      key: const Key('server-drive-error')),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(gone ? Icons.search_off : Icons.cloud_off_outlined, size: 40, color: t.colorScheme.onSurfaceVariant),
+                    const SizedBox(height: Gap.s),
+                    Text(gone ? 'The server no longer has this drive.' : friendlyError(e!, action: 'Loading the drive'),
+                        key: const Key('server-drive-error'), textAlign: TextAlign.center),
+                    const SizedBox(height: Gap.m),
+                    // A drive that is gone will not come back by asking again: the only useful step is back.
+                    if (gone)
+                      FilledButton.tonal(
+                        key: const Key('server-drive-back'),
+                        style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        child: const Text('Back'),
+                      )
+                    else
+                      FilledButton.tonalIcon(
+                        key: const Key('server-drive-retry'),
+                        style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                        onPressed: _retry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try again'),
+                      ),
+                  ]),
                 ),
               );
             }
@@ -118,6 +155,8 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
             final pings = _asPings(d);
             final isHidden = _hidden ?? x.review == 'hidden';
             final heardPct = d.pings.isEmpty ? null : (100 * d.heardCount / d.pings.length).round();
+            final dim = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+            const tap = Size(48, 48);
             return ListView(key: const Key('server-drive-screen'), padding: const EdgeInsets.all(Gap.l), children: [
               if (pings.isNotEmpty) SizedBox(height: 240, child: ClipRRect(borderRadius: BorderRadius.circular(Corners.card), child: DriveDetailMap(pings: pings, showZones: false))),
               const SizedBox(height: Gap.m),
@@ -132,30 +171,48 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
                   if (heardPct != null) '$heardPct% heard',
                   if (x.km != null) units.distance(x.km! * 1000),
                   '${d.repeaterCount} repeaters',
-                  if (d.bestSnr != null) 'best ${d.bestSnr!.toStringAsFixed(1)} dB',
+                  if (d.bestSnr != null) 'best signal ${d.bestSnr!.toStringAsFixed(1)} dB',
                 ].join(' · '),
                 key: const Key('server-drive-totals'),
               ),
-              if (x.reviewWords != null) Text(x.reviewWords!, style: t.textTheme.bodySmall),
-              if (d.skipped > 0) Text('${d.skipped} pings could not be read and are left out.', style: t.textTheme.bodySmall),
+              // Follows the Hide button at once: the server's own review line is from when the page was opened.
+              if (isHidden)
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.xs),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(Icons.visibility_off_outlined, size: 18, color: t.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: Gap.s),
+                    const Expanded(child: Text('Hidden from the public maps. Only you see it.', key: Key('server-drive-hidden-note'))),
+                  ]),
+                )
+              else if (x.reviewWords != null && x.review != 'hidden')
+                Text(x.reviewWords!, style: dim),
+              if (d.skipped > 0) Text('${d.skipped} pings could not be read and are left out.', style: dim),
               const SizedBox(height: Gap.s),
-              Wrap(spacing: Gap.s, children: [
+              if (_busy) const LinearProgressIndicator(key: Key('server-drive-busy')),
+              const SizedBox(height: Gap.xs),
+              Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
                 OutlinedButton.icon(
-                    key: const Key('server-drive-rename'), onPressed: _busy ? null : () => _rename(d), icon: const Icon(Icons.edit_outlined), label: const Text('Rename')),
+                    key: const Key('server-drive-rename'),
+                    style: OutlinedButton.styleFrom(minimumSize: tap),
+                    onPressed: _busy ? null : () => _rename(d),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Rename')),
                 OutlinedButton.icon(
                     key: const Key('server-drive-hide'),
+                    style: OutlinedButton.styleFrom(minimumSize: tap),
                     onPressed: _busy ? null : () => _hide(d),
                     icon: Icon(isHidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                    label: Text(isHidden ? 'Show on public maps' : 'Hide from public maps')),
+                    label: Text(isHidden ? 'Show on maps' : 'Hide from maps')),
                 OutlinedButton.icon(
                     key: const Key('server-drive-delete'),
-                    style: OutlinedButton.styleFrom(foregroundColor: t.colorScheme.error),
+                    style: OutlinedButton.styleFrom(minimumSize: tap, foregroundColor: t.colorScheme.error),
                     onPressed: _busy ? null : () => _delete(d),
                     icon: const Icon(Icons.delete_outline),
-                    label: const Text('Delete on the server')),
+                    label: const Text('Delete from server')),
               ]),
               const Divider(height: Gap.xl),
-              Text('Pings', style: t.textTheme.titleMedium),
+              Text(d.pings.isEmpty ? 'Pings' : 'Pings (${d.pings.length})', key: const Key('server-drive-pings-title'), style: t.textTheme.titleMedium),
               if (d.pings.isEmpty) const Text('The server holds no pings for this drive.', key: Key('server-drive-nopings')),
               for (final p in d.pings)
                 ListTile(
@@ -163,12 +220,12 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(p.heard ? Icons.check_circle_outline : Icons.radio_button_unchecked, color: p.heard ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
-                  title: Text(formatDateTime(p.at)),
+                  title: Text(formatTime(p.at)),
                   subtitle: Text(p.echoes.isEmpty
-                      ? 'Heard by no repeater'
-                      : [
+                      ? 'Not heard'
+                      : 'Heard by ${[
                           for (final e in p.echoes) '${e.name ?? e.repeaterId}${e.snr == null ? '' : ' ${e.snr!.toStringAsFixed(1)} dB'}',
-                        ].join(', ')),
+                        ].join(', ')}'),
                 ),
             ]);
           },
@@ -196,14 +253,29 @@ class _NameSheetState extends State<_NameSheet> {
     super.dispose();
   }
 
+  void _save() => Navigator.pop(context, _c.text.trim());
+
   @override
   Widget build(BuildContext context) => AppSheetScaffold(
         controller: widget.controller,
         title: 'Name this drive',
-        primaryAction: FilledButton(key: const Key('server-drive-name-save'), onPressed: () => Navigator.pop(context, _c.text.trim()), child: const Text('Save')),
-        secondaryAction: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        primaryAction: FilledButton(key: const Key('server-drive-name-save'), onPressed: _save, child: const Text('Save')),
+        secondaryAction: TextButton(key: const Key('server-drive-name-cancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         children: [
-          TextField(key: const Key('server-drive-name'), controller: _c, maxLength: 80, decoration: const InputDecoration(hintText: 'Empty uses the date')),
+          TextField(
+            key: const Key('server-drive-name'),
+            controller: _c,
+            autofocus: true, // the one field of this sheet: the keyboard is up without a second tap
+            maxLength: 80,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _save(), // Done on the keyboard saves
+            decoration: InputDecoration(
+              labelText: 'Drive name',
+              helperText: 'Empty uses the date.',
+              suffixIcon: IconButton(key: const Key('server-drive-name-clear'), tooltip: 'Clear', icon: const Icon(Icons.clear), onPressed: _c.clear),
+            ),
+          ),
         ],
       );
 }

@@ -1,4 +1,4 @@
-// Settings shell: a search field, then the sections (lib/ui/settings/*_section.dart, one file each) in the order of
+// Settings shell (build 76: eight sections, rare rows one level down on pages, see settings/settings_pages.dart): a search field, then the sections
 // lib/ui/settings/settings_index.dart. Phone: one scrolling list of collapsible section cards, expanded by default; the
 // app bar has Search (back to the field from anywhere in the list) and Sections (a sheet listing every section, which
 // jumps to it). Design reasoning: _docs/stream-6-settings.md "Build status (Andy decisions)".
@@ -9,27 +9,14 @@ import 'package:flutter/semantics.dart';
 
 import 'design/app_surfaces.dart';
 import 'app.dart';
-import 'settings/about_section.dart';
-import 'settings/account_section.dart';
-import 'settings/battery_section.dart';
-import 'settings/diagnostics_section.dart';
-import 'settings/display_section.dart';
-import 'settings/drives_section.dart';
-import 'settings/maps_section.dart';
-import 'settings/meshtrack_section.dart';
-import 'settings/my_radios_section.dart';
-import 'settings/notifications_section.dart';
-import 'settings/observer_section.dart';
-import 'settings/privacy_section.dart';
-import 'settings/radio_section.dart';
-import 'settings/region_section.dart';
+import 'settings/display_section.dart' show UnitsTile;
 import 'settings/settings_index.dart';
 import 'settings/settings_kit.dart';
-import 'settings/storage_section.dart';
-import 'settings/wardriving_section.dart';
+import 'settings/settings_pages.dart';
 
 export 'settings/account_section.dart'
     show DriverKeyScreen, KeyStatusBadge, keyStatusLabel, keyStatusHelp, confirmServerChange;
+export 'settings/settings_pages.dart' show settingsSectionRows, settingsSectionHelp, settingsPageRows, SettingsPageScreen, openSettingsPage;
 export 'settings/settings_kit.dart'
     show SliderTile, intervalStops, distanceStops, holdStops, syncEveryStops, nearestStop;
 
@@ -37,46 +24,9 @@ export 'settings/settings_kit.dart'
 /// design plan uses the same 840 dp for iPad master-detail).
 const double settingsTwoPaneWidth = 840;
 
-List<Widget> settingsSectionRows(BuildContext context, String id) => switch (id) {
-      'driver' => accountSectionRows(context),
-      'region' => regionSectionRows(context),
-      'display' => displaySectionRows(context),
-      'maps' => mapsSectionRows(context),
-      'privacy' => privacySectionRows(context),
-      'observer' => observerSectionRows(context),
-      'notifications' => notificationsSectionRows(context),
-      'meshtrack' => meshTrackSectionRows(context),
-      'battery' => batterySectionRows(context),
-      'wardriving' => wardrivingSectionRows(context),
-      'radio' => radioSectionRows(context),
-      'my-radios-section' => myRadiosSectionRows(context),
-      'drives' => drivesSectionRows(context),
-      'storage' => storageSectionRows(context),
-      'diagnostics' => diagnosticsSectionRows(context),
-      _ => aboutSectionRows(context),
-    };
-
-String? settingsSectionHelp(String id) => switch (id) {
-      'driver' => driverHelp,
-      'region' => regionHelp,
-      'display' => displayHelp,
-      'maps' => mapsHelp,
-      'privacy' => privacyHelp,
-      'observer' => observerHelp,
-      'notifications' => notificationsHelp,
-      'meshtrack' => meshTrackHelp,
-      'battery' => batteryHelp,
-      'wardriving' => wardrivingHelp,
-      'radio' => radioHelp,
-      'my-radios-section' => myRadiosHelp,
-      'drives' => drivesHelp,
-      'storage' => storageHelp,
-      'diagnostics' => diagnosticsHelp,
-      _ => null,
-    };
-
 class SettingsScreen extends StatefulWidget {
-  /// Opens with this section (an id from settings_index.dart) scrolled into view, e.g. 'privacy' from More > Privacy.
+  /// Opens on this place: a section id from settings_index.dart ('privacy' from More > Privacy), a pre-76 section id
+  /// (they still work: 'observer' opens Sharing & privacy > Observer and MQTT feeds), a page id or a row id.
   final String? initialSection;
   const SettingsScreen({super.key, this.initialSection});
   @override
@@ -96,11 +46,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    UnitsTile.openPerQuantity = (c) => openSettingsPage(c, 'units');
     final id = widget.initialSection;
-    if (id != null && settingsSections.any((x) => x.id == id)) {
-      _selected = id;
+    final to = id == null ? null : resolveSettingsTarget(id);
+    if (to != null) {
+      _selected = to.section;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _jumpTo('section-$id', id, '${sectionInfo(id).title} section', tint: false);
+        if (!mounted) return;
+        final row = to.page != null ? settingsPageRowAnchor(to.page!) : to.anchor;
+        if (row == null) {
+          _jumpTo('section-${to.section}', to.section, '${sectionInfo(to.section).title} section', tint: false);
+        } else {
+          _jumpTo(row, to.section, sectionInfo(to.section).title, tint: to.page == null);
+        }
+        if (to.page != null) openSettingsPage(context, to.page!, highlight: to.anchor);
       });
     }
   }
@@ -136,8 +95,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  void _openEntry(SettingsEntry e) =>
-      _jumpTo(e.id, e.section, '${e.title}, in ${sectionInfo(e.section).title}');
+  /// A row on the first level is scrolled to and tinted; a row on a page opens that page with the row tinted (the
+  /// list behind is left at the row that opens the page, so Back makes sense).
+  void _openEntry(SettingsEntry e) {
+    if (e.page == null) {
+      _jumpTo(e.id, e.section, '${e.title}, in ${e.where}');
+      return;
+    }
+    _jumpTo(settingsPageRowAnchor(e.page!), e.section, '${e.title}, in ${e.where}', tint: false);
+    openSettingsPage(context, e.page!, highlight: e.id);
+  }
 
   /// App bar Search: back to the top and into the field, from anywhere in the list.
   void _focusSearch() {
@@ -197,7 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
             labelText: 'Search settings',
-            hintText: 'For example: upload, units, privacy',
+            hintText: 'For example: upload, units, battery',
             prefixIcon: const Icon(Icons.search),
             suffixIcon: _query.isEmpty
                 ? null
@@ -236,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           key: Key('search-result-${e.id}'),
           leading: Icon(sectionInfo(e.section).icon),
           title: Text(e.title),
-          subtitle: Text('${e.summary}\n${sectionInfo(e.section).title}'),
+          subtitle: Text('${e.summary}\n${e.where}'),
           isThreeLine: true,
           onTap: () => _openEntry(e),
         ),
@@ -247,7 +214,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final t = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-      child: Text('Settings are saved on this phone as you change them.',
+      child: Text('Changes are saved as you make them.',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
     );
   }

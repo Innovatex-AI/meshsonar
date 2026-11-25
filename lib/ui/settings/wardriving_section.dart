@@ -16,10 +16,7 @@ import '../app.dart';
 import 'ping_feedback_rows.dart';
 import 'settings_kit.dart';
 
-const String wardrivingHelp = 'MeshSonar wardrives by sending one short message, a ping, on a shared channel. Repeaters '
-    'repeat it, your radio hears them, and fixed observers report it to the website: that is how a ping gets its repeaters, '
-    'hop counts and routes. An auto-ping goes out when BOTH are met: the time has passed and you\'ve moved the distance. '
-    'Ping now works any time. Changes to the cadence apply straight away, even mid-drive.';
+const String wardrivingHelp = 'An auto-ping goes out when the time has passed and you have moved the distance.';
 
 const String _notSendingReason = 'Off while pings are not sent: nothing is transmitted. Turn on "Send pings to the mesh" to '
     'use it.';
@@ -40,8 +37,7 @@ List<Widget> pingCadenceTiles(BuildContext context, {String prefix = ''}) {
       stops: intervalStops,
       value: st.intervalSec,
       label: (v) => 'Every $v s',
-      caption: 'How often an automatic ping may go out while driving. It goes out exactly when this time has passed and you '
-          'have moved the distance below. Shorter maps more, but uses more airtime on the shared mesh.',
+      caption: 'Shorter maps more, but uses more airtime on the shared mesh.',
       disabledReason: _notSendingReason,
       minLabel: '10 s',
       maxLabel: '2 min',
@@ -56,7 +52,7 @@ List<Widget> pingCadenceTiles(BuildContext context, {String prefix = ''}) {
       stops: units.minDistanceStops(distanceStops),
       value: st.minDistanceM,
       label: units.sliderDistance,
-      caption: 'Skips auto-pings while you\'re stopped at lights: the next one waits until you have moved this far.',
+      caption: 'No auto-ping until you have moved this far (skips red lights).',
       disabledReason: _notSendingReason,
       minLabel: units.sliderDistance(units.minDistanceStops(distanceStops).first),
       maxLabel: units.sliderDistance(units.minDistanceStops(distanceStops).last),
@@ -71,9 +67,7 @@ List<Widget> pingCadenceTiles(BuildContext context, {String prefix = ''}) {
       stops: listenStops,
       value: st.listenWindowSec,
       label: (v) => '$v s',
-      caption: 'How long each ping waits for repeaters to answer. Longer hears slower and more distant repeaters; it keeps '
-          'going past this while repeats are still arriving. Never longer than the interval less a second. Default 10 s, '
-          'the same as MeshMapper.',
+      caption: 'How long each ping waits for repeaters to answer. Default 10 s; never longer than the interval.',
       disabledReason: _notSendingReason,
       minLabel: '${Settings.minListenSec} s',
       maxLabel: '${Settings.maxListenSec} s',
@@ -89,48 +83,13 @@ String pingPreviewText() => formatPingText('k3x9m2q7ab'.substring(0, pingTagLeng
 /// "214 ms" / "1.2 s".
 String airtimeLabel(double ms) => ms < 1000 ? '${ms.round()} ms' : '${(ms / 1000).toStringAsFixed(1)} s';
 
+/// Driving, first level: send or listen-only, the channel, how often and how far apart.
 List<Widget> wardrivingSectionRows(BuildContext context) {
   final s = AppScope.of(context);
   final st = s.settings;
   final sending = !st.discoveryMode;
-  final info = s.selfInfo;
-  final airMs = info == null
-      ? null
-      : wardrivePingAirtimeMs(radioName: info.name, sf: info.radio.sf, bwKhz: info.radio.bwKhz, cr: info.radio.cr);
   final tiles = pingCadenceTiles(context);
-  final shareOfTime = airMs == null || st.intervalSec <= 0 ? null : 100 * airMs / (st.intervalSec * 1000);
-  final shown = info?.name.isNotEmpty == true ? info!.name : 'Your radio';
   return [
-    SettingsAnchor(
-      id: 'channel',
-      child: ListTile(
-        key: const Key('channel'),
-        leading: const Icon(Icons.tag),
-        title: const Text('Wardrive channel'),
-        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(st.channel, key: const Key('channel-name')),
-          const Text('Pings go out on this channel. Use the one your mesh community wardrives on; the default is '
-              '#wardriving. The key comes from the name in lower case, so #Wardriving is the same channel.'),
-          if (s.driving) const SettingsWhyNot('Locked while driving: stop the drive to change it.'),
-        ]),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: s.driving
-            ? null
-            : () async {
-                final v = await editSettingText(context,
-                    title: 'Wardrive channel',
-                    initial: st.channel,
-                    hint: '#wardriving',
-                    help: 'The channel pings are sent on. Use the one your mesh community wardrives on.',
-                    validate: (v) => v.trim().isEmpty ? 'Enter a channel name' : null);
-                if (v != null) {
-                  var c = v.trim();
-                  if (!c.startsWith('#')) c = '#$c';
-                  await s.updateSettings(st.copyWith(channel: c));
-                }
-              },
-      ),
-    ),
     SettingsAnchor(
       id: 'send-pings',
       child: SwitchListTile(
@@ -140,14 +99,59 @@ List<Widget> wardrivingSectionRows(BuildContext context) {
         subtitle: s.driving
             ? const SettingsWhyNot('Locked while driving: stop the drive to change it.')
             : Text(sending
-                ? 'On: each ping is sent on ${st.channel}. Repeaters repeat it, observers report it to the website: that is '
-                    'where a ping\'s repeaters, hop counts and routes come from.'
-                : 'Off (listen-only): the next drive transmits nothing, not even the ping. It only records repeaters '
-                    'it overhears. No observer can confirm your drive.'),
+                ? 'On: repeaters and observers can hear each ping.'
+                : 'Off (listen-only): nothing is transmitted, so no observer can confirm your drive.'),
         value: sending,
         onChanged: s.driving ? null : (v) => s.updateSettings(st.copyWith(discoveryMode: !v)),
       ),
     ),
+    SettingsAnchor(
+      id: 'channel',
+      child: ListTile(
+        key: const Key('channel'),
+        leading: const Icon(Icons.tag),
+        title: const Text('Wardrive channel'),
+        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(st.channel, key: const Key('channel-name')),
+          if (s.driving) const SettingsWhyNot('Locked while driving: stop the drive to change it.'),
+        ]),
+        trailing: s.driving ? const Icon(Icons.lock_outline) : const Icon(Icons.chevron_right),
+        onTap: s.driving
+            ? null
+            : () async {
+                final v = await editSettingText(context,
+                    title: 'Wardrive channel',
+                    initial: st.channel,
+                    hint: '#wardriving',
+                    help: 'Use the channel your mesh community wardrives on. Upper and lower case are the same channel.',
+                    validate: (v) => v.trim().isEmpty ? 'Enter a channel name' : null);
+                if (v != null) {
+                  var c = v.trim();
+                  if (!c.startsWith('#')) c = '#$c';
+                  await s.updateSettings(st.copyWith(channel: c));
+                }
+              },
+      ),
+    ),
+    SettingsAnchor(id: 'interval', child: tiles[0]),
+    SettingsAnchor(id: 'min-distance', child: tiles[1]),
+    pingFeedbackRows(context),
+  ];
+}
+
+/// Driving > Advanced: the listen window and the read-only facts (what goes on the air, airtime, this drive's counters).
+List<Widget> drivingAdvancedRows(BuildContext context) {
+  final s = AppScope.of(context);
+  final st = s.settings;
+  final sending = !st.discoveryMode;
+  final info = s.selfInfo;
+  final airMs = info == null
+      ? null
+      : wardrivePingAirtimeMs(radioName: info.name, sf: info.radio.sf, bwKhz: info.radio.bwKhz, cr: info.radio.cr);
+  final shareOfTime = airMs == null || st.intervalSec <= 0 ? null : 100 * airMs / (st.intervalSec * 1000);
+  final shown = info?.name.isNotEmpty == true ? info!.name : 'Your radio';
+  return [
+    SettingsAnchor(id: 'listen-window', child: pingCadenceTiles(context)[2]),
     SettingsAnchor(
       id: 'ping-message',
       child: ListTile(
@@ -156,9 +160,7 @@ List<Widget> wardrivingSectionRows(BuildContext context) {
         title: const Text('What goes on the air'),
         subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('$shown: ${pingPreviewText()}', key: const Key('ping-preview')),
-          const Text('Ten random characters, new for every ping. No position, no time, nothing about you; MeshCore itself '
-              'puts your radio\'s name in front. Where the ping happened is recorded on this phone from its GPS.'),
-          const Text('Sent as an ordinary flood: every repeater in range repeats it, with no region scope.'),
+          const Text('Ten random characters, new for every ping. No position, no time, nothing about you.'),
         ]),
       ),
     ),
@@ -170,17 +172,12 @@ List<Widget> wardrivingSectionRows(BuildContext context) {
         title: const Text('Airtime per ping'),
         subtitle: Text(
           airMs == null
-              ? 'Connect a radio to see how long one ping occupies the air at its settings.'
+              ? 'Connect a radio to see how long one ping is on the air.'
               : 'About ${airtimeLabel(airMs)} on air at SF${info!.radio.sf} / ${info.radio.bwKhz!.toStringAsFixed(1)} kHz'
-                  '${shareOfTime == null || !sending ? '' : ', ${shareOfTime.toStringAsFixed(1)}% of the time at one ping every ${st.intervalSec} s'}. '
-                  'The interval below is the limit on pings; one is only held back for a moment right after you send a chat message.',
+                  '${shareOfTime == null || !sending ? '' : ', ${shareOfTime.toStringAsFixed(1)}% of the time at one ping every ${st.intervalSec} s'}.',
         ),
       ),
     ),
-    SettingsAnchor(id: 'interval', child: tiles[0]),
-    SettingsAnchor(id: 'min-distance', child: tiles[1]),
-    SettingsAnchor(id: 'listen-window', child: tiles[2]),
-    pingFeedbackRows(context),
     SettingsAnchor(id: 'wardrive-counters', child: WardriveCountersTile(state: s)),
   ];
 }
@@ -218,8 +215,7 @@ class _WardriveCountersTileState extends State<WardriveCountersTile> {
 /// The counters in words. Observer numbers say where they stand: waiting for the first upload, live, or not offered.
 String driveCounterSummary(AppState s) {
   if (!s.driving && s.txPingCount == 0) {
-    return 'No drive running. Start one and the counters show here: pings sent, repeaters that heard them, observers that '
-        'confirmed them.';
+    return 'No drive running. Pings sent, heard and confirmed show here during a drive.';
   }
   if (s.settings.discoveryMode && s.driving) {
     return 'Listen-only: nothing is sent. ${s.pingCount} repeater sighting${s.pingCount == 1 ? '' : 's'} recorded so far.';

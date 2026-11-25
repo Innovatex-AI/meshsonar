@@ -1,4 +1,4 @@
-// Settings > Observer (release 0.38, observer-everywhere-mqtt-plan-2026-11-15.md section 3.3; build plan §4.5 items 3, 4
+// Settings > Sharing & privacy (release 0.38, observer-everywhere-mqtt-plan-2026-11-15.md section 3.3; build plan §4.5 items 3, 4
 // and 6): the one place for this phone as an observer.
 //   * Share with MeshSonar: the master switch (= Settings.telemetryEnabled, default ON; the same switch as in Privacy &
 //     data sharing, with the same confirm / erase flow).
@@ -39,32 +39,25 @@ import 'settings_kit.dart';
 
 /// The searchable rows of this section, in display order. Each id is a SettingsAnchor in [observerSectionRows].
 const List<SettingsEntry> observerSettingsEntries = [
-  SettingsEntry('observer-share', 'observer', 'Share with MeshSonar',
-      'The master switch: while it is on and your radio is connected, this phone is an observer and shares the public packets its radio hears.',
-      keywords: ['observer', 'share', 'sharing', 'master switch', 'opt out', 'turn off', 'telemetry', 'packets']),
-  SettingsEntry('observer-status', 'observer', 'Observer status',
+  SettingsEntry('observer-status', 'privacy', 'Observer status',
       'Whether this phone is sharing the public packets its radio hears right now, and what it is waiting for if not.',
-      keywords: ['observer', 'status', 'sharing', 'listening', 'packets', 'radio connected', 'heartbeat'], info: true),
-  SettingsEntry('observer-feeds', 'observer', 'MQTT feeds',
+      page: 'observer', was: 'Observer', keywords: ['observer', 'status', 'sharing', 'listening', 'packets', 'radio connected', 'heartbeat'], info: true),
+  SettingsEntry('observer-feeds', 'privacy', 'MQTT feeds',
       'Feed up to 10 other MeshCore sites from this phone, from a preset list or your own broker. Each one stays off until you turn it on.',
-      keywords: ['mqtt', 'feed', 'feeds', 'broker', 'preset', 'letsmesh', 'meshmapper', 'custom', 'other sites', 'observer', 'iata']),
+      page: 'observer', was: 'Observer', keywords: ['mqtt', 'feed', 'feeds', 'broker', 'preset', 'letsmesh', 'meshmapper', 'custom', 'other sites', 'observer', 'iata']),
 ];
 
-const String observerHelp =
-    'While your radio is connected and the app is open, this phone can act as an observer: it shares the public '
-    'packets its radio hears (never private messages or private channels).';
+const String observerHelp = 'This phone is an observer: it shares the public packets its radio hears, never private messages.';
 
 /// What an MQTT feed gets, in plain words (shown above the feeds and on "What MeshSonar shares").
 const String mqttFeedsHelp =
-    'An MQTT feed sends the public packets your radio hears to another MeshCore site you choose: each packet, its '
-    'signal strength and your radio\'s public key as the observer id. Never your position, your name, direct messages '
-    'or private channels. Feeds run only while the app is running, your radio is connected and Share with MeshSonar is '
-    'on. Each feed stays off until you turn it on.';
+    'An MQTT feed sends the public packets your radio hears to another MeshCore site you choose. Never your position, '
+    'your name or private messages. Feeds run only while Share with MeshSonar is on; each starts off.';
 
 /// One line on what the observer is doing now, in plain words (More > Observer and the status row).
 String observerStatusLine(AppState s) {
   if (!s.settings.telemetryEnabled) {
-    return 'Off. Turn on "Share with MeshSonar" in Settings > Observer to share again.';
+    return 'Off. Turn on "Share with MeshSonar" in Settings > Sharing & privacy to share again.';
   }
   if (s.observerSharing) {
     return s.connected
@@ -76,20 +69,31 @@ String observerStatusLine(AppState s) {
   return 'On: starts after you have seen what MeshSonar shares (the sheet shown on first launch).';
 }
 
+/// The Observer row on the first level: the state in a few words.
+String observerStatusCaption(AppState s) {
+  final feeds = s.settings.mqttSlots.where((x) => x.enabled).length;
+  final f = feeds == 0 ? '' : ' · $feeds MQTT feed${feeds == 1 ? '' : 's'} on';
+  if (!s.settings.telemetryEnabled) return 'Off: sharing is off.';
+  if (s.observerSharing && s.connected) return 'Sharing now$f.';
+  return 'Waiting: ${s.connected ? 'not sharing yet' : 'no radio connected'}$f.';
+}
+
 IconData _icon(BuildContext context, AppSymbol sym) {
   final pf = Theme.of(context).platform;
   return pf == TargetPlatform.iOS || pf == TargetPlatform.macOS ? sym.apple : sym.material;
 }
 
+/// The Observer page's own rows (the page adds the observer location and the erase row from privacy_section.dart).
+/// "Share with MeshSonar" is not here: it is one switch, on the first level of Sharing & privacy.
 List<Widget> observerSectionRows(BuildContext context) => const [
-      SettingsAnchor(id: 'observer-share', child: ObserverShareTile()),
       SettingsAnchor(id: 'observer-status', child: ObserverStatusTile()),
       SettingsAnchor(id: 'observer-feeds', child: MqttFeedsBlock()),
     ];
 
 // ---------------------------------------------------------------------------------------------------- master switch
 
-/// Share with MeshSonar, the master switch. Same setting and flow as the Privacy switch (setDataCategory).
+/// Share with MeshSonar, the master switch: the ONE switch for it in Settings (Sharing & privacy, first row). It has
+/// both keys the two pre-76 switches had: `telemetry-toggle` on the switch and `observer-share-toggle` around it.
 class ObserverShareTile extends StatelessWidget {
   const ObserverShareTile({super.key});
 
@@ -97,18 +101,22 @@ class ObserverShareTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final on = s.settings.telemetryEnabled;
-    return SwitchListTile(
+    final status = on ? telemetryCategory.onStatus?.call(s) : null;
+    return KeyedSubtree(
       key: const Key('observer-share-toggle'),
-      secondary: Icon(_icon(context, AppSymbols.antenna)),
-      title: Text(telemetryCategory.title),
-      subtitle: Text(on
-          ? 'On. Whenever your radio is connected and the app is open, this phone is an observer: public packets only.'
-          : 'Off: this phone shares nothing, with MeshSonar or any MQTT feed.'),
-      value: on,
-      onChanged: (v) {
-        AppHaptics.selection();
-        setDataCategory(context, s, telemetryCategory, v);
-      },
+      child: SwitchListTile(
+        key: Key(telemetryCategory.toggleKey),
+        secondary: Icon(_icon(context, AppSymbols.antenna)),
+        title: Text(telemetryCategory.title),
+        subtitle: Text(on
+            ? (status ?? 'On: the public packets your radio hears go to the live map.')
+            : 'Off: this phone shares nothing, with MeshSonar or any MQTT feed.'),
+        value: on,
+        onChanged: (v) {
+          AppHaptics.selection();
+          setDataCategory(context, s, telemetryCategory, v);
+        },
+      ),
     );
   }
 }
@@ -420,7 +428,7 @@ class _MqttFeedsBlockState extends State<MqttFeedsBlock> {
                 ),
                 const SizedBox(width: Gap.s),
                 Expanded(
-                  child: Text('No MQTT feeds yet. MeshSonar\'s own feed is the switch above; MQTT feeds are for other sites.',
+                  child: Text('No MQTT feeds yet. They are for other sites; MeshSonar\'s own sharing is the Share with MeshSonar switch.',
                       style: t.textTheme.bodyMedium),
                 ),
               ]),
@@ -1010,10 +1018,10 @@ class _SlotSheetState extends State<_SlotSheet> {
             SegmentedButton<MqttAuth>(
               key: const Key('mqtt-field-auth'),
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: MqttAuth.jwt, label: Text('Radio-signed')),
-                ButtonSegment(value: MqttAuth.password, label: Text('Password')),
-                ButtonSegment(value: MqttAuth.none, label: Text('None')),
+              segments: [
+                ButtonSegment(value: MqttAuth.jwt, label: segmentLabel('Radio-signed')),
+                ButtonSegment(value: MqttAuth.password, label: segmentLabel('Password')),
+                ButtonSegment(value: MqttAuth.none, label: segmentLabel('None')),
               ],
               selected: {_auth},
               onSelectionChanged: (v) => setState(() => _auth = v.first),

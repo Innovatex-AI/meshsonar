@@ -1,4 +1,6 @@
 // Settings: sliders (auto-ping, distance, heard hold, upload period), antenna type, upload toggles, discovery mode.
+// Build 76: the upload rows (both switches, the interval, the last-upload line) are on Driving > Uploads; `show` opens
+// that page by itself when the row lives there, and goes back to the first level for a row that does not.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart';
@@ -8,9 +10,9 @@ import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/ui/settings_screen.dart';
 
 import 'fakes.dart';
+import 'settings_test_kit.dart';
 
-Finder get settingsScroll =>
-    find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
+Finder get settingsScroll => settingsList;
 
 Future<Harness> openSettings(WidgetTester tester, {Settings? settings}) async {
   useTallScreen(tester);
@@ -22,12 +24,9 @@ Future<Harness> openSettings(WidgetTester tester, {Settings? settings}) async {
   return h;
 }
 
-/// Scrolls [key] into view and to the top of the list (clear of the bottom navigation bar).
-Future<void> show(WidgetTester tester, String key) async {
-  await tester.scrollUntilVisible(find.byKey(Key(key)), 100, scrollable: settingsScroll);
-  await tester.ensureVisible(find.byKey(Key(key)));
-  await tester.pumpAndSettle();
-}
+/// Scrolls [key] into view (clear of the bottom navigation bar), opening the page it lives on first when it is one
+/// level down.
+Future<void> show(WidgetTester tester, String key) => showSetting(tester, key, step: 100);
 
 Future<void> slideTo(WidgetTester tester, String key, int index) async {
   await show(tester, key);
@@ -70,8 +69,8 @@ void main() {
     expect(valueText(tester, 'interval'), 'Every 30 s');
     await show(tester, 'min-distance');
     expect(valueText(tester, 'min-distance'), '15 m');
-    expect(find.textContaining('BOTH'), findsOneWidget);
-    expect(find.textContaining('Ping now works any time'), findsOneWidget);
+    // Build 76 cut the section's paragraph to one line; it still says an auto-ping needs both conditions.
+    expect(find.text('An auto-ping goes out when the time has passed and you have moved the distance.'), findsOneWidget);
     expect(find.textContaining('manual'), findsNothing);
     expect(find.textContaining('0 = '), findsNothing);
   });
@@ -90,7 +89,9 @@ void main() {
     await slideTo(tester, 'heard-hold-slider', 6);
     expect(h.settings.saved.heardHoldPings, 7);
     expect(valueText(tester, 'heard-hold'), '7 pings');
+    expect(find.byKey(const Key('sync-every-slider')), findsNothing, reason: 'one level down, on Driving > Uploads');
     await slideTo(tester, 'sync-every-slider', 14);
+    expect(find.byKey(const Key('settings-page-uploads')), findsOneWidget);
     expect(h.settings.saved.syncEveryMin, 15);
     expect(valueText(tester, 'sync-every'), 'Every 15 min');
     expect(h.state.settings.syncEveryMin, 15);
@@ -149,6 +150,9 @@ void main() {
 
   testWidgets('upload toggles: during-drive needs end-of-drive; the period slider follows', (tester) async {
     final h = await openSettings(tester);
+    // The row that opens Uploads says what is set.
+    await show(tester, 'page-uploads');
+    expect(tester.widget<Text>(find.byKey(const Key('page-uploads-caption'))).data, 'While driving, every 5 min.');
     await show(tester, 'sync-every-slider');
     expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNotNull);
     expect(valueText(tester, 'sync-every'), 'Every 5 min');
@@ -172,6 +176,8 @@ void main() {
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).onChanged, isNull);
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).value, isFalse);
     expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNull);
+    await closeSettingsPage(tester);
+    expect(tester.widget<Text>(find.byKey(const Key('page-uploads-caption'))).data, 'Off: upload from Drives.');
   });
 
   testWidgets('last upload line shows time / failure', (tester) async {
@@ -190,6 +196,8 @@ void main() {
     await h.state.syncSession('s2');
     await tester.pumpAndSettle();
     expect(find.textContaining('Last upload failed'), findsOneWidget);
+    await closeSettingsPage(tester);
+    expect(tester.widget<Text>(find.byKey(const Key('page-uploads-caption'))).data, endsWith('last upload failed.'));
   });
 
   testWidgets('send pings off (listen-only): greys the interval/distance sliders, persists, and locks the switch while driving',

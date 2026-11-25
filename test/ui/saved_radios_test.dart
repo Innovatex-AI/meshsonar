@@ -186,17 +186,30 @@ void main() {
       expect(find.byKey(const Key('auto-connect-always')), findsOneWidget);
       expect(find.byKey(const Key('auto-connect-launch')), findsOneWidget);
       expect(find.byKey(const Key('auto-connect-off')), findsOneWidget);
-      expect(tester.widget<ListTile>(find.byKey(const Key('auto-connect-always'))).selected, isTrue);
-      expect(find.text('While driving, a dropped radio is always reconnected.'), findsOneWidget);
+      // Build 76: one row, the three choices side by side; the line under them says what the picked one does and
+      // always ends with the mid-drive sentence.
+      Set<AutoConnectMode> picked() =>
+          tester.widget<SegmentedButton<AutoConnectMode>>(find.byKey(const Key('auto-connect-selector'))).selected;
+      String footer() => tester.widget<Text>(find.byKey(const Key('auto-connect-footer'))).data!;
+      const midDrive = 'While driving, a dropped radio is always reconnected.';
+      expect(find.descendant(of: find.byKey(const Key('auto-connect')), matching: find.byKey(const Key('auto-connect-selector'))), findsOneWidget);
+      expect(picked(), {AutoConnectMode.always});
+      expect(tester.widget<Text>(find.byKey(const Key('auto-connect-always'))).data, 'Always');
+      expect(tester.widget<Text>(find.byKey(const Key('auto-connect-launch'))).data, 'At launch');
+      expect(tester.widget<Text>(find.byKey(const Key('auto-connect-off'))).data, 'Off');
+      expect(footer(), '${AutoConnectMode.always.summary} $midDrive');
       await tester.ensureVisible(find.byKey(const Key('auto-connect-off')));
       await tester.tap(find.byKey(const Key('auto-connect-off')));
       await tester.pumpAndSettle();
       expect(r.prefs.autoConnect, AutoConnectMode.off);
-      expect(tester.widget<ListTile>(find.byKey(const Key('auto-connect-off'))).selected, isTrue);
+      expect(picked(), {AutoConnectMode.off});
+      expect(footer(), '${AutoConnectMode.off.summary} $midDrive', reason: 'the mid-drive sentence stays for every choice');
       await tester.ensureVisible(find.byKey(const Key('auto-connect-launch')));
       await tester.tap(find.byKey(const Key('auto-connect-launch')));
       await tester.pumpAndSettle();
       expect(r.prefs.autoConnect, AutoConnectMode.launchOnly);
+      expect(picked(), {AutoConnectMode.launchOnly});
+      expect(footer(), '${AutoConnectMode.launchOnly.summary} $midDrive');
     });
 
     testWidgets('Saved radios row: counts, names the auto-connect radio, opens the same list (tap connects there)', (tester) async {
@@ -206,7 +219,8 @@ void main() {
       await h.pumpApp(tester);
       await openSettingsTab(tester);
       await showSetting(tester, 'saved-radios');
-      expect(find.textContaining('2 radios. Auto-connect: MeshCore-Truck'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('saved-radios')), matching: find.text('2 radios · auto-connect: MeshCore-Truck')),
+          findsOneWidget);
       await tester.tap(find.byKey(const Key('saved-radios')));
       await tester.pumpAndSettle();
       expect(find.byType(SavedRadiosScreen), findsOneWidget);
@@ -228,6 +242,32 @@ void main() {
       nav.push(MaterialPageRoute<void>(builder: (_) => const SavedRadiosScreen()));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('saved-radios-empty')), findsOneWidget);
+      // Build 76: the empty page has the next step on it.
+      expect(tester.getSize(find.byKey(const Key('saved-radios-connect'))).height, greaterThanOrEqualTo(48));
+      await tester.tap(find.byKey(const Key('saved-radios-connect')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConnectScreen), findsOneWidget);
+    });
+
+    testWidgets('Saved radios screen: one short footer line, "Connect another radio", and a tap on the connected radio says so', (tester) async {
+      install(tester, twoSaved());
+      final h = Harness();
+      useTallScreen(tester);
+      await h.pumpApp(tester);
+      final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+      nav.push(MaterialPageRoute<void>(builder: (_) => const SavedRadiosScreen()));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(find.byKey(const Key('saved-radios-footer'))).data!.length, lessThan(90));
+      expect(find.byKey(const Key('saved-radios-connect')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const ValueKey('saved-radio-info-zz:zz'))).width, greaterThanOrEqualTo(48));
+      await tester.tap(find.byKey(const ValueKey('saved-radio-zz:zz')));
+      await tester.pumpAndSettle();
+      expect(h.state.connected, isTrue);
+      await tester.pump(const Duration(seconds: 6)); // the "Connected to" toast goes
+      await tester.tap(find.byKey(const ValueKey('saved-radio-zz:zz')));
+      await tester.pump();
+      expect(find.text('Already connected to Base Station.'), findsOneWidget);
+      expect(h.state.device?.id, 'zz:zz');
     });
   });
 
@@ -262,9 +302,19 @@ void main() {
       expect(find.text('My radios and claims'), findsNothing);
       expect(find.descendant(of: find.byKey(const Key('more-settings')), matching: find.textContaining('claimed radios')), findsOneWidget);
       await openSettingsTab(tester);
+      // Build 76: Claimed radios is a page of Account, behind a row of that name; no section of its own.
+      await showSetting(tester, 'page-claims');
+      expect(find.byKey(const Key('section-my-radios-section')), findsNothing);
+      expect(find.text('CLAIMED RADIOS'), findsNothing, reason: 'no section header any more');
+      expect(find.descendant(of: find.byKey(const Key('section-driver')), matching: find.byKey(const Key('page-claims'))), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('page-claims')), matching: find.text('Claimed radios')), findsOneWidget);
       await showSetting(tester, 'my-radios');
-      expect(find.text('CLAIMED RADIOS'), findsOneWidget, reason: 'section header');
+      expect(find.byKey(const Key('settings-page-claims')), findsOneWidget);
+      expect(find.descendant(of: find.byType(AppBar), matching: find.text('Claimed radios')), findsOneWidget, reason: 'page title');
       expect(find.descendant(of: find.byKey(const Key('my-radios')), matching: find.text('Claimed radios')), findsOneWidget);
+      for (final k in ['claim-my-radio', 'claim-repeater']) {
+        expect(find.descendant(of: find.byKey(const Key('settings-page-claims')), matching: find.byKey(Key(k))), findsOneWidget, reason: k);
+      }
       expect(find.text('My radios'), findsNothing);
       expect(find.text('MY RADIOS'), findsNothing);
       final nav = tester.state<NavigatorState>(find.byType(Navigator).first);

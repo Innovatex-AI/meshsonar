@@ -1,15 +1,16 @@
 // Settings: region + radio-preset tiles from GET /api/cmh/site-config (app-settings-match-site spec, pieces 1-2),
 // and the "manage privacy zones" deep link (piece 3).
+// Build 76: Server URL, "Connected to" and "Radio preset" are on Account > Server (advanced); the website link for
+// privacy zones is on the Privacy zones screen. showSetting opens the page a row lives on.
 import 'package:flutter/material.dart' hide Radio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/radio/radio_api.dart';
+import 'package:meshsonar/ui/settings/settings_index.dart';
 
 import 'fakes.dart';
-
-final settingsScroll =
-    find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
+import 'settings_test_kit.dart';
 
 const _preset = RadioPreset(name: 'MeshCore US Recommended', freqMhz: 910.525, bwKhz: 62.5, sf: 7, cr: 5);
 const _region = RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com');
@@ -29,6 +30,8 @@ void main() {
   testWidgets('state (a): no site-config yet (or a failed fetch) shows nothing extra', (tester) async {
     final h = await openSettings(tester); // default FakeCmatClient.siteConfig() throws (no siteConfigResult set)
     expect(h.state.siteConfig, isNull);
+    await openSettingsPageRow(tester, 'account-advanced');
+    expect(find.byKey(const Key('server-url')), findsOneWidget, reason: 'the page is open');
     expect(find.byKey(const Key('site-region')), findsNothing);
     expect(find.byKey(const Key('site-radio-preset')), findsNothing);
   });
@@ -36,11 +39,11 @@ void main() {
   testWidgets('state (b): siteConfig.radioPreset == null shows a clear "no preset" state', (tester) async {
     final h = await openSettings(tester, siteConfig: const SiteConfig(region: _region, radioPreset: null));
     expect(h.state.siteConfig?.radioPreset, isNull);
-    await tester.scrollUntilVisible(find.byKey(const Key('site-region')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'site-region');
     expect(find.byKey(const Key('site-region')), findsOneWidget);
     expect(find.text('cmh.meshsonar.com'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'site-radio-preset');
     expect(find.byKey(const Key('site-radio-preset')), findsOneWidget);
     expect(find.text('This region has no suggested preset.'), findsOneWidget);
     expect(find.byKey(const Key('site-radio-preset-no-radio')), findsNothing);
@@ -50,7 +53,7 @@ void main() {
   testWidgets('state (c): a preset with no radio connected shows the preset and "no radio connected"', (tester) async {
     final h = await openSettings(tester, siteConfig: const SiteConfig(region: _region, radioPreset: _preset));
     expect(h.state.connected, isFalse);
-    await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'site-radio-preset');
     expect(find.byKey(const Key('site-radio-preset-no-radio')), findsOneWidget);
     expect(find.byKey(const Key('site-radio-preset-compare')), findsNothing);
     expect(find.textContaining('MeshCore US Recommended'), findsOneWidget);
@@ -71,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.state.connected, isTrue);
 
-    await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'site-radio-preset');
     expect(find.byKey(const Key('site-radio-preset-compare')), findsOneWidget);
     expect(find.byKey(const Key('site-radio-preset-no-radio')), findsNothing);
     expect(find.text('Yours'), findsOneWidget);
@@ -87,22 +90,33 @@ void main() {
     await h.state.updateSettings(h.state.settings.copyWith(serverUrl: 'https://other.example.org'));
     expect(h.state.siteConfig, isNull, reason: 'cleared immediately, before the new fetch can answer');
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const Key('server-url')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'server-url');
     expect(find.byKey(const Key('site-region')), findsNothing);
+    expect(find.byKey(const Key('site-radio-preset')), findsNothing);
+    await closeSettingsPage(tester);
+    expect(tester.widget<Text>(find.byKey(const Key('page-account-advanced-caption'))).data, 'other.example.org');
   });
 
-  testWidgets('privacy-zones-website opens <server>/me/privacy, styled like "Get a key on the website"', (tester) async {
+  // Build 76: the "Manage privacy zones on the website" row left Settings; the link is on the Privacy zones screen.
+  testWidgets('the privacy zones website link opens <server>/me/privacy from the Privacy zones screen; the old row id lands on Privacy zones', (tester) async {
     final h = await openSettings(tester);
-    await tester.scrollUntilVisible(find.byKey(const Key('privacy-zones-website')), 100, scrollable: settingsScroll);
-    expect(find.text('Manage privacy zones on the website'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('privacy-zones-website')));
+    expect(find.byKey(const Key('privacy-zones-website'), skipOffstage: false), findsNothing);
+    expect(find.text('Manage privacy zones on the website', skipOffstage: false), findsNothing);
+    expect(settingsEntry('privacy-zones-website').id, 'privacy-zones', reason: 'an old link or search still lands on the Privacy zones row');
+    await showSetting(tester, 'privacy-zones');
+    await tester.tap(find.byKey(const Key('privacy-zones')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('zones-website'), skipOffstage: false));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(const Key('zones-website')), matching: find.text('Also on the website')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('zones-website')));
     await tester.pumpAndSettle();
     expect(h.openedUrls, [Uri.parse('https://meshsonar.com/me/privacy')]);
   });
 
   testWidgets('Privacy zones row opens the map editor, which works with no key and no connection', (tester) async {
     await openSettings(tester);
-    await tester.scrollUntilVisible(find.byKey(const Key('privacy-zones')), 100, scrollable: settingsScroll);
+    await showSetting(tester, 'privacy-zones');
     expect(find.text('Privacy zones'), findsOneWidget);
     await tester.tap(find.byKey(const Key('privacy-zones')));
     await tester.pumpAndSettle();

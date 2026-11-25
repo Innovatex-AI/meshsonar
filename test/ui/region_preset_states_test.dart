@@ -13,14 +13,13 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'fakes.dart';
+import 'settings_test_kit.dart';
 
 const _ukk = RegionInfo(slug: 'ukk', url: 'https://ukk.meshsonar.com');
 const _aah = RegionInfo(slug: 'aah', url: 'https://aah.meshsonar.com');
 
 RegionIndexEntry reg(String code, String name) =>
     RegionIndexEntry(code: code, slug: code.toLowerCase(), name: name, url: 'https://${code.toLowerCase()}.meshsonar.com', bbox: const [-180, -90, 180, 90]);
-
-final settingsScroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
 
 Future<Harness> openSettings(WidgetTester tester, SiteConfig sc, {List<RegionIndexEntry> index = const [], Settings? settings}) async {
   useTallScreen(tester);
@@ -32,7 +31,7 @@ Future<Harness> openSettings(WidgetTester tester, SiteConfig sc, {List<RegionInd
   await tester.pumpAndSettle();
   await openSettingsTab(tester);
   await tester.pumpAndSettle();
-  await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
+  await showSetting(tester, 'site-radio-preset');
   return h;
 }
 
@@ -108,7 +107,8 @@ void main() {
     });
   });
 
-  group('Settings > Region > Radio preset', () {
+  // Build 76: the row is on Settings > Account > Server (advanced); showSetting opens that page.
+  group('Settings > Account > Server (advanced) > Radio preset', () {
     testWidgets('no preset and a stored reason: the reason is shown as written, with its evidence, and no preset numbers', (tester) async {
       await openSettings(
           tester, const SiteConfig(region: _ukk, radioPresetNone: PresetNone(reason: 'Kazakhstan has no published LoRa preset; any frequency would be a guess.', source: 'https://example.org/kz')),
@@ -145,10 +145,10 @@ void main() {
       await tester.pumpAndSettle();
       await openSettingsTab(tester);
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
+      await showSetting(tester, 'site-radio-preset');
       expect(find.text('From the catalogue.'), findsOneWidget);
       expect(h.state.viewingTimezone, 'Asia/Almaty');
-      await tester.scrollUntilVisible(find.byKey(const Key('site-region-timezone')), 100, scrollable: settingsScroll);
+      await showSetting(tester, 'site-region-timezone');
       expect(find.text('Time zone of East Kazakhstan, KZ: Asia/Almaty'), findsOneWidget);
     });
 
@@ -166,7 +166,7 @@ void main() {
       await tester.pumpAndSettle();
       await openSettingsTab(tester);
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.byKey(const Key('site-radio-preset')), 100, scrollable: settingsScroll);
+      await showSetting(tester, 'site-radio-preset');
       expect(find.text('869.618 MHz · 62.5 kHz · SF8 · CR8'), findsOneWidget);
       expect(find.byKey(const Key('site-radio-preset-provenance')), findsOneWidget);
       expect(find.text('Published in the MeshCore preset list.'), findsOneWidget);
