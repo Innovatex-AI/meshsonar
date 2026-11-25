@@ -40,7 +40,8 @@ class SettingsAnchor extends StatelessWidget {
       key: k,
       child: DecoratedBox(
         decoration: on ? BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)) : const BoxDecoration(),
-        child: child,
+        // Its own transparent Material: a ListTile inside the tint needs one to draw its ink on (and asserts in debug without it).
+        child: Material(type: MaterialType.transparency, child: child),
       ),
     );
   }
