@@ -164,9 +164,9 @@ class _PingLogScreenState extends State<PingLogScreen> {
                 selected: _filter == f,
                 showCheckmark: false,
                 selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                // Full 48 pt targets (build 76; the compact chips were about 32 pt tall).
+                materialTapTargetSize: MaterialTapTargetSize.padded,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 6),
                 onSelected: (_) => setState(() => _filter = f),
               ),
           ]),
@@ -182,7 +182,16 @@ class _PingLogScreenState extends State<PingLogScreen> {
         list = EmptyState(
           icon: Icons.radar,
           title: newestFirst.isEmpty ? 'No pings yet' : 'No pings match this filter',
-          body: newestFirst.isEmpty && live ? 'Start a drive; every ping shows up here as it finishes.' : null,
+          body: newestFirst.isEmpty && live ? 'Pings show up here as a drive runs.' : null,
+          // A filter that hides everything offers the way back (build 76).
+          action: newestFirst.isEmpty
+              ? null
+              : FilledButton.tonal(
+                  key: const Key('log-filter-clear'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                  onPressed: () => setState(() => _filter = PingFilter.all),
+                  child: const Text('Show all pings'),
+                ),
         );
       } else {
         list = ListView.separated(

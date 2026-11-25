@@ -114,7 +114,7 @@ void main() {
   testWidgets('server view is the default: scope, as-of, totals, compare line, then the switch shows the phone view', (tester) async {
     final h = await open(tester);
     expect(h.sc.keys, ['secretkey-abcdef-1234']);
-    expect(_text(tester, 'progress-server-scope'), startsWith('Across all your drives on the server, from every phone and install on this account, since '));
+    expect(_text(tester, 'progress-server-scope'), startsWith('Every drive you have uploaded, from any phone, since '));
     expect(find.byKey(const Key('progress-server-updated')), findsOneWidget);
     String tile(String id) => (find.descendant(of: find.byKey(Key('progress-server-total-$id')), matching: find.byType(Text)).evaluate().map((e) => (e.widget as Text).data).toList()[1])!;
     expect(tile('drives'), '3');
@@ -129,7 +129,7 @@ void main() {
     await tester.tap(find.byKey(const Key('progress-source-phone')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('progress-server-list')), findsNothing);
-    expect(_text(tester, 'progress-scope'), startsWith('From drives stored on this phone: 1 drive since '));
+    expect(_text(tester, 'progress-scope'), startsWith('1 drive on this phone since '));
     await tester.tap(find.byKey(const Key('progress-source-server')));
     await tester.pumpAndSettle();
     expect(h.sc.asks, 1, reason: 'switching back does not ask again');
@@ -147,7 +147,7 @@ void main() {
     await open(tester);
     await tester.scrollUntilVisible(find.byKey(const Key('chart-server-distance')), 200, scrollable: _list);
     expect(find.bySemanticsLabel(RegExp(r'^Distance per week \(km\)\. 3 weeks\. Most: Week of Sep 28, 67 km in 2 drives\.')), findsOneWidget);
-    expect(find.textContaining('Weeks start on Monday, UTC.'), findsWidgets);
+    expect(find.textContaining('Weeks start on Monday (UTC).'), findsWidgets);
     await tester.scrollUntilVisible(find.byKey(const Key('chart-server-heard')), 200, scrollable: _list);
     expect(find.bySemanticsLabel(RegExp(r'Best Week of Sep 28, 80% of 1000 pings\. This week 53%\.')), findsOneWidget);
     final toggle = find.descendant(of: find.byKey(const Key('chart-server-cells-toggle')), matching: find.text('Table'));
@@ -167,10 +167,10 @@ void main() {
     await tester.tap(find.byKey(const Key('progress-server-drive-d-far')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('progress-server-drive-sheet')), findsOneWidget);
-    expect(find.text('This drive is on the server but not on this phone.'), findsOneWidget);
+    expect(find.textContaining('not stored on this phone'), findsOneWidget);
     expect(find.text('Flagged for review'), findsWidgets);
     expect(find.text('gps-jump'), findsOneWidget);
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const Key('progress-server-drive-done')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('progress-server-drive-d-here')), 300, scrollable: _list);
     expect(find.descendant(of: find.byKey(const Key('progress-server-drive-d-here')), matching: find.textContaining('Also on this phone')), findsOneWidget);

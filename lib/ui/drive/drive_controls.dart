@@ -27,18 +27,19 @@ Future<void> openFinishedDriveReport(BuildContext context, String sessionId) => 
 
 /// Asks "Stop this drive?" and, on confirm, stops it. The Start/Stop button and the mini bar both go through here.
 Future<bool> confirmAndStopDrive(BuildContext context, AppState s) async {
-  if (!await confirmStopDrive(context)) return false;
+  if (!await confirmStopDrive(context, pings: s.pingCount)) return false;
   unawaited(s.stopDrive());
   return true;
 }
 
 /// "Stop this drive?" so a bump in the car can't end a drive. An iOS action sheet: the red Stop drive row, then a
 /// separate Keep driving (cancel). Returns true to stop; dismissing the sheet keeps driving.
-Future<bool> confirmStopDrive(BuildContext context) async {
+Future<bool> confirmStopDrive(BuildContext context, {int? pings}) async {
   final stop = await showAppActionSheet<bool>(
     context,
     title: 'Stop this drive?',
-    message: 'Pings stop and the drive is saved on this phone. Start drive begins a new one.',
+    // One short line that says what is kept (build 76; two sentences nobody read in a moving car).
+    message: pings == null ? 'It is saved on this phone.' : '$pings ${pings == 1 ? 'ping' : 'pings'} so far. The drive is saved on this phone.',
     actions: const [AppAction<bool>('Stop drive', true, destructive: true, key: Key('stop-drive-confirm'))],
     cancelLabel: 'Keep driving',
     cancelKey: const Key('stop-drive-keep'),

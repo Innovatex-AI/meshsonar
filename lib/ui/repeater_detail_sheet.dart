@@ -100,7 +100,7 @@ class RepeaterDetailSheet extends StatelessWidget {
     final brgNow = (ref != null && newest != null) ? m.bearingFrom(newest.lat, newest.lon) : null;
 
     final facts = <(String, String)>[
-      ('Id as heard', id.toUpperCase()),
+      ('Short ID', id.toUpperCase()),
       ('Full key', ref?.key ?? (m.ambiguous ? '${m.candidates.length} known repeaters share this id' : 'Not in any repeater list')),
       if (ref != null) ('Position', '${ref.lat.toStringAsFixed(5)}, ${ref.lon.toStringAsFixed(5)}'),
       if (distNow != null) ('Distance now', formatDistanceBearing(AppScope.unitsOf(context), distNow, brgNow)),
@@ -108,7 +108,7 @@ class RepeaterDetailSheet extends StatelessWidget {
       ('Last SNR', last?.snrDb == null ? '—' : formatSnrShort(last!.snrDb!)),
       ('Best SNR', best == null ? '—' : formatSnrShort(best)),
       if (last != null) ('Last heard', '${formatTime(last.ts)}${last.hops == null ? '' : ' · ${hopsLabel(last.hops)}'}'),
-      if (m.source != RepeaterSource.none) ('Name from', m.source == RepeaterSource.cmat ? 'MeshSonar' : 'map.meshcore.io'),
+      if (m.source != RepeaterSource.none) ('Listed by', m.source == RepeaterSource.cmat ? 'MeshSonar' : 'map.meshcore.io'),
     ];
 
     return ListView(

@@ -89,8 +89,7 @@ class _RepeaterReachSectionState extends State<RepeaterReachSection> {
     final header = <Widget>[
       Semantics(header: true, child: Text('Where MeshSonar drives heard this repeater', style: t.textTheme.titleMedium)),
       Text(
-        'All MeshSonar drivers, from public drives only (the start and end of every drive are trimmed). '
-        'Not the same as "Your drives", which counts only this phone.',
+        'From every MeshSonar driver\'s public drives. Not the same as "Your drives", which counts only this phone.',
         style: muted,
       ),
       const SizedBox(height: Gap.s),
@@ -160,8 +159,7 @@ class _RepeaterReachSectionState extends State<RepeaterReachSection> {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         offline,
         Text(
-          'No MeshSonar drive has heard this repeater directly yet. Only public drives count, and the start and end of each '
-          'drive are left out, so a repeater heard near where drives begin or end can show nothing here.',
+          'No MeshSonar drive has heard this repeater directly yet. Only public drives count, without their first and last stretch.',
           key: const Key('reach-empty'),
           style: t.textTheme.bodyMedium,
         ),
