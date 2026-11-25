@@ -114,7 +114,6 @@ void main() {
       'lib/ui/design/app_type.dart', // documentRegular / documentBold asset paths (PDF only)
       'lib/ui/report/pdf_export.dart', // PDF export
       'lib/core/report_pdf.dart', // PDF renderer
-      'lib/core/offline_style.dart', // web glyph stacks (MapLibre on the website), never loaded by the app
     };
     final hits = <String>[];
     for (final f in Directory('lib').listSync(recursive: true).whereType<File>()) {

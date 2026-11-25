@@ -1,4 +1,4 @@
-# Map tiles: sources, cache, offline packs, licences
+# Map tiles: sources, cache, licences
 
 Since 0.32.0 (plan unified-map-system §2.3, phase M2) every map in the app draws ONE basemap: our own Protomaps vector
 tiles, the same tiles and the same light / dark styles as the website, with OpenFreeMap as the automatic fallback.
@@ -13,8 +13,11 @@ Drawn as layers (lib/ui/map/coverage_map.dart and every small map, lib/ui/map/ba
    vector_map_tiles in raster mode with the styles in `lib/core/basemap_styles.g.dart`. Each tile goes through
    `MeshTileProvider` (`tile_source.dart`): disk cache first, stale beats blank, 6 requests at most, 8 s timeout, no
    retries, circuit breaker, the phone's offline state; a 204 (empty tile) is a tile, not a failure.
-3. **Offline region pack** (`OfflineBasemapLayer`): drawn on top for the pack covering the view centre; tiles it draws are
-   never requested online.
+
+There are no downloadable offline maps (removed in 0.46.0, build 76: the pack screen, the PMTiles reader, the pack style
+and the coverage snapshots; files an older build downloaded are deleted at launch, `lib/core/removed_map_packs.dart`). What
+stays is the ordinary tile cache: a tile that was drawn once is kept on the phone (flutter_map's built-in cache, through
+`MeshTileProvider`) and shown again with no signal, stale if need be.
 
 Base map styles (the cycler): **Chart** (our map, light or dark with the app theme), **Light** (always the light style; id
 `street`), **Dark** (always the dark style), **Topo** and **Satellite** (M3, Nov 12 2026; offered only while the Map Definition
@@ -23,19 +26,18 @@ is drawn as Chart).
 
 - **Topo** is our own vector tiles in the definition's topographic palette (`basemaps[topo].topo`: Protomaps' light / dark
   flavour with the overrides laid over it, baked into `lib/core/basemap_styles.g.dart` by `tool/basemap/make_basemap_styles.mjs`
-  from `assets/map/map-definition.json`). OpenTopoMap is no longer called. No offline pack (the definition says `offline: false`).
+  from `assets/map/map-definition.json`). OpenTopoMap is no longer called. (The definition's `offline` flag on a basemap is read past; the app does not use it.)
   Not drawn: the terrarium hillshade the website adds (no raster-DEM renderer in the app), recorded as a decision in the CHANGELOG.
 - **Satellite** is raster imagery from the definition's sources, bottom to top: Esri World Imagery through MeshSonar's own proxy
   (`/api/map/satellite/esri/{z}/{y}/{x}`; left out when `esriAvailable` is false), then USGS NAIP over the contiguous US
   (native z16, drawn to z17), then our town and road names (labels-only black flavour) over the imagery inside our extract
   (`ui/map/satellite_layers.dart`). Tiles go through the same `MeshTileProvider` (disk cache, request gate, circuit breaker).
-  No key, header or identifier is sent to any imagery host. With no network, Topo and Satellite show "needs a connection.
-  Saved tiles only. Chart works offline." (`map-needs-network`) instead of a blank map.
+  No key, header or identifier is sent to any imagery host. With no network every base map shows "No connection. The map
+  shows only places you have looked at before." (`map-needs-network`) instead of a silent blank map.
 
 ## Which map engine, and why vector (decision M2, Nov 9 2026)
 
-The app's engine is flutter_map. It draws raster tiles natively and vector tiles through vector_map_tiles (already used
-for offline packs since WP13). Neither our tile server nor OpenFreeMap serves raster tiles, and running a raster render
+The app's engine is flutter_map. It draws raster tiles natively and vector tiles through vector_map_tiles. Neither our tile server nor OpenFreeMap serves raster tiles, and running a raster render
 server would be new infrastructure, so the app draws our vector tiles itself (raster mode: each tile is rendered to an
 image once and cached, every overlay keeps working unchanged). The styles are generated from the website's own code:
 `node tool/basemap/make_basemap_styles.mjs` builds @protomaps/basemaps layers (white / black flavours, no POIs), applies
@@ -66,7 +68,7 @@ glyph PBFs) needs no server copy. Decision recorded in meshsonar-infra HANDOFF (
 
 - The credit is always on the map, no interaction needed: the Drive map's `AttributionLine` (12 pt, bottom right, (i) opens
   the Credits sheet) and every small map's `MiniMapCredit` (= `BasemapCredit`). Both name the source drawn right now:
-  **"Protomaps © OpenStreetMap contributors"** on our tiles and on M2 offline packs, **"OpenFreeMap © OpenStreetMap
+  **"Protomaps © OpenStreetMap contributors"** on our tiles, **"OpenFreeMap © OpenStreetMap
   contributors"** on the fallback, the definition's imagery credits on Satellite ("Powered by Esri. Source: Esri, Maxar, Earthstar
   Geographics, and the GIS User Community", "Imagery: USGS National Map (NAIP)", plus ours). test/lint/map_credit_test.dart fails if a FlutterMap has no
   shared credit or draws its own raster tile layer.
@@ -75,29 +77,3 @@ glyph PBFs) needs no server copy. Decision recorded in meshsonar-infra HANDOFF (
 - Esri World Imagery: terms require the attribution on the map (the proxy holds the key; never in the app). USGS National Map
   (NAIP): public-domain imagery, credited.
 - Hosts are pinned by `test/integration/hosts_static_test.dart`.
-
-## Offline packs (M2)
-
-A pack is one region's road basemap (an extract of the same North America archive, z0-14, schema `protomaps`) plus a
-coverage snapshot (`<CODE>.coverage.pmtiles`: Measured z6-13 and Predicted z8-13 coverage v2 tiles of the region's default
-preset, both layers in each tile) plus repeaters, which ride on the app's on-disk repeater store (`repeater_sync.dart`,
-read at launch before any network call, so pins and names work offline). Built on the server by meshsonar-infra
-`stack/basemap/build-packs.py`, served from `https://api.meshsonar.com/basemap/packs/` (manifest + immutable files,
-range requests for resume). Pack style = the online style, so moving in or out of a pack changes nothing on screen.
-
-- Manifest `https://api.meshsonar.com/basemap/packs/manifest.json`; each entry adds `schema` and a `coverage` block
-  (`url`, `bytes`, `sha256`, `version`, `preset`). While it is not published (404) the app reads the pre-M2 manifest on
-  `tiles.meshsonar.com` (OpenMapTiles packs, drawn with the old `offline_style.dart` until updated).
-- Coverage snapshot: downloaded after the basemap file, size + SHA-256 checked, written atomically; a failed one never
-  replaces a good one. Refreshed at launch at most every 12 h (Wi-Fi rule respected); the server rebuilds it nightly.
-- When the network fails, the coverage layers read the pack snapshot (`CoverageTileStore.offlineTiles`), first while the
-  layer is offline; the live tile replaces it once the network is back. Deeper zooms use the z13 hexagons as stand-ins.
-
-### Pre-M2 packs (`offlineStyleVersion` bump rule, web styles, Barlow glyph stacks)
-Kept only for packs installed before M2 and the website's old pack styles on tiles.meshsonar.com:
-
-### `offlineStyleVersion` bump rule
-`offlineStyleVersion` (`lib/core/offline_style.dart`) and the manifest's `style_version` are one number. Bump both, in the same release, whenever the offline style changes in a way an installed pack must pick up: layer set, colours, label fonts or sizes, source-layer names. Do not bump for a new or rebuilt pack (that is the pack `version`) or for app-only code that does not change the style JSON. The website styles at `styles/v<N>/` are regenerated from the same code (`dart run tool/make_web_styles.dart`), uploaded under the new `v<N>` path before the manifest points at them, and the old `v<N-1>` path stays.
-
-### Glyph stacks (web only)
-The app does not use baked glyph PBFs: the offline vector pack is drawn by `vector_map_tiles` in raster mode and labels are Flutter text (`offline_basemap.dart`, app target of `offline_style.dart`), so the app typeface change to SF Pro touches only the app-target `text-font` entries. The glyph PBFs under `tiles.meshsonar.com/fonts/` (Barlow-Regular, Barlow-Medium, BarlowSemiCondensed-SemiBold, SIL OFL, built with `build_pbf_glyphs` 1.4.3, recipe in `meshsonar-infra/tiles/upload-v4/README.md`) are used only by MapLibre on the website. Decision (Drive D14): they stay as they are until the website typeface changes. SF Pro cannot be used for glyph stacks (Apple licence). If the website typeface changes: re-bake the stacks from an open font under the OFL into a new `fonts/<Stack>/` path, point a new style version at them, bump `style_version` per the rule above, keep the Barlow stacks published.

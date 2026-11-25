@@ -63,7 +63,7 @@ void main() {
     expect((road['vector'] as Map)['bounds'], OurBasemap.bounds);
     expect((road['vector'] as Map)['maxzoom'], OurBasemap.maxZoom);
     expect((road['attribution'] as List).join(' '), OurBasemap.attribution);
-    expect(road['offline'], isTrue, reason: 'Road may go in an offline pack');
+    expect(road['offline'], isTrue, reason: 'a contract field the website keeps; the app reads past it and does not use it (build 76)');
     expect((road['fallbackStyle'] as Map)['light'], contains('tiles.openfreemap.org'));
   });
 

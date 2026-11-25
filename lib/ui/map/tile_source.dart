@@ -1,4 +1,4 @@
-// Base-map tiles for the live map: network + disk cache + installed offline pack, as one source.
+// Base-map tiles for the live map: network + disk cache, as one source.
 //
 // Why a provider of our own (flutter_map's NetworkTileProvider does the happy path fine):
 //   * It retried every failed tile three times with no cap on concurrent requests, so with no signal a pan queued dozens of
@@ -20,8 +20,7 @@
 //      503 with Retry-After pauses new requests for that long and halves the requests in flight.
 //      Build 72: before, any three failures (HTTP errors included) opened it for 15 s, a probe that ended without a result
 //      left it shut for good, and a few slow tiles after a pan turned the whole map blank ("slow, don't refresh").
-//   4. Tiles an installed offline pack draws are not requested at all ([shouldSkip]).
-//   5. Everything is counted in [MapTileStats] for the "Map and GPS health" recorder and the source pill on the map.
+//   4. Everything is counted in [MapTileStats] for the "Map and GPS health" recorder and the source pill on the map.
 //
 // Tile servers and licences: docs/MAP_TILES.md.
 import 'dart:async';
@@ -36,7 +35,7 @@ import 'package:http/http.dart' as http;
 import '../../app/build_flags.dart' show isDevelopmentBuild;
 
 /// What happened to one tile request (for the health recorder and the source indicator).
-enum TileOutcome { cacheHit, networkOk, staleServed, notModified, failed, offlineEmpty, cancelled, packCovered }
+enum TileOutcome { cacheHit, networkOk, staleServed, notModified, failed, offlineEmpty, cancelled }
 
 /// Counters for tile loads. One shared instance feeds the health recorder; tests make their own.
 class MapTileStats extends ChangeNotifier {
@@ -47,7 +46,6 @@ class MapTileStats extends ChangeNotifier {
   DateTime? _lastNetworkOk;
   DateTime? _lastCacheServe;
   DateTime? _lastFailure;
-  int _packHits = 0, _packMisses = 0, _totalPackHits = 0, _totalPackMisses = 0;
 
   /// Injected clock (tests).
   DateTime Function() clock = DateTime.now;
@@ -74,29 +72,16 @@ class MapTileStats extends ChangeNotifier {
         _lastCacheServe = now;
       case TileOutcome.failed || TileOutcome.offlineEmpty:
         _lastFailure = now;
-      case TileOutcome.cancelled || TileOutcome.packCovered:
+      case TileOutcome.cancelled:
         break;
     }
     notifyListeners();
-  }
-
-  /// A vector tile the offline pack served / did not have.
-  void recordPack({required bool hit}) {
-    if (hit) {
-      _packHits++;
-      _totalPackHits++;
-    } else {
-      _packMisses++;
-      _totalPackMisses++;
-    }
   }
 
   DateTime? get lastNetworkOk => _lastNetworkOk;
   DateTime? get lastCacheServe => _lastCacheServe;
   DateTime? get lastFailure => _lastFailure;
   int total(TileOutcome o) => _total[o]!;
-  int get totalPackHits => _totalPackHits;
-  int get totalPackMisses => _totalPackMisses;
 
   /// The counts since the last call, then starts a new window.
   Map<String, int> takeWindow() {
@@ -107,14 +92,10 @@ class MapTileStats extends ChangeNotifier {
       'failed': _counts[TileOutcome.failed]!,
       'offline_empty': _counts[TileOutcome.offlineEmpty]!,
       'cancelled': _counts[TileOutcome.cancelled]!,
-      'pack_covered_skipped': _counts[TileOutcome.packCovered]!,
-      'pack_hit': _packHits,
-      'pack_miss': _packMisses,
     };
     for (final o in TileOutcome.values) {
       _counts[o] = 0;
     }
-    _packHits = _packMisses = 0;
     return out;
   }
 
@@ -123,7 +104,6 @@ class MapTileStats extends ChangeNotifier {
       _counts[o] = 0;
       _total[o] = 0;
     }
-    _packHits = _packMisses = _totalPackHits = _totalPackMisses = 0;
     _lastNetworkOk = _lastCacheServe = _lastFailure = null;
     failureReasons.clear();
     failureKinds.clear();
@@ -131,11 +111,10 @@ class MapTileStats extends ChangeNotifier {
 }
 
 /// Which base-map source the person is looking at right now.
-enum MapSource { offlinePack, online, cachedOffline, none }
+enum MapSource { online, cachedOffline, none }
 
-/// The source to show, from what the last seconds of tile traffic did. [packActive]: an offline pack covers the view.
-MapSource currentMapSource(MapTileStats s, DateTime now, {required bool packActive, bool gateOpen = false, Duration window = const Duration(seconds: 12)}) {
-  if (packActive) return MapSource.offlinePack;
+/// The source to show, from what the last seconds of tile traffic did.
+MapSource currentMapSource(MapTileStats s, DateTime now, {bool gateOpen = false, Duration window = const Duration(seconds: 12)}) {
   bool recent(DateTime? t) => t != null && now.difference(t) <= window;
   if (!gateOpen && recent(s.lastNetworkOk) && !(recent(s.lastFailure) && !recent(s.lastNetworkOk))) return MapSource.online;
   if (recent(s.lastCacheServe) || (gateOpen && s.total(TileOutcome.cacheHit) + s.total(TileOutcome.staleServed) > 0)) {
@@ -184,7 +163,7 @@ class TileFetchGate {
   }
 
   /// Development builds only (screenshot harness, Settings > Developer later): pretend the phone has no network. Every gate
-  /// closes at once and the map falls back to the disk cache / offline pack, exactly as with real connectivity loss. Always false
+  /// closes at once and the map falls back to the disk cache, exactly as with real connectivity loss. Always false
   /// in a release build, whatever is set. `--dart-define=MS_FORCE_OFFLINE=1` starts it on.
   static final ValueNotifier<bool> debugForceOffline = ValueNotifier<bool>(isDevelopmentBuild && const bool.fromEnvironment('MS_FORCE_OFFLINE'));
   static bool get _forced => isDevelopmentBuild && debugForceOffline.value;
@@ -426,9 +405,6 @@ class MeshTileProvider extends TileProvider {
   /// The waits a raster tile image retries with (tests shorten them).
   final List<Duration> imageRetryDelays;
 
-  /// True when an offline pack draws this tile (no request, no cache read).
-  final bool Function(int z, int x, int y)? shouldSkip;
-
   MeshTileProvider({
     super.headers,
     http.Client? client,
@@ -437,7 +413,6 @@ class MeshTileProvider extends TileProvider {
     MapTileStats? stats,
     MapCachingProvider? cache,
     this.timeout = const Duration(seconds: 8),
-    this.shouldSkip,
     this.imageRetryDelays = retryDelays,
   }) : _client = client ?? http.Client(),
        _ownsClient = ownsClient ?? client == null, // a client handed in is the caller's, unless it says otherwise
@@ -450,13 +425,7 @@ class MeshTileProvider extends TileProvider {
 
   @override
   ImageProvider getImageWithCancelLoadingSupport(TileCoordinates coordinates, TileLayer options, Future<void> cancelLoading) {
-    final skip = shouldSkip?.call(coordinates.z, coordinates.x, coordinates.y) ?? false;
-    return MeshTileImage(
-      url: getTileUrl(coordinates, options),
-      skip: skip,
-      provider: this,
-      cancel: cancelLoading,
-    );
+    return MeshTileImage(url: getTileUrl(coordinates, options), provider: this, cancel: cancelLoading);
   }
 
   /// flutter_map calls this whenever ANY TileLayer that draws with this provider goes away (tile_layer.dart, State.dispose).
@@ -482,14 +451,14 @@ class MeshTileProvider extends TileProvider {
   // ---- the load, separate from the ImageProvider so tests call it directly ----
 
   /// Resolves one tile to image bytes (a transparent PNG when there is nothing to show).
-  Future<Uint8List> load(String url, {required bool skip, required Future<void> cancel}) async => (await loadWithOutcome(url, skip: skip, cancel: cancel)).$1;
+  Future<Uint8List> load(String url, {required Future<void> cancel}) async => (await loadWithOutcome(url, cancel: cancel)).$1;
 
   /// [load], plus what happened (the vector basemap counts failures for its fallback to OpenFreeMap).
-  Future<(Uint8List, TileOutcome)> loadWithOutcome(String url, {required bool skip, required Future<void> cancel}) async {
+  Future<(Uint8List, TileOutcome)> loadWithOutcome(String url, {required Future<void> cancel}) async {
     TileFetchGate._pendingLoads++;
     var outcome = TileOutcome.failed;
     try {
-      final b = await _load(url, skip: skip, cancel: cancel, seen: (o) => outcome = o);
+      final b = await _load(url, cancel: cancel, seen: (o) => outcome = o);
       return (b, outcome);
     } finally {
       TileFetchGate._pendingLoads--;
@@ -502,27 +471,23 @@ class MeshTileProvider extends TileProvider {
 
   /// [loadWithOutcome], asked again after each of [delays] while the tile has nothing to show (a failed request, or no
   /// request allowed and nothing cached). Stops at once when [cancel] completes (the tile left the screen).
-  Future<(Uint8List, TileOutcome)> loadWithRetry(String url, {required bool skip, required Future<void> cancel, List<Duration> delays = retryDelays}) async {
+  Future<(Uint8List, TileOutcome)> loadWithRetry(String url, {required Future<void> cancel, List<Duration> delays = retryDelays}) async {
     var cancelled = false;
     unawaited(cancel.then((_) => cancelled = true));
-    var r = await loadWithOutcome(url, skip: skip, cancel: cancel);
+    var r = await loadWithOutcome(url, cancel: cancel);
     for (final d in delays) {
       if (cancelled || !(r.$2 == TileOutcome.failed || r.$2 == TileOutcome.offlineEmpty)) break;
       await Future.any([Future<void>.delayed(d), cancel]);
       if (cancelled) break;
-      r = await loadWithOutcome(url, skip: skip, cancel: cancel);
+      r = await loadWithOutcome(url, cancel: cancel);
     }
     return r;
   }
 
-  Future<Uint8List> _load(String url, {required bool skip, required Future<void> cancel, required void Function(TileOutcome) seen}) async {
+  Future<Uint8List> _load(String url, {required Future<void> cancel, required void Function(TileOutcome) seen}) async {
     void rec(TileOutcome o) {
       stats.record(o);
       seen(o);
-    }
-    if (skip) {
-      rec(TileOutcome.packCovered);
-      return TileProvider.transparentImage;
     }
     CachedMapTile? cached;
     final c = cache;
@@ -661,10 +626,9 @@ class MeshTileProvider extends TileProvider {
 @immutable
 class MeshTileImage extends ImageProvider<MeshTileImage> {
   final String url;
-  final bool skip;
   final MeshTileProvider provider;
   final Future<void> cancel;
-  const MeshTileImage({required this.url, required this.skip, required this.provider, required this.cancel});
+  const MeshTileImage({required this.url, required this.provider, required this.cancel});
 
   @override
   Future<MeshTileImage> obtainKey(ImageConfiguration configuration) => SynchronousFuture(this);
@@ -679,7 +643,7 @@ class MeshTileImage extends ImageProvider<MeshTileImage> {
   }
 
   Future<ui.Codec> _decode(MeshTileImage key, ImageDecoderCallback decode) async {
-    final (bytes, outcome) = await provider.loadWithRetry(key.url, skip: key.skip, cancel: key.cancel, delays: provider.imageRetryDelays);
+    final (bytes, outcome) = await provider.loadWithRetry(key.url, cancel: key.cancel, delays: provider.imageRetryDelays);
     // Nothing to show after the retries: an empty tile for now, but never kept as the tile. Forgotten, so the next ask (a
     // pan, a zoom, the network coming back) fetches it.
     if (outcome == TileOutcome.failed || outcome == TileOutcome.offlineEmpty) {
@@ -695,8 +659,8 @@ class MeshTileImage extends ImageProvider<MeshTileImage> {
   }
 
   @override
-  bool operator ==(Object other) => other is MeshTileImage && other.url == url && other.skip == skip;
+  bool operator ==(Object other) => other is MeshTileImage && other.url == url;
 
   @override
-  int get hashCode => Object.hash(url, skip);
+  int get hashCode => url.hashCode;
 }

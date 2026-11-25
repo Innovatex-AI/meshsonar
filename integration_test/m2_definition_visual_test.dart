@@ -7,7 +7,7 @@
 //
 // Frames: CMH map with the legend card (closed, open), the Layers sheet (top, then Filters + Palette), the Colour-blind safe
 // palette chosen in the legend, the repeater ring symbol zoomed in, an outside-data-only region (SEA), a region outside North
-// America (AAH, Aachen: OpenFreeMap fallback, no offline pack), and a preview (Plan > Where to drive) with "Open the map".
+// America (AAH, Aachen: OpenFreeMap fallback), and a preview (Plan > Where to drive) with "Open the map".
 // Each step also checks what the frame shows comes from the definition (layer names, legend entries, palette names).
 import 'dart:io' show HttpClient, Platform;
 import 'dart:math' as math;

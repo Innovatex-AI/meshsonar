@@ -5,11 +5,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 import 'package:meshsonar/core/model.dart';
-import 'package:meshsonar/core/offline_packs.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;
-import 'package:meshsonar/ui/settings/storage_section.dart';
 
 import 'fakes.dart';
 import 'settings_test_kit.dart';
@@ -19,9 +16,7 @@ bool _measuring(WidgetTester tester) {
   final f = find.byKey(const Key('storage-total'), skipOffstage: false);
   if (f.evaluate().isEmpty) return true;
   final t = tester.widget<Text>(f).data!;
-  final offline = find.byKey(const Key('storage-offline-maps-value'), skipOffstage: false);
-  final o = offline.evaluate().isEmpty ? 'Measuring…' : tester.widget<Text>(offline).data!;
-  return t.startsWith('Measuring') || o == 'Measuring…';
+  return t.startsWith('Measuring');
 }
 
 DriveSession ended(String id) =>
@@ -29,14 +24,10 @@ DriveSession ended(String id) =>
 
 void main() {
   late Directory tmp;
-  late Future<OfflinePackManager> Function() realPacks;
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('ms_settings_storage_');
-    realPacks = storagePackManager;
-    storagePackManager = () async => OfflinePackManager(root: Directory('${tmp.path}/packs'), client: http.Client());
   });
   tearDown(() {
-    storagePackManager = realPacks;
     tmp.deleteSync(recursive: true);
   });
 
@@ -153,18 +144,11 @@ void main() {
     expect(text(tester, 'storage-node-map-value'), 'Not downloaded.');
   });
 
-  testWidgetsT('offline maps: shows what is downloaded and opens the packs screen to delete', (tester) async {
+  testWidgetsT('no offline maps row (removed in build 76)', (tester) async {
     await open(tester);
-    await showSetting(tester, 'storage-offline-maps');
-    expect(text(tester, 'storage-offline-maps-value'), 'No offline maps downloaded.');
-    expect(find.byKey(const Key('storage-offline-maps-open')), findsOneWidget);
-  });
-
-  testWidgetsT('offline maps: a folder that cannot be read says so instead of a number', (tester) async {
-    storagePackManager = () async => throw const FileSystemException('denied');
-    await open(tester);
-    await showSetting(tester, 'storage-offline-maps');
-    expect(text(tester, 'storage-offline-maps-value'), 'Couldn\'t read the offline maps folder.');
+    await showSetting(tester, 'storage-total');
+    expect(find.byKey(const Key('storage-offline-maps'), skipOffstage: false), findsNothing);
+    expect(find.textContaining('ffline map', skipOffstage: false), findsNothing);
   });
 
   testWidgetsT('total adds up what could be measured', (tester) async {

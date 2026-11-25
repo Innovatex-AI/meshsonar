@@ -431,7 +431,7 @@ const List<DataFlow> otherDataFlows = [
   DataFlow('Problem reports',
       'Only when you send one. You see the whole report before it goes; secrets are removed and positions rounded.'),
   DataFlow('Region and map data',
-      'The app downloads coverage, region pages, repeater names and map packs. Those requests carry no driver key, '
+      'The app downloads coverage, region pages, repeater names and map tiles. Those requests carry no driver key, '
           'except repeater names, which come from your server with your key.'),
 ];
 

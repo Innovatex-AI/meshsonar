@@ -38,7 +38,6 @@ pins the plist, manifest and icon facts this document relies on.
   - Optional driver key: upload your drives to the community coverage map at meshsonar.com. Public views hide the start and end of every drive and anything inside your privacy zones.
   - Pings on the air carry only a random 10-character tag. Your position, name or radio identity are never put on the air.
   - Region awareness: the app tells you which MeshSonar region you are in and when you cross into another, including the region's radio settings.
-  - Offline map packs for rural drives.
   - Export any drive as a file or a PDF report. Delete your data any time from Settings.
   - Works with iPhone and iPad. Dark mode, large text and VoiceOver supported.
 
@@ -121,9 +120,8 @@ Demo account: none needed. Contact: Andy (KE4BFI), alamb@innovatexit.com, phone 
 4. Region tab with a region's coverage and radio settings.
 5. Drives list with uploaded/not-uploaded states.
 6. Settings > Privacy & data sharing (switches, policy link, delete my data and account).
-7. Offline map packs.
-8. iPad: Drive tab in landscape.
-9. Plan tab: the Planner on the map with the sheet at Medium (Link result, or Coverage footprint, or Find sites pins).
+7. iPad: Drive tab in landscape.
+8. Plan tab: the Planner on the map with the sheet at Medium (Link result, or Coverage footprint, or Find sites pins).
 10. Settings > Observer (Share with MeshSonar, MQTT feeds, preset picker).
 
 Capture with `xcrun simctl io booted screenshot` in the matching simulator; no device frames needed.

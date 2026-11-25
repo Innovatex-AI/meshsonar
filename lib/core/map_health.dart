@@ -11,8 +11,7 @@
 //   frames   {frames, p50_ms, p95_ms, p99_ms, worst_ms, build_p95_ms, raster_p95_ms, janky_16, janky_8, stalls_50}
 //   puck     {puck_updates_hz, fixes, fixes_rejected, max_fix_gap_s, weak_frames, compass_readings}
 //   camera   {mode: follow|paused|off, heading_up, zoom, drives}
-//   tiles    {source, cache_hit, network_ok, stale_served, failed, offline_empty, cancelled, pack_covered_skipped, pack_hit,
-//             pack_miss}
+//   tiles    {source, cache_hit, network_ok, stale_served, failed, offline_empty, cancelled}
 //   layers   {cell_paints}
 //   loop     {max_lag_ms}  longest stretch the UI isolate went without a chance to run in the window (event-loop probe)
 import 'dart:async';

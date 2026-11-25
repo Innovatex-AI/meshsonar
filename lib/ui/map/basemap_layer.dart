@@ -2,7 +2,7 @@
 // as the fallback, drawn on the phone by vector_map_tiles in raster mode with the website's styles (core/basemap.dart).
 // Every map in the app (the Drive map and the small maps) uses this layer, and [BasemapCredit] / the AttributionLine
 // show the credit of the source actually drawn. Tile loads go through [MeshTileProvider]: the same disk cache, request
-// gate, circuit breaker and health counters as before; a tile an installed offline pack draws is never requested.
+// gate, circuit breaker and health counters as before.
 import 'dart:async';
 import 'dart:io' show Platform;
 
@@ -13,14 +13,8 @@ import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 import '../../core/basemap.dart';
-import '../../core/power_profile.dart';
 import 'basemap_cache.dart';
 import 'tile_source.dart';
-
-/// Whether a drive map shows coverage on a plain background instead of the basemap right now: a drive is running and the power
-/// profile asks for it (PowerProfile.current.simpleBasemap: Saver, or Custom with "Simple basemap" on). Build 70, battery plan.
-/// The renderer is not swapped; the basemap layers are simply left out (CoverageMap.plainBasemap).
-bool simpleBasemapNow({required bool driving}) => driving && PowerProfile.current.simpleBasemap;
 
 /// Serves our (or OpenFreeMap's) vector tiles to the renderer through a [MeshTileProvider].
 class NetworkBasemapTileProvider extends VectorTileProvider {
@@ -49,8 +43,7 @@ class NetworkBasemapTileProvider extends VectorTileProvider {
 
   @override
   Future<Uint8List> provide(TileIdentity tile) async {
-    final skip = tiles.shouldSkip?.call(tile.z, tile.x, tile.y) ?? false;
-    final (bytes, outcome) = await tiles.loadWithRetry(urlFor(tile), skip: skip, cancel: _never, delays: retryDelays);
+    final (bytes, outcome) = await tiles.loadWithRetry(urlFor(tile), cancel: _never, delays: retryDelays);
     // Only a server that really failed us counts towards the OpenFreeMap fallback: not a phone with no network (the gate is
     // shut, nothing was asked), where falling back would only change the credit over a map that cannot load either.
     if (outcome == TileOutcome.failed && !tiles.gate.isOpen) health.tileFailed(source);
@@ -59,10 +52,6 @@ class NetworkBasemapTileProvider extends VectorTileProvider {
       // Thrown, so nothing is kept for this tile: the renderer caches no bytes and no picture, and the map asks again when
       // the tile next comes into view or the network comes back (BasemapLayer re-asks on TileFetchGate.recoveries).
       throw ProviderException(message: 'no basemap tile ${tile.z}/${tile.x}/${tile.y} (${outcome.name})', retryable: Retryable.retry);
-    }
-    if (outcome == TileOutcome.packCovered) {
-      // The offline pack draws this tile: nothing here, and nothing for the renderer to keep (no status: not an empty tile).
-      throw ProviderException(message: 'pack tile ${tile.z}/${tile.x}/${tile.y}', retryable: Retryable.none);
     }
     if (identical(bytes, TileProvider.transparentImage)) {
       // The server has no tile there (404): the renderer draws an empty tile (the style's background).
@@ -133,7 +122,7 @@ class BasemapLayer extends StatefulWidget {
   /// Forces the dark (true) or light (false) look; null follows the app theme.
   final bool? dark;
 
-  /// The loader to use (the Drive map passes its own, which skips tiles its offline pack draws). Null = a shared one.
+  /// The loader to use (the Drive map passes its own). Null = a shared one.
   final MeshTileProvider? tiles;
 
   /// An event re-asks for every tile (the network came back, a pack was installed or removed).

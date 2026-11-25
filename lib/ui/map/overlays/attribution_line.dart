@@ -24,7 +24,7 @@ class AttributionLine extends StatelessWidget {
   /// Opens the Credits sheet.
   final VoidCallback? onInfo;
 
-  /// The credit of the source drawn right now (ours, OpenFreeMap or an offline pack); null = [attributionText].
+  /// The credit of the source drawn right now (ours or OpenFreeMap); null = [attributionText].
   final String? text;
   const AttributionLine({super.key, required this.style, this.showMeshCore = false, this.onInfo, this.text});
 

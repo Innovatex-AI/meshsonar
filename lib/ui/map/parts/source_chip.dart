@@ -5,13 +5,12 @@ import '../../theme.dart';
 import '../tile_source.dart';
 import 'map_chips.dart';
 
-/// Where the base map is coming from right now: the installed offline pack, the network, or the disk cache with no signal.
+/// Where the base map is coming from right now: the network, or the disk cache with no signal.
 class SourceChip extends StatefulWidget {
   final MapTileStats stats;
   final TileFetchGate gate;
-  final String? packName;
   final DateTime Function() clock;
-  const SourceChip({super.key, required this.stats, required this.gate, required this.packName, required this.clock});
+  const SourceChip({super.key, required this.stats, required this.gate, required this.clock});
 
   @override
   State<SourceChip> createState() => SourceChipState();
@@ -20,7 +19,7 @@ class SourceChip extends StatefulWidget {
 class SourceChipState extends State<SourceChip> {
   late MapSource _source = _compute();
 
-  MapSource _compute() => currentMapSource(widget.stats, widget.clock(), packActive: widget.packName != null, gateOpen: widget.gate.isOpen);
+  MapSource _compute() => currentMapSource(widget.stats, widget.clock(), gateOpen: widget.gate.isOpen);
 
   @override
   void initState() {
@@ -53,7 +52,6 @@ class SourceChipState extends State<SourceChip> {
     final t = Theme.of(context);
     final mc = MeshSonarColors.of(context);
     final (icon, text, color) = switch (_source) {
-      MapSource.offlinePack => (Icons.download_done_rounded, 'Offline map: ${widget.packName ?? 'pack'}', mc.snrStrong),
       MapSource.online => (Icons.cloud_done_outlined, 'Online map', mc.textMuted),
       MapSource.cachedOffline => (Icons.sd_storage_outlined, 'Saved map (no signal)', mc.beacon),
       MapSource.none => (Icons.cloud_off_rounded, 'No map here (no signal)', mc.beacon),

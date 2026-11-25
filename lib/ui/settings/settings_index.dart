@@ -37,7 +37,7 @@ const List<SettingsSectionInfo> settingsSections = [
   // Battery sits with the driving sections: most of its settings are about a drive (build 70).
   SettingsSectionInfo('battery', 'Battery', Icons.battery_charging_full),
   SettingsSectionInfo('display', 'Units & display', Icons.straighten),
-  SettingsSectionInfo('maps', 'Map & offline maps', Icons.map_outlined),
+  SettingsSectionInfo('maps', 'Map', Icons.map_outlined),
   SettingsSectionInfo('privacy', 'Privacy & data sharing', Icons.privacy_tip_outlined),
   SettingsSectionInfo('observer', 'Observer', Icons.sensors),
   SettingsSectionInfo('notifications', 'Notifications', Icons.notifications_outlined),
@@ -123,10 +123,7 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('heard-hold', 'display', 'Heard list hold',
       'How long a repeater stays bright in the heard list after it was last heard.',
       keywords: ['heard', 'repeaters', 'list', 'grey', 'stale', 'pings']),
-  // Map & offline maps
-  SettingsEntry('offline-maps', 'maps', 'Offline maps',
-      'Download a region\'s map so it works with no signal. Uses storage; delete a map any time.',
-      keywords: ['offline', 'download', 'pmtiles', 'tiles', 'basemap', 'no signal', 'map pack']),
+  // Map
   SettingsEntry('map-follow-options', 'maps', 'Follow and direction',
       'Heading-up or north-up map, re-centre by itself after you move the map, and zoom out a little at highway speed.',
       keywords: ['follow', 'heading', 'north up', 'rotate', 'recenter', 're-center', 'zoom', 'speed', 'compass', 'direction']),
@@ -208,9 +205,6 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('storage-node-map', 'storage', 'Public node map',
       'Repeater names and positions from map.meshcore.io near where you drive.',
       keywords: ['meshcore map', 'directory', 'nodes', 'cache', 'clear', 'space'], available: _hasDirectory),
-  SettingsEntry('storage-offline-maps', 'storage', 'Offline maps space',
-      'Space used by downloaded map packs. Delete them on the Offline maps screen.',
-      keywords: ['offline', 'maps', 'packs', 'space', 'delete']),
   SettingsEntry('storage-report-draft', 'storage', 'Unsent problem report',
       'A problem report that was not sent yet, kept so nothing you wrote is lost.',
       keywords: ['report', 'draft', 'discard'], available: _hasSavedReport),

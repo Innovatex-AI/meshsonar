@@ -3,6 +3,14 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.46.0+76] — 2026-11-25 — Offline maps removed; the streets stay when a drive starts
+
+- **Offline maps are gone.** The downloadable region maps (Settings > Offline maps, the "Download on Wi-Fi only" switch, the Offline maps space row under Data & storage, the dashed pack outlines and the "Offline map: ..." line in Credits) are removed, with everything behind them: the pack list and downloads, the PMTiles reader, the pack map style and the coverage snapshots. Settings > "Map & offline maps" is now **Map**. The map works as before online: Road / Light / Dark / Topo / Satellite and coverage load over the network, and places you have already looked at are still kept in the ordinary on-device tile cache and drawn with a weak or no signal.
+- **Maps already downloaded are deleted.** On the first launch of this build the folder older builds kept them in is removed, which gives the space back (about 50 MB for the Columbus map). Nothing else is touched.
+- **Fix: the street map no longer goes away when a drive starts.** With iPhone Low Power Mode on (or the Saver battery mode), the Drive map dropped every basemap layer the moment a drive started and showed coverage on a plain grid: Saver included "Simple basemap while driving", and Low Power Mode switches the app to Saver by default. That switch, the preset behind it and the swap are removed; starting a drive never changes the map. The other battery settings are unchanged, and a saved battery profile from an older build still loads.
+- **With no connection, every base map says so** ("No connection. The map shows only places you have looked at before."), not only Topo and Satellite; the "needs signal" note under Topo and Satellite in the base map picker is gone, since every base map now comes from the network.
+- Under the hood: `NetworkKind` / `NetworkMonitor` moved to `lib/core/network_kind.dart`; the map health record no longer has `pack_covered_skipped`, `pack_hit`, `pack_miss`; the Map Definition's `offline` flag on a basemap is still accepted and no longer used.
+
 ## [0.42.0+72] — 2026-11-21 — Drive map tiles fixed; Network opens on Live
 
 - **Drive map: the basemap changes when you pick one, and stays.** Every style (Chart, Light, Dark, Topo, Satellite) now has its own tile cache; before, they shared one, so tiles of the old style stayed on screen, two styles mixed, and after Satellite the other styles could show only street names. The old shared cache is deleted once at the first launch.

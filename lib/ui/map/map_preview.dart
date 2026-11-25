@@ -92,7 +92,7 @@ class MapPreview extends StatelessWidget {
   /// Draw the basemap (the Map tiles setting); false = the map background only.
   final bool tiles;
 
-  /// A basemap to draw instead of the online one (an installed offline pack).
+  /// A basemap layer to draw instead of the default one (another style: Light, Dark, Topo).
   final Widget? basemap;
 
   /// Where "Open the map" goes; null = no button.

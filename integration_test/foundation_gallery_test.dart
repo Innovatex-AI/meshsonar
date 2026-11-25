@@ -8,11 +8,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:meshsonar/core/offline_style.dart' show appLabelFont;
 import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/ui/design/app_type.dart';
 import 'package:meshsonar/ui/design/helper_gallery.dart';
 import 'package:meshsonar/ui/theme.dart';
+
+/// The label font of the app's basemap styles (tool/basemap/make_basemap_styles.mjs): the system font.
+const appLabelFont = 'CupertinoSystemText';
 
 double _w(String text, TextStyle style) {
   final p = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: TextScaler.noScaling)..layout();
@@ -63,7 +65,7 @@ void main() {
     final below = _w('Hamburgefonstiv', const TextStyle(fontSize: 19.5)) / 19.5, above = _w('Hamburgefonstiv', const TextStyle(fontSize: 20.5)) / 20.5;
     // ignore: avoid_print
     print('SPIKE_S4 opticalSwitch perPt19.5=$below perPt20.5=$above ratio=${above / below}');
-    // S1: the family the offline style asks for resolves to the system font.
+    // S1: the family the basemap styles ask for resolves to the system font.
     const sample = 'Westerville Rd Cleveland Ave';
     final sys = _w(sample, const TextStyle(fontSize: 17));
     final cup = _w(sample, TextStyle(fontSize: 17, fontFamily: appLabelFont));

@@ -46,7 +46,6 @@ void main() {
       'battery-observer-uploads',
       'battery-drive-upload',
       'battery-stats',
-      'battery-simple-basemap',
     ]) {
       await showSetting(tester, id);
       expect(find.descendant(of: find.byKey(const Key('section-battery')), matching: find.byKey(Key(id))), findsOneWidget,
@@ -97,10 +96,11 @@ void main() {
     expect(PowerProfile.chosen.radioPollBackS, 0);
 
     // A switch knob.
-    await showSetting(tester, 'battery-simple-basemap');
-    await tester.tap(find.byKey(const Key('battery-simple-basemap')));
+    await showSetting(tester, 'battery-drive-upload');
+    await tester.tap(find.byKey(const Key('battery-drive-upload')));
     await tester.pumpAndSettle();
-    expect(PowerProfile.chosen.simpleBasemap, isTrue);
+    expect(PowerProfile.chosen.uploadDuringDrive, isFalse);
+    expect(find.byKey(const Key('battery-simple-basemap')), findsNothing, reason: 'removed in build 76: a drive never drops the basemap');
 
     // Picking a mode again resets every knob.
     await showSetting(tester, 'battery-mode-balanced');

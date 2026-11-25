@@ -13,14 +13,14 @@ void main() {
     await tester.pumpAndSettle();
     final scroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
     // Stream 6 restructure: Wardriving + Antenna became Radio, Upload became Drives & uploads, the heard-list hold moved
-    // to Units & display, Report a problem to Diagnostics, Offline maps to Map & offline maps.
+    // to Units & display, Report a problem to Diagnostics. Build 76: Map & offline maps became Map (the offline maps were removed).
     for (final (section, field) in [
       ('driver', 'key-request'),
       ('driver', 'server-url'),
       ('region', 'region-pick'),
       ('display', 'units-tile'),
       ('display', 'heard-hold'),
-      ('maps', 'offline-maps'),
+      ('maps', 'map-follow-options'),
       ('privacy', 'telemetry-toggle'),
       ('privacy', 'privacy-what-shared'),
       ('privacy', 'privacy-location'),
@@ -42,7 +42,6 @@ void main() {
       ('storage', 'storage-drives'),
       ('storage', 'storage-region'),
       ('storage', 'refresh-repeaters'),
-      ('storage', 'storage-offline-maps'),
       ('diagnostics', 'diagnostics-log'),
       ('diagnostics', 'report-problem'),
       ('about-section', 'about'),
@@ -57,7 +56,7 @@ void main() {
       'ACCOUNT & DRIVER KEY',
       'REGION',
       'UNITS & DISPLAY',
-      'MAP & OFFLINE MAPS',
+      'MAP',
       'PRIVACY & DATA SHARING',
       'RADIO',
       'DRIVES & UPLOADS',

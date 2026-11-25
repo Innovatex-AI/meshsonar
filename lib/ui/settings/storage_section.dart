@@ -8,19 +8,13 @@ import 'package:flutter/material.dart';
 import '../design/app_surfaces.dart';
 import '../../app/app_state.dart';
 import '../../core/etag_client.dart';
-import '../../core/offline_packs.dart';
 import '../../core/storage_usage.dart';
 import '../app.dart';
-import '../map/offline_basemap.dart';
-import 'offline_packs_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
 const String storageHelp = 'What MeshSonar keeps on this phone. Clearing frees space; each item says what it costs '
     'first. Drives not fully uploaded are never removed here.';
-
-/// Opens the offline map pack manager. Tests replace it; the app uses the shared one the map uses.
-Future<OfflinePackManager> Function() storagePackManager = () => OfflineBasemap.instance.manager();
 
 List<Widget> storageSectionRows(BuildContext context) => const [StorageRows()];
 
@@ -28,10 +22,8 @@ String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
 /// Measured sizes (null = not known: not measurable here, or not measured yet).
 class _Sizes {
-  final int? drives, region, nodeMap, packs;
-  final int packCount;
-  final bool packsFailed;
-  const _Sizes({this.drives, this.region, this.nodeMap, this.packs, this.packCount = 0, this.packsFailed = false});
+  final int? drives, region, nodeMap;
+  const _Sizes({this.drives, this.region, this.nodeMap});
 }
 
 class StorageRows extends StatefulWidget {
@@ -78,19 +70,8 @@ class _StorageRowsState extends State<StorageRows> {
       final region = await _regionBytes(s);
       final dir = s.services.directory;
       final nodeMap = dir == null ? null : await bytesOnDisk(dir.cacheFile);
-      int? packs;
-      var packCount = 0;
-      var packsFailed = false;
-      try {
-        final m = await storagePackManager();
-        packs = await m.usedBytes();
-        packCount = m.installed.length;
-      } catch (_) {
-        packsFailed = true;
-      }
       if (!mounted) return;
-      setState(() => _sizes = _Sizes(
-          drives: drives, region: region, nodeMap: nodeMap, packs: packs, packCount: packCount, packsFailed: packsFailed));
+      setState(() => _sizes = _Sizes(drives: drives, region: region, nodeMap: nodeMap));
     } finally {
       _measuring = false;
     }
@@ -215,7 +196,7 @@ class _StorageRowsState extends State<StorageRows> {
           ),
         );
 
-    final known = [z.drives, z.region, z.nodeMap, z.packs].whereType<int>();
+    final known = [z.drives, z.region, z.nodeMap].whereType<int>();
     final total = known.isEmpty ? null : known.reduce((a, b) => a + b);
     final drivesText = s.sessionsLoading && s.sessions.isEmpty
         ? 'Counting…'
@@ -309,28 +290,6 @@ class _StorageRowsState extends State<StorageRows> {
           action: z.nodeMap == null || z.nodeMap == 0 ? null : clearButton('storage-node-map-clear', 'Clear', _clearNodeMap),
         ),
       ],
-      const Divider(height: 1, indent: 56),
-      row(
-        id: 'storage-offline-maps',
-        icon: Icons.map_outlined,
-        text: z.packsFailed
-            ? 'Couldn\'t read the offline maps folder.'
-            : z.packs == null
-                ? 'Measuring…'
-                : z.packCount == 0 && z.packs == 0
-                    ? 'No offline maps downloaded.'
-                    : z.packCount == 0
-                        ? 'Unfinished downloads${size(z.packs)}.'
-                        : '${_count(z.packCount, 'map')}${size(z.packs)}.',
-        explain: 'Each map is deleted on its own, on the Offline maps screen; it asks first.',
-        action: clearButton(
-            'storage-offline-maps-open',
-            'Open Offline maps',
-            () async {
-              await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const OfflinePacksScreen()));
-              await _measure();
-            }),
-      ),
       if (s.savedReport != null) ...[
         const Divider(height: 1, indent: 56),
         row(

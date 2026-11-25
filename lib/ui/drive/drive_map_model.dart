@@ -181,9 +181,7 @@ class DriveMapModel extends ChangeNotifier implements MapLayersModel {
     health.providers['camera'] = telemetry.cameraJson;
     health.providers['tiles'] = (w) {
       final j = <String, Object?>{...MapTileStats.instance.takeWindow()};
-      j['source'] = ((j['pack_hit'] as int?) ?? 0) > 0
-          ? 'offline_pack'
-          : tiles.currentMapSource(MapTileStats.instance, state.services.clock(), packActive: false).name;
+      j['source'] = tiles.currentMapSource(MapTileStats.instance, state.services.clock()).name;
       return j;
     };
     health.providers['layers'] = (w) {

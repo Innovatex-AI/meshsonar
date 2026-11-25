@@ -8,9 +8,8 @@ import 'package:flutter/material.dart';
 import '../../../core/map_styles.dart';
 import '../../../platform/open_url.dart';
 import '../../design/app_surfaces.dart' show showAppSheet;
-import '../../theme.dart';
 
-/// Opens the sheet. [sourceState] is the live "Online map / Offline map: CMH / Saved map / No map here" line; [colourKey] is
+/// Opens the sheet. [sourceState] is the live "Online map / Saved map / No map here" line; [colourKey] is
 /// the map key widget; [meshCoreCredit] is the layer's attribution text when its data is on the map.
 Future<void> showMapCredits(
   BuildContext context, {
@@ -59,7 +58,6 @@ class CreditsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final mc = MeshSonarColors.of(context);
     Widget head(String s) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 4), child: Text(s, style: t.textTheme.titleSmall));
     Widget link(String label, Uri u) => TextButton(
       onPressed: () => openExternalUrl(u),
@@ -128,8 +126,6 @@ class CreditsSheet extends StatelessWidget {
         ),
         link('protomaps.com', _protomaps),
         link('openfreemap.org', _openfreemap),
-        head('Offline maps'),
-        Text('Offline region maps are the same Protomaps map, served by MeshSonar, with the same credit.', style: t.textTheme.bodyMedium?.copyWith(color: mc.textMuted)),
         if (colourKey != null) ...[head('What the colours mean'), KeyedSubtree(key: const Key('credits-key'), child: colourKey!)],
         if (openLegend != null)
           Padding(

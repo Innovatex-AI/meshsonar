@@ -52,7 +52,7 @@ void main() {
       expect(BaseMapStyle.dark.labelIn(d), 'Dark');
       expect(BaseMapStyle.chart.id, 'chart');
       expect(BaseMapStyle.street.id, 'street');
-      expect(BaseMapStyle.street.look, BaseMapStyle.chart.look, reason: 'same tiles, so cache keys and offline packs are untouched');
+      expect(BaseMapStyle.street.look, BaseMapStyle.chart.look, reason: 'same tiles, so cache keys are untouched');
     });
 
     test('a saved Light (street) draws as Road; the saved value is not rewritten', () {

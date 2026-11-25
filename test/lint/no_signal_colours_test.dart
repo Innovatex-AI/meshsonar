@@ -13,7 +13,7 @@ const _allowed = {'lib/core/map_definition_bundled.g.dart'};
 /// Basemap styles (street, rail and land colours of the Protomaps / OpenMapTiles styles, generated from the packages the
 /// website uses): a basemap grey that happens to equal a band colour is not a signal colour. Checked for the colour-table
 /// patterns below, not for single hexes.
-const _basemapStyles = {'lib/core/basemap_styles.g.dart', 'lib/core/offline_style.dart'};
+const _basemapStyles = {'lib/core/basemap_styles.g.dart'};
 
 List<File> _dart(Directory d) => [
   for (final e in d.listSync(recursive: true, followLinks: false))

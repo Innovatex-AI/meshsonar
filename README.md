@@ -42,7 +42,7 @@ No account. No sign-up. Open the app and it creates its own driver key.
 - **Pings through your own radio.** Connect a MeshCore companion radio over Bluetooth. The app pings on the interval and distance you choose and listens for 7 seconds for echoes. A ping carries no location and nothing about you on the air: just `MS:` and 10 random characters.
 - **Every echo recorded.** Which repeater, SNR, RSSI, hops and path, for every ping, including the pings nobody heard. "Heard nothing" is data too.
 - **Save first.** Every ping is on disk the moment it finishes. Drives upload when you are online, retry safely, and can be exported as files.
-- **Built for the road.** A drive keeps recording with the screen locked (iOS can still end a background app, so check the report), reconnects a dropped radio, handles bad GPS and clock drift, and keeps working offline (offline map packs).
+- **Built for the road.** A drive keeps recording with the screen locked (iOS can still end a background app, so check the report), reconnects a dropped radio, handles bad GPS and clock drift, and keeps recording with no signal (pings are saved on the phone first and uploaded later).
 
 **See**
 - **A map that tells the truth.** Hexagons on the same grid as the website (H3, finer as you zoom in). Green and the other strength colours mean measured signal; **grey means mapped but nothing heard**; purple means heard but no signal reading.

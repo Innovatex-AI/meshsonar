@@ -178,7 +178,6 @@ void main() {
       'region-pick',
       'unit-distance',
       'unit-pressure',
-      'offline-maps',
       'privacy-what-shared',
       'privacy-location',
       'privacy-zones-website',
@@ -189,7 +188,6 @@ void main() {
       'about',
       'show-intro',
       'key-website',
-      'storage-offline-maps-open',
     ]) {
       await showSetting(tester, key);
       final urls = h.openedUrls.length;

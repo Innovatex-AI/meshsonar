@@ -1,5 +1,5 @@
-// Tile source: cache first, stale beats blank, bounded and cancellable requests, a circuit breaker with no error spam, tiles the
-// offline pack draws are never requested, and the source the map reports.
+// Tile source: cache first, stale beats blank, bounded and cancellable requests, a circuit breaker with no error spam, and
+// the source the map reports.
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -75,15 +75,15 @@ class ScriptClient extends http.BaseClient {
 const url = 'https://tile.example/1/2/3.png';
 final never = Completer<void>().future;
 
-MeshTileProvider make(ScriptClient c, {MemCache? cache, TileFetchGate? gate, MapTileStats? stats, bool Function(int, int, int)? skip, Duration timeout = const Duration(seconds: 8)}) =>
-    MeshTileProvider(client: c, cache: cache ?? MemCache(), gate: gate ?? TileFetchGate(), stats: stats ?? MapTileStats(), shouldSkip: skip, timeout: timeout);
+MeshTileProvider make(ScriptClient c, {MemCache? cache, TileFetchGate? gate, MapTileStats? stats, Duration timeout = const Duration(seconds: 8)}) =>
+    MeshTileProvider(client: c, cache: cache ?? MemCache(), gate: gate ?? TileFetchGate(), stats: stats ?? MapTileStats(), timeout: timeout);
 
 void main() {
   test('a fresh cached tile is shown with no request', () async {
     final cache = MemCache()..tiles[url] = tile([9, 9], stale: false);
     final c = ScriptClient();
     final stats = MapTileStats();
-    final b = await make(c, cache: cache, stats: stats).load(url, skip: false, cancel: never);
+    final b = await make(c, cache: cache, stats: stats).load(url, cancel: never);
     expect(b, [9, 9]);
     expect(c.sent, isEmpty);
     expect(stats.total(TileOutcome.cacheHit), 1);
@@ -93,7 +93,7 @@ void main() {
     final cache = MemCache();
     final c = ScriptClient();
     final stats = MapTileStats();
-    final b = await make(c, cache: cache, stats: stats).load(url, skip: false, cancel: never);
+    final b = await make(c, cache: cache, stats: stats).load(url, cancel: never);
     expect(b, [1, 2, 3]);
     expect(stats.total(TileOutcome.networkOk), 1);
     await Future<void>.delayed(Duration.zero);
@@ -104,7 +104,7 @@ void main() {
     final cache = MemCache()..tiles[url] = tile([7, 7], stale: true);
     final c = ScriptClient()..handler = (r) async => http.StreamedResponse(const Stream.empty(), 304, headers: {'cache-control': 'max-age=60', 'date': 'Sun, 01 Nov 2026 12:00:00 GMT'});
     final stats = MapTileStats();
-    final b = await make(c, cache: cache, stats: stats).load(url, skip: false, cancel: never);
+    final b = await make(c, cache: cache, stats: stats).load(url, cancel: never);
     expect(b, [7, 7]);
     expect(stats.total(TileOutcome.notModified), 1);
   });
@@ -113,7 +113,7 @@ void main() {
     final cache = MemCache()..tiles[url] = tile([7, 7], stale: true);
     final c = ScriptClient()..handler = (r) async => throw http.ClientException('no route');
     final stats = MapTileStats();
-    final b = await make(c, cache: cache, stats: stats).load(url, skip: false, cancel: never);
+    final b = await make(c, cache: cache, stats: stats).load(url, cancel: never);
     expect(b, [7, 7]);
     expect(stats.total(TileOutcome.staleServed), 1);
   });
@@ -121,7 +121,7 @@ void main() {
   test('no cache and no network: a transparent tile, never an exception, never a retry', () async {
     final c = ScriptClient()..handler = (r) async => throw http.ClientException('no route');
     final stats = MapTileStats();
-    final b = await make(c, stats: stats).load(url, skip: false, cancel: never);
+    final b = await make(c, stats: stats).load(url, cancel: never);
     expect(b, TileProvider.transparentImage);
     expect(c.sent, hasLength(1), reason: 'one request, no retries');
     expect(stats.total(TileOutcome.failed), 1);
@@ -129,7 +129,7 @@ void main() {
 
   test('HTTP errors count as failures and show an empty tile', () async {
     final c = ScriptClient()..handler = (r) async => http.StreamedResponse(Stream.value([0]), 503);
-    final b = await make(c).load(url, skip: false, cancel: never);
+    final b = await make(c).load(url, cancel: never);
     expect(b, TileProvider.transparentImage);
   });
 
@@ -140,20 +140,20 @@ void main() {
     final c = ScriptClient()..handler = (r) async => throw http.ClientException('offline');
     final p = make(c, cache: cache, gate: gate);
     for (var i = 0; i < 3; i++) {
-      await p.load('https://tile.example/$i.png', skip: false, cancel: never);
+      await p.load('https://tile.example/$i.png', cancel: never);
     }
     expect(gate.isOpen, isTrue);
     final sentBefore = c.sent.length;
     final stats = p.stats;
-    expect(await p.load('https://tile.example/cached.png', skip: false, cancel: never), [5], reason: 'the stale cached tile is shown offline');
-    expect(await p.load('https://tile.example/new.png', skip: false, cancel: never), TileProvider.transparentImage);
+    expect(await p.load('https://tile.example/cached.png', cancel: never), [5], reason: 'the stale cached tile is shown offline');
+    expect(await p.load('https://tile.example/new.png', cancel: never), TileProvider.transparentImage);
     expect(c.sent.length, sentBefore, reason: 'no request while the breaker is open');
     expect(stats.total(TileOutcome.offlineEmpty), 1);
 
     // after the cool-down exactly one probe goes out; a success closes the breaker
     now = now.add(const Duration(seconds: 16));
     c.handler = null;
-    final b = await p.load('https://tile.example/new.png', skip: false, cancel: never);
+    final b = await p.load('https://tile.example/new.png', cancel: never);
     expect(b, [1, 2, 3]);
     expect(gate.isOpen, isFalse);
   });
@@ -163,10 +163,10 @@ void main() {
     final c = ScriptClient();
     final p = make(c, gate: gate);
     gate.setPhoneOnline(false);
-    expect(await p.load(url, skip: false, cancel: never), TileProvider.transparentImage);
+    expect(await p.load(url, cancel: never), TileProvider.transparentImage);
     expect(c.sent, isEmpty);
     gate.setPhoneOnline(true);
-    expect(await p.load(url, skip: false, cancel: never), [1, 2, 3]);
+    expect(await p.load(url, cancel: never), [1, 2, 3]);
   });
 
   test('concurrency is bounded, newest request first, and a cancelled tile never goes out', () async {
@@ -175,7 +175,7 @@ void main() {
     final p = make(c, gate: gate);
     final cancelFirstWaiter = Completer<void>();
     final futures = <Future<Uint8List>>[
-      for (var i = 0; i < 6; i++) p.load('https://tile.example/$i.png', skip: false, cancel: i == 3 ? cancelFirstWaiter.future : never),
+      for (var i = 0; i < 6; i++) p.load('https://tile.example/$i.png', cancel: i == 3 ? cancelFirstWaiter.future : never),
     ];
     await Future<void>.delayed(const Duration(milliseconds: 5));
     cancelFirstWaiter.complete();
@@ -191,7 +191,7 @@ void main() {
   test('an in-flight request is aborted when its tile leaves the screen', () async {
     final c = ScriptClient(delay: const Duration(seconds: 5));
     final cancel = Completer<void>();
-    final f = make(c).load(url, skip: false, cancel: cancel.future);
+    final f = make(c).load(url, cancel: cancel.future);
     await Future<void>.delayed(const Duration(milliseconds: 20));
     cancel.complete();
     expect(await f, TileProvider.transparentImage);
@@ -200,34 +200,20 @@ void main() {
   test('a request that never answers times out, counts as a failure, and does not hang the tile', () async {
     final c = ScriptClient(delay: const Duration(seconds: 30));
     final stats = MapTileStats();
-    final b = await make(c, stats: stats, timeout: const Duration(milliseconds: 60)).load(url, skip: false, cancel: never);
+    final b = await make(c, stats: stats, timeout: const Duration(milliseconds: 60)).load(url, cancel: never);
     expect(b, TileProvider.transparentImage);
     expect(stats.total(TileOutcome.failed), 1);
   });
 
-  test('a tile the offline pack draws is not requested and not read from the cache', () async {
-    final c = ScriptClient();
-    final cache = MemCache();
-    final stats = MapTileStats();
-    final b = await make(c, cache: cache, stats: stats, skip: (z, x, y) => true).load(url, skip: true, cancel: never);
-    expect(b, TileProvider.transparentImage);
-    expect(c.sent, isEmpty);
-    expect(cache.gets, 0);
-    expect(stats.total(TileOutcome.packCovered), 1);
-  });
-
-  test('stats windows: counts since the last take, pack hits and misses', () {
+  test('stats windows: counts since the last take', () {
     final s = MapTileStats();
     s.record(TileOutcome.cacheHit);
     s.record(TileOutcome.cacheHit);
     s.record(TileOutcome.networkOk);
-    s.recordPack(hit: true);
-    s.recordPack(hit: false);
     final w = s.takeWindow();
     expect(w['cache_hit'], 2);
     expect(w['network_ok'], 1);
-    expect(w['pack_hit'], 1);
-    expect(w['pack_miss'], 1);
+    expect(w.keys.where((k) => k.contains('pack')), isEmpty, reason: 'no map pack counters (removed in build 76)');
     expect(s.takeWindow()['cache_hit'], 0);
     expect(s.total(TileOutcome.cacheHit), 2, reason: 'totals keep counting');
   });
@@ -235,16 +221,15 @@ void main() {
   group('the source the map shows', () {
     final t0 = DateTime.utc(2026, 11, 1, 12);
     MapTileStats statsAt(DateTime t) => MapTileStats()..clock = () => t;
-    test('pack wins; recent network is online; offline with cache is "saved"; offline with nothing is "none"', () {
+    test('recent network is online; offline with cache is "saved"; offline with nothing is "none"', () {
       final s = statsAt(t0);
-      expect(currentMapSource(s, t0, packActive: true), MapSource.offlinePack);
-      expect(currentMapSource(s, t0, packActive: false), MapSource.online, reason: 'nothing has happened yet: assume online');
+      expect(currentMapSource(s, t0), MapSource.online, reason: 'nothing has happened yet: assume online');
       s.record(TileOutcome.networkOk);
-      expect(currentMapSource(s, t0, packActive: false), MapSource.online);
+      expect(currentMapSource(s, t0), MapSource.online);
       final off = statsAt(t0)..record(TileOutcome.staleServed);
-      expect(currentMapSource(off, t0, packActive: false, gateOpen: true), MapSource.cachedOffline);
+      expect(currentMapSource(off, t0, gateOpen: true), MapSource.cachedOffline);
       final none = statsAt(t0)..record(TileOutcome.offlineEmpty);
-      expect(currentMapSource(none, t0, packActive: false, gateOpen: true), MapSource.none);
+      expect(currentMapSource(none, t0, gateOpen: true), MapSource.none);
     });
   });
 
@@ -272,7 +257,7 @@ void main() {
       final gate = TileFetchGate();
       final p = make(c, gate: gate, stats: stats);
       for (var i = 0; i < 12; i++) {
-        expect(await p.load('https://tile.example/$i.png', skip: false, cancel: never), TileProvider.transparentImage);
+        expect(await p.load('https://tile.example/$i.png', cancel: never), TileProvider.transparentImage);
       }
       expect(gate.isOpen, isFalse);
       expect(c.sent, hasLength(12));
@@ -288,16 +273,16 @@ void main() {
       final c = ScriptClient()..handler = (r) async => fail ? throw http.ClientException('no route') : http.StreamedResponse(Stream.value([1]), 200);
       final stats = MapTileStats();
       final p = make(c, gate: gate, stats: stats);
-      await p.load('https://tile.example/ok.png', skip: false, cancel: never);
+      await p.load('https://tile.example/ok.png', cancel: never);
       fail = true;
       now = now.add(const Duration(seconds: 2));
       for (var i = 0; i < 4; i++) {
-        await p.load('https://tile.example/a$i.png', skip: false, cancel: never);
+        await p.load('https://tile.example/a$i.png', cancel: never);
       }
       expect(gate.isOpen, isFalse, reason: 'a server answered 2 s ago: a few failures are not "offline"');
       expect(stats.total(TileOutcome.offlineEmpty), 0);
       now = now.add(const Duration(seconds: 6));
-      await p.load('https://tile.example/b.png', skip: false, cancel: never);
+      await p.load('https://tile.example/b.png', cancel: never);
       expect(gate.isOpen, isTrue, reason: 'failures in a row and nothing answered for 5 s: the network is gone');
     });
 
@@ -308,34 +293,34 @@ void main() {
       final c = ScriptClient()..handler = (r) async => up ? http.StreamedResponse(Stream.value([1]), 200) : throw http.ClientException('no route');
       final p = make(c, gate: gate);
       for (var i = 0; i < 3; i++) {
-        await p.load('https://tile.example/$i.png', skip: false, cancel: never);
+        await p.load('https://tile.example/$i.png', cancel: never);
       }
       expect(gate.isOpen, isTrue);
       for (final wait in const [3, 6, 12, 15, 15]) {
         now = now.add(Duration(seconds: wait - 1));
         final before = c.sent.length;
-        await p.load('https://tile.example/x.png', skip: false, cancel: never);
+        await p.load('https://tile.example/x.png', cancel: never);
         expect(c.sent.length, before, reason: 'still shut ${wait - 1} s into a $wait s wait');
         now = now.add(const Duration(seconds: 1));
-        await p.load('https://tile.example/x.png', skip: false, cancel: never);
+        await p.load('https://tile.example/x.png', cancel: never);
         expect(c.sent.length, before + 1, reason: 'one probe after $wait s');
         expect(gate.isOpen, isTrue, reason: 'the probe failed: shut again');
       }
       final recoveries = gate.recoveries.value;
       up = true;
       now = now.add(const Duration(seconds: 15));
-      expect(await p.load('https://tile.example/x.png', skip: false, cancel: never), [1]);
+      expect(await p.load('https://tile.example/x.png', cancel: never), [1]);
       expect(gate.isOpen, isFalse);
       expect(gate.recoveries.value, recoveries + 1);
       // And the next outage starts from 3 s again.
       up = false;
       now = now.add(const Duration(seconds: 10));
       for (var i = 0; i < 3; i++) {
-        await p.load('https://tile.example/n$i.png', skip: false, cancel: never);
+        await p.load('https://tile.example/n$i.png', cancel: never);
       }
       now = now.add(const Duration(seconds: 3));
       final before = c.sent.length;
-      await p.load('https://tile.example/y.png', skip: false, cancel: never); // not x.png: that one is in the cache now
+      await p.load('https://tile.example/y.png', cancel: never); // not x.png: that one is in the cache now
       expect(c.sent.length, before + 1);
     });
 
@@ -345,7 +330,7 @@ void main() {
       final c = ScriptClient()..handler = (r) async => throw http.ClientException('no route');
       final p = make(c, gate: gate);
       for (var i = 0; i < 3; i++) {
-        await p.load('https://tile.example/$i.png', skip: false, cancel: never);
+        await p.load('https://tile.example/$i.png', cancel: never);
       }
       now = now.add(const Duration(seconds: 4));
       // The probe: a slow request whose tile is cancelled before any answer.
@@ -353,14 +338,14 @@ void main() {
         ..delay = const Duration(seconds: 30)
         ..handler = null;
       final cancel = Completer<void>();
-      final probe = p.load('https://tile.example/probe.png', skip: false, cancel: cancel.future);
+      final probe = p.load('https://tile.example/probe.png', cancel: cancel.future);
       await Future<void>.delayed(const Duration(milliseconds: 10));
       expect(gate.mayRequest, isFalse, reason: 'one probe at a time');
       cancel.complete();
       await probe;
       expect(gate.mayRequest, isTrue, reason: 'the cancelled probe gave the turn back');
       c.delay = Duration.zero;
-      expect(await p.load('https://tile.example/next.png', skip: false, cancel: never), [1, 2, 3]);
+      expect(await p.load('https://tile.example/next.png', cancel: never), [1, 2, 3]);
       expect(gate.isOpen, isFalse);
     });
 
@@ -372,24 +357,24 @@ void main() {
         ..handler = (r) async => limited ? http.StreamedResponse(Stream.value([0]), 429, headers: {'retry-after': '4'}) : http.StreamedResponse(Stream.value([9]), 200);
       final stats = MapTileStats();
       final p = make(c, gate: gate, stats: stats);
-      await p.load('https://tile.example/1.png', skip: false, cancel: never);
+      await p.load('https://tile.example/1.png', cancel: never);
       expect(gate.paused, isTrue);
       expect(gate.isOpen, isFalse);
       expect(gate.maxConcurrent, 5);
       expect(gate.slowedDown, 1);
       final before = c.sent.length;
-      await p.load('https://tile.example/2.png', skip: false, cancel: never);
+      await p.load('https://tile.example/2.png', cancel: never);
       expect(c.sent.length, before, reason: 'nothing is sent while the server asked us to wait');
       limited = false;
       now = now.add(const Duration(seconds: 4));
-      expect(await p.load('https://tile.example/2.png', skip: false, cancel: never), [9]);
+      expect(await p.load('https://tile.example/2.png', cancel: never), [9]);
     });
 
     test('404 is "no tile there": an empty tile, a good answer, never a failure', () async {
       final c = ScriptClient()..handler = (r) async => http.StreamedResponse(const Stream.empty(), 404);
       final stats = MapTileStats();
       final gate = TileFetchGate();
-      final (b, o) = await make(c, gate: gate, stats: stats).loadWithRetry(url, skip: false, cancel: never, delays: const [Duration(milliseconds: 5)]);
+      final (b, o) = await make(c, gate: gate, stats: stats).loadWithRetry(url, cancel: never, delays: const [Duration(milliseconds: 5)]);
       expect(b, TileProvider.transparentImage);
       expect(o, TileOutcome.networkOk);
       expect(c.sent, hasLength(1), reason: 'not retried');
@@ -402,7 +387,7 @@ void main() {
       final c = ScriptClient()..handler = (r) async => ++n <= 3 ? throw http.ClientException('reset') : http.StreamedResponse(Stream.value([4, 2]), 200);
       // failuresToOpen above 3 keeps the breaker out of this test; the breaker's own recovery is tested above.
       final gate = TileFetchGate(failuresToOpen: 10);
-      final (b, o) = await make(c, gate: gate).loadWithRetry(url, skip: false, cancel: never, delays: const [Duration(milliseconds: 5), Duration(milliseconds: 10), Duration(milliseconds: 20)]);
+      final (b, o) = await make(c, gate: gate).loadWithRetry(url, cancel: never, delays: const [Duration(milliseconds: 5), Duration(milliseconds: 10), Duration(milliseconds: 20)]);
       expect(b, [4, 2]);
       expect(o, TileOutcome.networkOk);
       expect(c.sent, hasLength(4));
@@ -413,13 +398,13 @@ void main() {
       final c = ScriptClient()..handler = (r) async => throw http.ClientException('reset');
       final gate = TileFetchGate(failuresToOpen: 10);
       final p = make(c, gate: gate);
-      final (b, o) = await p.loadWithRetry(url, skip: false, cancel: never, delays: const [Duration(milliseconds: 5), Duration(milliseconds: 10)]);
+      final (b, o) = await p.loadWithRetry(url, cancel: never, delays: const [Duration(milliseconds: 5), Duration(milliseconds: 10)]);
       expect(b, TileProvider.transparentImage);
       expect(o, TileOutcome.failed);
       expect(c.sent, hasLength(3));
       // Cancelled during a long wait: returns at once, no further request.
       final cancel = Completer<void>();
-      final f = p.loadWithRetry('https://tile.example/c.png', skip: false, cancel: cancel.future, delays: const [Duration(seconds: 30)]);
+      final f = p.loadWithRetry('https://tile.example/c.png', cancel: cancel.future, delays: const [Duration(seconds: 30)]);
       await Future<void>.delayed(const Duration(milliseconds: 20));
       final sent = c.sent.length;
       cancel.complete();
@@ -434,10 +419,10 @@ void main() {
       final c = ScriptClient()..handler = (r) async => up ? http.StreamedResponse(Stream.value([8]), 200) : throw http.ClientException('no route');
       final p = make(c, gate: gate);
       for (var i = 0; i < 3; i++) {
-        await p.load('https://tile.example/$i.png', skip: false, cancel: never);
+        await p.load('https://tile.example/$i.png', cancel: never);
       }
       expect(gate.isOpen, isTrue);
-      final f = p.loadWithRetry(url, skip: false, cancel: never, delays: const [Duration(milliseconds: 20), Duration(milliseconds: 20)]);
+      final f = p.loadWithRetry(url, cancel: never, delays: const [Duration(milliseconds: 20), Duration(milliseconds: 20)]);
       await Future<void>.delayed(const Duration(milliseconds: 5));
       up = true;
       now = now.add(const Duration(seconds: 3)); // the first probe is due
@@ -475,12 +460,12 @@ void main() {
     var closed = false;
     final real = _ClosableClient(() => closed = true);
     final p = MeshTileProvider(client: real, ownsClient: true, cache: MemCache(), gate: TileFetchGate(), stats: MapTileStats());
-    expect(await p.load('https://tile.example/a.png', skip: false, cancel: never), [1, 2, 3]);
+    expect(await p.load('https://tile.example/a.png', cancel: never), [1, 2, 3]);
     // Satellite's two imagery layers are disposed when another basemap is picked; each calls dispose() on the provider.
     p.dispose();
     p.dispose();
     expect(closed, isFalse, reason: 'the HTTP client stays open for the layers that remain');
-    expect(await p.load('https://tile.example/b.png', skip: false, cancel: never), [1, 2, 3], reason: 'the vector basemap still loads tiles');
+    expect(await p.load('https://tile.example/b.png', cancel: never), [1, 2, 3], reason: 'the vector basemap still loads tiles');
     p.close();
     p.close();
     expect(closed, isTrue);
@@ -497,7 +482,7 @@ void main() {
       stats: stats,
       imageRetryDelays: const [Duration(milliseconds: 10), Duration(milliseconds: 20)],
     );
-    final img = MeshTileImage(url: url, skip: false, provider: p, cancel: never);
+    final img = MeshTileImage(url: url, provider: p, cancel: never);
     Future<void> resolve() async {
       final done = Completer<void>();
       final stream = img.resolve(ImageConfiguration.empty);

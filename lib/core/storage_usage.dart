@@ -73,7 +73,7 @@ DriveStorageSplit splitDrives(List<SessionSummary> sessions, {String? recordingI
   return DriveStorageSplit(removable: removable, kept: kept, keptUnsentPings: unsent);
 }
 
-/// "820 KB", "3.4 MB", "1.25 GB" (binary units, like the offline maps screen).
+/// "820 KB", "3.4 MB", "1.25 GB" (binary units).
 String formatStorageBytes(int b) {
   if (b < 1024) return '$b B';
   if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(0)} KB';

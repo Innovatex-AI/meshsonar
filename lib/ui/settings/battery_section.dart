@@ -62,9 +62,6 @@ const List<SettingsEntry> batterySettingsEntries = [
   SettingsEntry('battery-stats', 'battery', 'Radio and phone stats',
       'How often the drive report records radio and phone readings (battery, temperature, pressure).',
       keywords: [..._kw, 'stats', 'telemetry', 'samples', 'radio battery', 'report', 'interval']),
-  SettingsEntry('battery-simple-basemap', 'battery', 'Simple basemap while driving',
-      'Shows the coverage hexes on a plain background during a drive, without satellite or street detail.',
-      keywords: [..._kw, 'basemap', 'map', 'satellite', 'plain', 'tiles', 'simple', 'background']),
 ];
 
 // ---------------------------------------------------------------- the knobs: one description each
@@ -356,15 +353,6 @@ List<Widget> batterySectionRows(BuildContext context) => [
         ),
       ),
       SettingsAnchor(id: 'battery-stats', child: KnobTile(knob: statsKnob)),
-      SettingsAnchor(
-        id: 'battery-simple-basemap',
-        child: _KnobSwitch(
-          id: 'battery-simple-basemap',
-          icon: Icons.layers_clear_outlined,
-          read: (s) => s.simpleBasemap,
-          write: (s, v) => s.copyWith(simpleBasemap: v),
-        ),
-      ),
     ];
 
 /// Max data / Balanced / Saver, with "Custom" when a knob was changed and a line while Low Power Mode overrides.

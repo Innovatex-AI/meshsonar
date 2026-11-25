@@ -24,7 +24,6 @@ import 'drive/drive_clock.dart';
 import 'drive/drive_controls.dart';
 import 'drive/drive_live_stats.dart';
 import 'drive/drive_map_model.dart';
-import 'map/basemap_layer.dart' show simpleBasemapNow;
 import 'map/coverage_map.dart';
 import 'map/map_key.dart';
 import 'map/legend_card.dart';
@@ -101,7 +100,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
     if (open != null && open != kDrivePanelId && p != null && p.detent == PanelDetent.medium) p.settleTo(PanelDetent.dock);
   }
 
-  /// The battery mode changed: the wakelock rule, and the map's simple basemap.
+  /// The battery mode changed: the wakelock rule.
   void _powerChanged() {
     if (!mounted) return;
     _syncClocks();
@@ -472,7 +471,6 @@ class _MapPane extends StatelessWidget {
           puck: model.puck,
           telemetry: model.telemetry,
           rotatable: rotatable,
-          plainBasemap: simpleBasemapNow(driving: s.driving),
           topClearance: topClearance,
           bottomClearance: bottomClearance,
           panelHost: panelHost,

@@ -13,7 +13,6 @@
 // 'zone-add-cancel', 'zone-tile-<i>', 'zone-editor', 'zone-name', 'zone-radius', 'zone-move', 'zone-here', 'zone-delete',
 // 'zone-trim', 'zone-limit', 'zones-unsupported', 'zones-website'.
 import '../../core/map_styles.dart' show BaseMapStyle;
-import '../../core/pmtiles_reader.dart' show PmtilesReader;
 import '../map/active_map_definition.dart';
 import '../map/basemap_layer.dart' show BasemapLayer;
 import '../map/map_preview.dart';
@@ -33,7 +32,6 @@ import '../../core/units.dart' show Units;
 import '../app.dart';
 import 'confirm_sheet.dart';
 import '../map/coverage_map.dart' show CoverageMap;
-import '../map/offline_basemap.dart';
 import '../map/region_center.dart';
 import '../map/tools/drive_key.dart';
 import '../map/tools/zone_layer.dart';
@@ -49,17 +47,13 @@ const String privacyZonesEdgeNote = 'A ping just outside a zone shows where its 
     'to remove what the server already holds inside it.';
 
 /// The base layer of the zone editor for the reader's saved base map [style] (build 75): Chart (the build 74 map, which follows the
-/// theme) is null, so MapPreview draws its default; Light and Dark force their look; Topo draws the topographic palette; an installed
-/// offline pack draws under the styles that use one. Satellite is NOT drawn here: the editor's map is a MapPreview, whose credit line
+/// theme) is null, so MapPreview draws its default; Light and Dark force their look; Topo draws the topographic palette.
+/// Satellite is NOT drawn here: the editor's map is a MapPreview, whose credit line
 /// cannot carry the imagery credits Satellite requires, so it keeps the Chart map (the Drive map and the drive detail map draw it).
-/// Offline, an installed pack replaces the online tiles exactly as before.
 @visibleForTesting
-Widget? zonesBasemap({required BaseMapStyle style, required bool tiles, PmtilesReader? offline, String? packCode}) {
+Widget? zonesBasemap({required BaseMapStyle style, required bool tiles}) {
   if (!tiles) return null;
   final drawn = style.isSatellite ? BaseMapStyle.chart : style;
-  if (offline != null && drawn.usesOfflinePack) {
-    return OfflineBasemapLayer(key: ValueKey('zones-offline-$packCode'), reader: offline, dark: drawn.darkLook);
-  }
   if (drawn == BaseMapStyle.chart) return null;
   return BasemapLayer(key: ValueKey('zones-basemap-${drawn.id}'), dark: drawn.darkLook, look: drawn.look);
 }
@@ -97,7 +91,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
   late final MapController _map = widget.mapController ?? MapController();
   final FocusNode _nameFocus = FocusNode();
   final TextEditingController _name = TextEditingController();
-  late final OfflinePackSelection _pack = OfflinePackSelection(OfflineBasemap.instance);
 
   int? _selected;
   _Mode _mode = _Mode.select;
@@ -126,10 +119,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       _c = c;
       c.addListener(_onChanged);
       unawaited(c.load().then((_) => c.sync()));
-      if (_tiles) {
-        OfflineBasemap.instance.ensureOpen();
-        OfflineBasemap.instance.addListener(_onPacks);
-      }
     }
   }
 
@@ -190,14 +179,9 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     }
   }
 
-  void _onPacks() {
-    if (mounted && _pack.refresh()) setState(() {});
-  }
-
   @override
   void dispose() {
     _c?.removeListener(_onChanged);
-    if (_tiles) OfflineBasemap.instance.removeListener(_onPacks);
     unawaited(_commitDraft());
     _nameFocus.dispose();
     _name.dispose();
@@ -367,7 +351,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     final t = Theme.of(context);
     final zones = _zones;
     final start = _startView(s);
-    final offline = _tiles ? _pack.reader : null;
     final sel = _selected;
     final map = Semantics(
       container: true,
@@ -381,15 +364,13 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
         fit: start.bounds == null ? null : CameraFit.bounds(bounds: start.bounds!, padding: const EdgeInsets.all(40), maxZoom: 16),
         interaction: MapPreviewInteraction.edit,
         tiles: _tiles,
-        basemap: zonesBasemap(style: _style(s), tiles: _tiles, offline: offline, packCode: _pack.code),
+        basemap: zonesBasemap(style: _style(s), tiles: _tiles),
         onMapReady: () {
           _mapReady = true;
           _framedKey = _keyOf(start);
-          if (_tiles && _pack.update(start.center.latitude, start.center.longitude) && mounted) setState(() {});
         },
         onPositionChanged: (cam, hasGesture) {
           if (hasGesture) _touched = true;
-          if (_tiles && _pack.update(cam.center.latitude, cam.center.longitude) && mounted) setState(() {});
         },
         onTap: (_, p) => unawaited(_onMapTap(p)),
         overlays: [

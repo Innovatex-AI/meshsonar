@@ -13,7 +13,7 @@ import 'package:path/path.dart' as p;
 const allowedServerHosts = {'meshsonar.com', 'cmh.meshsonar.com', 'cmh-meshcore.lovable.app'};
 /// Named in lib/ only so the app can refuse them; nothing ever connects to these.
 const refusedHosts = {'mqtt.meshsonar.com'};
-const allowedLiteralHosts = {...allowedServerHosts, 'www.opengis.net', 'map.meshcore.io', 'api.meshsonar.com', 'tiles.openfreemap.org', 'api.meshcore.nz', 'tiles.meshsonar.com', 'open-meteo.com', 'www.openstreetmap.org', 'opendatacommons.org', 'www.esri.com', 'www.usgs.gov', 'creativecommons.org', 'flasher.meshcore.io', 'protomaps.com', 'openfreemap.org'};
+const allowedLiteralHosts = {...allowedServerHosts, 'www.opengis.net', 'map.meshcore.io', 'api.meshsonar.com', 'tiles.openfreemap.org', 'api.meshcore.nz', 'open-meteo.com', 'www.openstreetmap.org', 'opendatacommons.org', 'www.esri.com', 'www.usgs.gov', 'creativecommons.org', 'flasher.meshcore.io', 'protomaps.com', 'openfreemap.org'};
 // protomaps.com, openfreemap.org: basemap credit LINKS in the Credits sheet, opened in the browser on tap only (M2).
 // www.esri.com, www.usgs.gov (M3 Satellite imagery credit LINKS, on tap only; the imagery itself is fetched from the URLs in the Map Definition, never hard-coded here).
 // www.openstreetmap.org, opendatacommons.org, creativecommons.org: the map credit LINKS in the Credits sheet (the (i)
@@ -22,9 +22,8 @@ const allowedLiteralHosts = {...allowedServerHosts, 'www.opengis.net', 'map.mesh
 // Weather block). The app never contacts Open-Meteo; the server does (stream 7 WP6).
 // flasher.meshcore.io: the official MeshCore firmware flasher, a LINK opened in the browser on tap only (Device settings >
 // Firmware, chat plan 4.14); the app never contacts it and never flashes firmware itself.
-// api.meshsonar.com: our basemap tiles + offline packs (core/basemap.dart, core/offline_packs.dart; plan M2). tiles.openfreemap.org:
+// api.meshsonar.com: our basemap tiles (core/basemap.dart; plan M2). tiles.openfreemap.org:
 // the keyless basemap fallback (OpenFreeMap TileJSON + tiles), contacted only when our tiles fail or the view leaves our extract.
-// tiles.meshsonar.com stays for the pre-M2 pack manifest (read only while the M2 one is not published).
 // coverage_v2.dart: the coverage v2 reads (tiles, cell, meta) go to the configured MeshSonar server only (WP5, Nov 8 2026).
 // photo_wire.dart: the photo upload's socket (dart:io HttpClient for real per-chunk progress); it only opens the URL
 // HttpCmatClient.endpoint('photo-upload') hands it, i.e. the configured MeshSonar server.
@@ -113,7 +112,7 @@ void main() {
     expect(unknown, isEmpty, reason: 'a new host in lib/ needs a spec decision (MeshSonar sends only to its server)');
     // live_api.dart (AZ-3.3) opens one client per /v1/stream connection on the region host, as live_stream.dart does for
     // region-live, so a pause really drops the socket.
-    expect(clients.difference({'live_api.dart', 'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'coverage_v2.dart', 'live_stream.dart', 'radio_presets.dart', 'offline_packs.dart', 'offline_basemap.dart', 'repeater_sync.dart', 'tile_source.dart', 'basemap.dart', 'map_definition.dart', 'photo_cache.dart', 'photo_wire.dart'}), isEmpty);
+    expect(clients.difference({'live_api.dart', 'cmat_client.dart', 'repeater_directory.dart', 'region_repeaters_api.dart', 'region_overview_api.dart', 'region_reports_api.dart', 'region_packets_api.dart', 'region_analysis_api.dart', 'repeater_detail_api.dart', 'etag_client.dart', 'region_stats_api.dart', 'region_timeline_api.dart', 'coverage_v2.dart', 'live_stream.dart', 'radio_presets.dart', 'repeater_sync.dart', 'tile_source.dart', 'basemap.dart', 'map_definition.dart', 'photo_cache.dart', 'photo_wire.dart'}), isEmpty);
     expect(hosts.keys.where((h) => h.contains('meshmapper')), isEmpty);
   });
 
