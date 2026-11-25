@@ -123,6 +123,9 @@ void main() {
 
     // The name is optional: left blank, the generic one goes out.
 
+    // Build 76: the form is one tap down, on its own page; it closes itself once the key is there.
+    await tester.tap(find.byKey(const Key('key-create')));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('key-name')), 'Andy');
     await tester.enterText(find.byKey(const Key('key-callsign')), 'KD8XYZ');
     await tester.tap(find.byKey(const Key('key-request')));
@@ -154,6 +157,8 @@ void main() {
     await h.pumpApp(tester);
     h.client.requestError = const CmatException('', status: 503);
     await openSettingsTab(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('key-create')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('key-name')), 'Andy');
     await tester.tap(find.byKey(const Key('key-request')));

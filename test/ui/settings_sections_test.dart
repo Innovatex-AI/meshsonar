@@ -17,7 +17,7 @@ void main() {
     // Build 76 (Andy: "simplify the settings and group appropriately"): eight sections; rare rows are on a page of
     // their section (the third value), opened from the row `page-<id>`.
     for (final (section, page, field) in <(String, String?, String)>[
-      ('driver', null, 'key-request'),
+      ('driver', null, 'key-create'),
       ('driver', null, 'page-claims'),
       ('driver', null, 'delete-my-data'),
       ('driver', 'account-advanced', 'server-url'),
