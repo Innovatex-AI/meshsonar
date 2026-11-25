@@ -650,6 +650,17 @@ class LinkModeBodyState extends State<LinkModeBody> {
           liveRegion: true,
           child: PlanLine(verdictSymbol(v), '${linkVerdictWords(v)} (Estimate)', key: const Key('link-verdict'), color: colour, style: t.textTheme.titleLarge),
         ),
+      // Build 76: the verdict in a plain sentence with the next step, before any dB figure.
+      if (v != null)
+        Text(
+          switch (v) {
+            PlanVerdict.likely => 'These two should hear each other.',
+            PlanVerdict.marginal => 'It may work some of the time. A higher antenna on either end helps.',
+            PlanVerdict.unlikely => 'Something is in the way. Try a higher antenna, or a relay between them.',
+          },
+          key: const Key('link-plain'),
+          style: t.textTheme.bodyLarge,
+        ),
       if (d.marginDb != null)
         PlanFact('Link margin after the ${fadeMarginDb.round()} dB fade margin (${directionWords(rq.direction)})', dbWords(d.marginDb!, signed: true)),
       // ---- the profile

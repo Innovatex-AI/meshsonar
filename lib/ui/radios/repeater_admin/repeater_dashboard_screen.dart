@@ -8,6 +8,7 @@ import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator, Cuperti
 import 'package:flutter/material.dart';
 
 import '../../../chat/db/stats_history_repository.dart' show StatsPoint;
+import '../../../core/units.dart' show Units;
 import '../../../radio/default_passwords.dart';
 import '../../../radio/has_connection.dart';
 import '../../../radio/repeater_admin.dart';
@@ -460,6 +461,15 @@ class _TelemetryPageState extends State<_TelemetryPage> {
     if (c.snapshot?.telemetry == null) WidgetsBinding.instance.addPostFrameCallback((_) => c.refreshTelemetry());
   }
 
+  /// The reading with its unit (build 76: extra sensors showed a bare number).
+  static String _value(LppValue v, Units units) => switch (v.type) {
+        LppValue.typeVoltage => '${v.value.toStringAsFixed(2)} V',
+        LppValue.typeTemperature => units.temperature(v.value),
+        LppValue.typeHumidity => '${v.value.toStringAsFixed(0)} %',
+        LppValue.typePressure => '${v.value.toStringAsFixed(0)} hPa',
+        _ => v.value.toStringAsFixed(2),
+      };
+
   static String _name(LppValue v) => switch (v.type) {
         LppValue.typeVoltage => 'Voltage',
         LppValue.typeTemperature => 'Temperature',
@@ -482,7 +492,7 @@ class _TelemetryPageState extends State<_TelemetryPage> {
           for (final v in t.values) {
             if (v.type == LppValue.typeVoltage && t.voltageV != null && v.channel == 1) continue;
             if (v.type == LppValue.typeTemperature && t.temperatureC != null && v.channel == 1) continue;
-            rows.add(GroupRow(title: _name(v), value: v.value.toStringAsFixed(2)));
+            rows.add(GroupRow(title: _name(v), value: _value(v, AppScope.unitsOf(context))));
           }
         }
         return CustomScrollView(
@@ -496,9 +506,24 @@ class _TelemetryPageState extends State<_TelemetryPage> {
                 delegate: SliverChildListDelegate([
                   if (c.notices['telemetry'] != null) NoticeBanner(c.notices['telemetry']!),
                   if (c.loadingTelemetry && t == null)
-                    const Padding(padding: EdgeInsets.all(Gap.xl), child: Center(child: CupertinoActivityIndicator()))
+                    Padding(
+                      padding: const EdgeInsets.all(Gap.xl),
+                      child: Column(children: [
+                        const CupertinoActivityIndicator(),
+                        const SizedBox(height: Gap.s),
+                        Text('Asking the repeater… up to 12 s', key: const Key('telemetry-loading'), style: AppType.footnote.copyWith(color: colors.textMuted)),
+                      ]),
+                    )
                   else if (rows.isEmpty)
-                    Padding(padding: const EdgeInsets.all(Gap.xl), child: Text('No readings yet. Pull down to ask for them.', style: AppType.body.copyWith(color: colors.textMuted)))
+                    // Build 76: a button that fixes it, not only "pull down".
+                    Padding(
+                      padding: const EdgeInsets.all(Gap.xl),
+                      child: Column(children: [
+                        Text('No readings yet.', style: AppType.body.copyWith(color: colors.textMuted)),
+                        const SizedBox(height: Gap.m),
+                        CupertinoButton.filled(key: const Key('telemetry-read'), minimumSize: const Size(Hit.min, Hit.min), onPressed: c.refreshTelemetry, child: const Text('Read now')),
+                      ]),
+                    )
                   else
                     InsetGroup(
                       header: 'Readings',
@@ -563,11 +588,21 @@ class DashboardChartPage extends StatelessWidget {
                 if (values.length < 2)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: Gap.xl),
-                    child: Text(
-                      values.isEmpty ? 'No readings yet. Every time the dashboard reads this repeater it adds a point.' : 'One reading so far. A line appears after the next one.',
-                      key: const Key('chart-empty'),
-                      style: AppType.body.copyWith(color: colors.textMuted),
-                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(
+                        values.isEmpty ? 'No readings yet. Each read of this repeater adds a point.' : 'One reading so far. A line appears after the next one.',
+                        key: const Key('chart-empty'),
+                        style: AppType.body.copyWith(color: colors.textMuted),
+                      ),
+                      const SizedBox(height: Gap.m),
+                      // Build 76: add a point from here (it meant going back to the dashboard and pulling down).
+                      CupertinoButton.filled(
+                        key: const Key('chart-read'),
+                        minimumSize: const Size(Hit.min, Hit.min),
+                        onPressed: controller.loadingStatus ? null : () => controller.refreshStatus(),
+                        child: Text(controller.loadingStatus ? 'Reading…' : 'Read now'),
+                      ),
+                    ]),
                   )
                 else
                   SparklineChart(values: values, format: (x) => x.toStringAsFixed(dec), semanticLabel: Sparkline.summary(title, values, unit: unit, decimals: dec)),

@@ -161,13 +161,15 @@ class _PlanShareSheetState extends State<PlanShareSheet> {
         key: const Key('plan-share'),
         controller: widget.scroll,
         title: 'Share the plan',
-        children: const [
-          SizedBox(height: Gap.l),
+        children: [
+          const SizedBox(height: Gap.l),
           AppEmptyView(
-            key: Key('plan-share-empty'),
+            key: const Key('plan-share-empty'),
             symbol: AppSymbols.squareAndArrowUp,
             title: 'Nothing to share yet',
             message: 'Add a spot first: press and hold the map, or add a repeater.',
+            actionLabel: 'Back to the plan',
+            onAction: () => Navigator.of(context).maybePop(),
           ),
         ],
       );
@@ -540,23 +542,41 @@ class _PlanImportSheetState extends State<PlanImportSheet> {
 
   Widget _input(BuildContext context) {
     final t = Theme.of(context);
+    final empty = _field.text.trim().isEmpty;
     return AppSheetScaffold(
       key: const Key('plan-import'),
       controller: widget.scroll,
       title: 'Import',
-      primaryAction: FilledButton(
-        key: const Key('plan-import-go'),
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
-        onPressed: _go,
-        child: const Text('Continue'),
-      ),
-      secondaryAction: TextButton.icon(
-        key: const Key('plan-import-paste'),
-        style: TextButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min)),
-        onPressed: _pasteIn,
-        icon: const AppSymbolIcon(AppSymbols.docOnDoc, size: 20),
-        label: const Text('Paste from the clipboard'),
-      ),
+      // Build 76: while the box is empty the big button is Paste (the way nearly everyone gets a link in); once there is
+      // text it is Continue. Both keep their Keys.
+      primaryAction: empty
+          ? FilledButton.icon(
+              key: const Key('plan-import-paste'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
+              onPressed: _pasteIn,
+              icon: const AppSymbolIcon(AppSymbols.docOnDoc, size: 20),
+              label: const Text('Paste from the clipboard'),
+            )
+          : FilledButton(
+              key: const Key('plan-import-go'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
+              onPressed: _go,
+              child: const Text('Continue'),
+            ),
+      secondaryAction: empty
+          ? TextButton(
+              key: const Key('plan-import-go'),
+              style: TextButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min)),
+              onPressed: _go,
+              child: const Text('Continue'),
+            )
+          : TextButton.icon(
+              key: const Key('plan-import-paste'),
+              style: TextButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min)),
+              onPressed: _pasteIn,
+              icon: const AppSymbolIcon(AppSymbols.docOnDoc, size: 20),
+              label: const Text('Paste from the clipboard'),
+            ),
       children: [
         Text(
           'Paste a plan link or code someone sent you, or a MeshCore contacts list to add those radios to this plan.',
@@ -570,14 +590,25 @@ class _PlanImportSheetState extends State<PlanImportSheet> {
           maxLines: 6,
           keyboardType: TextInputType.multiline,
           decoration: InputDecoration(
-            labelText: 'Link, code or contacts JSON',
+            labelText: 'Link, code or contacts list',
             border: const OutlineInputBorder(),
             errorText: _error,
             errorMaxLines: 4,
+            // A clear button while there is text: a long pasted list took select-all and delete to remove.
+            suffixIcon: empty
+                ? null
+                : IconButton(
+                    key: const Key('plan-import-clear'),
+                    tooltip: 'Clear',
+                    constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+                    onPressed: () => setState(() {
+                      _field.clear();
+                      _error = null;
+                    }),
+                    icon: const AppSymbolIcon(AppSymbols.xmarkCircleFill, size: 18),
+                  ),
           ),
-          onChanged: (_) {
-            if (_error != null) setState(() => _error = null);
-          },
+          onChanged: (_) => setState(() => _error = null),
         ),
         const SizedBox(height: Gap.l),
       ],

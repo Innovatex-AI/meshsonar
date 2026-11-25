@@ -580,7 +580,7 @@ class PlannerScreenState extends State<PlannerScreen> {
       sheetKey: const Key('plan-menu-sheet'),
       actions: [
         const AppAction('Rename', 'rename', symbol: AppSymbols.squareAndPencil, key: Key('plan-menu-rename')),
-        const AppAction('Radio and clutter', 'settings', symbol: AppSymbols.antenna, key: Key('plan-menu-settings')),
+        const AppAction('Radio and trees', 'settings', symbol: AppSymbols.antenna, key: Key('plan-menu-settings')),
         if (planDriveTargets(c.nodes).isNotEmpty)
           const AppAction('Show plan on the Drive map', 'drive', symbol: AppSymbols.car, key: Key('plan-menu-drive-map')),
         const AppAction('Share or export', 'share', symbol: AppSymbols.squareAndArrowUp, key: Key('plan-menu-share')),

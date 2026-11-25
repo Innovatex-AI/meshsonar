@@ -77,6 +77,13 @@ Future<void> reveal(WidgetTester tester, Finder f) async {
 }
 
 void main() {
+  test('build 76: saved-plan times read today / yesterday / a date', () {
+    final now = DateTime(2026, 11, 25, 15, 0);
+    expect(savedWhen(DateTime(2026, 11, 25, 9, 5), now), 'today 09:05');
+    expect(savedWhen(DateTime(2026, 11, 24, 23, 59), now), 'yesterday 23:59');
+    expect(savedWhen(DateTime(2026, 11, 20, 8, 0), now), '2026-11-20');
+  });
+
   tearDown(PlanShareSeams.reset);
 
   group('readPlanPaste', () {
@@ -198,6 +205,10 @@ void main() {
       final st = await openPlanner(tester, h);
       PlanShareSeams.paste = () async => 'meshsonar://plan#${encodePlanShare(_shared()).code}';
       await openMenu(tester, 'plan-menu-import');
+      // Build 76: with an empty box the filled button is Paste.
+      expect(find.byKey(const Key('plan-import-paste')), findsOneWidget);
+      expect(tester.widget(find.byKey(const Key('plan-import-paste'))), isA<FilledButton>());
+      expect(find.byKey(const Key('plan-import-clear')), findsNothing);
       await tapIn(tester, find.byKey(const Key('plan-import-paste')));
       await settle(tester);
       expect(st.controller!.plan.name, 'Club plan');

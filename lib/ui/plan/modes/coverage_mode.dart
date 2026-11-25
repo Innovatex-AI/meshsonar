@@ -697,6 +697,9 @@ class CoverageBodyState extends State<CoverageBody> {
           excludeSemantics: true,
           child: Text(areaWords(units, d.coveredKm2), key: const Key('coverage-area'), style: numberStyle(context, size: 30)),
         ),
+        // Build 76: the area as a distance people can picture, before the technical line.
+        if (d.coveredKm2 > 0)
+          Text('About the same as a circle ${units.distance(2000 * math.sqrt(d.coveredKm2 / math.pi))} across.', key: const Key('coverage-plain'), style: t.textTheme.bodyLarge),
         Text('Estimate: area where a ${CoverageReceiver.of(_plan.receiverM).label.toLowerCase()} radio can decode this site', style: t.textTheme.bodySmall),
         const SizedBox(height: Gap.s),
         for (final b in d.bands)

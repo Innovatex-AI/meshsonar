@@ -404,13 +404,14 @@ class SiteRow extends StatelessWidget {
                 ),
               ),
           ]),
-        Wrap(spacing: Gap.xs, runSpacing: 0, children: [
-          TextButton.icon(
+        // Build 76: Add is the card's one filled button (three look-alike text links hid the main action).
+        Wrap(spacing: Gap.s, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          FilledButton.tonalIcon(
             key: Key('$keyBase-add-${s.id}'),
-            style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+            style: FilledButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
             onPressed: inPlan ? null : onAdd,
             icon: AppSymbolIcon(inPlan ? AppSymbols.checkmarkCircleFill : AppSymbols.plus, size: 18),
-            label: Text(inPlan ? 'In the plan' : 'Add', semanticsLabel: inPlan ? 'Pin $pin is in the plan' : 'Add pin $pin to the plan'),
+            label: Text(inPlan ? 'In the plan' : 'Add to plan', semanticsLabel: inPlan ? 'Pin $pin is in the plan' : 'Add pin $pin to the plan'),
           ),
           TextButton.icon(
             key: Key('$keyBase-show-${s.id}'),
