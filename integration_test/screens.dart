@@ -709,7 +709,7 @@ final List<ScreenStep> screens = [
       await t.tap(row);
       await pumpFor(t, const Duration(seconds: 1));
       await shot(t, 'settings-page-$id');
-      await t.pageBack();
+      await backOne(t);
       await pumpFor(t, const Duration(seconds: 1));
     }
   }, optional: true),
