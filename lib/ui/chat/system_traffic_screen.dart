@@ -40,19 +40,22 @@ class _SystemTrafficScreenState extends State<SystemTrafficScreen> {
     final page = widget.controller.service.systemTraffic(widget.channel.id!, limit: 100);
     final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text('${widget.channel.name} traffic')),
+      appBar: AppBar(title: Text('${widget.channel.name} traffic', maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: SafeArea(
         child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.all(Gap.l),
-            child: Text(
-              'This is the wardrive channel: other people\'s pings land here. It is read-only and kept only on this phone, the newest ${page.messages.length}.',
-              style: t.textTheme.bodyMedium,
+          // One short line, and only when there is a list under it (the empty state says the same thing).
+          if (page.messages.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Gap.l, Gap.m, Gap.l, Gap.s),
+              child: Text(
+                'Pings from other drivers. Read-only, newest ${page.messages.length}, kept on this phone.',
+                key: const Key('traffic-intro'),
+                style: t.textTheme.bodySmall,
+              ),
             ),
-          ),
           Expanded(
             child: page.messages.isEmpty
-                ? const AppEmptyView(symbol: AppSymbols.waveform, title: 'Nothing heard yet', message: 'Pings from other drivers on this channel will show up here while your radio is connected.')
+                ? const AppEmptyView(symbol: AppSymbols.waveform, title: 'Nothing heard yet', message: 'Pings from other drivers show here while your radio is connected.')
                 : ListView.builder(
                     key: const Key('traffic-list'),
                     itemCount: page.messages.length,

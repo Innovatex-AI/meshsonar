@@ -652,20 +652,7 @@ class CoverageTileStore {
   int capacity;
   int maxConcurrent;
   final Future<CoverageTileData> Function(Uint8List bytes, CoverageTileLayer layer, int z, int x, int y) decode;
-  CoverageTileStore(this.client, {this.capacity = 400, this.maxConcurrent = 6, this.decode = decodeCoverageTileAsync, this.offlineTiles});
-
-  /// An installed offline pack's coverage snapshot (Measured + Predicted, both layers in one tile, z <= 13); null bytes =
-  /// the pack has nothing there. Asked when the network fails, and FIRST while the layer is [offline]. A tile served from
-  /// a pack is asked for again on the network once the network is back (at most once a minute per tile).
-  Future<Uint8List?> Function(String preset, int z, int x, int y)? offlineTiles;
-
-  final Map<String, DateTime> _fromPack = {};
-
-  /// True when the tile in memory came from an offline pack's snapshot (tests, the map's offline note).
-  bool fromPack(String key) => _fromPack.containsKey(key);
-
-  /// Injected clock (tests).
-  DateTime Function() clock = DateTime.now;
+  CoverageTileStore(this.client, {this.capacity = 400, this.maxConcurrent = 6, this.decode = decodeCoverageTileAsync});
 
   final Map<String, CoverageTileData> _tiles = {};
   final Map<String, Completer<void>> _inflight = {};
@@ -735,42 +722,18 @@ class CoverageTileStore {
   void want(CoverageTileLayer layer, String preset, int version, int z, int x, int y) {
     final key = coverageTileKey(layer, preset, version, z, x, y);
     if (_inflight.containsKey(key)) return;
-    if (_tiles.containsKey(key)) {
-      // A pack tile is replaced by the live one once the network is back.
-      final at = _fromPack[key];
-      if (at == null || offline || clock().difference(at) < const Duration(minutes: 1)) return;
-      _fromPack[key] = clock();
-    }
+    if (_tiles.containsKey(key)) return;
     final c = Completer<void>();
     _inflight[key] = c;
     _queue.add((key, () async {
-      Future<bool> fromPack() async {
-        final src = offlineTiles;
-        if (layer.isSummary || src == null || _tiles.containsKey(key)) return false; // a pack carries no summary tiles
-        try {
-          final b = await src(preset, z, x, y);
-          if (b == null) return false;
-          _put(key, await decode(b, layer, z, x, y));
-          _fromPack[key] = clock();
-          return true;
-        } catch (_) {
-          return false;
-        }
-      }
-
       try {
-        if (offline && await fromPack()) return;
         final bytes = await client.tile(layer, z, x, y, preset: preset, version: version);
         final data = bytes == null ? CoverageTileData.empty : await decode(bytes, layer, z, x, y);
         _put(key, data);
-        _fromPack.remove(key);
         networkFailures = 0;
         fetched++;
       } on CoverageV2Exception catch (e) {
-        if (e.network) {
-          networkFailures++;
-          await fromPack();
-        }
+        if (e.network) networkFailures++;
       } catch (_) {
         // a broken tile: draw nothing there rather than fail the layer
         _put(key, CoverageTileData.empty);
@@ -789,7 +752,6 @@ class CoverageTileStore {
     _tiles.remove(key);
     _tiles[key] = d;
     while (_tiles.length > capacity) {
-      _fromPack.remove(_tiles.keys.first);
       _tiles.remove(_tiles.keys.first);
     }
   }
@@ -805,7 +767,6 @@ class CoverageTileStore {
   /// Forgets every tile (a new data version or preset).
   void clear() {
     _tiles.clear();
-    _fromPack.clear();
   }
 
   /// Test seam: completes when nothing is in flight.

@@ -32,7 +32,6 @@ void main() {
     for (final s in [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark]) {
       expect(s.isVector, isTrue, reason: s.id);
       expect(s.attribution, OurBasemap.attribution);
-      expect(s.usesOfflinePack, isTrue);
     }
     expect(BaseMapStyle.topo.isVector, isTrue, reason: 'M3 Topo is our own Protomaps map in the definition palette');
     expect(BaseMapStyle.topo.look, BasemapLook.topo);

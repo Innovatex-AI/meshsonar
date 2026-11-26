@@ -26,7 +26,7 @@ abstract final class BasemapRenderCache {
   /// What the shared no-id theme of builds 57 to 71 named its renders.
   static const String legacyPrefix = 'default-vnone-';
 
-  /// Our styles' ids all start with this (tool/basemap/make_basemap_styles.mjs, offline_basemap.dart).
+  /// Our styles' ids all start with this (tool/basemap/make_basemap_styles.mjs).
   static const String ownPrefix = 'meshsonar-';
 
   /// The temp directory (tests point this at their own).

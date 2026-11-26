@@ -21,7 +21,7 @@ import 'package:meshsonar/core/observer_engine.dart';
 import 'package:meshsonar/core/plan/plan_repository.dart';
 import 'package:meshsonar/core/telemetry.dart' show TelemetryRecord;
 import 'package:meshsonar/chat/secret_store.dart';
-import 'package:meshsonar/core/offline_packs.dart' show NetworkKind, NetworkMonitor;
+import 'package:meshsonar/core/network_kind.dart';
 import 'package:meshsonar/core/region_lookup.dart';
 import 'package:meshsonar/core/region_stats_api.dart' show HubRegions;
 import 'package:meshsonar/core/repeater_sync.dart';
@@ -888,7 +888,7 @@ void useTallScreen(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-/// Network seam for the offline-pack download policy: set [kind] and call [emit] to simulate a change.
+/// The phone's network for the map (CoverageMap.debugNetwork): set [kind] and call [emit] to simulate a change.
 class FakeNetworkMonitor implements NetworkMonitor {
   NetworkKind kind;
   FakeNetworkMonitor([this.kind = NetworkKind.wifi]);

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../../../app/app_state.dart';
+import '../../../core/startup_location.dart' show LocationAccess;
+import '../../antenna_sheet.dart' show showAntennaSheet;
 import '../../design/tokens.dart';
 import '../drive_controls.dart' show openConnect;
 import '../radio_link_status.dart';
@@ -25,10 +27,16 @@ class ImmersivePill extends StatelessWidget {
     final s = state;
     final c = AppColors.fromTheme(Theme.of(context));
     final link = RadioLinkStatus.of(s);
-    final canStart = !s.busy && !s.connecting && !(s.connected && (s.needsAntennaSetup || s.locationNote != null));
+    // Approximate location still starts a drive, as on the Dock (the pill used to refuse it: build 76 fix).
+    final locationBlocks = s.locationNote != null && s.locationAccess != LocationAccess.approximate;
+    final canStart = !s.busy && !s.connecting && !(s.connected && (s.needsAntennaSetup || locationBlocks));
     // Same words and glyphs as the Dock (RadioLinkStatus): "Connect radio", "Connecting…", "Reconnecting…", "Start drive".
-    final label = link.label;
-    final enabled = link.working ? false : (canStart || !s.connected);
+    // Build 76: when Start cannot run the pill says why and does the next step itself, instead of a grey "Start drive"
+    // that did nothing: "Set antenna" opens the antenna sheet, "Location is off" brings the Dock back (its strip has the fix).
+    final needAntenna = s.connected && !link.working && s.needsAntennaSetup;
+    final needLocation = s.connected && !link.working && !needAntenna && locationBlocks;
+    final label = needAntenna ? 'Set antenna' : (needLocation ? 'Location is off' : link.label);
+    final enabled = link.working ? false : (canStart || !s.connected || needAntenna || needLocation);
     return Semantics(
       container: true,
       explicitChildNodes: true,
@@ -48,7 +56,20 @@ class ImmersivePill extends StatelessWidget {
               key: const Key('pill-nub'),
               behavior: HitTestBehavior.opaque,
               onTap: () => controller.settleTo(PanelDetent.dock),
-              child: SizedBox(width: 64, height: 24, child: Center(child: Container(width: 36, height: 5, decoration: BoxDecoration(color: c.textMuted.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(3))))),
+              // A visible "bring the controls back" chevron on its own chip, 72 x 36 to hit (build 76; it was a faint 36 x 5 bar
+              // that vanished on a busy map).
+              child: SizedBox(
+                width: 72,
+                height: 36,
+                child: Center(
+                  child: Container(
+                    width: 48,
+                    height: 24,
+                    decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: c.outline)),
+                    child: Icon(Icons.keyboard_arrow_up_rounded, size: 22, color: c.textPrimary),
+                  ),
+                ),
+              ),
             ),
             Semantics(
               button: true,
@@ -69,7 +90,14 @@ class ImmersivePill extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (s.connected) Icon(Icons.play_arrow_rounded, size: 24, color: c.onAccent) else link.leading(context, size: 22, color: c.onAccent),
+                      if (needAntenna)
+                        Icon(Icons.settings_input_antenna_rounded, size: 22, color: c.onAccent)
+                      else if (needLocation)
+                        Icon(Icons.location_off_rounded, size: 22, color: c.onAccent)
+                      else if (s.connected)
+                        Icon(Icons.play_arrow_rounded, size: 24, color: c.onAccent)
+                      else
+                        link.leading(context, size: 22, color: c.onAccent),
                       const SizedBox(width: 8),
                       Text(label, maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.onAccent)),
                     ],
@@ -86,6 +114,10 @@ class ImmersivePill extends StatelessWidget {
   void _start(BuildContext context) {
     if (!state.connected) {
       openConnect(context);
+    } else if (state.needsAntennaSetup) {
+      showAntennaSheet(context);
+    } else if (state.locationNote != null && state.locationAccess != LocationAccess.approximate) {
+      controller.settleTo(PanelDetent.dock);
     } else {
       state.startDrive();
     }

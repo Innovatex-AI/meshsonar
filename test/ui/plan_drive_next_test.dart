@@ -38,6 +38,7 @@ void main() {
     expect(find.text('Where to drive next'), findsOneWidget);
     expect(find.byKey(const Key('fake-map')), findsOneWidget);
     expect(find.textContaining('No reply ('), findsOneWidget);
+    expect(find.textContaining('Dot: driven'), findsOneWidget, reason: 'build 76: one short line explains dots and rings');
     expect(find.textContaining('Grey means'), findsNothing);
     expect(find.textContaining('Pick a place'), findsNothing);
     expect(find.textContaining('N'), findsWidgets);

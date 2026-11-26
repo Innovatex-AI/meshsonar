@@ -91,7 +91,7 @@ void main() {
     await tester.pump();
     expect(find.descendant(of: find.byKey(const Key('composer-send')), matching: find.text('0')), findsOneWidget);
     expect(find.byKey(const Key('composer-trimmed')), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(seconds: 6));
     expect(find.byKey(const Key('composer-trimmed')), findsNothing);
     // leave the screen: the draft is flushed
     await tester.enterText(find.byKey(const Key('composer-field')), 'half written');

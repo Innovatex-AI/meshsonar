@@ -98,10 +98,13 @@ void main() {
       expect(find.byKey(const Key('segment-radio')), findsNothing, reason: 'build 71: the Radio segment moved to More > Radio');
       await tester.tap(find.byKey(const Key('segment-channels')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('channels-sort')), findsOneWidget);
+      // Channels lists channels only. (The sort control shows from two channels besides Public: build 76.)
+      expect(find.text('Ohio'), findsOneWidget);
+      expect(find.text('Bob'), findsNothing);
       // Rebuild the tab: the session remembers Channels.
       await pumpTab(tester);
-      expect(find.byKey(const Key('channels-sort')), findsOneWidget);
+      expect(find.text('Ohio'), findsOneWidget);
+      expect(find.text('Bob'), findsNothing);
       await tester.tap(find.byKey(const Key('segment-contacts')));
       await tester.pumpAndSettle();
       expect(find.text('Bob'), findsOneWidget, reason: 'the Contacts segment is the real contacts list');
@@ -333,7 +336,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('chat-search-field')), 'zzzqq');
       await tester.pump();
       expect(find.byKey(const Key('chats-no-results')), findsOneWidget);
-      expect(find.text('Search messages instead'), findsOneWidget);
+      expect(find.text('Search every message'), findsOneWidget);
     });
 
     testWidgets('a message result opens its conversation', (tester) async {

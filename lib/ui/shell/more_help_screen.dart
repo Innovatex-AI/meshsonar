@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/server_url.dart' show privacyPolicyUrl;
 import '../app.dart';
+import '../onboarding/onboarding_screen.dart';
 import '../report_problem_screen.dart' show openReportProblem;
 import 'more_tab.dart' show MoreRow;
 
@@ -22,19 +23,33 @@ class MoreHelpScreen extends StatelessWidget {
         child: ListView(
           key: const Key('more-help-list'),
           children: [
-            MoreRow(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'From a ping to a coloured hexagon on the map, and a tour of the tabs', onOpen: onOpen),
-            MoreRow(MoreItem.method, Icons.menu_book_outlined, 'Method', 'How the figures are made, and what they cannot say', onOpen: onOpen),
+            MoreRow(MoreItem.howItWorks, Icons.explore_outlined, 'How it works', 'What a ping is, and a tour of the tabs', onOpen: onOpen),
+            // Build 76: the intro again in one tap (it was two levels down, inside How it works).
+            ListTile(
+              key: const Key('more-tour'),
+              minVerticalPadding: Gap.s,
+              leading: const Icon(Icons.slideshow_outlined),
+              title: const Text('Show the intro again'),
+              subtitle: const Text('Four short pages'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (c2) => OnboardingScreen(replay: true, onFinish: (_) => Navigator.of(c2).pop()),
+              )),
+            ),
+            MoreRow(MoreItem.method, Icons.menu_book_outlined, 'Method', 'How the numbers are worked out', onOpen: onOpen),
             MoreRow(MoreItem.legend, Icons.palette_outlined, 'Colour legend', 'What the map colours mean', onOpen: onOpen),
+            const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
             ListTile(
               key: const Key('more-report'),
               minVerticalPadding: Gap.s,
               leading: const Icon(Icons.flag_outlined),
               title: const Text('Report a problem'),
-              subtitle: const Text('Send the team what went wrong'),
+              subtitle: const Text('Tell us what went wrong'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => openReportProblem(context),
             ),
-            MoreRow(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'Problem reports you sent and where they stand', onOpen: onOpen),
+            MoreRow(MoreItem.myReports, Icons.report_gmailerrorred_outlined, 'My reports', 'What you sent, and its status', onOpen: onOpen),
+            const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
             ListTile(
               key: const Key('more-privacy-policy'),
               minVerticalPadding: Gap.s,

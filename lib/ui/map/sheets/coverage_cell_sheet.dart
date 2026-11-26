@@ -57,7 +57,7 @@ class CoverageCellSheet extends StatelessWidget {
     final muted = t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant);
     Widget stat(String label, String value, {Key? key}) => Padding(
       key: key,
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -99,18 +99,20 @@ class CoverageCellSheet extends StatelessWidget {
       rows
         ..add(bandRow(m.band))
         ..add(stat('Mean SNR', m.snrMean == null ? '-' : _db(m.snrMean!), key: const Key('coverage-cell-mean')))
-        ..add(stat('Lowest / highest', m.snrMin == null || m.snrMax == null ? '-' : '${_db(m.snrMin!)} / ${_db(m.snrMax!)}'))
-        ..add(stat('Spread (SD)', m.snrSd == null ? '-' : '${m.snrSd!.toStringAsFixed(1)} dB'))
         ..add(stat(
           'Replies',
           '${m.nOk} of ${m.attempts}${m.replyRate == null ? '' : ' (${(100 * m.replyRate!).round()}%)'}',
           key: const Key('coverage-cell-replies'),
         ));
       if (m.attempts < meta.faintBelow) rows.add(Text('Drawn faint: under ${meta.faintBelow} pings here.', style: muted));
-      rows
-        ..add(stat('Noise floor', m.noiseFloor == null ? '-' : '${m.noiseFloor!.round()} dBm'))
-        ..add(stat('First measured', m.firstAt == null ? '-' : lastSeenText(m.firstAt!, now: now)))
-        ..add(stat('Last measured', m.lastAt == null ? '-' : lastSeenText(m.lastAt!, now: now)));
+      // Build 76: the answer first (band, mean SNR, replies, last measured); the statistics follow, and a figure nobody
+      // measured is left out instead of a row with a dash. "Lowest to highest" and "How much it varies" are the plain names
+      // of the range and the standard deviation.
+      if (m.lastAt != null) rows.add(stat('Last measured', lastSeenText(m.lastAt!, now: now)));
+      if (m.firstAt != null) rows.add(stat('First measured', lastSeenText(m.firstAt!, now: now)));
+      if (m.snrMin != null && m.snrMax != null) rows.add(stat('Lowest to highest', '${_db(m.snrMin!)} to ${_db(m.snrMax!)}'));
+      if (m.snrSd != null) rows.add(stat('How much it varies', '±${m.snrSd!.toStringAsFixed(1)} dB'));
+      if (m.noiseFloor != null) rows.add(stat('Noise floor', '${m.noiseFloor!.round()} dBm'));
       final src = [for (final e in m.sources.entries) if (e.value > 0) '${e.key == 'meshsonar' ? 'MeshSonar' : (e.key == 'meshmapper' ? 'MeshMapper' : e.key)} ${e.value}'];
       if (src.isNotEmpty) rows.add(stat('Sources', src.join(', ')));
       if (m.repeaters.isNotEmpty) {

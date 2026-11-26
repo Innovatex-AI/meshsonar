@@ -53,6 +53,7 @@ abstract final class AppSymbols {
   static const xmarkCircleFill = AppSymbol('xmark.circle.fill', CupertinoIcons.xmark_circle_fill, Icons.cancel);
   static const checkmark = AppSymbol('checkmark', CupertinoIcons.check_mark, Icons.check);
   static const checkmarkCircleFill = AppSymbol('checkmark.circle.fill', CupertinoIcons.check_mark_circled_solid, Icons.check_circle);
+  static const arrowClockwise = AppSymbol('arrow.clockwise', CupertinoIcons.arrow_clockwise, Icons.refresh);
   static const ellipsis = AppSymbol('ellipsis', CupertinoIcons.ellipsis, Icons.more_horiz);
   static const magnifyingglass = AppSymbol('magnifyingglass', CupertinoIcons.search, Icons.search);
   static const lineDecrease = AppSymbol('line.3.horizontal.decrease', CupertinoIcons.line_horizontal_3_decrease, Icons.filter_list);
@@ -115,7 +116,7 @@ abstract final class AppSymbols {
     gear, //
     location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform, //
     route, gauge, bubbles, qrcode,
-    squareAndPencil, globe, numberSign, exclamationCircleFill, checkmarkBubble, squareAndArrowDown, camera, photo,
+    squareAndPencil, globe, numberSign, exclamationCircleFill, checkmarkBubble, squareAndArrowDown, camera, photo, arrowClockwise,
   ];
 }
 

@@ -114,12 +114,34 @@ Future<bool> openNetworkSection(WidgetTester t, String name) async {
     }
   }
   if (!await waitFor(t, chip, timeout: const Duration(seconds: 20))) return false;
-  await t.ensureVisible(chip);
-  await pumpFor(t, const Duration(milliseconds: 500));
-  await t.tap(chip);
-  // The strip scrolls to the picked name (200 ms) and the section loads.
-  await pumpFor(t, const Duration(seconds: 1));
+  // Build 76: an incoming-message banner (the simulated radio's chat traffic) sits over the header and the strip for 4 s,
+  // and a tap on it opens that chat. That is what failed `network-packets` in the build 75 tour ("the packet list did not
+  // open": the tap at the strip landed on the banner). Wait until the banner is gone and the name can take the tap; if a
+  // new banner still caught it, go back and tap once more.
+  for (var attempt = 0; attempt < 3; attempt++) {
+    await waitInAppBannerGone(t);
+    await t.ensureVisible(chip);
+    await pumpFor(t, const Duration(milliseconds: 500));
+    await waitInAppBannerGone(t);
+    await t.tap(chip, warnIfMissed: false);
+    // The strip scrolls to the picked name (200 ms) and the section loads.
+    await pumpFor(t, const Duration(seconds: 1));
+    if (find.byKey(Key('network-section-body-$name')).evaluate().isNotEmpty) return true;
+    await popToRoots(t);
+    await openShellTab(t, 'Network');
+    if (chip.evaluate().isEmpty) return false;
+  }
+  // The name was tapped; the step that called says what did not open.
   return true;
+}
+
+/// Waits (up to 8 s) until no in-app message banner is on screen. The banner hides itself after 4 s.
+Future<void> waitInAppBannerGone(WidgetTester t) async {
+  final banner = find.byKey(const Key('in-app-banner'));
+  final end = DateTime.now().add(const Duration(seconds: 8));
+  while (banner.evaluate().isNotEmpty && DateTime.now().isBefore(end)) {
+    await pumpFor(t, const Duration(milliseconds: 250));
+  }
 }
 
 /// Opens the region switcher from the Network header (build 71: the region name is the button).
@@ -127,6 +149,7 @@ Future<bool> openRegionSwitcher(WidgetTester t) async {
   await openShellTab(t, 'Network');
   final b = find.byKey(const Key('network-region-button'));
   if (!await waitFor(t, b, timeout: const Duration(seconds: 20))) return false;
+  await waitInAppBannerGone(t); // the banner covers the header too
   await t.tap(b);
   await pumpFor(t, const Duration(seconds: 1));
   return true;
@@ -168,6 +191,11 @@ Future<void> openSettingsSection(WidgetTester t, MoreItem item) async {
 
 /// One step back: the page's Back button, else the site page's close button, else the top route of the root navigator.
 Future<void> backOne(WidgetTester t) async {
+  // The in-app message banner lies over the top bar for a few seconds: a Back tap would land on it and open a chat.
+  final banner = find.byKey(const Key('in-app-banner'));
+  for (var i = 0; i < 40 && banner.evaluate().isNotEmpty; i++) {
+    await pumpFor(t, const Duration(milliseconds: 250));
+  }
   final b = find.byTooltip('Back');
   if (b.evaluate().isNotEmpty) {
     await t.tap(b.last, warnIfMissed: false);
@@ -675,6 +703,21 @@ final List<ScreenStep> screens = [
     await openTab(t, 'Settings');
     await shootFullScroll(t, 'settings');
   }),
+  // Build 76: the rare rows of each section are one level down. One shot per page (each opens from its `page-<id>` row).
+  ScreenStep('settings-pages', (t) async {
+    final list = find.byKey(const Key('settings-list'));
+    for (final id in ['claims', 'account-advanced', 'uploads', 'battery', 'driving-advanced', 'units', 'observer', 'sharing', 'meshtrack', 'storage-items', 'diagnostics-advanced']) {
+      final row = find.byKey(Key('page-$id'));
+      if (!await scrollToFind(t, row, list.first)) continue; // a page this build does not have (MeshTrack off)
+      await t.ensureVisible(row);
+      await pumpFor(t, const Duration(milliseconds: 400));
+      await t.tap(row);
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'settings-page-$id');
+      await backOne(t);
+      await pumpFor(t, const Duration(seconds: 1));
+    }
+  }, optional: true),
   ScreenStep('about', (t) async {
     final f = find.text('About MeshSonar');
     await t.ensureVisible(f);
@@ -693,7 +736,9 @@ final List<ScreenStep> screens = [
     await openShellTab(t, 'More');
     if (find.byKey(const Key('more-observer')).evaluate().isNotEmpty) _stepFail('observer: More still has an Observer row (it only jumped into Settings)');
     await openSettingsSection(t, MoreItem.observer);
-    expect(await waitFor(t, find.byKey(const Key('observer-share-toggle'))), isTrue, reason: 'Settings > Observer: Share with MeshSonar');
+    // Build 76: More > Observer lands on Settings > Sharing & privacy > Observer and MQTT feeds (status and feeds; the one
+    // Share with MeshSonar switch is the first row of Sharing & privacy, behind this page).
+    expect(await waitFor(t, find.byKey(const Key('observer-status'))), isTrue, reason: 'Settings > Sharing & privacy > Observer: status');
     await shot(t, 'observer');
     final feeds = find.byKey(const Key('mqtt-add-feed'));
     await t.ensureVisible(feeds);
@@ -706,7 +751,7 @@ final List<ScreenStep> screens = [
     await popToRoots(t);
     await openShellTab(t, 'More');
     if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
-    const rows = ['more-drives', 'more-radio', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-chat', 'more-settings', 'more-help', 'more-about'];
+    const rows = ['more-drives', 'more-radio', 'more-settings', 'more-chat', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-help', 'more-about'];
     final list = find.byKey(const Key('more-list'));
     for (final k in rows) {
       if (!await scrollToFind(t, find.byKey(Key(k)), list, wait: const Duration(seconds: 4))) {
@@ -828,6 +873,21 @@ final List<ScreenStep> screens = [
     if (panelTop < view.height * 0.3) _stepFail('network-live: the open panel covers more than 60% of the screen (top ${panelTop.toStringAsFixed(0)} of ${view.height.toStringAsFixed(0)})');
     await t.tap(header.first, warnIfMissed: false);
     await pumpFor(t, const Duration(seconds: 1));
+    // Build 76: one sheet at a time. Layers open = the Live panel steps aside; closing Layers brings its header back.
+    final layersButton = find.descendant(of: find.byKey(const Key('live-map')), matching: find.byKey(const Key('drive-map-layers')));
+    if (layersButton.hitTestable().evaluate().isNotEmpty) {
+      await t.tap(layersButton.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'network-live-layers');
+      if (find.byKey(const Key('layers-sheet')).evaluate().isEmpty) _stepFail('network-live: the Layers button did not open the layers');
+      if (find.byKey(const Key('live-panel-header')).hitTestable().evaluate().isNotEmpty) _stepFail('network-live: the Live panel and the Layers panel are both on screen (stacked sheets)');
+      final done = find.byKey(const Key('layers-done'));
+      if (done.evaluate().isNotEmpty) await t.tap(done.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+      if (find.byKey(const Key('live-panel-header')).hitTestable().evaluate().isEmpty) _stepFail('network-live: closing Layers did not bring the Live panel back');
+    } else {
+      _stepNote('network-live', 'no Layers button on the live map: the one-sheet check was skipped');
+    }
     _stepOk('network-live');
   }, optional: true),
   ScreenStep('network-nodes', (t) async {

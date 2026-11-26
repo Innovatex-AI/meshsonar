@@ -8,7 +8,7 @@
 //   connecting     spinner               Connecting…                 Connecting…                            warning
 //   reconnecting   spinner               Reconnecting…               Reconnecting…                          warning
 //   connected      bluetooth_connected   Start drive                 Connected (the chip shows the name)    ok
-//   simulator      science (flask)       Start drive                 Simulator                              warning (not a real radio)
+//   simulator      science (flask)       Start drive                 Simulator                              ok (it works; build 76: amber read as a fault)
 // The map capsule is the compact form of the status label: "No radio" / "Connecting…" / "Reconnecting…" / "Radio".
 //
 // "Reconnecting" is both the mid-drive reconnect (AppState.reconnecting while driving) and the automatic reconnect after launch
@@ -16,6 +16,7 @@
 import 'package:flutter/material.dart';
 
 import '../../alerts/alerts_runtime.dart';
+import '../../alerts/launch_reconnect.dart' show LaunchReconnectState;
 import '../../app/app_state.dart';
 import '../design/tokens.dart' show AppColors;
 
@@ -42,6 +43,22 @@ class RadioLinkStatus {
 
   /// True while the automatic reconnect after launch (or a foreground return) is working.
   static bool launchReconnectActive() => AlertsHost.runtime.value?.reconnect?.active ?? false;
+
+  /// The one short line under the words (Dock subtitle), or null when the words are the whole message:
+  ///   connecting / reconnecting   the radio's name, when known
+  ///   not connected               "Could not reach (radio name)" after the automatic reconnect gave up, else nothing
+  /// Short on purpose: the Dock's text column is about 120 pt wide on an iPhone SE, and a longer sentence was cut off.
+  static String? detailOf(AppState s) {
+    final reconnect = AlertsHost.runtime.value?.reconnect;
+    final link = RadioLinkStatus.of(s);
+    return switch (link.link) {
+      RadioLink.reconnecting => reconnect?.radioName ?? s.device?.name,
+      RadioLink.connecting => s.device?.name,
+      RadioLink.notConnected =>
+        reconnect?.state == LaunchReconnectState.gaveUp ? 'Could not reach ${reconnect?.radioName ?? 'your radio'}' : null,
+      RadioLink.connected || RadioLink.simulator => null,
+    };
+  }
 
   /// What to rebuild on: the app state and the automatic reconnect.
   static Listenable listenable(AppState s) => Listenable.merge([s, AlertsHost.runtime, AlertsHost.runtime.value?.reconnect]);
@@ -77,8 +94,8 @@ class RadioLinkStatus {
 
   Color color(AppColors c) => switch (link) {
         RadioLink.notConnected => c.textMuted,
-        RadioLink.connecting || RadioLink.reconnecting || RadioLink.simulator => c.warning,
-        RadioLink.connected => c.ok,
+        RadioLink.connecting || RadioLink.reconnecting => c.warning,
+        RadioLink.connected || RadioLink.simulator => c.ok,
       };
 
   /// The icon, or the spinner for the working states, at [size] in [color] (default: this state's colour).

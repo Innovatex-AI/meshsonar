@@ -36,10 +36,10 @@ StripInfo? stripFor(AppState s, GpsHealth h) {
     }
     if (s.reconnecting) return const StripInfo(StripKind.radioLost, 'Radio lost - reconnecting', severe: true);
     if (h.kind == GpsHealthKind.approximate) {
-      return StripInfo(StripKind.preciseOff, 'Precise Location is off - data is unusable', actionLabel: 'Open Settings', action: gpsAction(), severe: true);
+      return StripInfo(StripKind.preciseOff, 'Precise Location is off', actionLabel: 'Open Settings', action: gpsAction(), severe: true);
     }
     if (h.kind == GpsHealthKind.noPermission) {
-      return StripInfo(StripKind.permission, 'Location is off for MeshSonar', actionLabel: 'Open Settings', action: gpsAction(), severe: true);
+      return StripInfo(StripKind.permission, 'Location is off', actionLabel: 'Open Settings', action: gpsAction(), severe: true);
     }
     if (s.unsavedCount > 0) return StripInfo(StripKind.unsynced, '${s.unsavedCount} ping${s.unsavedCount == 1 ? '' : 's'} not saved yet - retrying');
     if (h.kind == GpsHealthKind.weak) {
@@ -51,10 +51,12 @@ StripInfo? stripFor(AppState s, GpsHealth h) {
     return null;
   }
   // Idle: location trouble has its one-tap fix here (the old banner row is gone).
+  // Shown whatever the radio is doing (build 76). It used to hide while a connect try ran, so with location off the panel grew
+  // and shrank by 28 pt on every try of the automatic reconnect (eight tries in two minutes).
   final note = s.locationNote;
-  if (note != null && !s.connecting) {
+  if (note != null) {
     final isPrecise = note.access == LocationAccess.approximate;
-    return StripInfo(isPrecise ? StripKind.preciseOff : StripKind.permission, isPrecise ? 'Precise Location is off - data is unusable' : 'Location is off for MeshSonar',
+    return StripInfo(isPrecise ? StripKind.preciseOff : StripKind.permission, isPrecise ? 'Precise Location is off' : 'Location is off',
         actionLabel: note.action == null ? null : (note.action == LocationAction.ask ? 'Allow location' : 'Open Settings'),
         action: note.action == null ? null : () => unawaited(s.resolveLocationNote()));
   }
@@ -79,7 +81,12 @@ class DockStripView extends StatelessWidget {
         label: info.text,
         child: ExcludeSemantics(
           excluding: info.action == null,
-          child: ColoredBox(
+          // The whole strip runs its one fix (build 76): the words "Open Settings" alone were a 28 pt target.
+          child: GestureDetector(
+            key: info.action == null ? null : const Key('dock-strip-hit'),
+            behavior: HitTestBehavior.opaque,
+            onTap: info.action,
+            child: ColoredBox(
             color: c.surface,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin),
@@ -94,18 +101,15 @@ class DockStripView extends StatelessWidget {
                       label: '${info.actionLabel}',
                       excludeSemantics: true,
                       onTap: info.action,
-                      child: GestureDetector(
+                      child: ConstrainedBox(
                         key: const Key('dock-strip-action'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: info.action,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: kPanelStripHeight, minWidth: 44),
-                          child: Center(child: Text(info.actionLabel!, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.accent))),
-                        ),
+                        constraints: const BoxConstraints(minHeight: kPanelStripHeight, minWidth: 44),
+                        child: Center(child: Text(info.actionLabel!, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.accent))),
                       ),
                     ),
                 ],
               ),
+            ),
             ),
           ),
         ),
@@ -113,4 +117,3 @@ class DockStripView extends StatelessWidget {
     );
   }
 }
-

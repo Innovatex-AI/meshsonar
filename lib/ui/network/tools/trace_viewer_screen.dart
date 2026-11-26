@@ -5,6 +5,7 @@
 // - a trace the connected radio just ran ([TraceViewerScreen.local], opened from the radio Trace tool): the same hop
 //   layout from the radio's own answer, labelled "From your radio".
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard;
 
 import '../../../core/v1/packet_models.dart' show HopConfidence;
 import '../../../core/v1/tools_api.dart';
@@ -153,16 +154,15 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
     final local = widget.local;
     return ToolFrame(
       frameKey: const Key('tool-trace-viewer'),
-      title: 'Trace Viewer',
+      title: local != null ? 'Your trace' : 'Trace Viewer',
       onClose: widget.onClose,
-      body: ListView(padding: kToolPagePadding, children: local != null ? _localBody(context, local) : _serverBody(context)),
+      body: ListView(padding: kToolPagePadding, keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag, children: local != null ? _localBody(context, local) : _serverBody(context)),
     );
   }
 
   // ---------------------------------------------------------------- server copy
 
   List<Widget> _serverBody(BuildContext context) {
-    final t = Theme.of(context);
     final asked = _asked, trace = _trace;
     return [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -175,7 +175,23 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
             textInputAction: TextInputAction.search,
             onSubmitted: _open,
             style: const TextStyle(fontFamily: 'monospace'),
-            decoration: InputDecoration(labelText: 'Packet hash of a TRACE', hintText: '16 hex characters', border: const OutlineInputBorder(), errorText: _inputError, errorMaxLines: 2),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'Trace ID (its packet hash)',
+              hintText: '16 hex characters',
+              border: const OutlineInputBorder(),
+              errorText: _inputError,
+              errorMaxLines: 2,
+              suffixIcon: _text.text.isEmpty
+                  ? IconButton(
+                      key: const Key('trace-paste'),
+                      tooltip: 'Paste',
+                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                      onPressed: _paste,
+                      icon: const Icon(Icons.content_paste),
+                    )
+                  : null,
+            ),
           ),
         ),
         const SizedBox(width: Gap.s),
@@ -196,7 +212,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
             style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
             onPressed: _close,
             icon: const Icon(Icons.arrow_back, size: 18),
-            label: const Text('Recent traces'),
+            label: const Text('All recent traces'),
           ),
         ),
         if (_loading) const Padding(padding: EdgeInsets.only(top: Gap.xl), child: SizedBox(height: 160, child: AppLoadingView(label: 'Loading the trace'))),
@@ -218,8 +234,14 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
         ],
         if (trace != null) ..._traceDetail(context, trace),
       ],
-      if (asked == null && _recent == null && _recentError == null) Padding(padding: const EdgeInsets.only(top: Gap.l), child: Text('Loading recent traces…', style: t.textTheme.bodyMedium)),
     ];
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (!mounted || text.isEmpty) return;
+    await _open(text);
   }
 
   List<Widget> _recentList(BuildContext context) {
@@ -227,8 +249,19 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
     final recent = _recent;
     final now = (widget.clock ?? DateTime.now)();
     return [
-      const SizedBox(height: Gap.l),
-      Semantics(header: true, child: Text('Recent traces in this region', style: t.textTheme.titleMedium)),
+      const SizedBox(height: Gap.s),
+      Row(children: [
+        Expanded(child: Semantics(header: true, child: Text('Recent traces here', style: t.textTheme.titleMedium))),
+        IconButton(
+          key: const Key('trace-refresh-recent'),
+          tooltip: 'Reload the recent traces',
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          onPressed: recent == null && _recentError == null ? null : _loadRecent,
+          icon: const Icon(Icons.refresh),
+        ),
+      ]),
+      if (recent != null && recent.isNotEmpty) Text('Tap one to see how far it got.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+      if (recent == null && _recentError == null) const SizedBox(height: 140, child: AppLoadingView(label: 'Loading recent traces')),
       if (_recentError != null) ...[
         ToolErrorLine(_recentError!, key: const Key('trace-recent-error')),
         Align(alignment: Alignment.centerLeft, child: TextButton(style: TextButton.styleFrom(minimumSize: const Size(44, 44)), onPressed: _loadRecent, child: const Text('Try again'))),
@@ -236,29 +269,35 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
       if (recent != null && recent.isEmpty)
         Padding(
           padding: const EdgeInsets.only(top: Gap.s),
-          child: Text('No TRACE packets were heard here in the last 7 days. Run a trace from Radio tools, or type a hash above.', key: const Key('trace-recent-none'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          child: Text('No traces were heard here in the last 7 days. Send one with Trace path (Tools, With your radio), or paste a trace ID above.',
+              key: const Key('trace-recent-none'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       if (recent != null)
         for (final r in recent)
-          InkWell(
-            key: Key('trace-recent-${r.hash}'),
-            onTap: () => _open(r.hash),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                      Text(r.hash, style: t.textTheme.bodyLarge?.copyWith(fontFamily: 'monospace')),
-                      Text(
-                        '${agoText(r.firstSeen, now: now)} · ${r.hops} hop${r.hops == 1 ? '' : 's'}${r.observations == null ? '' : ' · heard by ${r.observations}'}',
-                        style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
-                      ),
-                    ]),
-                  ),
-                  Icon(Icons.chevron_right, size: 18, color: t.colorScheme.onSurfaceVariant),
-                ]),
+          Semantics(
+            button: true,
+            label: 'Trace from ${agoText(r.firstSeen, now: now)}, ${r.hops} hop${r.hops == 1 ? '' : 's'}${r.observations == null ? '' : ', heard by ${r.observations}'}. Opens it.',
+            excludeSemantics: true,
+            child: InkWell(
+              key: Key('trace-recent-${r.hash}'),
+              onTap: () => _open(r.hash),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                        Text(
+                          '${agoText(r.firstSeen, now: now)} · ${r.hops} hop${r.hops == 1 ? '' : 's'}${r.observations == null ? '' : ' · heard by ${r.observations}'}',
+                          style: t.textTheme.bodyLarge,
+                        ),
+                        Text(r.hash, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace', color: t.colorScheme.onSurfaceVariant)),
+                      ]),
+                    ),
+                    Icon(Icons.chevron_right, size: 18, color: t.colorScheme.onSurfaceVariant),
+                  ]),
+                ),
               ),
             ),
           ),
@@ -282,30 +321,32 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
           const SizedBox(height: Gap.xs),
           Text(
             [
-              if (v.tag != null) 'Tag ${v.tag}',
-              if (v.hashSize > 0) '${v.hashSize}-byte hashes',
-              'heard ${v.observations.length} time${v.observations.length == 1 ? '' : 's'}',
+              'Heard ${v.observations.length} time${v.observations.length == 1 ? '' : 's'}',
               if (v.observations.length > 1) 'over ${(v.spread.inMilliseconds / 1000).toStringAsFixed(1)} s',
               if (v.copies.length > 1) '${v.copies.length} copies (one per hop count)',
+              if (v.tag != null) 'tag ${v.tag}',
+              if (v.hashSize > 0) '${v.hashSize * 2}-character hop IDs',
             ].join(' · '),
             style: dim,
           ),
           if (v.note != null) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(v.note!, key: const Key('trace-note'), style: dim)),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
+            child: TextButton.icon(
               key: const Key('trace-open-packet'),
-              style: TextButton.styleFrom(minimumSize: const Size(44, 44), padding: EdgeInsets.zero),
+              style: TextButton.styleFrom(minimumSize: const Size(44, 48), padding: EdgeInsets.zero),
               onPressed: () => openNetworkPacket(context, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, hash: v.hash),
-              child: const Text('Open the packet'),
+              icon: const Icon(Icons.chevron_right, size: 18),
+              iconAlignment: IconAlignment.end,
+              label: const Text('See the whole packet'),
             ),
           ),
         ]),
       ),
       if (v.hops.isNotEmpty) ...[
         const SizedBox(height: Gap.l),
-        Semantics(header: true, child: Text('Hops', style: t.textTheme.titleMedium)),
-        Text('The SNR is how well each hop heard the trace arrive.', style: dim),
+        Semantics(header: true, child: Text('Hop by hop', style: t.textTheme.titleMedium)),
+        Text('The number on the right is how well each hop heard the trace (higher is better). Tap a hop to open it.', style: dim),
         ..._map(context, v),
         for (final h in v.hops)
           ToolNodeRow(
@@ -314,13 +355,18 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
             regionSlug: widget.regionSlug,
             leading: '${h.index + 1}  ${h.prefix}',
             node: h.node,
-            missing: h.confidence == HopConfidence.ambiguous ? 'Several nodes share this prefix' : 'Unknown node',
-            detail: h.index >= v.completed ? 'Not reached' : HopConfidenceBadge.label(h.confidence),
+            missing: h.confidence == HopConfidence.ambiguous ? 'Unclear which repeater' : 'Unknown repeater',
+            detail: h.index >= v.completed
+                ? 'Not reached'
+                : h.node == null && h.confidence == HopConfidence.ambiguous
+                    ? 'Several share this ID'
+                    : HopConfidenceBadge.label(h.confidence),
             trailing: SnrBar(h.snrDb),
           ),
       ],
       const SizedBox(height: Gap.l),
       Semantics(header: true, child: Text('Heard by', style: t.textTheme.titleMedium)),
+      if (v.observations.isNotEmpty) Text('The observers that reported this trace. Tap one to open it.', style: dim),
       if (v.observations.isEmpty) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text('No observer reports are kept for this trace.', style: dim)),
       for (var i = 0; i < v.observations.length; i++) _observation(context, v.observations[i], i),
     ];
@@ -432,8 +478,8 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
       ),
       if (r.hops.isNotEmpty) ...[
         const SizedBox(height: Gap.l),
-        Semantics(header: true, child: Text('Hops', style: t.textTheme.titleMedium)),
-        Text('The SNR is how well each hop heard the trace arrive.', style: dim),
+        Semantics(header: true, child: Text('Hop by hop', style: t.textTheme.titleMedium)),
+        Text('The number on the right is how well each hop heard the trace (higher is better).', style: dim),
         for (var i = 0; i < r.hops.length; i++)
           ToolNodeRow(
             key: Key('trace-hop-$i'),
@@ -450,7 +496,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
           ),
       ],
       const SizedBox(height: Gap.l),
-      Text('This is your radio\'s own answer. The network\'s copy appears in Trace Viewer under Recent traces once an observer hears the trace.', style: dim),
+      Text('This is your radio\'s own answer. Once an observer hears the trace, the network\'s copy is in Tools, Trace Viewer.', style: dim),
     ];
   }
 }

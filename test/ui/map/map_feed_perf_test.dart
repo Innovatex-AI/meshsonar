@@ -187,7 +187,7 @@ void main() {
     testWidgets('metric: distance in km, raw battery mV, offline', (t) async {
       await t.pumpWidget(host(Units.metric));
       expect(find.text('1.1 km'), findsOneWidget);
-      expect(find.text('4012 mV'), findsOneWidget);
+      expect(find.text('4.01 V'), findsOneWidget);
       expect(find.text('Offline'), findsOneWidget);
       expect(find.text('1,234'), findsOneWidget);
       expect(find.text('Heltec V3 · v1.9'), findsOneWidget);

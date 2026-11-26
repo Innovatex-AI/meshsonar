@@ -148,7 +148,9 @@ void main() {
       await h.state.connect(h.bt.devices.first, RadioKind.bluetooth);
       await settle(tester);
       await openDrivePanel(tester); // the chip lives in the Medium panel
-      await tester.ensureVisible(find.byKey(const Key('ping-settings-chip')));
+      // The row sits in the middle of the list now: bring it to the middle of the panel, clear of the tab bar.
+      await Scrollable.ensureVisible(tester.element(find.byKey(const Key('ping-settings-chip'))), alignment: 0.3);
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(const Key('ping-settings-chip')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('ping-settings-sheet')), findsOneWidget);

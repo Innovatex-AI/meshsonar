@@ -24,10 +24,10 @@ Future<void> showAntennaSheet(BuildContext context, {String? radioKey, bool user
 
 /// Icon and one-line description of each mount.
 const Map<AntennaMount, (IconData, String)> antennaMountInfo = {
-  AntennaMount.handheld: (Icons.back_hand_outlined, 'The radio in your hand or pocket, with its own antenna.'),
-  AntennaMount.insideCar: (Icons.directions_car_outlined, 'On the dash or a seat, antenna inside the car.'),
-  AntennaMount.roofMagMount: (Icons.settings_input_antenna, 'A magnetic antenna on the car roof.'),
-  AntennaMount.fixedMast: (Icons.cell_tower, 'A mast or pole that stays in one place.'),
+  AntennaMount.handheld: (Icons.back_hand_outlined, 'In your hand or pocket'),
+  AntennaMount.insideCar: (Icons.directions_car_outlined, 'On the dash or a seat'),
+  AntennaMount.roofMagMount: (Icons.settings_input_antenna, 'Magnet antenna on the car roof'),
+  AntennaMount.fixedMast: (Icons.cell_tower, 'A mast or pole that stays put'),
 };
 
 class _AntennaSheet extends StatefulWidget {
@@ -102,6 +102,33 @@ class _AntennaSheetState extends State<_AntennaSheet> {
     ];
   }
 
+  /// The usual height of each mount, in metres (the helper text's own figures); a mast has none.
+  static const Map<AntennaMount, double> _usualHeightM = {AntennaMount.handheld: 1.0, AntennaMount.insideCar: 1.0, AntennaMount.roofMagMount: 1.5};
+
+  /// The height the sheet last filled in by itself, so picking another mount may replace it but never what the person typed.
+  String? _autoHeight;
+
+  /// Picking a mount fills in its usual height when the field is empty (build 76): a first setup is a mount, a gain and
+  /// Save, with no typing for the height. The person can still change the number.
+  void _pickMount(AntennaMount m) {
+    setState(() {
+      _mount = m;
+      final cur = _height.text.trim();
+      if (cur.isEmpty || cur == _autoHeight) {
+        final h = _usualHeightM[m];
+        _height.text = h == null ? '' : _units.heightNumber(h);
+        _autoHeight = h == null ? null : _height.text;
+      }
+    });
+  }
+
+  /// What Save still waits for, one thing at a time.
+  String get _missing {
+    if (_mount == null) return 'Pick how the antenna is mounted';
+    if (_heightValue == null) return 'Enter the height above ground';
+    return 'Enter the gain, or turn on Don\'t know';
+  }
+
   Future<void> _save() async {
     final s = AppScope.read(context);
     final nav = Navigator.of(context);
@@ -138,8 +165,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
             Semantics(header: true, child: Text('How is this radio\'s antenna set up?', style: t.textTheme.titleLarge)),
             const SizedBox(height: Gap.xs),
             Text(
-              '${radio ?? 'This radio'}: saved for every drive with it, so coverage is compared like '
-              'with like. You can change it later in Settings.',
+              '${radio ?? 'This radio'}: saved with every drive. Change it any time in Settings.',
               style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
             if (legacy != null) ...[
@@ -202,7 +228,7 @@ class _AntennaSheetState extends State<_AntennaSheet> {
             if (!_valid) ...[
               const SizedBox(height: Gap.xs),
               Text(
-                'Pick a mount, enter the height, and a gain or Don\'t know',
+                _missing,
                 key: const Key('antenna-save-hint'),
                 textAlign: TextAlign.center,
                 style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
@@ -235,11 +261,14 @@ class _AntennaSheetState extends State<_AntennaSheet> {
             borderRadius: BorderRadius.circular(Corners.chip),
             side: BorderSide(color: selected ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: 1.5),
           ),
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          minTileHeight: 56,
           leading: Icon(icon),
-          title: Text(m.label),
+          title: Text(m.label, style: t.textTheme.titleMedium),
           subtitle: Text(about),
           trailing: Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked),
-          onTap: () => setState(() => _mount = m),
+          onTap: () => _pickMount(m),
         ),
       ),
     );

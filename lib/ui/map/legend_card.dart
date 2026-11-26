@@ -185,7 +185,11 @@ class LegendCard extends StatefulWidget {
 
   /// Only the entries (no chip, no card): the body of the legend MapPanel.
   final bool asPanel;
-  const LegendCard({super.key, required this.on, this.meta, this.local = false, this.drivePanel = true, this.initiallyOpen = false, this.onOpen, this.asPanel = false});
+
+  /// The short chip of the Drive map (build 76): the band ramp and "Weak → strong", no chevron, so it takes a third less of
+  /// the map, and as tall as the region chip above it (36 pt; it was 28).
+  final bool compact;
+  const LegendCard({super.key, required this.on, this.meta, this.local = false, this.drivePanel = true, this.initiallyOpen = false, this.onOpen, this.asPanel = false, this.compact = false});
 
   @override
   State<LegendCard> createState() => _LegendCardState();
@@ -218,11 +222,13 @@ class _LegendCardState extends State<LegendCard> {
     final labels = def.bandLabels;
     String label(int b) => widget.meta?.labelOf(b) ?? labels[b] ?? 'Band $b';
 
+    // In the panel the rows are a size up and further apart (build 76): there is room, and it is read at arm's length.
+    final rowText = widget.asPanel ? t.textTheme.bodyMedium : small;
     Widget row(Widget key, String text) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: EdgeInsets.symmetric(vertical: widget.asPanel ? 5 : 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: [SizedBox(width: 20, child: Center(child: key)), const SizedBox(width: Gap.s), Expanded(child: Text(text, style: small))],
+        children: [SizedBox(width: 24, child: Center(child: key)), const SizedBox(width: Gap.s), Expanded(child: Text(text, style: rowText))],
       ),
     );
 
@@ -236,7 +242,7 @@ class _LegendCardState extends State<LegendCard> {
         onTap: widget.onOpen ?? () => setState(() => _open = !_open),
         child: ExcludeSemantics(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: 6),
+            padding: EdgeInsets.symmetric(horizontal: widget.compact ? 12 : Gap.s, vertical: widget.compact ? 10 : 6),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -245,9 +251,11 @@ class _LegendCardState extends State<LegendCard> {
                     Padding(padding: const EdgeInsets.only(right: 2), child: CoverageBandSwatch(band: b, colors: bands, size: 11)),
                   const SizedBox(width: 6),
                 ],
-                Text(anyCoverage ? 'Weak → strong signal' : 'Legend', style: t.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(width: 4),
-                AppSymbolIcon(_open && widget.onOpen == null ? AppSymbols.chevronDown : AppSymbols.chevronUp, size: 12, color: t.colorScheme.onSurfaceVariant),
+                Text(anyCoverage ? (widget.compact ? 'Weak → strong' : 'Weak → strong signal') : 'Legend', style: t.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
+                if (!widget.compact) ...[
+                  const SizedBox(width: 4),
+                  AppSymbolIcon(_open && widget.onOpen == null ? AppSymbols.chevronDown : AppSymbols.chevronUp, size: 12, color: t.colorScheme.onSurfaceVariant),
+                ],
               ],
             ),
           ),
@@ -275,7 +283,7 @@ class _LegendCardState extends State<LegendCard> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(l.name, style: t.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
+                            Text(l.name, style: (widget.asPanel ? t.textTheme.titleSmall : t.textTheme.labelMedium)?.copyWith(fontWeight: FontWeight.w600)),
                             for (final e in l.legend)
                               if (e.kind == 'bands') ...[
                                 if (e.note != null) Text('${e.note}:', style: dim),

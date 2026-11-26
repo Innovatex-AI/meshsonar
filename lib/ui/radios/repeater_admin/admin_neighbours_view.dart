@@ -80,7 +80,7 @@ class _AdminNeighboursViewState extends State<AdminNeighboursView> {
                   else if (list != null && list.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(Gap.l),
-                      child: Text('No neighbours. This repeater does not hear any other repeater right now. Use "Look for neighbours", wait a minute, then pull down to read the list again.',
+                      child: Text('No neighbours. This repeater does not hear any other repeater right now. Tap Look for neighbours, wait a minute, then pull down.',
                           key: const Key('neighbours-empty'), style: t.textTheme.bodyLarge?.copyWith(height: 1.35)),
                     )
                   else if (list != null) ...[
@@ -114,8 +114,9 @@ class _AdminNeighboursViewState extends State<AdminNeighboursView> {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(name ?? 'Unknown repeater', style: t.textTheme.titleSmall),
-                Text('Key starts ${n.prefixHex}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                // When it was heard first (build 76); the key prefix is the small print.
                 Text('Heard ${agoText(n.secondsAgo)}', style: t.textTheme.bodyMedium),
+                Text('Key starts ${n.prefixHex}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
               ]),
             ),
             const SizedBox(width: Gap.s),
@@ -132,7 +133,7 @@ class _AdminNeighboursViewState extends State<AdminNeighboursView> {
   Future<void> _discover(BuildContext context) async {
     final ok = await confirmAction(context,
         title: 'Look for neighbours?',
-        body: 'The repeater sends a discovery request and listens for about a minute. It uses a little airtime, and the repeater answers at most 4 requests every 2 minutes. Then pull down to read its list again.',
+        body: 'The repeater asks who is nearby and listens for about a minute. It uses a little airtime. Then pull down to read the list.',
         confirmLabel: 'Look',
         confirmKey: const Key('discover-confirm'));
     if (!ok || !context.mounted) return;

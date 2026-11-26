@@ -16,9 +16,9 @@ import 'ble_diagnostics_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String diagnosticsHelp = 'Helps explain a problem. The log lives in memory only: it is empty after the app '
-    'restarts and is never sent unless you include it in a problem report.';
+const String diagnosticsHelp = 'For explaining a problem. Nothing here is sent unless you put it in a report.';
 
+/// Storage & diagnostics, first level: the log and Report a problem.
 List<Widget> diagnosticsSectionRows(BuildContext context) {
   return [
     SettingsAnchor(
@@ -28,12 +28,28 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
         leading: const Icon(Icons.receipt_long_outlined),
         title: Text(settingsEntry('diagnostics-log').title),
         // No line count here: the log grows without telling the screen, and a stale number would mislead.
-        subtitle: const Text('Recent app events since the app started. View them, copy them with secrets hidden, or '
-            'clear them.'),
+        subtitle: const Text('App events since it started. Copy them with secrets hidden.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DiagnosticsLogScreen())),
       ),
     ),
+    SettingsAnchor(
+      id: 'report-problem',
+      child: ListTile(
+        key: const Key('report-problem'),
+        leading: const Icon(Icons.bug_report_outlined),
+        title: const Text('Report a problem'),
+        subtitle: const Text('You see exactly what is sent first.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => openReportProblem(context),
+      ),
+    ),
+  ];
+}
+
+/// Storage & diagnostics > Advanced: the tools only a tester needs.
+List<Widget> diagnosticsAdvancedRows(BuildContext context) {
+  return [
     SettingsAnchor(id: 'diagnostics-ble', child: bleDiagnosticsRows(context).first),
     SettingsAnchor(
       id: 'map-health-overlay',
@@ -43,25 +59,13 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
           key: const Key('map-health-overlay'),
           secondary: const Icon(Icons.speed_outlined),
           title: Text(settingsEntry('map-health-overlay').title),
-          subtitle: const Text('Frame times, GPS rate, camera and map source over the map. While this is on, a sample every 10 s is '
-              'saved with each drive (Drives > menu > Share map health). Off saves battery. Stays on this phone.'),
+          subtitle: const Text('Frame times, GPS rate and map source over the map, saved with each drive. Off saves battery.'),
           value: MapPrefs.shared.healthOverlay,
           onChanged: (v) => MapPrefs.shared.healthOverlay = v,
         ),
       ),
     ),
     const SettingsAnchor(id: 'diagnostics-power-counters', child: PowerCountersCard()),
-    SettingsAnchor(
-      id: 'report-problem',
-      child: ListTile(
-        key: const Key('report-problem'),
-        leading: const Icon(Icons.bug_report_outlined),
-        title: const Text('Report a problem'),
-        subtitle: const Text('Goes to your server\'s operators with your driver key. You see exactly what is sent first.'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => openReportProblem(context),
-      ),
-    ),
   ];
 }
 
@@ -136,14 +140,28 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
           ),
         ],
       ),
+      // Copy is the one thing people come here for: a full-width button in thumb reach, not only an icon at the top.
+      bottomNavigationBar: lines.isEmpty
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: FilledButton.icon(
+                  key: const Key('diagnostics-copy-button'),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: () => _copy(context, s),
+                  icon: const Icon(Icons.copy_rounded),
+                  label: const Text('Copy log'),
+                ),
+              ),
+            ),
       body: SafeArea(
         child: lines.isEmpty
             ? const Center(
                 key: Key('diagnostics-empty'),
                 child: Padding(
                   padding: EdgeInsets.all(24),
-                  child: Text('Nothing logged since the app started. Connecting, drives, uploads and errors add lines '
-                      'here.', textAlign: TextAlign.center),
+                  child: Text('Nothing logged yet. Connect a radio or start a drive, then come back.', textAlign: TextAlign.center),
                 ),
               )
             : ListView.builder(
@@ -153,12 +171,12 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
                 itemBuilder: (_, i) => i == 0
                     ? Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: Text('Oldest first, times in UTC. Secrets are hidden and positions rounded here and '
-                            'when copied.', style: t.textTheme.bodySmall),
+                        child: Text('${lines.length} line${lines.length == 1 ? '' : 's'}, newest first, times in UTC. Secrets hidden, positions rounded.',
+                            key: const Key('diagnostics-count'), style: t.textTheme.bodySmall),
                       )
                     : Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: SelectableText(lines[i - 1],
+                        child: SelectableText(lines[lines.length - i],
                             style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
                       ),
               ),
@@ -246,7 +264,7 @@ class _PowerCountersCardState extends State<PowerCountersCard> {
         Padding(
           padding: const EdgeInsets.only(left: 40, right: 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Since the app started $upWords ago. Rates are per hour. Stays on this phone.',
+            Text('Since the app started $upWords ago. Rates are per hour.',
                 style: t.textTheme.bodySmall),
             const SizedBox(height: 6),
             for (final (what, value) in lines)

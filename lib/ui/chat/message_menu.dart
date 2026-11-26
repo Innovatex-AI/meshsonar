@@ -108,10 +108,11 @@ Future<FailedChoice?> showFailedSheet(BuildContext context) {
   return showAppActionSheet<FailedChoice>(
     context,
     sheetKey: const Key('failed-sheet'),
+    title: 'Not delivered',
     actions: const [
-      AppAction('Try Again', FailedChoice.retry, key: Key('failed-retry')),
-      AppAction('Details', FailedChoice.details, key: Key('failed-details')),
-      AppAction('Delete', FailedChoice.delete, destructive: true, key: Key('failed-delete')),
+      AppAction('Try Again', FailedChoice.retry, isDefault: true, symbol: AppSymbols.arrowUpCircleFill, key: Key('failed-retry')),
+      AppAction('Details', FailedChoice.details, symbol: AppSymbols.infoCircle, key: Key('failed-details')),
+      AppAction('Delete', FailedChoice.delete, destructive: true, symbol: AppSymbols.trash, key: Key('failed-delete')),
     ],
   );
 }

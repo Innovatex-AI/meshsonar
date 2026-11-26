@@ -1,5 +1,5 @@
 // The one source of truth for what MeshSonar collects and shares, and the words used to say so. The first-run sheet
-// (lib/ui/telemetry_sheet.dart), Settings > Privacy & data sharing and the "What MeshSonar shares" page all read from
+// (lib/ui/telemetry_sheet.dart), Settings > Sharing & privacy and the "What MeshSonar shares" page all read from
 // here, so they can never disagree.
 //
 // Owner decision (Andy, Oct 2026, binding): every kind of data collection is OPT-OUT, on by default, disclosed at first
@@ -22,7 +22,7 @@ import '../../core/data_categories.dart' as core;
 import '../../core/phone_sensors.dart';
 
 /// The Settings section that holds the switches; the first-run sheet points people here by this exact name.
-const String privacySectionTitle = 'Privacy & data sharing';
+const String privacySectionTitle = 'Sharing & privacy';
 
 class DataCategory {
   /// Stable id (also used in widget keys).
@@ -178,7 +178,7 @@ const DataCategory telemetryCategory = DataCategory(
     'Your name, your radio\'s name or public key, and adverts your own radio sends',
     'Your exact position outside a drive (only the ~5 km area, or the region)',
     'The contents of your own pings that you keep off the public map (their repeats go as header and signal only)',
-    'Anything to other sites: an MQTT feed gets packets only if you add one yourself in Settings > Observer',
+    'Anything to other sites: an MQTT feed gets packets only if you add one yourself in Settings > Sharing & privacy',
   ],
   destination: 'Collected only while your radio is connected and this phone has a driver key, and sent only to your '
       'server (the Server URL in Settings) once the server has accepted the key: every few seconds while the app is open, '
@@ -416,11 +416,11 @@ class DataFlow {
 const List<DataFlow> otherDataFlows = [
   DataFlow('Your drives',
       'Each ping\'s time, position, signal and which repeaters heard it, plus the antenna setup. Uploaded only to your '
-          'server, under your driver key, when uploads are on (Settings > Drives & uploads). Without a key nothing is '
-          'uploaded. A ping inside one of your privacy zones (Settings > Privacy & data sharing) is never uploaded: it stays on '
+          'server, under your driver key, when uploads are on (Settings > Driving > Uploads). Without a key nothing is '
+          'uploaded. A ping inside one of your privacy zones (Settings > Sharing & privacy) is never uploaded: it stays on '
           'this phone.'),
   DataFlow('MQTT feeds to other sites',
-      'Only feeds you add yourself in Settings > Observer, each off until you turn it on. A feed gets the same public '
+      'Only feeds you add yourself in Settings > Sharing & privacy, each off until you turn it on. A feed gets the same public '
           'packets as Share with MeshSonar (never direct messages or private channels), their signal strength and your '
           'radio\'s public key as the observer id. Never your position or your name. It runs only while the app is '
           'running, your radio is connected and Share with MeshSonar is on. A feed password stays in the phone\'s '
@@ -431,14 +431,14 @@ const List<DataFlow> otherDataFlows = [
   DataFlow('Problem reports',
       'Only when you send one. You see the whole report before it goes; secrets are removed and positions rounded.'),
   DataFlow('Region and map data',
-      'The app downloads coverage, region pages, repeater names and map packs. Those requests carry no driver key, '
+      'The app downloads coverage, region pages, repeater names and map tiles. Those requests carry no driver key, '
           'except repeater names, which come from your server with your key.'),
 ];
 
 // ---------- location (the "Always" explainer) ----------
 
 /// The four points of the "Always" location explainer (lib/ui/always_location_screen.dart), also summarised in
-/// Settings > Privacy & data sharing > Location while driving.
+/// Settings > Sharing & privacy > Location while driving.
 const List<({String head, String body})> locationPoints = [
   (
     head: 'Why "Always"',

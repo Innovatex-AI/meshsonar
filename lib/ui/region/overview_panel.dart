@@ -3,7 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/network_request.dart';
 import '../../core/region_overview_api.dart';
+import '../shell/shell_controller.dart' show ShellController;
 import '../charts/sparkline.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -71,13 +73,21 @@ class _OverviewPanelState extends State<OverviewPanel> {
           return RegionOfflineEmpty(what: 'the overview', onRetry: _reload);
         }
         if (snap.hasError) {
+          // What went wrong in plain words first, the server's own text under it, and a full-size button to retry.
+          final detail = err is RegionApiException ? err.message : '${snap.error}';
           return Padding(
+            key: const Key('overview-error'),
             padding: const EdgeInsets.all(Gap.l),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ErrorBanner('${snap.error}'),
-                TextButton.icon(
+                Text('The overview did not load', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: Gap.s),
+                ErrorBanner(detail),
+                const SizedBox(height: Gap.s),
+                FilledButton.icon(
+                  key: const Key('overview-retry'),
                   onPressed: _reload,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Try again'),
@@ -125,30 +135,40 @@ class OverviewContent extends StatelessWidget {
         o.status.state == RegionDataState.pending;
     final observers = (o.observersOnline == null && o.observersTotal == null)
         ? '—'
-        : '${_n(o.observersOnline)} / ${_n(o.observersTotal)}';
+        : '${_n(o.observersOnline)} of ${_n(o.observersTotal)}';
+    // A figure opens the list it counts (Packets, Observers, Nodes) when the panel sits in the app's shell.
+    final shell = ShellController.of(context);
+    VoidCallback? go(NetworkSection section) =>
+        shell == null || regionSlug.isEmpty ? null : () => shell.openNetwork(NetworkRequest.section(section, region: regionSlug));
     return Column(
       key: const Key('overview-content'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Build 76: no second "Region overview" title (the header above already says it); the freshness line and the
+        // refresh button share one row.
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Text('Region overview', style: t.textTheme.titleLarge),
+              child: Padding(padding: const EdgeInsets.only(top: 8), child: RegionStatusBlock(o.status)),
             ),
             if (onRefresh != null)
               IconButton(
+                key: const Key('overview-refresh'),
                 tooltip: 'Refresh',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: onRefresh,
                 icon: const Icon(Icons.refresh),
               ),
           ],
         ),
-        RegionStatusBlock(o.status),
-        const SizedBox(height: Gap.m),
+        const SizedBox(height: Gap.s),
         if (noData && o.packets24h == null && o.repeaters == null)
-          const EmptyState(
+          EmptyState(
             icon: Icons.insights_outlined,
             title: 'No overview data yet',
+            body: 'Numbers show up here once this region\'s first packets are heard.',
+            action: onRefresh == null ? null : OutlinedButton(key: const Key('overview-empty-retry'), onPressed: onRefresh, child: const Text('Check again')),
           )
         else ...[
           Row(
@@ -158,6 +178,9 @@ class OverviewContent extends StatelessWidget {
                   label: 'Packets, 24 h',
                   value: _n(o.packets24h),
                   valueKey: const Key('stat-packets'),
+                  tapKey: const Key('stat-packets-open'),
+                  hint: 'Open Packets',
+                  onTap: go(NetworkSection.packets),
                 ),
               ),
               const SizedBox(width: Gap.s),
@@ -166,6 +189,9 @@ class OverviewContent extends StatelessWidget {
                   label: 'Observers online',
                   value: observers,
                   valueKey: const Key('stat-observers'),
+                  tapKey: const Key('stat-observers-open'),
+                  hint: 'Open Observers',
+                  onTap: go(NetworkSection.observers),
                 ),
               ),
             ],
@@ -175,9 +201,12 @@ class OverviewContent extends StatelessWidget {
             children: [
               Expanded(
                 child: _Card(
-                  label: 'Repeaters',
+                  label: 'Repeaters known',
                   value: _n(o.repeaters),
                   valueKey: const Key('stat-repeaters'),
+                  tapKey: const Key('stat-repeaters-open'),
+                  hint: 'Open Nodes',
+                  onTap: go(NetworkSection.nodes),
                   color: MeshSonarColors.of(context).beacon,
                 ),
               ),
@@ -185,6 +214,9 @@ class OverviewContent extends StatelessWidget {
               Expanded(
                 child: _Card(
                   label: 'Repeaters heard, 24 h',
+                  tapKey: const Key('stat-heard-open'),
+                  hint: 'Open Nodes',
+                  onTap: go(NetworkSection.nodes),
                   value: _n(o.repeatersHeard24h),
                   valueKey: const Key('stat-heard'),
                 ),
@@ -196,9 +228,10 @@ class OverviewContent extends StatelessWidget {
           if (o.recentEvents.isNotEmpty) ...[
             const SectionLabel('Recent events'),
             for (final e in o.recentEvents.take(6))
+              // The time sits under the text, so a long repeater name keeps the full width of a phone and is not cut.
               ListTile(
-                dense: true,
                 contentPadding: EdgeInsets.zero,
+                minLeadingWidth: 24,
                 leading: Icon(
                   _eventIcon(e.type),
                   size: 20,
@@ -206,10 +239,11 @@ class OverviewContent extends StatelessWidget {
                 ),
                 title: Text(
                   e.detail,
-                  maxLines: 2,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.bodyMedium,
                 ),
-                trailing: Text(agoText(e.at), style: t.textTheme.labelMedium),
+                subtitle: Text('${_eventWord(e.type)}${agoText(e.at)}', style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
               ),
           ],
         ],
@@ -217,6 +251,16 @@ class OverviewContent extends StatelessWidget {
     );
   }
 }
+
+/// The kind of event in plain words, before its time ("Link unstable · 13 h ago"); empty for a kind the app does not know.
+String _eventWord(String type) => switch (type) {
+  'repeater_new' => 'New repeater · ',
+  'repeater_quiet' => 'Repeater went quiet · ',
+  'link_new' => 'New link · ',
+  'link_lost' => 'Link lost · ',
+  'link_flap' => 'Link unstable · ',
+  _ => '',
+};
 
 IconData _eventIcon(String type) => switch (type) {
   'repeater_new' => Icons.add_circle_outline,
@@ -230,40 +274,60 @@ IconData _eventIcon(String type) => switch (type) {
 class _Card extends StatelessWidget {
   final String label, value;
   final Key valueKey;
+  final Key? tapKey;
   final Color? color;
+
+  /// Opens the list this figure counts; null = a plain figure (no shell above, as in a test of the panel alone).
+  final VoidCallback? onTap;
+
+  /// What the tap does, for a screen reader ("Open Packets").
+  final String? hint;
   const _Card({
     required this.label,
     required this.value,
     required this.valueKey,
+    this.tapKey,
     this.color,
+    this.onTap,
+    this.hint,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
+    final radius = BorderRadius.circular(Corners.card);
+    return Semantics(
+      button: onTap != null,
+      hint: onTap == null ? null : hint,
+      child: Material(
         color: t.colorScheme.surface,
-        borderRadius: BorderRadius.circular(Corners.card),
-        border: Border.all(color: t.colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(Gap.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                key: valueKey,
-                style: numberStyle(context, size: 34, color: color),
-              ),
+        shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: t.colorScheme.outlineVariant)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: tapKey,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.m),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    key: valueKey,
+                    style: numberStyle(context, size: 34, color: color),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(children: [
+                  Expanded(child: Text(label, style: t.textTheme.labelMedium, maxLines: 2)),
+                  if (onTap != null) Icon(Icons.chevron_right, size: 16, color: t.colorScheme.onSurfaceVariant),
+                ]),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(label, style: t.textTheme.labelMedium, maxLines: 2),
-          ],
+          ),
         ),
       ),
     );

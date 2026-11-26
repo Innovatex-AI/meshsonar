@@ -67,7 +67,7 @@ void main() {
     await tester.tap(find.byKey(const Key('open-progress')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('progress-screen')), findsOneWidget);
-    expect(_text(tester, 'progress-scope'), startsWith('From drives stored on this phone: 2 drives since '));
+    expect(_text(tester, 'progress-scope'), startsWith('2 drives on this phone since '));
     final drives = find.descendant(of: find.byKey(const Key('progress-total-drives')), matching: find.text('2'));
     expect(drives, findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('progress-total-heard')), matching: find.text('71%')), findsOneWidget);
@@ -91,7 +91,7 @@ void main() {
     expect(find.descendant(of: find.byKey(const Key('chart-progress-heard-table')), matching: find.text('Week 41 (Oct 5)')), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('chart-progress-heard-table')), matching: find.text('75%')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const Key('chart-progress-cells')), 200, scrollable: _list);
-    expect(find.textContaining('ISO weeks starting Monday, your phone\'s local time ('), findsWidgets);
+    expect(find.textContaining('Weeks start on Monday ('), findsWidgets);
     await tester.scrollUntilVisible(find.byKey(const Key('chart-progress-repeaters')), 200, scrollable: _list);
     expect(find.bySemanticsLabel(RegExp(r'^New repeaters per week\. 1 repeaters heard in all\. This week 0 new repeaters\.')), findsOneWidget);
     handle.dispose();
@@ -141,7 +141,8 @@ void main() {
     openProgress(tester.element(find.byType(Scaffold).first));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('progress-empty')), findsOneWidget);
-    expect(find.textContaining('From drives stored on this phone.'), findsOneWidget);
+    expect(find.textContaining('after your first drive'), findsOneWidget);
+    expect(find.byKey(const Key('progress-empty-start')), findsOneWidget, reason: 'the next step is a button');
   });
 
   testWidgets('the store fails: an error with Try again, which recovers', (tester) async {
@@ -163,6 +164,6 @@ void main() {
     h.store.failPings.add('old');
     await openDirect(tester, h);
     expect(find.byKey(const Key('progress-unreadable')), findsOneWidget);
-    expect(_text(tester, 'progress-scope'), startsWith('From drives stored on this phone: 1 drive since '));
+    expect(_text(tester, 'progress-scope'), startsWith('1 drive on this phone since '));
   });
 }

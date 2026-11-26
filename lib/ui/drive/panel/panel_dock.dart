@@ -16,11 +16,11 @@ import '../../../core/dead_area.dart' show silentPingStreak;
 import '../../../core/model.dart';
 import '../../../core/startup_location.dart' show LocationAccess;
 import '../../../radio/radio_api.dart';
+import '../../antenna_sheet.dart' show showAntennaSheet;
 import '../../design/tokens.dart';
 import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport;
 import '../radio_link_status.dart';
 import '../drive_clock.dart';
-import 'auto_collapse.dart';
 import 'panel_meshtrack.dart';
 
 /// Distinct repeaters that heard [p]. A repeater is counted once however many echoes it produced.
@@ -40,6 +40,21 @@ String agoShort(Duration d) {
   if (s < 60) return '$s s';
   final m = s ~/ 60;
   return '${m}m${(s % 60).toString().padLeft(2, '0')}s';
+}
+
+/// Ping debounce: ignored while a ping is in flight and for 2 s after the last accepted tap (airtime protection).
+class PingDebounce {
+  static const Duration quiet = Duration(seconds: 2);
+  DateTime? _last;
+
+  /// True (and starts the quiet period) when a tap at [now] may send a ping.
+  bool accept(DateTime now, {required bool inFlight}) {
+    if (inFlight) return false;
+    final l = _last;
+    if (l != null && now.difference(l) < quiet) return false;
+    _last = now;
+    return true;
+  }
 }
 
 class DriveDock extends StatelessWidget {
@@ -97,25 +112,50 @@ class _IdleDock extends StatelessWidget {
     final t = Theme.of(context);
     final c = AppColors.fromTheme(t);
     final busy = s.busy || s.connecting;
-    // Idle table (plan 4.20): not connected -> "Not connected" / "Connect your radio to begin" + Connect radio; location off ->
+    // Idle table (plan 4.20, simplified in build 76): not connected -> "Not connected" + Connect radio, and nothing else (the
+    // old second line "Connect your radio to begin" repeated the button and was cut off on every iPhone narrower than a
+    // Pro Max); after the automatic reconnect gave up the second line says "Could not reach <radio>". Location off ->
     // "Location is off for MeshSonar" (Start disabled; the strip above carries Allow location / Open Settings).
     final locationOff = s.locationNote != null;
-    final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (locationOff ? 'Location is off for MeshSonar' : 'Ready');
-    final String sub = !s.connected
-        ? 'Connect your radio to begin'
-        : (s.needsAntennaSetup ? 'Set your antenna first (open the panel)' : (locationOff ? 'Allow location to start a drive' : s.connectionLabel));
-    final text = _dockText(
+    // Build 76: the lines are short enough for the 130 pt an iPhone SE leaves them ("Location is off for MeshSonar" and
+    // "Set your antenna first (open the panel)" were cut off), and the antenna line opens the antenna sheet itself.
+    final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (s.needsAntennaSetup ? 'Set antenna' : (locationOff ? 'Location is off' : 'Ready'));
+    final String? sub = !s.connected
+        ? RadioLinkStatus.detailOf(s)
+        : (s.needsAntennaSetup ? 'Tap to set it up' : (locationOff ? 'Allow it to start' : s.connectionLabel));
+    final antennaTap = s.connected && s.needsAntennaSetup;
+    Widget text = _dockText(
       context,
       Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, key: const Key('status-line'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(title, key: const Key('status-line'), maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          ),
+          if (sub != null) ...[
+            const SizedBox(height: 2),
+            Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: antennaTap ? c.accent : c.textMuted)),
+          ],
         ],
       ),
     );
+    if (antennaTap) {
+      text = Semantics(
+        button: true,
+        label: 'Set up this radio\'s antenna',
+        excludeSemantics: true,
+        onTap: () => showAntennaSheet(context),
+        child: GestureDetector(
+          key: const Key('dock-antenna-setup'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => showAntennaSheet(context),
+          child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Align(alignment: Alignment.centerLeft, heightFactor: 1, child: text)),
+        ),
+      );
+    }
     final button = _StartStopButton(state: s, busy: busy, fullWidth: ax);
     if (ax) {
       return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -147,8 +187,8 @@ class _StartStopButton extends StatelessWidget {
     final stopBg = dark ? const Color(0xFFFF8A80) : t.colorScheme.error;
     final stopFg = dark ? const Color(0xFF2A0A08) : t.colorScheme.onError;
     return SizedBox(
-      width: fullWidth ? double.infinity : (driving ? 104 : 148),
-      height: fullWidth ? 56 : 52,
+      width: fullWidth ? double.infinity : (driving ? 116 : 148),
+      height: fullWidth || driving ? 56 : 52,
       child: FilledButton(
         key: const Key('start-stop'),
         style: FilledButton.styleFrom(
@@ -192,8 +232,11 @@ class _StartStopButton extends StatelessWidget {
 
 // ------------------------------------------------------------------------------------------------ connecting
 
-/// Wireframe B: spinner + "Connecting…" / "Reconnecting…" (the one wording, [RadioLinkStatus]) and a Cancel text button that returns to
-/// idle with no confirmation. It sits in the Dock like every other state: it never changes the detent and never covers the map.
+/// Wireframe B: spinner + "Connecting…" / "Reconnecting…" (the one wording, [RadioLinkStatus]), the radio's name under it, and a
+/// Cancel text button that returns to idle with no confirmation. It sits in the Dock like every other state: it never changes
+/// the detent and never covers the map. Build 76: the second line is the radio's name (it was "Looking for GPS - step outside
+/// if indoors" while connecting, which is not what a radio connect does and never fitted the row), and the words stay on one
+/// line (two lines overflowed the 72 pt row at large text).
 class _ConnectingDock extends StatelessWidget {
   final AppState state;
   final RadioLinkStatus link;
@@ -208,10 +251,7 @@ class _ConnectingDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.fromTheme(Theme.of(context));
-    final radio = AlertsHost.runtime.value?.reconnect?.radioName;
-    final String sub = link.link == RadioLink.reconnecting
-        ? (radio == null ? 'Looking for your radio' : 'Looking for $radio')
-        : 'Looking for GPS - step outside if indoors';
+    final String? sub = RadioLinkStatus.detailOf(state);
     final text = _dockText(
       context,
       Row(children: [
@@ -222,8 +262,12 @@ class _ConnectingDock extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(link.label, key: const Key('status-line'), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-              Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(link.label, key: const Key('status-line'), maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              ),
+              if (sub != null) Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
             ],
           ),
         ),
@@ -240,7 +284,11 @@ class _ConnectingDock extends StatelessWidget {
         onTap: _cancel,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48, minWidth: 72),
-          child: Center(child: Text('Cancel', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.accent))),
+          // Looks like the button it is (build 76; it was bare accent text).
+          child: DecoratedBox(
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: c.outline, width: 1.5)),
+            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Center(widthFactor: 1, child: Text('Cancel', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.accent)))),
+          ),
         ),
       ),
     );
@@ -250,7 +298,7 @@ class _ConnectingDock extends StatelessWidget {
         SizedBox(height: 56, child: cancel),
       ]);
     }
-    return Row(children: [Expanded(child: text), const MeshTrackDockButton(), const SizedBox(width: 4), cancel]);
+    return Row(children: [Expanded(child: text), const MeshTrackDockButton(), const SizedBox(width: 8), cancel]);
   }
 }
 
@@ -273,7 +321,7 @@ class _FinishedDock extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Drive saved', key: Key('status-line'), maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          const FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text('Drive saved', key: Key('status-line'), maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600))),
           const SizedBox(height: 2),
           Text(total == 0 ? 'No pings this drive' : '$total ${total == 1 ? 'ping' : 'pings'}, $heard heard', key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
         ],
@@ -283,9 +331,9 @@ class _FinishedDock extends StatelessWidget {
       return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         SizedBox(height: 64, child: Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: text)), const MeshTrackDockButton()])),
         Row(children: [
-          Expanded(child: SizedBox(height: 56, child: OutlinedButton(key: const Key('view-report'), onPressed: () => openFinishedDriveReport(context, sessionId), child: const Text('Report', maxLines: 1)))),
+          Expanded(child: SizedBox(height: 56, child: OutlinedButton(key: const Key('view-report'), onPressed: () => openFinishedDriveReport(context, sessionId), child: const Text('View report', maxLines: 1)))),
           const SizedBox(width: 8),
-          Expanded(child: SizedBox(height: 56, child: FilledButton(key: const Key('start-stop'), onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context), child: Text(s.connected ? 'Start new' : 'Connect radio', maxLines: 1)))),
+          Expanded(child: SizedBox(height: 56, child: FilledButton(key: const Key('start-stop'), onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context), child: Text(s.connected ? 'New drive' : 'Connect radio', maxLines: 1)))),
         ]),
       ]);
     }
@@ -293,26 +341,28 @@ class _FinishedDock extends StatelessWidget {
       children: [
         // With the MeshTrack button the row is full on an iPhone SE: the two buttons shrink their labels before the
         // summary gives way (flex 3 : 2 : 3), so nothing overflows at any width.
+        // Build 76: the two buttons say what they do ("View report", "New drive"; they were "Report" and "Start new") and
+        // are the same width, 52 pt tall.
         Expanded(flex: 3, child: text),
         const MeshTrackDockButton(),
         const SizedBox(width: 8),
-        Flexible(flex: 2, child: SizedBox(
-          height: 48,
+        Flexible(flex: 3, child: SizedBox(
+          height: 52,
           child: OutlinedButton(
             key: const Key('view-report'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48), padding: const EdgeInsets.symmetric(horizontal: 10)),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 8)),
             onPressed: () => openFinishedDriveReport(context, sessionId),
-            child: const FittedBox(fit: BoxFit.scaleDown, child: Text('Report', maxLines: 1)),
+            child: const FittedBox(fit: BoxFit.scaleDown, child: Text('View report', maxLines: 1)),
           ),
         )),
         const SizedBox(width: 8),
         Flexible(flex: 3, child: SizedBox(
-          height: 48,
+          height: 52,
           child: FilledButton(
             key: const Key('start-stop'),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 48), padding: const EdgeInsets.symmetric(horizontal: 12)),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 8)),
             onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context),
-            child: FittedBox(fit: BoxFit.scaleDown, child: Text(s.connected ? 'Start new' : 'Connect radio', maxLines: 1)),
+            child: FittedBox(fit: BoxFit.scaleDown, child: Text(s.connected ? 'New drive' : 'Connect radio', maxLines: 1)),
           ),
         )),
       ],
@@ -355,7 +405,8 @@ class _DrivingDock extends StatelessWidget {
           PingCircle(state: s, debounce: debounce, onPing: onPing),
         ],
         const MeshTrackDockButton(),
-        const SizedBox(width: 8),
+        // Stop is the largest target in the row (116 x 56, build 76; it was 104 x 52) and stands 14 pt clear of its neighbour.
+        const SizedBox(width: 14),
         _StartStopButton(state: s, busy: s.busy),
       ],
     );
@@ -386,7 +437,7 @@ class _DockHeroState extends State<DockHero> with DriveClock {
         child: Semantics(
           label: 'Listening, no ping yet',
           excludeSemantics: true,
-          child: Text('Listening', key: const Key('dock-hero-listening'), maxLines: 1, style: TextStyle(fontSize: 15, color: c.textMuted)),
+          child: Text('Listening', key: const Key('dock-hero-listening'), maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.textPrimary)),
         ),
       );
     }
@@ -401,14 +452,19 @@ class _DockHeroState extends State<DockHero> with DriveClock {
         label: none ? 'No repeater heard the last ping, $ago ago' : '$n ${n == 1 ? 'repeater' : 'repeaters'} heard the last ping, $ago ago',
         value: s.heardPercent == null ? null : '${s.heardCount} of ${s.pingCount} pings heard',
         excludeSemantics: true,
-        child: Column(
+        // The bigger figures scale down as one block on a narrow or large-text Dock, never overflow.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('$n', key: const Key('dock-hero'), style: TextStyle(fontSize: 34, height: 1.0, fontWeight: FontWeight.w600, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
+                Text('$n', key: const Key('dock-hero'), style: TextStyle(fontSize: 38, height: 1.0, fontWeight: FontWeight.w600, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
                 if (streak >= 5) ...[const SizedBox(width: 4), Icon(Icons.warning_amber_rounded, key: const Key('dock-hero-streak'), size: 18, color: c.warning)],
               ],
             ),
@@ -416,9 +472,10 @@ class _DockHeroState extends State<DockHero> with DriveClock {
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(none ? 'No echo · $ago' : 'heard · $ago', key: const Key('dock-hero-caption'), maxLines: 1, style: TextStyle(fontSize: 12, color: none ? c.warning : c.textMuted)),
+              child: Text(none ? 'No echo · $ago' : 'heard · $ago', key: const Key('dock-hero-caption'), maxLines: 1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: none ? c.warning : c.textPrimary)),
             ),
           ],
+        ),
         ),
       ),
     );

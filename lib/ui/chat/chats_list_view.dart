@@ -144,7 +144,7 @@ class _ChatsListViewState extends State<ChatsListView> {
           key: const Key('chats-empty-no-radio'),
           symbol: AppSymbols.antenna,
           title: 'Connect a radio to start chatting',
-          message: 'Messages travel over your MeshCore radio. Once it is connected, people and channels nearby appear here.',
+          message: 'Messages go out over your MeshCore radio.',
           actionLabel: 'Connect radio',
           onAction: widget.onConnect,
         ),
@@ -152,7 +152,7 @@ class _ChatsListViewState extends State<ChatsListView> {
     }
     return SliverFillRemaining(
       hasScrollBody: false,
-      child: _NothingYet(controller: _c, connected: connected, onNew: widget.onNew),
+      child: _NothingYet(controller: _c, connected: connected, onNew: widget.onNew, onConnect: widget.onConnect),
     );
   }
 
@@ -166,8 +166,8 @@ class _ChatsListViewState extends State<ChatsListView> {
           key: const Key('chats-no-results'),
           symbol: AppSymbols.magnifyingglass,
           title: noMatchesTitle(widget.query),
-          message: 'Try a shorter name, or search the text of every message.',
-          actionLabel: 'Search messages instead',
+          message: 'Try a shorter word.',
+          actionLabel: 'Search every message',
           onAction: () => ChatSearchScreen.open(context, _c),
         ),
       );
@@ -224,7 +224,7 @@ class _ChatsListViewState extends State<ChatsListView> {
     final system = rows.where((r) => r.isSystem).toList();
     return SliverMainAxisGroup(
       slivers: [
-        if (direct.isNotEmpty) ..._section('Direct messages', 'direct', direct),
+        if (direct.isNotEmpty) ..._section('People', 'direct', direct),
         if (channels.isNotEmpty) ..._section('Channels', 'channels', channels),
         if (rooms.isNotEmpty) ..._section('Rooms', 'rooms', rooms),
         if (system.isNotEmpty) ..._section('System', 'system', system),
@@ -235,10 +235,10 @@ class _ChatsListViewState extends State<ChatsListView> {
 
   /// A header and its rows. Every row has the same height (fixed two-line preview slot), so long sections cost nothing
   /// off screen.
-  List<Widget> _section(String title, String id, List<ConversationRow> rows) {
+  List<Widget> _section(String title, String id, List<ConversationRow> rows, {bool header = true}) {
     final proto = ConversationRow(key: 'proto', convKind: ConvKind.dm, kind: RowKind.person, title: 'Prototype', avatarSeed: 'proto', preview: 'Prototype');
     return [
-      SliverToBoxAdapter(child: _SectionHeader(title, key: Key('section-$id'))),
+      if (header) SliverToBoxAdapter(child: _SectionHeader(title, key: Key('section-$id'))) else const SliverToBoxAdapter(child: SizedBox(height: Gap.s)),
       SliverPrototypeExtentList(
         prototypeItem: Column(children: [ConversationTile(row: proto, stamp: '9:41'), const RowDivider()]),
         delegate: SliverChildBuilderDelegate(
@@ -274,7 +274,8 @@ class _ChatsListViewState extends State<ChatsListView> {
       slivers: [
         // MeshTrack: friends on the map, found where people look for groups (build 69). Hidden while searching.
         if (!filtered) const SliverToBoxAdapter(child: MeshTrackChatCard()),
-        if (!filtered)
+        // The sort only shows when it can change the order (two or more channels besides Public).
+        if (!filtered && rest.length >= 2)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.xs, Layout.screenMargin, 0),
@@ -288,9 +289,10 @@ class _ChatsListViewState extends State<ChatsListView> {
                   child: CupertinoSlidingSegmentedControl<ChannelSort>(
                     key: const Key('channels-sort'),
                     groupValue: _channelSort,
+                    // 44 pt tall: the two halves are thumb targets, not a desktop toggle.
                     children: const {
-                      ChannelSort.recent: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.s), child: Text('Recent', key: Key('channels-sort-recent'))),
-                      ChannelSort.name: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.s), child: Text('A–Z', key: Key('channels-sort-name'))),
+                      ChannelSort.recent: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 10), child: Text('Recent', key: Key('channels-sort-recent'))),
+                      ChannelSort.name: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 10), child: Text('A–Z', key: Key('channels-sort-name'))),
                     },
                     onValueChanged: (v) {
                       if (v != null && v != _channelSort) setState(() => _channelSort = v);
@@ -300,7 +302,7 @@ class _ChatsListViewState extends State<ChatsListView> {
               ]),
             ),
           ),
-        if (public.isNotEmpty || rest.isNotEmpty) ..._section('Channels', 'channel-list', [...public, ...rest]),
+        if (public.isNotEmpty || rest.isNotEmpty) ..._section('Channels', 'channel-list', [...public, ...rest], header: system.isNotEmpty),
         if (system.isNotEmpty) ..._section('System', 'system', system),
         const SliverToBoxAdapter(child: SizedBox(height: Gap.xl)),
       ],
@@ -318,11 +320,11 @@ class _ChatsListViewState extends State<ChatsListView> {
             key: const Key('channels-empty'),
             symbol: AppSymbols.message,
             title: 'No channels yet',
-            message: 'Join the Public channel to talk with everyone in range, or join a # channel your community uses.',
-            actionLabel: connected ? 'Join Public channel' : 'New channel',
+            message: connected ? 'Public reaches everyone in range.' : 'Connect your radio to join one.',
+            actionLabel: connected ? 'Join Public channel' : (_c.radioId == null && widget.onConnect != null ? 'Connect radio' : 'New channel'),
             onAction: connected
                 ? () => runChannelAction(context, _c, () => _c.admin.joinPublic(_c.radioId ?? ''), what: 'Public')
-                : widget.onNew,
+                : (_c.radioId == null && widget.onConnect != null ? widget.onConnect : widget.onNew),
           ),
         ),
       ]),
@@ -335,7 +337,9 @@ class _ChatsListViewState extends State<ChatsListView> {
           key: const Key('channels-no-results'),
           symbol: AppSymbols.magnifyingglass,
           title: noMatchesTitle(widget.query),
-          message: 'Channel names only. To join a new channel, tap the compose button.',
+          message: 'Not one of your channels.',
+          actionLabel: widget.onNew == null ? null : 'Join or make a channel',
+          onAction: widget.onNew,
         ),
       );
 
@@ -634,7 +638,8 @@ class _NothingYet extends StatelessWidget {
   final ChatController controller;
   final bool connected;
   final VoidCallback? onNew;
-  const _NothingYet({required this.controller, required this.connected, this.onNew});
+  final VoidCallback? onConnect;
+  const _NothingYet({required this.controller, required this.connected, this.onNew, this.onConnect});
 
   @override
   Widget build(BuildContext context) {
@@ -654,9 +659,7 @@ class _NothingYet extends StatelessWidget {
               Text('No conversations yet', style: t.textTheme.titleMedium, textAlign: TextAlign.center),
               const SizedBox(height: Gap.xs),
               Text(
-                connected
-                    ? 'Messages from people nearby appear after they advertise. You can also join the Public channel to talk with everyone in range.'
-                    : 'Your radio is not connected. Channels and people appear here when it is, and you can already join a channel.',
+                connected ? 'Join Public to talk with everyone in range.' : 'Your radio is not connected.',
                 style: t.textTheme.bodyMedium?.copyWith(color: c.textMuted),
                 textAlign: TextAlign.center,
               ),
@@ -669,6 +672,13 @@ class _NothingYet extends StatelessWidget {
                     : onNew,
                 child: Text(connected ? 'Join Public channel' : 'New chat'),
               ),
+              if (!connected && onConnect != null)
+                CupertinoButton(
+                  key: const Key('connect-empty'),
+                  minimumSize: const Size(Hit.min, Hit.min),
+                  onPressed: onConnect,
+                  child: const Text('Connect radio'),
+                ),
               if (connected)
                 CupertinoButton(
                   key: const Key('announce-empty'),

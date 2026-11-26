@@ -154,7 +154,8 @@ class MoreRow extends StatelessWidget {
         minVerticalPadding: Gap.s,
         leading: Icon(icon),
         title: Text(title),
-        subtitle: Text(subtitle),
+        // One line: the More pages are menus, not paragraphs (build 76). Large text may take a second line.
+        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => onOpen(item),
       );
@@ -175,22 +176,25 @@ class MoreList extends StatelessWidget {
         child: ListView(
           key: const Key('more-list'),
           children: [
-            row(MoreItem.drives, Icons.list_alt, 'Drives', 'Your drives, reports and progress'),
-            row(MoreItem.radio, Icons.settings_input_antenna, 'Radio',
-                s.connected ? 'Your radio, repeaters, rooms, sensors and radio tools' : 'Not connected. Repeaters, rooms and radio tools'),
-            row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your driver key, other phones, MeshMapper forwarding'),
-            if (s.radioProofCapable) row(MoreItem.observers, Icons.cell_tower, 'Observers', 'Your observers, this phone, and radios that may be yours'),
-            row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Drivers who opted in, this region or every region'),
-            row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle, 'Step by step: make your repeater report to MeshSonar. Free'),
+            // Build 76: what people open most first (drives, the radio, settings), then the rest; every line is short
+            // enough for one row at 375 pt. The Radio row says which radio is connected.
+            row(MoreItem.drives, Icons.list_alt, 'Drives', 'Your saved drives and reports'),
+            row(MoreItem.radio, Icons.settings_input_antenna, 'Radio', s.connected ? '${s.connectionLabel} · connected' : 'Not connected'),
+            row(MoreItem.settings, Icons.settings, 'Settings', 'Pings, alerts, privacy, maps, storage'),
             row(MoreItem.chat, Icons.chat_bubble_outline, 'Chat settings', 'Quick replies, Return key, haptics'),
-            row(MoreItem.settings, Icons.settings, 'Settings', 'Wardriving, notifications, observer, privacy, claimed radios, maps, storage'),
-            row(MoreItem.help, Icons.help_outline, 'Help', 'How it works, method, colour legend, report a problem'),
+            const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
+            row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your key, other phones, MeshMapper'),
+            if (s.radioProofCapable) row(MoreItem.observers, Icons.cell_tower, 'Observers', 'Your observers and radios'),
+            row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Top drivers, here or everywhere'),
+            row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle, 'Make your repeater report in. Free'),
+            const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
+            row(MoreItem.help, Icons.help_outline, 'Help', 'How it works, colours, report a problem'),
             ListTile(
               key: const Key('more-about'),
               minVerticalPadding: Gap.s,
               leading: const Icon(Icons.info_outline),
               title: const Text('About MeshSonar'),
-              subtitle: Text('Version ${s.services.appInfo.version ?? ''}, licence, credits'),
+              subtitle: Text('Version ${s.services.appInfo.version ?? ''}'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => onOpen(MoreItem.about),
             ),

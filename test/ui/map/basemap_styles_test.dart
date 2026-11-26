@@ -9,8 +9,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/basemap.dart';
-import 'package:meshsonar/core/offline_style.dart' show appLabelFont;
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
+
+/// The label font of the app's basemap styles (tool/basemap/make_basemap_styles.mjs): the system font.
+const appLabelFont = 'CupertinoSystemText';
 
 class _Capture implements vtr.Logger {
   final warnings = <String>[];

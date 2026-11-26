@@ -48,7 +48,7 @@ void main() {
       var connects = 0;
       await pumpView(tester, contacts: 0, link: false, onConnect: () => connects++);
       expect(find.byKey(const Key('contacts-no-radio')), findsOneWidget);
-      expect(find.text('Your contacts appear here'), findsOneWidget);
+      expect(find.text('Connect a radio to see your contacts'), findsOneWidget);
       await tester.tap(find.text('Connect radio'));
       expect(connects, 1);
     });
@@ -81,7 +81,7 @@ void main() {
       await tester.pumpWidget(hostApp(ContactsView(controller: rig.controller)));
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.byKey(const Key('banner-syncing')), findsOneWidget);
-      expect(find.text('Loading contacts from your radio: 120 of 350'), findsOneWidget);
+      expect(find.text('Loading contacts: 120 of 350'), findsOneWidget);
       expect(find.byKey(const Key('contacts-search')), findsOneWidget);
       slow.gate.complete();
       await tester.pump(const Duration(milliseconds: 50));

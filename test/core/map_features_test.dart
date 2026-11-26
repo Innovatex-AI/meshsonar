@@ -59,9 +59,7 @@ void main() {
       expect(BaseMapStyle.parse('hybrid'), BaseMapStyle.chart, reason: 'an id this build does not know');
       expect(BaseMapStyle.parse(null), BaseMapStyle.chart);
     });
-    test('topo and satellite are the ones without an offline pack (the network only); every style credits OpenStreetMap or its imagery', () {
-      expect([for (final s in BaseMapStyle.values) if (!s.usesOfflinePack) s], [BaseMapStyle.topo, BaseMapStyle.satellite]);
-      expect([for (final s in BaseMapStyle.values) if (s.needsNetwork) s], [BaseMapStyle.topo, BaseMapStyle.satellite]);
+    test('every style credits OpenStreetMap or its imagery', () {
       for (final s in BaseMapStyle.values) {
         if (s.isSatellite) {
           expect(s.attribution, isEmpty, reason: 'satellite builds its credit from the definition');

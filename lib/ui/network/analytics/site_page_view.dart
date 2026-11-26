@@ -145,6 +145,9 @@ class _SitePageViewState extends State<SitePageView> {
   /// A page that has shown nothing after this long is treated as not reachable (never an endless bar).
   static const Duration _patience = Duration(seconds: 25);
 
+  static const String _slowText = 'The page took too long to load.';
+  bool get _slow => _error == _slowText;
+
   late final Uri? _start = sitePageUri(widget.baseUrl, widget.path);
   SiteWebEngine? _engine;
   bool _noEngine = false;
@@ -153,6 +156,10 @@ class _SitePageViewState extends State<SitePageView> {
   String? _error;
   bool _canGoBack = false;
   Uri? _current;
+
+  /// True once a page has finished loading in this view: until then the body says what is loading (a first load used
+  /// to be a blank dark page with a 2 px bar).
+  bool _shownOnce = false;
 
   /// The native link last acted on from an address change: the same address is not acted on again until the page has
   /// been somewhere else (stepping back can never loop).
@@ -223,7 +230,7 @@ class _SitePageViewState extends State<SitePageView> {
     if (e == null || start == null) return;
     _timer?.cancel();
     _timer = Timer(_patience, () {
-      if (mounted && _loading) _onError('The page took too long to load.');
+      if (mounted && _loading) _onError(_slowText);
     });
     void set() {
       _error = null;
@@ -326,7 +333,10 @@ class _SitePageViewState extends State<SitePageView> {
     _timer?.cancel();
     unawaited(_engine?.runScript(siteEmbedScript).catchError((Object _) {}));
     if (!mounted) return;
-    setState(() => _loading = false);
+    setState(() {
+      _loading = false;
+      _shownOnce = true;
+    });
     _refreshBack();
   }
 
@@ -377,7 +387,7 @@ class _SitePageViewState extends State<SitePageView> {
       body = AppErrorView(
         key: const Key('site-page-no-engine'),
         title: 'This page opens in your browser',
-        message: 'This device cannot show the page inside the app.',
+        message: 'This device cannot show ${widget.title} inside the app.',
         onRetry: _openInBrowser,
         retryLabel: 'Open in browser',
       );
@@ -389,11 +399,40 @@ class _SitePageViewState extends State<SitePageView> {
           Positioned.fill(
             child: ColoredBox(
               color: t.scaffoldBackgroundColor,
-              child: AppErrorView(
-                key: const Key('site-page-error'),
-                title: "Can't reach MeshSonar",
-                message: 'Check your connection, then try again. ($_error)',
-                onRetry: _load,
+              // Plain words first; the engine's own text is kept, last and in brackets, for a problem report. The page can
+              // still be opened in the browser from here (the header button does the same).
+              child: Column(key: const Key('site-page-error'), mainAxisAlignment: MainAxisAlignment.center, children: [
+                Flexible(
+                  child: AppErrorView(
+                    title: _slow ? 'This page is slow to load' : "Can't reach MeshSonar",
+                    message: _slow
+                        ? 'It did not show after ${_patience.inSeconds} seconds. Try again, or open it in your browser.'
+                        : 'Check your connection, then try again. ($_error)',
+                    onRetry: _load,
+                  ),
+                ),
+                TextButton.icon(
+                  key: const Key('site-page-error-browser'),
+                  onPressed: _openInBrowser,
+                  icon: const Icon(Icons.open_in_browser, size: 18),
+                  label: const Text('Open in browser instead'),
+                ),
+                const SizedBox(height: 16),
+              ]),
+            ),
+          ),
+        if (_loading && _error == null && !_shownOnce)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ColoredBox(
+                color: t.scaffoldBackgroundColor,
+                child: Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3)),
+                    const SizedBox(height: 12),
+                    Text('Loading ${widget.title}…', key: const Key('site-page-loading-label'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  ]),
+                ),
               ),
             ),
           ),
@@ -409,7 +448,7 @@ class _SitePageViewState extends State<SitePageView> {
     final actions = [
       if (_canGoBack && widget.onClose == null)
         IconButton(key: const Key('site-page-close'), tooltip: 'Close this page', onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
-      if (e != null && _start != null) IconButton(key: const Key('site-page-reload'), tooltip: 'Reload', constraints: const BoxConstraints(minWidth: 48, minHeight: 48), onPressed: _load, icon: const Icon(Icons.refresh)),
+      if (e != null && _start != null) IconButton(key: const Key('site-page-reload'), tooltip: 'Reload this page', constraints: const BoxConstraints(minWidth: 48, minHeight: 48), onPressed: _load, icon: const Icon(Icons.refresh)),
       if (_start != null)
         IconButton(key: const Key('site-page-browser'), tooltip: 'Open in browser', constraints: const BoxConstraints(minWidth: 48, minHeight: 48), onPressed: _openInBrowser, icon: const Icon(Icons.open_in_browser)),
     ];

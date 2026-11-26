@@ -111,7 +111,7 @@ void main() {
       await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ConvKey.dm(bobKey))));
       await tester.pump();
       expect(find.byKey(const Key('route-broken-card')), findsOneWidget);
-      expect(find.text('This route may be broken.'), findsOneWidget);
+      expect(find.text('Messages are not getting through'), findsOneWidget);
       expect(find.byKey(const Key('broken-find')), findsOneWidget);
       expect(find.byKey(const Key('broken-reset')), findsOneWidget);
       await tester.tap(find.byKey(const Key('broken-reset')));
@@ -171,7 +171,7 @@ void main() {
       await tester.pumpWidget(host(ChatSettingsScreen(controller: kit.controller)));
       await tester.pump();
       expect(find.text('Quick replies'), findsOneWidget);
-      expect(find.text('${defaultQuickReplies.length}'), findsOneWidget);
+      expect(find.text('${defaultQuickReplies.length} saved'), findsOneWidget);
       expect(loadReturnSends(kit.store), isFalse);
       await tester.tap(find.byKey(const Key('chat-return-sends')));
       await tester.pump();

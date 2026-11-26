@@ -40,7 +40,8 @@ class SettingsAnchor extends StatelessWidget {
       key: k,
       child: DecoratedBox(
         decoration: on ? BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)) : const BoxDecoration(),
-        child: child,
+        // Its own transparent Material: a ListTile inside the tint needs one to draw its ink on (and asserts in debug without it).
+        child: Material(type: MaterialType.transparency, child: child),
       ),
     );
   }
@@ -146,6 +147,12 @@ class InfoTile extends StatelessWidget {
         onTap: onTap,
       );
 }
+
+/// The label of one choice in a SegmentedButton. A segment on a narrow phone or at large text is narrower than a word,
+/// and a plain Text then breaks the word in two ("Bala / nced"); this keeps the label whole on one line and shrinks it
+/// to fit the segment. The key stays on the Text.
+Widget segmentLabel(String text, {Key? key}) =>
+    FittedBox(fit: BoxFit.scaleDown, child: Text(text, key: key, maxLines: 1, softWrap: false));
 
 /// Says why a control in a Settings row cannot be used right now and what makes it usable ("Turn on X first",
 /// "Locked while driving: stop the drive to change it"). Every disabled control in Settings has one in its row, so no

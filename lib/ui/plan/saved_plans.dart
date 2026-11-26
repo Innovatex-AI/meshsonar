@@ -64,7 +64,8 @@ class _PlanNameSheetState extends State<_PlanNameSheet> {
         primaryAction: FilledButton(
           key: const Key('saved-plan-name-save'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
-          onPressed: () => Navigator.of(context).pop(_field.text),
+          // Off while the name is empty (build 76): an empty name used to be accepted.
+          onPressed: _field.text.trim().isEmpty ? null : () => Navigator.of(context).pop(_field.text),
           child: Text(widget.action),
         ),
         children: [
@@ -73,8 +74,23 @@ class _PlanNameSheetState extends State<_PlanNameSheet> {
             controller: _field,
             autofocus: true,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(labelText: 'Plan name', border: OutlineInputBorder()),
-            onSubmitted: (v) => Navigator.of(context).pop(v),
+            decoration: InputDecoration(
+              labelText: 'Plan name',
+              border: const OutlineInputBorder(),
+              suffixIcon: _field.text.isEmpty
+                  ? null
+                  : IconButton(
+                      key: const Key('saved-plan-name-clear'),
+                      tooltip: 'Clear the name',
+                      constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+                      onPressed: () => setState(_field.clear),
+                      icon: const AppSymbolIcon(AppSymbols.xmarkCircleFill, size: 18),
+                    ),
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (v) {
+              if (v.trim().isNotEmpty) Navigator.of(context).pop(v);
+            },
           ),
         ],
       );
@@ -104,6 +120,16 @@ class SavedPlansSheet extends StatefulWidget {
 
 class _SavedPlansSheetState extends State<SavedPlansSheet> {
   late Future<List<SavedPlanSummary>> _list = _read();
+
+  /// The filter box (shown from six plans up).
+  final TextEditingController _find = TextEditingController();
+
+  @override
+  void dispose() {
+    _find.dispose();
+    super.dispose();
+  }
+
   String? get _currentId => widget.current?.plan.id;
 
   Future<List<SavedPlanSummary>> _read() async {
@@ -113,6 +139,11 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
     final l = await widget.saved.list();
     l.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return l;
+  }
+
+  List<SavedPlanSummary> _shown(List<SavedPlanSummary> all) {
+    final q = _find.text.trim().toLowerCase();
+    return q.isEmpty || all.length < 6 ? all : [for (final p in all) if (p.name.toLowerCase().contains(q)) p];
   }
 
   void _refresh() {
@@ -185,7 +216,7 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
     final ok = await showAppConfirm(
       context,
       title: 'Delete "${p.name}"?',
-      message: 'The plan and its ${p.nodeCount} ${p.nodeCount == 1 ? 'node' : 'nodes'} are removed from this phone. Links you shared keep working.',
+      message: 'Removed from this phone. Links you already shared keep working.',
       confirmLabel: 'Delete plan',
       destructive: true,
       confirmKey: Key('saved-plan-delete-confirm-${p.id}'),
@@ -215,7 +246,7 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
             minTileHeight: Hit.min + 8,
             leading: const AppSymbolIcon(AppSymbols.squareAndArrowDown),
             title: const Text('Import a plan or contacts'),
-            subtitle: const Text('Paste a plan link, a plan code or a MeshCore contacts list'),
+            subtitle: const Text('Paste a link, a code or a contacts list'),
             onTap: () => Navigator.of(context).pop(const SavedPlansChoice.import()),
           ),
           const SizedBox(height: Gap.s),
@@ -229,17 +260,56 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
           if (snap.hasData && snap.data!.isEmpty)
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 200),
-              child: const AppEmptyView(key: Key('saved-plans-empty'), symbol: AppSymbols.tray, title: 'No saved plans yet', message: 'A plan is saved here as soon as you add a node.'),
+              // Build 76: the empty state has the button that gets a plan in here.
+              child: AppEmptyView(
+                key: const Key('saved-plans-empty'),
+                symbol: AppSymbols.tray,
+                title: 'No saved plans yet',
+                message: 'A plan is saved here by itself as soon as you add to it.',
+                actionLabel: 'Import a plan',
+                onAction: () => Navigator.of(context).pop(const SavedPlansChoice.import()),
+              ),
+            ),
+          // A filter box once the list is long enough to need one.
+          if (snap.hasData && snap.data!.length >= 6)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.s),
+              child: TextField(
+                key: const Key('saved-plans-find'),
+                controller: _find,
+                autocorrect: false,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  prefixIcon: const AppSymbolIcon(AppSymbols.magnifyingglass, size: 18),
+                  hintText: 'Find a plan',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: _find.text.isEmpty
+                      ? null
+                      : IconButton(
+                          key: const Key('saved-plans-find-clear'),
+                          tooltip: 'Clear',
+                          constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+                          onPressed: () => setState(_find.clear),
+                          icon: const AppSymbolIcon(AppSymbols.xmarkCircleFill, size: 18),
+                        ),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          if (snap.hasData && snap.data!.isNotEmpty && _shown(snap.data!).isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Gap.m),
+              child: Text('No plan is called "${_find.text.trim()}".', key: const Key('saved-plans-no-match'), style: t.textTheme.bodyMedium),
             ),
           if (snap.hasData)
-            for (final p in snap.data!)
+            for (final p in _shown(snap.data!))
               ListTile(
                 key: Key('saved-plan-${p.id}'),
                 contentPadding: EdgeInsets.zero,
                 minTileHeight: Hit.min + 8,
                 leading: AppSymbolIcon(p.id == _currentId ? AppSymbols.checkmarkCircleFill : AppSymbols.map, color: p.id == _currentId ? t.colorScheme.primary : null),
                 title: Text(p.name),
-                subtitle: Text('${p.nodeCount} ${p.nodeCount == 1 ? 'node' : 'nodes'} · saved ${_when(p.updatedAt)}${p.id == _currentId ? ' · open now' : ''}'),
+                subtitle: Text('${p.nodeCount} ${p.nodeCount == 1 ? 'node' : 'nodes'} · saved ${savedWhen(p.updatedAt, widget.saved.clock())}${p.id == _currentId ? ' · open now' : ''}'),
                 onTap: () => Navigator.of(context).pop(SavedPlansChoice.open(p.id)),
                 trailing: IconButton(
                   key: Key('saved-plan-more-${p.id}'),
@@ -257,7 +327,12 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
 }
 
 String _two(int v) => v.toString().padLeft(2, '0');
-String _when(DateTime t) {
-  final l = t.toLocal();
-  return '${l.year}-${_two(l.month)}-${_two(l.day)} ${_two(l.hour)}:${_two(l.minute)}';
+/// "today 14:05", "yesterday 09:12" or "2026-11-20" (build 76: the full date and time on every row was hard to scan).
+String savedWhen(DateTime t, DateTime now) {
+  final l = t.toLocal(), n = now.toLocal();
+  final days = DateTime(n.year, n.month, n.day).difference(DateTime(l.year, l.month, l.day)).inDays;
+  final hm = '${_two(l.hour)}:${_two(l.minute)}';
+  if (days == 0) return 'today $hm';
+  if (days == 1) return 'yesterday $hm';
+  return '${l.year}-${_two(l.month)}-${_two(l.day)}';
 }

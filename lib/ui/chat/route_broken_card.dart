@@ -53,21 +53,26 @@ class RouteBrokenCard extends StatelessWidget {
             const SizedBox(width: Gap.s),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('This route may be broken.', style: AppType.headline.copyWith(color: c.textPrimary)),
+                Text('Messages are not getting through', style: AppType.headline.copyWith(color: c.textPrimary)),
                 const SizedBox(height: 2),
-                Text('The last three messages to ${contact.displayName} were not delivered.', style: AppType.subhead.copyWith(color: c.textMuted)),
+                Text('The last three to ${contact.displayName} were not delivered. The saved route may be broken.',
+                    maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.subhead.copyWith(color: c.textMuted)),
               ]),
             ),
           ]),
-          const SizedBox(height: Gap.xs),
-          Wrap(alignment: WrapAlignment.end, children: [
-            CupertinoButton(
-              key: const Key('broken-find'),
-              minimumSize: Size.square(Hit.min),
-              padding: const EdgeInsets.symmetric(horizontal: Gap.m),
-              onPressed: () => _find(context),
-              child: const Text('Find a route now'),
+          const SizedBox(height: Gap.s),
+          // The fix is the one filled button; the reset is the quiet one beside it. Both are full thumb targets.
+          Row(children: [
+            Expanded(
+              child: CupertinoButton.filled(
+                key: const Key('broken-find'),
+                minimumSize: Size.square(Hit.min),
+                padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+                onPressed: () => _find(context),
+                child: const FittedBox(fit: BoxFit.scaleDown, child: Text('Find a route now')),
+              ),
             ),
+            const SizedBox(width: Gap.s),
             CupertinoButton(
               key: const Key('broken-reset'),
               minimumSize: Size.square(Hit.min),

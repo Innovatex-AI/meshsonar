@@ -202,7 +202,7 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
     final learned = c.pathLearnedMs;
     final caption = searching
         ? 'Messages go to everyone nearby.'
-        : (!c.hasPath ? 'No route yet. The first message searches and learns one.' : (learned == null ? routeCaption(c) : 'Learned ${agoText(now, learned)}'));
+        : (!c.hasPath ? 'Your first message finds one.' : (learned == null ? routeCaption(c) : 'Learned ${agoText(now, learned)}'));
     return ListView(
       padding: const EdgeInsets.only(bottom: Gap.xl),
       children: [
@@ -237,6 +237,8 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
             key: const Key('route-find'),
             label: 'Find a route now',
             valueWidget: _finding ? const CupertinoActivityIndicator() : null,
+            // Says why it will not work before the tap, like the Test row under it.
+            value: _finding || connected ? null : 'Radio not connected',
             chevron: !_finding,
             onTap: _finding ? null : () => _find(c),
           ),
@@ -248,7 +250,7 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
             onTap: c.hasPath || c.pathMode == PathMode.fixed ? () => _reset(c) : null,
             value: c.hasPath ? null : 'No route saved',
           ),
-        ], footer: connected ? 'Finding or testing a route uses a little airtime.' : null),
+        ], footer: connected ? 'Finding or testing uses a little airtime.' : 'Connect your radio to find or test a route.'),
         if (_found != null) _foundCard(c, col, repeaters),
         ProfileGroup(rows: [
           ProfileRow(

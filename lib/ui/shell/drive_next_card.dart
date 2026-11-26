@@ -187,10 +187,10 @@ class _DriveNextCardState extends State<DriveNextCard> {
         _note(
           context,
           note == null
-              ? 'MeshSonar needs your location to find coverage gaps near you. No account needed.'
+              ? 'Waiting for your location to find gaps near you.'
               : note.action == LocationAction.ask
-                  ? 'Allow location and MeshSonar lists the places near you where no repeater answered and the areas nobody has mapped yet. No account needed.'
-                  : 'Location is off for MeshSonar. Turn it on in Settings to find coverage gaps near you.',
+                  ? 'Allow location to see the gaps near you: places where no repeater answered, and places nobody has driven.'
+                  : 'Location is off for MeshSonar. Turn it on in Settings to see the gaps near you.',
           action: note?.actionLabel == null
               ? null
               : FilledButton.tonal(
@@ -240,8 +240,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
         context,
         _note(
           context,
-          'Nothing to drive to within ${units.distance(15000)} of you in the coverage we have: no cells without a reply '
-          'and no unmapped areas.',
+          'Nothing to drive to within ${units.distance(15000)} of you: every place near you has been driven and answered.',
         ),
       );
     }
@@ -252,8 +251,8 @@ class _DriveNextCardState extends State<DriveNextCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Filled dots are No reply: someone drove there and no repeater answered. Rings are unmapped: nobody has '
-            'logged a ping there yet (it may not be a road). Within ${units.distance(15000)} of you.',
+            'Dot: driven, but no repeater answered. Ring: nobody has driven there yet. '
+            'Nearest first, within ${units.distance(15000)}.',
             style: t.textTheme.bodySmall?.copyWith(
               color: t.colorScheme.onSurfaceVariant,
             ),
@@ -287,7 +286,7 @@ class _DriveNextCardState extends State<DriveNextCard> {
     );
     final what = silent
         ? 'No reply (${x.pings} ping${x.pings == 1 ? '' : 's'}, no repeater answered)'
-        : 'Unmapped area';
+        : 'Nobody has driven here yet';
     return ListTile(
       key: Key('plan-target-$i'),
       contentPadding: EdgeInsets.zero,
@@ -356,11 +355,13 @@ class _DriveNextCardState extends State<DriveNextCard> {
                   point: me,
                   width: 20,
                   height: 20,
-                  child: const DecoratedBox(
+                  // The app's own you-are-here colour (the live puck's), not a hard-coded blue.
+                  child: DecoratedBox(
+                    key: const Key('plan-drive-next-me'),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Color(0xFF1E6FFF),
-                      border: Border.fromBorderSide(
+                      color: cs.primary,
+                      border: const Border.fromBorderSide(
                         BorderSide(color: Colors.white, width: 3),
                       ),
                     ),

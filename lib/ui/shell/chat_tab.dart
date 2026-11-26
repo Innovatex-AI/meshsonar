@@ -132,10 +132,9 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
       child: AppEmptyView(
         key: const Key('chat-empty'),
         symbol: AppSymbols.message,
-        title: s.connected ? 'Chat is getting ready' : 'Messages arrive here once you connect a radio',
-        message: s.connected
-            ? 'Your radio is connected. Conversations appear here in a moment.'
-            : 'Connect your MeshCore companion radio over Bluetooth. People and channels show up here; you can map coverage while you wait.',
+        // Build 76: the same words as the Chats list's own empty state.
+        title: s.connected ? 'Chat is getting ready' : 'Connect a radio to start chatting',
+        message: s.connected ? 'Your radio is connected. Chats appear here in a moment.' : 'Messages go out over your MeshCore radio.',
         actionLabel: s.connected ? 'Open Drive' : 'Connect radio',
         onAction: s.connected ? () => ShellScope.maybeRead(context)?.select(AppTab.drive) : () => openConnect(context),
       ),
@@ -238,17 +237,27 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
                   child: AppSymbolIcon(AppSymbols.personBadgePlus, size: 22, color: c.accent),
                 ),
               ),
+            // Build 76: a labelled pill ("New"), not a bare pencil: starting a message is one obvious tap.
             Semantics(
-              label: 'New message',
+              label: 'New chat',
               button: true,
               excludeSemantics: true,
               onTap: () => _new(context, p),
-              child: CupertinoButton(
-                key: const Key('chat-new'),
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(Hit.min, Hit.min),
-                onPressed: () => _new(context, p),
-                child: AppSymbolIcon(AppSymbols.squareAndPencil, size: 22, color: c.accent),
+              child: Tooltip(
+                message: 'New chat',
+                child: CupertinoButton(
+                  key: const Key('chat-new'),
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+                  minimumSize: const Size(Hit.min, Hit.min),
+                  color: c.accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(Hit.min / 2),
+                  onPressed: () => _new(context, p),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    AppSymbolIcon(AppSymbols.squareAndPencil, size: 18, color: c.accent),
+                    const SizedBox(width: Gap.xs),
+                    Text('New', style: TextStyle(color: c.accent, fontWeight: FontWeight.w600, fontSize: 15)),
+                  ]),
+                ),
               ),
             ),
           ]),
@@ -282,8 +291,8 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
             child: TipCard(
               tipId: 'chat-swipe-tip',
               symbol: AppSymbols.message,
-              title: 'Swipe a conversation',
-              message: 'Swipe right to pin or mark unread. Swipe left to mute or delete.',
+              title: 'Swipe a chat for quick actions',
+              message: 'Pin, mute and delete are also under its … menu.',
               onDismissed: () => setState(() {}),
             ),
           )

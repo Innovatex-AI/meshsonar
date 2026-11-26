@@ -88,11 +88,12 @@ class PingDetailSheet extends StatelessWidget {
     final units = AppScope.unitsOf(context);
     final snr = bestSnr(p);
     final color = mc.forPing(heard: !p.heardNothing, snr: snr);
+    // Rows the phone or radio did not record are left out (build 76; they used to show as a column of dashes).
     final facts = <(String, String)>[
       ('Position', '${_ll(p.lat)}, ${_ll(p.lon)}'),
-      ('GPS accuracy', p.gpsAccuracyM == null ? '—' : '±${units.shortLength(p.gpsAccuracyM!)}'),
-      ('Speed', p.speedMps == null ? '—' : units.speed(p.speedMps!)),
-      ('Noise floor', p.noiseFloorDbm == null ? '—' : '${p.noiseFloorDbm!.round()} dBm'),
+      if (p.gpsAccuracyM != null) ('GPS accuracy', '±${units.shortLength(p.gpsAccuracyM!)}'),
+      if (p.speedMps != null) ('Speed', units.speed(p.speedMps!)),
+      if (p.noiseFloorDbm != null) ('Noise floor', '${p.noiseFloorDbm!.round()} dBm'),
     ];
     return ListView(
       key: const Key('ping-detail'),
@@ -142,7 +143,8 @@ class PingDetailSheet extends StatelessWidget {
           ),
         ),
         if (p.echoes.isNotEmpty) ...[
-          _Heading('Echoes', '${p.echoes.length}'),
+          // Plain words (build 76): "Echoes" is the radio term; the count is how many repeaters answered.
+          _Heading('Repeaters that answered', '${repeatersHeard(p).length}'),
           for (final e in p.echoes) ...[
             EchoTile(
               echo: e,
@@ -170,6 +172,7 @@ class PingDetailSheet extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, 0),
           child: OutlinedButton.icon(
             key: const Key('ping-copy'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: pingAsText(p, lookup, AppScope.read(context).units)));
               if (context.mounted) showAppToast(context, 'Ping copied as text.', kind: AppToastKind.success);

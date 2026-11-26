@@ -32,10 +32,15 @@ class AcctClient extends FakeCmatClient {
   int deleteCalls = 0;
   final List<String> calls = [];
   int exports = 0;
+  Object? devicesError;
+  Object? driveError;
+  Object? reportsError;
+  List<ReportRow>? reports;
 
   @override
   Future<DriverDevices> driverDevices(String driverKey) async {
     calls.add('devices');
+    if (devicesError != null) throw devicesError!;
     return DriverDevices(
       driver: const AccountDevice(id: 'd1', display: 'KE4BFI', status: DriverKeyStatus.approved, keyHint: '1234', revealable: true),
       linked: linked,
@@ -61,7 +66,13 @@ class AcctClient extends FakeCmatClient {
   }
 
   @override
-  Future<ServerDriveDetail> driverDrive(String driverKey, String sessionId) async => ServerDriveDetail.tryParse({
+  Future<ServerDriveDetail> driverDrive(String driverKey, String sessionId) async {
+    calls.add('drive:$sessionId');
+    if (driveError != null) throw driveError!;
+    return _drive(sessionId);
+  }
+
+  ServerDriveDetail _drive(String sessionId) => ServerDriveDetail.tryParse({
         'drive': {'id': sessionId, 'startedAt': '2026-10-30T10:00:00Z', 'km': 2.5, 'review': 'ok'},
         'pings': [
           {'id': 'p1', 'at': '2026-10-30T10:01:00Z', 'lat': 39.9, 'lon': -83.0, 'heard': true, 'echoes': [{'repeaterId': 'ab12', 'name': 'Hill', 'snr': 4.5}]},
@@ -78,9 +89,14 @@ class AcctClient extends FakeCmatClient {
   Future<void> deleteServerDrive(String driverKey, String sessionId) async => calls.add('delete:$sessionId');
 
   @override
-  Future<List<ReportRow>> driverReports(String driverKey) async => [
-        ReportRow(id: 'r1', createdAt: DateTime.utc(2026, 10, 31), status: 'triaged', category: 'gps', source: 'app', summary: 'No fix in the tunnel'),
-      ];
+  Future<List<ReportRow>> driverReports(String driverKey) async {
+    calls.add('reports');
+    if (reportsError != null) throw reportsError!;
+    return reports ??
+        [
+          ReportRow(id: 'r1', createdAt: DateTime.utc(2026, 10, 31), status: 'triaged', category: 'gps', source: 'app', summary: 'No fix in the tunnel'),
+        ];
+  }
 
   @override
   Future<List<int>> exportAccount(String driverKey) async {
@@ -116,6 +132,15 @@ Future<AcctHarness> open(WidgetTester tester, {Set<String> caps = const {'driver
   return h;
 }
 
+/// An iPhone SE-wide screen at the largest everyday text size: nothing may overflow.
+void usePhoneLargeText(WidgetTester tester) {
+  tester.view.physicalSize = const Size(750, 1334);
+  tester.view.devicePixelRatio = 2;
+  tester.platformDispatcher.textScaleFactorTestValue = 2;
+  addTearDown(tester.view.reset);
+  addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+}
+
 void push(WidgetTester tester, Widget w) => Navigator.of(tester.element(find.byType(Scaffold).first)).push(MaterialPageRoute<void>(builder: (_) => w));
 
 void main() {
@@ -130,15 +155,26 @@ void main() {
     expect(find.byKey(const Key('devices-mm-m1')), findsOneWidget);
     expect(find.text(_myKey), findsNothing, reason: 'the key is masked until asked for');
     expect(find.byKey(const Key('devices-key-hidden')), findsOneWidget);
+    expect(find.byKey(const Key('devices-key-copy')), findsOneWidget, reason: 'copy is one tap: the key need not be on screen first');
+    expect(find.text('One key per phone. No account or sign-in needed.'), findsOneWidget, reason: 'the intro is one short line');
+    expect(find.byKey(const Key('devices-this-next')), findsNothing, reason: 'a working key needs no next step');
+    expect(find.textContaining('Works · no uploads yet · ends in 1234'), findsOneWidget, reason: 'no "created never · last upload never"');
+    expect(find.byKey(const Key('devices-profile-website')), findsOneWidget, reason: 'the account note has its button to the website');
     await tester.tap(find.byKey(const Key('devices-key-toggle')));
     await tester.pump();
     expect(find.byKey(const Key('devices-key-shown')), findsOneWidget);
+    expect(find.text('Hides in 30 s. Keep it private.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.text('Hides in 20 s. Keep it private.'), findsOneWidget, reason: 'the time left counts down');
     await tester.pump(keyRevealFor + const Duration(seconds: 1));
     expect(find.byKey(const Key('devices-key-shown')), findsNothing, reason: 'hides itself after 30 s');
 
     await tester.tap(find.byKey(const Key('reveal-driver-d2')));
     await tester.pumpAndSettle();
     expect(find.text('ms_other_phone_key'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Copy key'), findsOneWidget, reason: 'copy is the main button');
+    expect(find.byKey(const Key('reveal-how')), findsNothing, reason: 'no MeshMapper line (and no blank line) under a phone key');
+    expect(find.textContaining('Closes in '), findsOneWidget);
     await tester.tap(find.byKey(const Key('reveal-close')));
     await tester.pumpAndSettle();
     expect(find.text('ms_other_phone_key'), findsNothing);
@@ -146,6 +182,8 @@ void main() {
     await tester.tap(find.byKey(const Key('reveal-mm-m1')));
     await tester.pumpAndSettle();
     expect(tester.widget<SelectableText>(find.byKey(const Key('reveal-text'))).data, startsWith('meshmapper://custom-api'));
+    expect(find.text('Paste it into MeshMapper > Custom API Endpoint.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Copy link'), findsOneWidget);
     expect(h.ac.calls, containsAll(['reveal:driver:d2', 'reveal:mm:m1']));
     await tester.pump(keyRevealFor + const Duration(seconds: 1));
     await tester.pumpAndSettle();
@@ -159,6 +197,52 @@ void main() {
     expect(find.byKey(const Key('devices-unlinked')), findsOneWidget);
     expect(find.byKey(const Key('devices-mm-needs-account')), findsOneWidget);
     expect(find.byKey(const Key('devices-row-d2')), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Sign in on the website'), findsOneWidget, reason: 'the note has its next step as a button');
+    expect(find.byKey(const Key('devices-profile-website')), findsNothing);
+  });
+
+  testWidgets('devices: a failed list says so with a full-size Try again that loads it', (tester) async {
+    final h = await open(tester);
+    h.ac.devicesError = const CmatException('network error: down');
+    push(tester, const DevicesScreen());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('devices-this-phone')), findsOneWidget, reason: 'this phone\'s key is local and still shown');
+    expect(find.byKey(const Key('devices-account')), findsNothing);
+    expect(tester.getSize(find.byKey(const Key('devices-retry'))).height, greaterThanOrEqualTo(44));
+    h.ac.devicesError = null;
+    await tester.tap(find.byKey(const Key('devices-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('devices-account')), findsOneWidget);
+  });
+
+  test('devices: a key that does not work says what to do next; a working one says nothing', () {
+    expect(keyNextStep(DriverKeyStatus.rejected), 'The server turned this key down. Make a new key below.');
+    expect(keyNextStep(DriverKeyStatus.revoked), 'This key was switched off. Make a new key below.');
+    expect(keyNextStep(DriverKeyStatus.pending), 'Pull down to check again.');
+    expect(keyNextStep(DriverKeyStatus.approved), isNull);
+    expect(keyLine(DriverKeyStatus.approved, createdAt: DateTime(2026, 10, 1), lastSeenAt: DateTime(2026, 10, 30), keyHint: '1234'),
+        'Works · last upload 30 Oct 2026 · made 1 Oct 2026 · ends in 1234');
+  });
+
+  testWidgets('devices: 375 pt wide at 2x text lays out with no overflow, and every button is at least 44 pt', (tester) async {
+    await open(tester);
+    usePhoneLargeText(tester);
+    push(tester, const DevicesScreen());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    for (final k in ['devices-key-toggle', 'devices-key-copy', 'devices-rotate']) {
+      final size = tester.getSize(find.byKey(Key(k)));
+      expect(size.height, greaterThanOrEqualTo(44), reason: k);
+      expect(size.width, greaterThanOrEqualTo(44), reason: k);
+    }
+    await tester.scrollUntilVisible(find.byKey(const Key('devices-website')), 300, scrollable: find.descendant(of: find.byKey(const Key('devices-screen')), matching: find.byType(Scrollable)).first);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.byKey(const Key('reveal-mm-m1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reveal-mm-m1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reveal-dialog')), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'the key sheet fits too');
   });
 
   testWidgets('devices: no capability = the key still shows, the account lists say the server does not offer them', (tester) async {
@@ -167,6 +251,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('devices-unavailable')), findsOneWidget);
     expect(find.byKey(const Key('devices-this-phone')), findsOneWidget);
+    expect(find.byKey(const Key('devices-rotate-why')), findsOneWidget, reason: 'a greyed button says why');
     expect(tester.widget<OutlinedButton>(find.byKey(const Key('devices-rotate'))).onPressed, isNull);
   });
 
@@ -234,15 +319,91 @@ void main() {
     expect(find.byKey(const Key('drive-map-layers')), findsOneWidget, reason: 'the server drive map has the Layers button (build 75)');
     await tester.scrollUntilVisible(find.byKey(const ValueKey('server-ping-p1')), 300, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('Hill 4.5 dB'), findsOneWidget);
+    expect(find.text('Pings (2)'), findsOneWidget);
+    // Build 76: the drive key on the map says "Not heard" too, so look in the unheard ping's own row.
+    expect(find.descendant(of: find.byKey(const ValueKey('server-ping-p2')), matching: find.text('Not heard')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('server-ping-p1')), matching: find.text('Not heard')), findsNothing);
+    expect(find.byKey(const Key('server-drive-hidden-note')), findsNothing);
     await tester.tap(find.byKey(const Key('server-drive-hide')));
     await tester.pumpAndSettle();
     expect(h.ac.calls, contains('update:s1::true'));
+    expect(find.byKey(const Key('server-drive-hidden-note')), findsOneWidget, reason: 'the page says it is hidden now, not only the button');
+    expect(find.widgetWithText(OutlinedButton, 'Show on maps'), findsOneWidget);
     await tester.tap(find.byKey(const Key('server-drive-delete')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('server-drive-delete-dialog-confirm')));
     await tester.pumpAndSettle();
     expect(h.ac.calls, contains('delete:s1'));
     expect(find.byKey(const Key('server-drive-screen')), findsNothing, reason: 'closes after deleting');
+  });
+
+  testWidgets('server drive: rename saves from the keyboard; an emptied name shows the date again, not a blank title', (tester) async {
+    final h = await open(tester);
+    final d = ServerDrive.tryParse({'id': 's1', 'startedAt': '2026-10-30T10:00:00Z'})!;
+    push(tester, ServerDriveScreen(drive: d));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('server-drive-rename')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(const Key('server-drive-name'))).autofocus, isTrue, reason: 'the keyboard is up without a second tap');
+    await tester.enterText(find.byKey(const Key('server-drive-name')), 'Hill loop ');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(h.ac.calls, contains('update:s1:Hill loop:'), reason: 'Done on the keyboard saves, trimmed');
+    expect(find.widgetWithText(AppBar, 'Hill loop'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6)); // the "Renamed." toast goes
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('server-drive-rename')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('server-drive-name-clear')));
+    await tester.tap(find.byKey(const Key('server-drive-name-save')));
+    await tester.pumpAndSettle();
+    expect(h.ac.calls.last, 'update:s1::', reason: 'an empty name clears the label');
+    expect(tester.widget<Text>(find.descendant(of: find.byType(AppBar), matching: find.byType(Text))).data, startsWith('Fri 30 Oct 2026'));
+  });
+
+  testWidgets('server drive: a failed load has Try again; a drive the server dropped has Back instead', (tester) async {
+    final h = await open(tester);
+    final d = ServerDrive.tryParse({'id': 's1', 'startedAt': '2026-10-30T10:00:00Z'})!;
+    h.ac.driveError = const CmatException('network error: down');
+    push(tester, ServerDriveScreen(drive: d));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('server-drive-error')), findsOneWidget);
+    expect(find.byKey(const Key('server-drive-back')), findsNothing);
+    h.ac.driveError = null;
+    await tester.tap(find.byKey(const Key('server-drive-retry')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('server-drive-totals')), findsOneWidget);
+    expect(h.ac.calls.where((c) => c == 'drive:s1').length, 2);
+    Navigator.of(tester.element(find.byKey(const Key('server-drive-screen')))).pop();
+    await tester.pumpAndSettle();
+
+    h.ac.driveError = const CmatException('not found', status: 404);
+    push(tester, ServerDriveScreen(drive: d));
+    await tester.pumpAndSettle();
+    expect(find.text('The server no longer has this drive.'), findsOneWidget);
+    expect(find.byKey(const Key('server-drive-retry')), findsNothing, reason: 'asking again cannot bring it back');
+    await tester.tap(find.byKey(const Key('server-drive-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('server-drive-error')), findsNothing);
+  });
+
+  testWidgets('server drive: 375 pt wide at 2x text lays out with no overflow; the three actions are at least 44 pt', (tester) async {
+    await open(tester);
+    usePhoneLargeText(tester);
+    final d = ServerDrive.tryParse({'id': 's1', 'startedAt': '2026-10-30T10:00:00Z', 'endedAt': '2026-10-30T11:00:00Z', 'label': 'A long name for a Saturday drive'})!;
+    push(tester, ServerDriveScreen(drive: d));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    for (final k in ['server-drive-rename', 'server-drive-hide', 'server-drive-delete']) {
+      await tester.scrollUntilVisible(find.byKey(Key(k)), 200, scrollable: find.descendant(of: find.byKey(const Key('server-drive-screen')), matching: find.byType(Scrollable)).first);
+      expect(tester.getSize(find.byKey(Key(k))).height, greaterThanOrEqualTo(44), reason: k);
+      expect(tester.getSize(find.byKey(Key(k))).width, lessThanOrEqualTo(375 - 32), reason: '$k fits the page');
+    }
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('server-ping-p2')), 300, scrollable: find.descendant(of: find.byKey(const Key('server-drive-screen')), matching: find.byType(Scrollable)).first);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('my reports: lists what was sent with plain-words status', (tester) async {
@@ -252,6 +413,42 @@ void main() {
     expect(find.byKey(const ValueKey('report-r1')), findsOneWidget);
     expect(find.textContaining('working on it'), findsOneWidget);
     expect(find.text('GPS or location'), findsOneWidget);
+    expect(find.text('No fix in the tunnel'), findsOneWidget);
+    expect(find.textContaining('triaged'), findsNothing, reason: 'the server\'s status code is not shown, only its plain words');
+    expect(find.text('1 report · kept for 90 days'), findsOneWidget);
+    expect(find.textContaining('Sent Sat 31 Oct 2026').evaluate().isNotEmpty || find.textContaining('Sent Fri 30 Oct 2026').evaluate().isNotEmpty, isTrue);
+  });
+
+  testWidgets('my reports: empty has Check again; a failed load has Try again; both ask the server again', (tester) async {
+    final h = await open(tester);
+    h.ac.reports = [];
+    push(tester, const ReportsHistoryScreen());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reports-empty')), findsOneWidget);
+    h.ac.reports = null;
+    h.ac.reportsError = const CmatException('network error: down');
+    await tester.tap(find.byKey(const Key('reports-empty-refresh')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reports-error')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('reports-retry'))).height, greaterThanOrEqualTo(44));
+    h.ac.reportsError = null;
+    await tester.tap(find.byKey(const Key('reports-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('report-r1')), findsOneWidget);
+    expect(h.ac.calls.where((c) => c == 'reports').length, 3);
+  });
+
+  testWidgets('my reports: 375 pt wide at 2x text lays out with no overflow', (tester) async {
+    final h = await open(tester);
+    usePhoneLargeText(tester);
+    h.ac.reports = [
+      ReportRow(id: 'r1', createdAt: DateTime.utc(2026, 10, 31), status: 'new', category: 'upload', source: 'app', summary: 'My drives from Saturday never reached the map, the app says uploaded'),
+      ReportRow(id: 'r2', createdAt: DateTime.utc(2026, 10, 30), status: 'closed', category: 'radio', source: 'app', summary: ''),
+    ];
+    push(tester, const ReportsHistoryScreen());
+    await tester.pumpAndSettle();
+    expect(find.text('2 reports · kept for 90 days'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('leaderboard: period and scope switches ask the right endpoint; offline copy is labelled', (tester) async {
@@ -273,6 +470,43 @@ void main() {
     await tester.tap(find.text('Every region'));
     await tester.pumpAndSettle();
     expect(paths.last, '/api/cmh/network-leaderboard?period=all');
+    expect(find.byKey(const Key('leaderboard-not-listed')), findsNothing, reason: 'this phone\'s name is on the list');
+    expect(tester.getSize(find.byKey(const Key('leaderboard-period'))).width, greaterThan(380), reason: 'the switches span the page');
+    expect(tester.getSize(find.byKey(const Key('leaderboard-period'))).height, greaterThanOrEqualTo(44));
+  });
+
+  testWidgets('leaderboard: a driver who is not listed is told why; a failed load has Try again', (tester) async {
+    var fail = false;
+    var hits = 0;
+    regionStatsApiFactory = (b) => RegionStatsApi(b, client: MockClient((r) async {
+          hits++;
+          if (fail) return http.Response('nope', 500);
+          return http.Response(jsonEncode({'period': '30d', 'rows': [{'rank': 1, 'callsign': 'W8AAA', 'km': 12.5, 'drives': 3, 'cells': 40, 'repeatersHeard': 5}]}), 200,
+              headers: {'content-type': 'application/json'});
+        }));
+    await open(tester);
+    usePhoneLargeText(tester);
+    push(tester, const LeaderboardScreen());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: '375 pt wide at 2x text: no overflow');
+    expect(find.byKey(const Key('leaderboard-not-listed')), findsOneWidget);
+    expect(find.text('30 days'), findsOneWidget);
+    fail = true;
+    await tester.tap(find.text('All time'));
+    await tester.pumpAndSettle();
+    if (find.byKey(const Key('leaderboard-error')).evaluate().isNotEmpty) {
+      // no stored copy for this period: the error and its button
+      expect(tester.getSize(find.byKey(const Key('leaderboard-retry'))).height, greaterThanOrEqualTo(44));
+      fail = false;
+      final before = hits;
+      await tester.tap(find.byKey(const Key('leaderboard-retry')));
+      await tester.pumpAndSettle();
+      expect(hits, greaterThan(before));
+      expect(find.text('W8AAA'), findsOneWidget);
+    } else {
+      expect(find.byKey(const Key('leaderboard-offline')), findsOneWidget);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('leaderboard: without the network capability there is no scope switch', (tester) async {

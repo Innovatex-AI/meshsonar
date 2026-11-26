@@ -22,8 +22,6 @@
 #      Planner flows A-E and J1-J8 against the deployed server; its OPENURL lines are opened with simctl openurl). The
 #      screen tour needs it too: Start drive is off until location is allowed, so without the grant drive-live could not
 #      start a drive and drive-report / drive-detail had nothing to show. GRANT_LOCATION=0 runs a flow with location not asked.
-#      OFFLINE_MAPS=1 also runs integration_test/offline_maps_test.dart (in-app download of the real CMH pack, then
-#      z10/z14 light/dark shots of the offline map).
 # For each device: boot, `flutter build ios --simulator`, install + launch com.meshsonar.app, then run
 # integration_test/verify_screens_test.dart (screens listed in integration_test/screens.dart) and screenshot every
 # "SCREEN <name>" it prints. Prints screenshot paths and the app's installed version. Talks to production, no sign-in.
@@ -95,7 +93,7 @@ run_flow() {
           url="${line##*OPENURL }"; url="${url%%[[:space:]]*}"
           sim openurl "$UDID" "$url" && echo "openurl ${url:0:60}…" ;;
         *STEPFAIL*|*"MISSING "*|*OVERFLOW*|*"STEP "*|*"NOTE "*|*RUN_INFO*) echo "$line" ;;
-        *APP_VERSION*|*DOWNLOAD*|*PACK_FILE*|*SKIPPED*|*FAILED*|*VERIFY_DONE*|*"All tests passed"*|*"Some tests failed"*|*"No tests ran"*) echo "$line" ;;
+        *APP_VERSION*|*SKIPPED*|*FAILED*|*VERIFY_DONE*|*"All tests passed"*|*"Some tests failed"*|*"No tests ran"*) echo "$line" ;;
       esac
     done
     RC=${PIPESTATUS[0]}
@@ -222,10 +220,6 @@ for NAME in "${LIST[@]}"; do
   N=0
   run_flow "${FLOW_TEST:-integration_test/verify_screens_test.dart}" "$D/test.log" || FAIL=1
   grep -o 'APP_VERSION [^ ]*' "$D/test.log" | tail -1 > "$D/version.txt" || true
-  if [ "${OFFLINE_MAPS:-0}" = 1 ]; then
-    # Downloads the real CMH pack in-app (53 MB from tiles.meshsonar.com) and shows it at z10/z14 light/dark.
-    run_flow integration_test/offline_maps_test.dart "$D/offline-maps.log" || FAIL=1
-  fi
   [ "$FAIL" = 0 ] && echo "== $NAME OK: $(cat "$D/version.txt")"
 done
 

@@ -45,9 +45,11 @@ class MapPill extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: t.colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        // An outline and a little more room (build 76): the pill stays readable on any map colour.
+        border: Border.all(color: t.colorScheme.outlineVariant),
       ),
-      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), child: child),
+      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5), child: child),
     );
   }
 }

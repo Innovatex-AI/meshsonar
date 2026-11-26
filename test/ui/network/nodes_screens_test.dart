@@ -94,6 +94,15 @@ Future<void> settle(WidgetTester t) async {
   }
 }
 
+/// Opens a closed section of a node or observer page (build 76: one row each, a tap opens it).
+Future<void> openSection(WidgetTester t, String id) async {
+  final head = find.descendant(of: find.byKey(Key('node-section-$id')), matching: find.byType(ListTile)).first;
+  await t.ensureVisible(head);
+  await t.pumpAndSettle();
+  await t.tap(head);
+  await t.pumpAndSettle();
+}
+
 void main() {
   late Server s;
   late NetworkFavouritesStore store;
@@ -147,6 +156,24 @@ void main() {
     await t.pump(const Duration(milliseconds: 400));
     await settle(t);
 
+    // Build 76: a plain hint, a clear button in the field, one Clear chip while a filter is on, a chevron on every row.
+    expect(find.text('Search nodes by name or ID'), findsOneWidget);
+    expect(find.byKey(const Key('nodes-clear-filters')), findsNothing);
+    await t.ensureVisible(find.byKey(const Key('nodes-role-room')));
+    await t.tap(find.byKey(const Key('nodes-role-room')));
+    await settle(t);
+    await t.ensureVisible(find.byKey(const Key('nodes-clear-filters')));
+    await t.tap(find.byKey(const Key('nodes-clear-filters')));
+    await settle(t);
+    expect(s.seen.last.queryParameters['role'], isNull);
+    expect(find.text('Hilltop RPT'), findsOneWidget);
+    await t.enterText(find.byKey(const Key('nodes-search')), 'old');
+    await t.pump();
+    await t.tap(find.byKey(const Key('nodes-search-clear')));
+    await settle(t);
+    expect(find.text('Hilltop RPT'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('nodes-list')), matching: find.byIcon(Icons.chevron_right)), findsWidgets);
+
     // Star Eastgate (the last row): it moves first; My nodes shows only it.
     await networkFavouritesForTest().toggleFavourite(FavouriteKind.node, '3c9f4f0d5b8d0d22e81eed085d02372a8b037a8ac1df62a84ced88eed980688f');
     await settle(t);
@@ -173,8 +200,27 @@ void main() {
     expect(find.text('98%'), findsOneWidget, reason: 'Heard (7 d)');
     expect(find.text('Heard (7 d)'), findsOneWidget);
     expect(find.textContaining('Uptime'), findsNothing);
+    // Build 76: what people look for comes first (name, kind and state, last heard, position, actions, key on one line);
+    // nothing is said twice; every other part is one closed row that a tap opens.
+    expect(find.byKey(const Key('node-name')), findsOneWidget);
+    expect(find.byKey(const Key('node-heard')), findsOneWidget);
+    expect(find.text('Status'), findsNothing, reason: 'the state is in the header, not again under Health');
+    expect(find.text('Last heard'), findsNothing);
+    expect(t.widget<Text>(find.byKey(const Key('node-key'))).data, '${hilltop.substring(0, 8)}…${hilltop.substring(58)}');
+    expect(t.getSize(find.byKey(const Key('node-key-copy'))).height, greaterThanOrEqualTo(44));
+    expect(t.getTopLeft(find.byKey(const Key('node-actions'))).dy, lessThan(t.getTopLeft(find.byKey(const Key('node-section-health'))).dy));
+    for (final id in ['activity', 'types', 'snr', 'heard-by', 'neighbours', 'paths', 'reach', 'clock', 'battery', 'radio', 'hash', 'adverts']) {
+      expect(find.descendant(of: find.byKey(Key('node-section-$id')), matching: find.byType(ExpansionTile)), findsOneWidget, reason: '$id is a closed row');
+    }
+    expect(find.textContaining('could be Riverside RPT or Quarry Hill RPT'), findsNothing, reason: 'Neighbours starts closed');
+    await openSection(t, 'neighbours');
     expect(find.text('Could be Riverside RPT or Quarry Hill RPT'), findsNothing);
     expect(find.textContaining('could be Riverside RPT or Quarry Hill RPT'), findsOneWidget);
+    await openSection(t, 'hash');
+    expect(find.text('Short ID in packets'), findsOneWidget);
+    expect(find.text('First seen'), findsOneWidget);
+    await t.drag(find.byKey(const Key('node-page')), const Offset(0, 3000));
+    await settle(t);
 
     await t.tap(find.byKey(const Key('fav-node-$hilltop')));
     await settle(t);
@@ -196,16 +242,34 @@ void main() {
     expect(shared, 'https://cmh.meshsonar.com/nodes/$hilltop');
   });
 
+  testWidgets('node page: a long list shows five rows and one "Show all" button; a huge clock drift is said in words', (t) async {
+    tall(t);
+    Widget row(int i) => ListTile(title: Text('row $i'));
+    await t.pumpWidget(app(Scaffold(body: SingleChildScrollView(child: NodeMoreList(id: 'x', children: [for (var i = 0; i < 12; i++) row(i)])))));
+    expect(find.text('row 4'), findsOneWidget);
+    expect(find.text('row 5'), findsNothing);
+    expect(find.text('Show all 12'), findsOneWidget);
+    expect(t.getSize(find.byKey(const Key('node-more-x'))).height, greaterThanOrEqualTo(44));
+    await t.tap(find.byKey(const Key('node-more-x')));
+    await t.pump();
+    expect(find.text('row 11'), findsOneWidget);
+    expect(find.byKey(const Key('node-more-x')), findsNothing);
+    expect(driftText(-67263900.0), 'Jumps around (not a steady drift)');
+    expect(driftText(2.34), '2.3 s per day fast');
+    expect(readableName('212de2caebe743a1e2eb1d298f4a959616ad8806877839418478eb40e30e4ca4'), 'Unnamed 212de2ca…');
+    expect(readableName('Hilltop RPT'), 'Hilltop RPT');
+  });
+
   testWidgets('node page: the SNR trend is one collapsed header; tapping it shows the 30-day card', (t) async {
     tall(t);
     await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
     await settle(t);
-    expect(find.text('SNR trend'), findsOneWidget);
+    expect(find.text('Signal trend'), findsOneWidget);
     expect(find.byKey(const Key('node-snr-latest')), findsOneWidget);
     expect(find.byKey(const Key('repdetail-snr-trend')), findsNothing, reason: 'collapsed by default');
-    await t.ensureVisible(find.text('SNR trend'));
-    expect(t.getSize(find.byType(ExpansionTile)).height, greaterThanOrEqualTo(44));
-    await t.tap(find.text('SNR trend'));
+    await t.ensureVisible(find.text('Signal trend'));
+    expect(t.getSize(find.descendant(of: find.byKey(const Key('node-section-snr')), matching: find.byType(ExpansionTile))).height, greaterThanOrEqualTo(44));
+    await t.tap(find.text('Signal trend'));
     await settle(t);
     expect(find.byKey(const Key('repdetail-snr-trend')), findsOneWidget);
     expect(find.text('30-day signal trend'), findsOneWidget);
@@ -332,6 +396,7 @@ void main() {
     nodesApiFactory = (b) => NodesApi(b, client: MockClient((r) async => r.url.path == '/v1/observers/$westside' ? json(jsonEncode(j)) : inner.get(r.url)));
     await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside)));
     await settle(t);
+    await openSection(t, 'observer-hardware');
     expect(t.widget<Text>(find.byKey(const Key('observer-radio'))).data, '910.525 MHz · BW 62.5 kHz · SF 7 · CR 5');
     expect(find.textContaining('910.525024'), findsNothing);
     expect(find.textContaining('Dashed line: interference above this (-100 dBm).', skipOffstage: false), findsOneWidget);
@@ -360,6 +425,7 @@ void main() {
     await settle(t);
     expect(find.byKey(const Key('node-legacy-note')), findsOneWidget);
     expect(find.byKey(const Key('node-section-heard-by')), findsOneWidget);
+    await openSection(t, 'heard-by');
     expect(find.textContaining('best 9.5 dB'), findsOneWidget);
     expect(find.byKey(const Key('node-section-paths')), findsNothing);
     expect(find.byKey(const Key('node-section-battery')), findsNothing);
@@ -384,6 +450,11 @@ void main() {
     expect(find.byKey(const Key('chart-obs-airtime')), findsOneWidget);
     expect(find.byKey(const Key('chart-obs-battery')), findsNothing, reason: 'no battery samples: hidden');
     expect(find.byKey(const Key('node-section-observer-neighbours')), findsOneWidget);
+    expect(find.byKey(const Key('observer-name')), findsOneWidget);
+    expect(find.byKey(const Key('observer-seen')), findsOneWidget);
+    expect(find.text('RAK4631'), findsNothing, reason: 'Hardware starts closed; its row says the model');
+    expect(find.textContaining('RAK4631'), findsOneWidget);
+    await openSection(t, 'observer-hardware');
     expect(find.text('RAK4631'), findsOneWidget);
     await t.tap(find.byKey(const Key('fav-observer-$westside')));
     await t.tap(find.byKey(const Key('network-share')));

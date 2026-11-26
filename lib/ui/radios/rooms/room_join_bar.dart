@@ -83,13 +83,22 @@ class RoomJoinBar extends StatelessWidget {
             ]),
           );
         }
+        // Build 76: the whole bar is the button (it was only the words on the right), with a lock so it reads as "locked".
         return Container(
           key: const Key('room-bar-login'),
           margin: const EdgeInsets.fromLTRB(Gap.l, Gap.xs, Gap.l, 0),
-          padding: const EdgeInsets.symmetric(horizontal: Gap.m),
           decoration: BoxDecoration(color: t.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(Corners.chip)),
-          child: Row(children: [
-            Expanded(child: Text('A room only sends its posts to radios that logged in.', style: TextStyle(color: t.colorScheme.onSecondaryContainer, fontSize: 13))),
+          clipBehavior: Clip.antiAlias,
+          child: GestureDetector(
+            key: const Key('room-bar-tap'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _login(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+              child: Row(children: [
+            ExcludeSemantics(child: AppSymbolIcon(AppSymbols.lock, size: 16, color: t.colorScheme.onSecondaryContainer)),
+            const SizedBox(width: Gap.s),
+            Expanded(child: Text('Log in to read and post here.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSecondaryContainer))),
             CupertinoButton(
               key: const Key('room-log-in'),
               minimumSize: const Size(Hit.min, Hit.min),
@@ -97,7 +106,9 @@ class RoomJoinBar extends StatelessWidget {
               onPressed: () => _login(context),
               child: const Text('Log in to post'),
             ),
-          ]),
+              ]),
+            ),
+          ),
         );
       },
     );

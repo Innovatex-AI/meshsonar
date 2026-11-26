@@ -2,6 +2,7 @@
 // camera) never touch the plugin.
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -38,9 +39,9 @@ class _QrScanScreenState extends State<QrScanScreen> {
     if (c == _last) return; // the camera reports the same code many times a second
     _last = c;
     if (!c.toLowerCase().startsWith('meshcore://')) {
-      setState(() => _notice = 'That is not a MeshCore code');
+      setState(() => _notice = 'Not a MeshCore code. Try another one.');
       _noticeTimer?.cancel();
-      _noticeTimer = Timer(const Duration(seconds: 2), () {
+      _noticeTimer = Timer(const Duration(seconds: 3), () {
         if (mounted) {
           setState(() {
             _notice = null;
@@ -101,16 +102,22 @@ class _QrScanScreenState extends State<QrScanScreen> {
                     child: Text(_notice!, style: TextStyle(color: t.colorScheme.onErrorContainer)),
                   )
                 else
-                  const Text('Point the camera at a MeshCore contact code.', style: TextStyle(color: Colors.white), textAlign: TextAlign.center),
+                  // Contact and channel codes both scan here. A dark plate keeps the hint readable over a bright camera picture.
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
+                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                    child: const Text('Point the camera at a MeshCore QR code', style: TextStyle(color: Colors.white, fontSize: 16), textAlign: TextAlign.center),
+                  ),
                 const SizedBox(height: Gap.m),
-                OutlinedButton(
+                CupertinoButton(
                   key: const Key('scan-paste'),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, minimumSize: const Size(48, 48), side: const BorderSide(color: Colors.white70)),
+                  color: Colors.white24,
+                  minimumSize: const Size(double.infinity, 48),
                   onPressed: () {
                     Navigator.of(context).pop();
                     widget.onPaste?.call();
                   },
-                  child: const Text('Paste instead'),
+                  child: const Text('Paste a link instead', style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -160,7 +167,7 @@ class _RealScannerState extends State<_RealScanner> {
           top: Gap.m,
           child: IconButton.filledTonal(
             key: const Key('scan-torch'),
-            tooltip: _torch ? 'Torch off' : 'Torch on',
+            tooltip: _torch ? 'Light off' : 'Light on',
             style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
             icon: Icon(_torch ? Icons.flash_on_rounded : Icons.flash_off_rounded),
             onPressed: () async {
@@ -180,8 +187,8 @@ class _RealScannerState extends State<_RealScanner> {
         padding: const EdgeInsets.all(Gap.xl),
         child: Text(
           denied
-              ? 'Camera access is off. Turn it on in Settings, or paste a link instead.'
-              : 'No camera is available here. Paste a link or key instead.',
+              ? 'Camera access is off. Turn it on in Settings > MeshSonar > Camera, or paste a link below.'
+              : 'No camera here. Paste a link below.',
           key: const Key('scan-problem'),
           style: const TextStyle(color: Colors.white, fontSize: 16),
           textAlign: TextAlign.center,

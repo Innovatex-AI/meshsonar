@@ -1,13 +1,13 @@
 // Base maps the Drive tab can show. Pure Dart. The cycler button steps through [availableBaseStyles].
 //
 //  chart      the app's own map (plan §2.3 Road / Dark): our Protomaps vector tiles in the website's light or dark style,
-//             following the app theme (and the downloaded offline pack when one covers the map).
+//             following the app theme.
 //  street     the same map, always in the light style (readable in sunlight, whatever the app theme). The id stays 'street'
 //             so a saved choice keeps working; it was plain OpenStreetMap colours before M2.
 //  dark       the same map, always in the dark style (night driving).
 //  topo       (M3) the same vector tiles in the Map Definition's topographic palette (land cover, water and roads in earth
 //             tones; the definition's `basemaps[topo].topo` overrides over Protomaps' flavour). It replaced OpenTopoMap, which
-//             the app no longer calls. No offline pack; the network only. The id stays 'topo'.
+//             the app no longer calls. The id stays 'topo'.
 //  satellite  (M3) aerial imagery: USGS NAIP in the US, Esri World Imagery through MeshSonar's own proxy elsewhere, with our town
 //             and road names over it inside the basemap extract. Raster, the network only, credits always on the map.
 //
@@ -21,11 +21,11 @@ import 'map_definition.dart' show MapDefinition;
 import 'map_definition_pages.dart';
 
 enum BaseMapStyle {
-  chart('chart', 'Chart', 'Our map, light or dark with your theme', 19, OurBasemap.attribution, true),
-  street('street', 'Light', 'Always the light map (bright sun)', 19, OurBasemap.attribution, true),
-  dark('dark', 'Dark', 'Always the dark map (night driving)', 19, OurBasemap.attribution, true),
-  topo('topo', 'Topo', 'Land cover and terrain colours (needs a connection)', 19, OurBasemap.attribution, false),
-  satellite('satellite', 'Satellite', 'Aerial imagery (needs a connection)', 18, '', false);
+  chart('chart', 'Chart', 'Our map, light or dark with your theme', 19, OurBasemap.attribution),
+  street('street', 'Light', 'Always the light map (bright sun)', 19, OurBasemap.attribution),
+  dark('dark', 'Dark', 'Always the dark map (night driving)', 19, OurBasemap.attribution),
+  topo('topo', 'Topo', 'Land cover and terrain colours', 19, OurBasemap.attribution),
+  satellite('satellite', 'Satellite', 'Aerial imagery', 18, '');
 
   final String id;
   final String label;
@@ -36,10 +36,7 @@ enum BaseMapStyle {
   /// The default credit (the vector styles show the credit of the source drawn: ours or OpenFreeMap; Satellite builds its own
   /// from the definition's imagery sources).
   final String attribution;
-
-  /// An installed offline region pack may be drawn instead of the online tiles.
-  final bool usesOfflinePack;
-  const BaseMapStyle(this.id, this.label, this.blurb, this.maxNativeZoom, this.attribution, this.usesOfflinePack);
+  const BaseMapStyle(this.id, this.label, this.blurb, this.maxNativeZoom, this.attribution);
 
   /// The next style among [available] (wraps; the current one when it is the only one).
   BaseMapStyle nextAvailable(List<BaseMapStyle> available) {
@@ -57,9 +54,6 @@ enum BaseMapStyle {
   /// Which Protomaps look the vector layer draws.
   BasemapLook get look => this == BaseMapStyle.topo ? BasemapLook.topo : BasemapLook.road;
 
-  /// Needs the network: no offline pack draws it, so offline-only use gets an honest message instead of a blank map.
-  bool get needsNetwork => !usesOfflinePack;
-
   /// No colour grading: the vector styles are already the website's light / dark styles and Satellite is drawn as served.
   bool get ungraded => true;
 
@@ -70,7 +64,7 @@ enum BaseMapStyle {
     _ => null,
   };
 
-  /// Forces the dark grading (and the dark offline style) whatever the theme says.
+  /// Forces the dark grading whatever the theme says.
   bool get forcesDark => this == BaseMapStyle.dark;
 
   /// The definition says the basemaps as variables (`variables.basemap`, schemaMinor 7): Chart and Light become ONE entry, Road

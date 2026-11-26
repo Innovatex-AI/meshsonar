@@ -1,5 +1,5 @@
 // The Drive panel on the real Drive screen (the only Drive screen since build 70): panel tops per device, hit zones, drag leaves the map alone,
-// MapInsets are written at settle, dock states, Ping debounce, auto-collapse with the Passenger switch, tab bar hook.
+// MapInsets are written at settle, dock states, Ping debounce, the panel stays where the person put it at speed, tab bar hook.
 import 'dart:async';
 import 'dart:io';
 
@@ -116,7 +116,7 @@ void main() {
       expect(r.width, greaterThanOrEqualTo(48), reason: k);
     }
     expect(tester.getSize(find.byKey(const Key('ping-now'))), const Size(64, 64));
-    expect(tester.getSize(find.byKey(const Key('start-stop'))), const Size(104, 52));
+    expect(tester.getSize(find.byKey(const Key('start-stop'))), const Size(116, 56));
 
     // A tap on Ping does not toggle the panel.
     await tester.tap(find.byKey(const Key('ping-now')));
@@ -267,7 +267,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Drive saved'), findsOneWidget);
       expect(find.byKey(const Key('view-report')), findsOneWidget);
-      expect(find.text('Start new'), findsOneWidget);
+      expect(find.text('New drive'), findsOneWidget);
+      expect(find.text('View report'), findsOneWidget);
       await tester.pump(const Duration(seconds: 25));
     });
   });
@@ -289,8 +290,8 @@ void main() {
     });
   });
 
-  group('auto-collapse (5.3)', () {
-    testWidgets('moving above 5 mph: Medium collapses after 15 s without touch; Passenger keeps it open', (tester) async {
+  group('only the person moves the panel (build 76)', () {
+    testWidgets('moving above 5 mph: Medium stays open with no touch, and there is no switch to flip', (tester) async {
       final fixes = StreamController<GeoFix>.broadcast();
       late Harness h;
       Future<void> tick(int seconds) async {
@@ -308,27 +309,14 @@ void main() {
       await tester.tapAt(Offset(200, 690));
       await settleAnim(tester);
       expect(panelTop(tester), closeTo(366, 2));
-      // Turn Passenger on: nothing collapses.
-      await tester.tap(find.byKey(const Key('passenger-switch')));
-      await tick(1);
-      for (var i = 0; i < 30; i++) {
-        fixes.add(GeoFix(lat: 40.0, lon: -82.9, at: DateTime.now(), speedMps: 10));
-        await tick(1);
-      }
-      expect(panelTop(tester), closeTo(366, 2), reason: 'Passenger is on');
-      await tester.tap(find.byKey(const Key('passenger-switch')));
-      await tester.pump(const Duration(milliseconds: 100));
-      for (var i = 0; i < 12; i++) {
-        fixes.add(GeoFix(lat: 40.0, lon: -82.9, at: DateTime.now(), speedMps: 10));
-        await tick(1);
-      }
-      expect(panelTop(tester), closeTo(366, 2), reason: 'a touch inside 15 s resets the timer');
-      for (var i = 0; i < 8; i++) {
+      expect(find.byType(Switch), findsNothing);
+      expect(find.byKey(const Key('medium-ratio')), findsOneWidget);
+      for (var i = 0; i < 90; i++) {
         fixes.add(GeoFix(lat: 40.0, lon: -82.9, at: DateTime.now(), speedMps: 10));
         await tick(1);
       }
       await settleAnim(tester);
-      expect(panelTop(tester), closeTo(680, 2));
+      expect(panelTop(tester), closeTo(366, 2), reason: 'the person opened it: the car moving never closes it');
       await end(tester, h);
     });
   });

@@ -221,7 +221,7 @@ void main() {
       expect(find.textContaining('changes which radios can hear yours'), findsOneWidget);
       expect(find.textContaining('disconnect you from other devices'), findsOneWidget);
       expect(find.byKey(const Key('setup-confirm-from')), findsOneWidget);
-      expect(tester.widget<Text>(find.byKey(const Key('setup-confirm-to'))).data, 'To:  910.525 MHz, 62.5 kHz, SF7, CR5');
+      expect(tester.widget<Text>(find.byKey(const Key('setup-confirm-to'))).data, 'New:  910.525 MHz, 62.5 kHz, SF7, CR5');
       expect(tester.widget<FilledButton>(find.byKey(const Key('setup-confirm-apply'))).onPressed, isNull, reason: 'locked until understood');
       await tester.tap(find.byKey(const Key('setup-confirm-cancel')));
       await tester.pumpAndSettle();
@@ -379,7 +379,7 @@ void main() {
       await openScreen(tester, host);
       expect(find.bySemanticsLabel('Name'), findsWidgets);
       expect(find.bySemanticsLabel(RegExp('Include the position in adverts')), findsWidgets);
-      expect(find.bySemanticsLabel(RegExp('Apply radio parameters')), findsWidgets);
+      expect(find.bySemanticsLabel(RegExp('Apply frequency settings')), findsWidgets);
       expect(rig.radio.sentFrames, isNotEmpty);
       sem.dispose();
     });

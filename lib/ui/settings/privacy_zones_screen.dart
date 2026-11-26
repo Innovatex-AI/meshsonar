@@ -1,9 +1,9 @@
-// Settings > Privacy & data sharing > Privacy zones: the map editor. Circles where the pings of this driver are hidden from
+// Settings > Sharing & privacy > Privacy zones: the map editor. Circles where the pings of this driver are hidden from
 // every public view (past and future drives); the start and end of each drive are also trimmed by the trim distance.
 //
 // Behaviour (mirrors the website's /me/privacy editor, meshcore-insights zone-editor.tsx):
 //  - A tap on a zone SELECTS it; a tap on empty map selects nothing. A zone is only added from "Add a zone" (one tap on
-//    the map = one zone) or "Use my location", so a tap meant to pick a zone can never drop a second one.
+//    the map = one zone) or "Add where I am", so a tap meant to pick a zone can never drop a second one.
 //  - Radius 50-5000 m (slider), at most 10 zones, coordinates rounded to 4 decimals and longitude wrapped before they are
 //    saved or sent (lib/core/privacy_zones.dart), a name of up to 40 characters, "Move on map" and Delete with Undo.
 //  - Works with no signal and no driver key: every change is saved on the phone at once and sent when it can be
@@ -11,9 +11,9 @@
 //
 // Keys (tests): 'privacy-zones-screen', 'zones-map', 'zone-status', 'zone-add', 'zone-add-here', 'zone-add-banner',
 // 'zone-add-cancel', 'zone-tile-<i>', 'zone-editor', 'zone-name', 'zone-radius', 'zone-move', 'zone-here', 'zone-delete',
-// 'zone-trim', 'zone-limit', 'zones-unsupported', 'zones-website'.
+// 'zone-trim', 'zone-limit', 'zones-unsupported', 'zones-website', 'zones-how' (opens 'zones-explain-full' and
+// 'zones-edge-note'), 'zone-retry'.
 import '../../core/map_styles.dart' show BaseMapStyle;
-import '../../core/pmtiles_reader.dart' show PmtilesReader;
 import '../map/active_map_definition.dart';
 import '../map/basemap_layer.dart' show BasemapLayer;
 import '../map/map_preview.dart';
@@ -33,7 +33,6 @@ import '../../core/units.dart' show Units;
 import '../app.dart';
 import 'confirm_sheet.dart';
 import '../map/coverage_map.dart' show CoverageMap;
-import '../map/offline_basemap.dart';
 import '../map/region_center.dart';
 import '../map/tools/drive_key.dart';
 import '../map/tools/zone_layer.dart';
@@ -43,23 +42,23 @@ import 'privacy_zones_start.dart';
 const String privacyZonesExplain = 'Pings inside a zone stay on this phone: they are never uploaded, and the drive log here keeps them. '
     'The start and end of each drive are also trimmed (the trim distance below).';
 
-/// Under the trim: what a zone does not hide.
+/// The one line at the top of the screen (build 76). [privacyZonesExplain] and [privacyZonesEdgeNote] are one tap away,
+/// under "How zones work".
+const String privacyZonesShort = 'Pings inside a zone are never uploaded.';
+
+/// Under "How zones work": what a zone does not hide.
 const String privacyZonesEdgeNote = 'A ping just outside a zone shows where its edge is, so draw a zone a little bigger than the place '
     'you want to hide. Packets your phone hears inside a zone are shared with no position. Adding or enlarging a zone also offers '
     'to remove what the server already holds inside it.';
 
 /// The base layer of the zone editor for the reader's saved base map [style] (build 75): Chart (the build 74 map, which follows the
-/// theme) is null, so MapPreview draws its default; Light and Dark force their look; Topo draws the topographic palette; an installed
-/// offline pack draws under the styles that use one. Satellite is NOT drawn here: the editor's map is a MapPreview, whose credit line
+/// theme) is null, so MapPreview draws its default; Light and Dark force their look; Topo draws the topographic palette.
+/// Satellite is NOT drawn here: the editor's map is a MapPreview, whose credit line
 /// cannot carry the imagery credits Satellite requires, so it keeps the Chart map (the Drive map and the drive detail map draw it).
-/// Offline, an installed pack replaces the online tiles exactly as before.
 @visibleForTesting
-Widget? zonesBasemap({required BaseMapStyle style, required bool tiles, PmtilesReader? offline, String? packCode}) {
+Widget? zonesBasemap({required BaseMapStyle style, required bool tiles}) {
   if (!tiles) return null;
   final drawn = style.isSatellite ? BaseMapStyle.chart : style;
-  if (offline != null && drawn.usesOfflinePack) {
-    return OfflineBasemapLayer(key: ValueKey('zones-offline-$packCode'), reader: offline, dark: drawn.darkLook);
-  }
   if (drawn == BaseMapStyle.chart) return null;
   return BasemapLayer(key: ValueKey('zones-basemap-${drawn.id}'), dark: drawn.darkLook, look: drawn.look);
 }
@@ -97,7 +96,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
   late final MapController _map = widget.mapController ?? MapController();
   final FocusNode _nameFocus = FocusNode();
   final TextEditingController _name = TextEditingController();
-  late final OfflinePackSelection _pack = OfflinePackSelection(OfflineBasemap.instance);
 
   int? _selected;
   _Mode _mode = _Mode.select;
@@ -107,6 +105,26 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
   int? _trimDraft;
   bool _touched = false; // the person moved the map: stop following the best-known start
   String? _framedKey;
+  final GlobalKey _editorKey = GlobalKey();
+  bool _retrying = false;
+
+  /// The editor card sits under the list of zones: with a few zones it opened below the fold and a tap on a zone looked
+  /// like it did nothing. Bring it into view.
+  void _showEditor() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _editorKey.currentContext;
+      if (!mounted || ctx == null) return;
+      unawaited(Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 200), curve: Curves.easeOut));
+    });
+  }
+
+  Future<void> _retry() async {
+    setState(() => _retrying = true);
+    final st = await c.sync();
+    if (!mounted) return;
+    setState(() => _retrying = false);
+    if (st != ZoneSyncStatus.synced) _say('Still not sent. Your zones stay saved on this phone.');
+  }
 
   bool get _tiles => widget.showTiles ?? CoverageMap.tilesByDefault;
 
@@ -126,10 +144,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       _c = c;
       c.addListener(_onChanged);
       unawaited(c.load().then((_) => c.sync()));
-      if (_tiles) {
-        OfflineBasemap.instance.ensureOpen();
-        OfflineBasemap.instance.addListener(_onPacks);
-      }
     }
   }
 
@@ -164,9 +178,8 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       final ok = await showConfirmSheet(
         context,
         title: 'Remove earlier uploads inside this zone?',
-        body: 'The server still holds ${parts.join(', ')} inside the zone you just saved. Remove them from the server now? '
-            'This cannot be undone. They stay in your own drive log on this phone. If you keep them, they are only hidden '
-            'from public views.',
+        body: 'The server holds ${parts.join(', ')} inside this zone. Removing them cannot be undone; your phone keeps '
+            'its own copy. If you keep them, they stay hidden from public views.',
         confirmLabel: 'Remove from server',
         cancelLabel: 'Keep them hidden',
         destructive: true,
@@ -181,23 +194,29 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       }
       final r = await c.runPurge();
       if (!mounted) return;
+      // Says everything that was removed (it used to count pings only: "0 earlier pings were removed" after removing
+      // observer positions).
+      final gone = r == null
+          ? const <String>[]
+          : [
+              if (r.pings > 0) '${r.pings} earlier ping${r.pings == 1 ? '' : 's'}',
+              if (r.positions > 0) '${r.positions} observer position${r.positions == 1 ? '' : 's'}',
+              if (r.heard > 0) '${r.heard} heard-along-the-way record${r.heard == 1 ? '' : 's'}',
+            ];
       final msg = r == null
-          ? 'Could not remove them just now. They stay hidden from public views and will be offered again.'
-          : '${r.pings} earlier ping${r.pings == 1 ? '' : 's'} inside ${preview.pings == 0 ? 'the zone' : 'this zone'} ${r.pings == 1 ? 'was' : 'were'} removed from the server.';
+          ? 'Could not remove them just now. They stay hidden, and you will be asked again.'
+          : gone.isEmpty
+              ? 'Nothing was left on the server inside this zone.'
+              : '${gone.join(', ')} inside this zone ${r.total == 1 ? 'was' : 'were'} removed from the server.';
       showAppToast(context, msg);
     } finally {
       _offering = false;
     }
   }
 
-  void _onPacks() {
-    if (mounted && _pack.refresh()) setState(() {});
-  }
-
   @override
   void dispose() {
     _c?.removeListener(_onChanged);
-    if (_tiles) OfflineBasemap.instance.removeListener(_onPacks);
     unawaited(_commitDraft());
     _nameFocus.dispose();
     _name.dispose();
@@ -238,6 +257,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       final z = c.zones[i];
       _map.move(LatLng(z.lat, z.lon), math.max(_map.camera.zoom, _zoomFor(z.radiusM, z.lat)));
     }
+    if (i != null) _showEditor();
   }
 
   double _zoomFor(double radiusM, double lat) => zoneZoomFor(radiusM, lat);
@@ -276,7 +296,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
 
   Future<void> _addHere() async {
     final p = _phone();
-    if (p == null) return _say('No location yet. Turn on location for MeshSonar, or tap "Add a zone" and tap the map.');
+    if (p == null) return _say('No location yet. Tap "Add a zone", then tap the map.');
     await _addAt(p.lat, p.lon);
     if (mounted && _mapReady) _map.move(LatLng(c.zones.last.lat, c.zones.last.lon), _zoomFor(c.zones.last.radiusM, c.zones.last.lat));
   }
@@ -284,7 +304,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
   Future<void> _moveHere() async {
     final i = _selected, p = _phone();
     if (i == null) return;
-    if (p == null) return _say('No location yet. Turn on location for MeshSonar, or use "Move on map".');
+    if (p == null) return _say('No location yet. Use "Move on map" instead.');
     await _commitDraft();
     await c.setZones([...c.zones]..[i] = c.zones[i].copyWith(lat: p.lat, lon: p.lon));
     if (mounted && _mapReady) _map.move(LatLng(c.zones[i].lat, c.zones[i].lon), _map.camera.zoom);
@@ -367,7 +387,6 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     final t = Theme.of(context);
     final zones = _zones;
     final start = _startView(s);
-    final offline = _tiles ? _pack.reader : null;
     final sel = _selected;
     final map = Semantics(
       container: true,
@@ -381,15 +400,13 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
         fit: start.bounds == null ? null : CameraFit.bounds(bounds: start.bounds!, padding: const EdgeInsets.all(40), maxZoom: 16),
         interaction: MapPreviewInteraction.edit,
         tiles: _tiles,
-        basemap: zonesBasemap(style: _style(s), tiles: _tiles, offline: offline, packCode: _pack.code),
+        basemap: zonesBasemap(style: _style(s), tiles: _tiles),
         onMapReady: () {
           _mapReady = true;
           _framedKey = _keyOf(start);
-          if (_tiles && _pack.update(start.center.latitude, start.center.longitude) && mounted) setState(() {});
         },
         onPositionChanged: (cam, hasGesture) {
           if (hasGesture) _touched = true;
-          if (_tiles && _pack.update(cam.center.latitude, cam.center.longitude) && mounted) setState(() {});
         },
         onTap: (_, p) => unawaited(_onMapTap(p)),
         overlays: [
@@ -502,7 +519,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     final full = c.zones.length >= kZoneMax;
     final units = AppScope.unitsOf(context);
     return [
-      Text(privacyZonesExplain, key: const Key('zones-explain'), style: t.textTheme.bodyMedium),
+      Text(privacyZonesShort, key: const Key('zones-explain'), style: t.textTheme.bodyMedium),
       const SizedBox(height: Gap.m),
       _statusBanner(context),
       const SizedBox(height: Gap.m),
@@ -520,7 +537,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
             style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
             onPressed: full ? null : _addHere,
             icon: const Icon(Icons.my_location),
-            label: const Text('Use my location'),
+            label: const Text('Add where I am'),
           ),
         ]),
         if (full)
@@ -532,7 +549,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       ],
       if (zones.isEmpty)
         Text(
-          _editable ? 'No zones yet. Tap "Add a zone", then tap the map, or use your location.' : 'No zones.',
+          _editable ? 'No zones yet. Tap "Add a zone", then tap the map.' : 'No zones.',
           key: const Key('zones-empty'),
           style: t.textTheme.bodyMedium,
         )
@@ -547,17 +564,34 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
               selected: i == _selected,
               leading: CircleAvatar(radius: 14, child: Text('${i + 1}')),
               title: Text(_title(zones[i], i)),
-              subtitle: Text('${units.distance(zones[i].radiusM)} radius · ${zones[i].lat.toStringAsFixed(kCoordDecimals)}, ${zones[i].lon.toStringAsFixed(kCoordDecimals)}'),
-              trailing: _editable ? const Icon(Icons.chevron_right) : null,
+              // No raw coordinates here (build 76): the number matches the pin on the map above.
+              subtitle: Text(_editable ? '${units.distance(zones[i].radiusM)} radius · ${i == _selected ? 'editing below' : 'tap to edit'}' : '${units.distance(zones[i].radiusM)} radius'),
+              trailing: _editable ? Icon(i == _selected ? Icons.expand_less : Icons.edit_outlined) : null,
               onTap: () => unawaited(_select(i == _selected ? null : i)),
             ),
           ),
-      if (_editable && _selected != null && _selected! < zones.length) _editor(context, zones[_selected!], _selected!),
+      if (_editable && _selected != null && _selected! < zones.length) KeyedSubtree(key: _editorKey, child: _editor(context, zones[_selected!], _selected!)),
       const SizedBox(height: Gap.l),
       _trim(context),
-      const SizedBox(height: Gap.m),
-      Text(privacyZonesEdgeNote, key: const Key('zones-edge-note'), style: Theme.of(context).textTheme.bodySmall),
-      const SizedBox(height: Gap.l),
+      const SizedBox(height: Gap.s),
+      // The two explanatory paragraphs, one tap away instead of always on the page.
+      ExpansionTile(
+        key: const Key('zones-how'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: Gap.m),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        expandedAlignment: Alignment.centerLeft,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        leading: const Icon(Icons.help_outline),
+        title: const Text('How zones work'),
+        children: [
+          Text(privacyZonesExplain, key: const Key('zones-explain-full'), style: t.textTheme.bodyMedium),
+          const SizedBox(height: Gap.s),
+          Text(privacyZonesEdgeNote, key: const Key('zones-edge-note'), style: t.textTheme.bodyMedium),
+        ],
+      ),
+      const SizedBox(height: Gap.s),
       OutlinedButton.icon(
         key: const Key('zones-website'),
         style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -585,7 +619,16 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       child: Padding(
         padding: const EdgeInsets.all(Gap.l),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Semantics(header: true, child: Text('Edit ${_title(z, i)}', style: t.textTheme.titleMedium)),
+          Row(children: [
+            Expanded(child: Semantics(header: true, child: Text('Edit ${_title(z, i)}', style: t.textTheme.titleMedium))),
+            // Changes save by themselves; Done closes the editor and shows every zone again.
+            TextButton(
+              key: const Key('zone-done'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => unawaited(_select(null)),
+              child: const Text('Done'),
+            ),
+          ]),
           const SizedBox(height: Gap.s),
           TextField(
             key: const Key('zone-name'),
@@ -624,7 +667,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
               style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
               onPressed: _moveHere,
               icon: const Icon(Icons.my_location),
-              label: const Text('Move here'),
+              label: const Text('Move to where I am'),
             ),
             OutlinedButton.icon(
               key: const Key('zone-delete'),
@@ -645,7 +688,7 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     final v = (_trimDraft ?? c.trimM).toDouble();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Semantics(header: true, child: Text('Trim the start and end of each drive', style: t.textTheme.titleMedium)),
-      Text('Hides the first and last ${units.distance(v)} of every drive, wherever it starts. Applies to every drive you upload.',
+      Text('Hides the first and last ${units.distance(v)} of every drive you upload.',
           key: const Key('zone-trim-label'), style: t.textTheme.bodyMedium),
       Semantics(
         container: true,
@@ -675,10 +718,10 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
     final t = Theme.of(context);
     final scope = c.state.scope;
     final (IconData icon, String text) = switch (c.status) {
-      ZoneSyncStatus.unsupported => (Icons.info_outline, 'This server does not support privacy zones yet, so they cannot be set from the app. Nothing is hidden by zones until it does.'),
+      ZoneSyncStatus.unsupported => (Icons.info_outline, 'This server does not support privacy zones yet. Nothing is hidden by zones until it does.'),
       ZoneSyncStatus.waitingForKey => (Icons.cloud_off_outlined, 'Saved on this phone. They are sent as soon as this phone has a driver key.'),
       ZoneSyncStatus.offline => (Icons.cloud_off_outlined, 'Saved on this phone. They are sent when the server can be reached.'),
-      ZoneSyncStatus.rejected => (Icons.error_outline, c.error ?? 'The server did not accept the zones.'),
+      ZoneSyncStatus.rejected => (Icons.error_outline, c.error ?? 'The server did not accept the zones. Check them and try again.'),
       ZoneSyncStatus.syncing => (Icons.sync, 'Sending…'),
       ZoneSyncStatus.synced => (
           Icons.cloud_done_outlined,
@@ -697,7 +740,20 @@ class _PrivacyZonesScreenState extends State<PrivacyZonesScreen> {
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, size: 20, color: bad ? t.colorScheme.onErrorContainer : null),
         const SizedBox(width: Gap.s),
-        Expanded(child: Text(text, style: t.textTheme.bodyMedium?.copyWith(color: bad ? t.colorScheme.onErrorContainer : null))),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(text, style: t.textTheme.bodyMedium?.copyWith(color: bad ? t.colorScheme.onErrorContainer : null)),
+            // Not sent yet: one tap to try now instead of waiting for the app to try again by itself.
+            if (c.status == ZoneSyncStatus.offline || c.status == ZoneSyncStatus.rejected)
+              TextButton.icon(
+                key: const Key('zone-retry'),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48), padding: EdgeInsets.zero, foregroundColor: bad ? t.colorScheme.onErrorContainer : null),
+                onPressed: _retrying ? null : _retry,
+                icon: _retrying ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh, size: 20),
+                label: Text(_retrying ? 'Sending…' : 'Try again'),
+              ),
+          ]),
+        ),
       ]),
     );
   }

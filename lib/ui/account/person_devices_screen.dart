@@ -13,12 +13,10 @@ import '../design/app_surfaces.dart';
 import '../settings/confirm_sheet.dart';
 import '../widgets.dart';
 
-String _when(DateTime? t) {
-  if (t == null) return 'not yet';
-  final l = t.toLocal();
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
-}
+/// Notices shown before "Show all": the newest few, so the device list stays within a thumb's reach.
+const int noticesShownFirst = 3;
+
+const _tap = Size(48, 48);
 
 class PersonDevicesScreen extends StatefulWidget {
   const PersonDevicesScreen({super.key});
@@ -28,6 +26,7 @@ class PersonDevicesScreen extends StatefulWidget {
 
 class _PersonDevicesScreenState extends State<PersonDevicesScreen> {
   bool _started = false;
+  bool _allNotices = false;
   String? _msg;
 
   @override
@@ -51,7 +50,7 @@ class _PersonDevicesScreenState extends State<PersonDevicesScreen> {
     final c = AppScope.read(context).personDevices;
     final name = await showAppSheet<String>(
       context,
-      detents: const [0.5],
+      detents: [MediaQuery.textScalerOf(context).scale(10) > 13 ? 0.92 : 0.5], // large text needs the room for both buttons
       builder: (ctx, controller) => _RenameSheet(initial: d.nameSet ? d.name : '', controller: controller),
     );
     if (name == null) return;
@@ -64,9 +63,7 @@ class _PersonDevicesScreenState extends State<PersonDevicesScreen> {
       context,
       sheetKey: const Key('device-remove-sheet'),
       title: 'Remove ${d.name}?',
-      body:
-          'This device will stop uploading and signing in as you. The drives it already recorded stay on your account. '
-          'If it is yours, connect your radio on it again to bring it back.',
+      body: 'It stops uploading as you. Its drives stay on your account. To bring it back, connect your radio on it again.',
       confirmLabel: 'Remove device',
       confirmKey: const Key('device-remove-confirm'),
       cancelKey: const Key('device-remove-cancel'),
@@ -85,6 +82,12 @@ class _PersonDevicesScreenState extends State<PersonDevicesScreen> {
       for (final d in c.devices)
         if (!d.removed) d,
     ];
+    // Things that wait for an answer come first; the rest are news and can be folded away.
+    final notices = [...c.notices.where((n) => n.isOpenRequest), ...c.notices.where((n) => !n.isOpenRequest)];
+    final open = notices.where((n) => n.isOpenRequest).length;
+    final first = open > noticesShownFirst ? open : noticesShownFirst;
+    final visible = _allNotices ? notices : notices.take(first).toList();
+    final fresh = notices.where((n) => n.isOpenRequest || !n.read).length;
     return Scaffold(
       appBar: AppBar(title: const Text('Devices')),
       body: SafeArea(
@@ -92,52 +95,85 @@ class _PersonDevicesScreenState extends State<PersonDevicesScreen> {
           onRefresh: c.refresh,
           child: ListView(
             key: const Key('person-devices-screen'),
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(Gap.l),
             children: [
               Text(
-                'The phones and tablets on your MeshSonar account. There is no key to copy or paste: a device is yours because its radio proved it.',
+                'Phones and tablets on your account. No key to copy.',
                 key: const Key('person-devices-intro'),
-                style: t.textTheme.bodyMedium,
+                style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(height: Gap.m),
+              const SizedBox(height: Gap.s),
               if (_msg != null) ErrorBanner(_msg!),
               if (c.error != null) ...[
                 ErrorBanner(c.error!),
-                TextButton(key: const Key('person-devices-retry'), onPressed: c.refresh, child: const Text('Try again')),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FilledButton.tonalIcon(
+                    key: const Key('person-devices-retry'),
+                    style: FilledButton.styleFrom(minimumSize: _tap),
+                    onPressed: c.refresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try again'),
+                  ),
+                ),
               ],
-              SwitchListTile(
-                key: const Key('ask-first-switch'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Ask me first'),
-                subtitle: const Text('When a device connects a radio that is yours, wait until you say yes before it joins your account.'),
-                value: c.askFirst,
-                onChanged: (v) => _guard(() => c.setAskFirst(v), 'Saving the setting'),
-              ),
-              if (c.notices.isNotEmpty) ...[
-                const SizedBox(height: Gap.m),
-                Text('Notices', style: t.textTheme.titleMedium),
-                for (final n in c.notices.take(10))
-                  _NoticeTile(n, onAct: (a) => _guard(() => c.noticeAct(n.id, a), 'Answering the notice')),
+              if (notices.isNotEmpty) ...[
+                const SizedBox(height: Gap.s),
+                Text(fresh == 0 ? 'Notices' : 'Notices ($fresh new)', key: const Key('person-notices-title'), style: t.textTheme.titleMedium),
+                for (final n in visible) _NoticeTile(n, onAct: (a) => _guard(() => c.noticeAct(n.id, a), 'Answering the notice')),
+                if (notices.length > visible.length)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      key: const Key('person-notices-all'),
+                      style: TextButton.styleFrom(minimumSize: _tap),
+                      onPressed: () => setState(() => _allNotices = true),
+                      child: Text('Show all ${notices.length} notices'),
+                    ),
+                  ),
               ],
               const SizedBox(height: Gap.m),
               Text('Your devices', style: t.textTheme.titleMedium),
               if (c.loading && !c.loadedOnce)
-                const Center(
-                  child: Padding(padding: EdgeInsets.all(Gap.l), child: CircularProgressIndicator()),
+                const Padding(
+                  key: Key('person-devices-loading'),
+                  padding: EdgeInsets.all(Gap.l),
+                  child: Column(children: [CircularProgressIndicator(), SizedBox(height: Gap.s), Text('Loading your devices…')]),
                 )
               else if (shown.isEmpty && c.loadedOnce)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Gap.m),
-                  child: Text('No devices listed yet.', key: Key('person-devices-empty')),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Gap.m),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('No devices yet. Connect your radio on this phone and it shows up here.', key: Key('person-devices-empty')),
+                    TextButton.icon(
+                      key: const Key('person-devices-empty-refresh'),
+                      style: TextButton.styleFrom(minimumSize: _tap),
+                      onPressed: c.refresh,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Check again'),
+                    ),
+                  ]),
                 )
               else
                 for (final d in shown) _DeviceTile(d, onRename: () => _rename(d), onRemove: () => _remove(d)),
-              const SizedBox(height: Gap.l),
+              const SizedBox(height: Gap.m),
+              // A setting, so it sits under the list it is about (the list and the notices are what people come for).
+              SwitchListTile(
+                key: const Key('ask-first-switch'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Ask me first'),
+                subtitle: const Text('A new device waits for your yes before it joins.'),
+                value: c.askFirst,
+                onChanged: (v) => _guard(() => c.setAskFirst(v), 'Saving the setting'),
+              ),
+              const SizedBox(height: Gap.s),
               TextButton.icon(
                 key: const Key('person-devices-website'),
+                style: TextButton.styleFrom(minimumSize: _tap),
                 onPressed: () => s.openWebPage('/me/devices'),
                 icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text('View this page on the website'),
+                label: const Text('Open on the website'),
               ),
             ],
           ),
@@ -164,23 +200,38 @@ class _DeviceTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            // Wrap, not Row: at large text the marker drops under the name instead of squeezing it.
+            Wrap(
+              spacing: Gap.s,
+              runSpacing: Gap.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Expanded(child: Text(d.name, style: t.textTheme.titleSmall)),
+                Text(d.name, style: t.textTheme.titleMedium),
                 if (d.current)
                   Chip(key: Key('device-current-${d.id}'), label: const Text('This phone'), visualDensity: VisualDensity.compact),
               ],
             ),
             if (detail.isNotEmpty) Text(detail, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            Text('Last used ${_when(d.lastSeenAt)}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            Row(
+            Text(d.lastSeenAt == null ? 'Not used yet' : 'Last used ${formatDateTime(d.lastSeenAt!)}',
+                key: Key('device-used-${d.id}'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: Gap.xs),
+            Wrap(
+              spacing: Gap.s,
               children: [
-                TextButton(key: Key('device-rename-${d.id}'), onPressed: onRename, child: const Text('Rename')),
+                OutlinedButton.icon(
+                  key: Key('device-rename-${d.id}'),
+                  style: OutlinedButton.styleFrom(minimumSize: _tap),
+                  onPressed: onRename,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Rename'),
+                ),
                 if (!d.current)
-                  TextButton(
+                  OutlinedButton.icon(
                     key: Key('device-remove-${d.id}'),
+                    style: OutlinedButton.styleFrom(minimumSize: _tap, foregroundColor: t.colorScheme.error),
                     onPressed: onRemove,
-                    child: Text('Remove', style: TextStyle(color: t.colorScheme.error)),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Remove'),
                   ),
               ],
             ),
@@ -211,15 +262,32 @@ class _NoticeTile extends StatelessWidget {
               n.words,
               style: n.read && !n.isOpenRequest ? t.textTheme.bodyMedium : t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
-            Text(_when(n.createdAt), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            Row(
+            if (n.createdAt != null) Text(formatDateTime(n.createdAt!), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            if (n.isOpenRequest || !n.read) const SizedBox(height: Gap.xs),
+            // Wrap, not Row: two buttons side by side do not fit at 375 pt with large text.
+            Wrap(
+              spacing: Gap.s,
               children: [
                 if (n.isOpenRequest) ...[
-                  FilledButton(key: Key('notice-approve-${n.id}'), onPressed: () => onAct('approve'), child: const Text('Approve')),
-                  const SizedBox(width: Gap.s),
-                  TextButton(key: Key('notice-deny-${n.id}'), onPressed: () => onAct('deny'), child: const Text('Turn down')),
+                  FilledButton(
+                    key: Key('notice-approve-${n.id}'),
+                    style: FilledButton.styleFrom(minimumSize: _tap),
+                    onPressed: () => onAct('approve'),
+                    child: const Text('Yes, add it'),
+                  ),
+                  OutlinedButton(
+                    key: Key('notice-deny-${n.id}'),
+                    style: OutlinedButton.styleFrom(minimumSize: _tap),
+                    onPressed: () => onAct('deny'),
+                    child: const Text('No'),
+                  ),
                 ] else if (!n.read)
-                  TextButton(key: Key('notice-read-${n.id}'), onPressed: () => onAct('read'), child: const Text('Got it')),
+                  TextButton(
+                    key: Key('notice-read-${n.id}'),
+                    style: TextButton.styleFrom(minimumSize: _tap),
+                    onPressed: () => onAct('read'),
+                    child: const Text('Got it'),
+                  ),
               ],
             ),
           ],
@@ -247,19 +315,29 @@ class _RenameSheetState extends State<_RenameSheet> {
     super.dispose();
   }
 
+  // Trimmed, so a stray space from the keyboard's autocomplete is not saved as part of the name.
+  void _save() => Navigator.pop(context, _ctl.text.trim());
+
   @override
   Widget build(BuildContext context) => AppSheetScaffold(
         controller: widget.controller,
         title: 'Rename device',
-        primaryAction: FilledButton(key: const Key('device-rename-save'), onPressed: () => Navigator.pop(context, _ctl.text), child: const Text('Save')),
-        secondaryAction: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        primaryAction: FilledButton(key: const Key('device-rename-save'), onPressed: _save, child: const Text('Save')),
+        secondaryAction: TextButton(key: const Key('device-rename-cancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         children: [
           TextField(
             key: const Key('device-rename-field'),
             controller: _ctl,
             autofocus: true,
             maxLength: 40,
-            decoration: const InputDecoration(hintText: 'Leave empty for the default name'),
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _save(), // Done on the keyboard saves: no reach for the button
+            decoration: InputDecoration(
+              labelText: 'Device name',
+              helperText: 'Empty uses the default name.',
+              suffixIcon: IconButton(key: const Key('device-rename-clear'), tooltip: 'Clear', icon: const Icon(Icons.clear), onPressed: _ctl.clear),
+            ),
           ),
         ],
       );

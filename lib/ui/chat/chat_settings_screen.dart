@@ -45,12 +45,12 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           children: [
             InsetGroup(
               header: 'Writing',
-              footer: 'With a hardware keyboard, Return sends and Shift-Return starts a new line. Command-Return always sends.',
+              footer: 'Hardware keyboard only. Shift-Return starts a new line; Command-Return always sends.',
               rows: [
                 InsetRow(
                   key: const Key('chat-quick-replies'),
                   title: 'Quick replies',
-                  value: '${replies.length}',
+                  value: replies.isEmpty ? 'None' : '${replies.length} saved',
                   onTap: c == null
                       ? null
                       : () async {
@@ -80,8 +80,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                     switchKey: const Key('chat-photos-autoload'),
                     symbol: AppSymbols.photo,
                     title: 'Load photos automatically',
-                    subtitle: 'Shows photos in chats as they arrive. Loading a photo contacts the MeshSonar server, which sees '
-                        'your internet address. Off: tap a photo to load it.',
+                    subtitle: 'Off: tap a photo to load it. Loading contacts the MeshSonar server, which sees your internet address.',
                     value: _p!.autoLoad,
                     onChanged: (v) => setState(() => _p!.autoLoad = v),
                   ),
@@ -89,13 +88,12 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
               ),
             if (st != null && app != null)
               InsetGroup(
-                header: 'Feel',
+                header: 'Touch',
                 rows: [
                   AppSwitchTile(
                     switchKey: const Key('chat-haptics'),
                     symbol: AppSymbols.waveform,
-                    title: 'Haptics',
-                    subtitle: 'Small taps when you send, toggle or pick something.',
+                    title: 'Vibrate on taps',
                     value: st.haptics,
                     onChanged: (v) => app.updateSettings(st.copyWith(haptics: v)),
                   ),

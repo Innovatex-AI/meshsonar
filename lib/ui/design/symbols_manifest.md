@@ -74,3 +74,4 @@ redistributed.
 | `squareAndArrowDown` | `square.and.arrow.down` | Chat: Save photo to Photos |
 | `camera` | `camera` | Chat: composer photo button, Take Photo |
 | `photo` | `photo` | Chat: photo placeholders, Choose from Library, View photo |
+| `arrowClockwise` | `arrow.clockwise` | Repeater settings: read one setting again |

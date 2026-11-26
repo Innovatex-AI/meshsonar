@@ -59,7 +59,7 @@ class _NetworkObserverScreenState extends State<NetworkObserverScreen> {
         builder: (context, snap) {
           final p = snap.data;
           final id = widget.observerId;
-          final name = p?.detail.row.name ?? (id.length > 12 ? 'Observer ${id.substring(0, 8)}…' : 'Observer $id');
+          final name = p != null ? readableName(p.detail.row.name) : (id.length > 12 ? 'Observer ${id.substring(0, 8)}…' : 'Observer $id');
           return Scaffold(
             key: const Key('network-observer-screen'),
             appBar: AppBar(
@@ -71,25 +71,32 @@ class _NetworkObserverScreenState extends State<NetworkObserverScreen> {
               ],
             ),
             body: switch (snap.connectionState) {
-              ConnectionState.done when snap.hasError => _error(snap.error),
+              ConnectionState.done when snap.hasError => _error(context, snap.error),
               ConnectionState.done => RefreshIndicator(onRefresh: _reload, child: ObserverPageBody(page: p!, baseUrl: widget.baseUrl, regionSlug: widget.regionSlug)),
-              _ => const Center(child: CircularProgressIndicator()),
+              _ => Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: Gap.m),
+                    Text('Loading this observer…', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  ]),
+                ),
             },
           );
         },
       );
 
-  Widget _error(Object? e) {
+  Widget _error(BuildContext context, Object? e) {
     if (e is V1Error && e.offline) return SingleChildScrollView(child: RegionOfflineEmpty(what: 'this observer', onRetry: _reload));
     final notFound = e is V1Error && e.notFound;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(Gap.xl),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(notFound ? 'This region does not know that observer.' : (e is V1Error ? e.message : 'The observer did not load.'),
+          Text(notFound ? 'This observer is not in this region. It may report to another region.' : (e is V1Error ? e.message : 'The observer did not load.'),
               key: const Key('observer-error'), textAlign: TextAlign.center),
           const SizedBox(height: Gap.m),
-          if (!notFound) FilledButton(onPressed: _reload, child: const Text('Try again')),
+          if (!notFound) FilledButton(key: const Key('observer-retry'), onPressed: _reload, child: const Text('Try again')),
+          if (notFound) FilledButton(key: const Key('observer-error-back'), onPressed: () => Navigator.of(context).maybePop(), child: const Text('Go back')),
         ]),
       ),
     );
@@ -115,9 +122,17 @@ class ObserverPageBody extends StatelessWidget {
       if (r.noiseFloorDbm != null) KvRow('Noise floor', '${r.noiseFloorDbm!.round()} dBm'),
       if (r.airtimeTxPct1h != null) KvRow('Airtime sending', '${r.airtimeTxPct1h!.toStringAsFixed(1)}%'),
       if (r.airtimeRxPct1h != null) KvRow('Airtime receiving', '${r.airtimeRxPct1h!.toStringAsFixed(1)}%'),
-      if (r.dutyCycleWarn) const KvRow('Duty cycle', 'Sending more than the duty-cycle limit', valueKey: Key('observer-duty-warn')),
       if (r.clockOffsetS != null) KvRow('Clock', skewText(r.clockOffsetS!)),
       if (r.batteryMv != null) KvRow('Battery', voltsText(r.batteryMv!)),
+    ];
+    final hardware = <Widget>[
+      if (d.model != null) KvRow('Model', d.model!),
+      if (r.firmware != null) KvRow('Firmware', r.firmware!),
+      if (d.radio != null) KvRow('Radio', radioText(d.radio!), valueKey: const Key('observer-radio')),
+      if (d.uptimeS != null) KvRow('Up for', _uptime(d.uptimeS!)),
+      if (d.reboots7d != null) KvRow('Restarts in 7 days', '${d.reboots7d}${d.lastReboot == null ? '' : ', last ${agoText(d.lastReboot)}'}'),
+      if (d.qualityFlags.isNotEmpty) KvRow('Data quality', d.qualityFlags.join(', ')),
+      if (d.trusted == false) const KvRow('Data quality', 'Not trusted for hop naming'),
     ];
     return ListView(
       key: const Key('observer-page'),
@@ -125,24 +140,22 @@ class ObserverPageBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
       children: [
         if (page.offlineAsOf != null) RegionOfflineAsOf(asOf: page.offlineAsOf!),
-        if (page.source == NetworkReadSource.legacy)
-          Text('From the region observer page: airtime per hour, reboots and the neighbour report come with the new observer service.',
-              key: const Key('observer-legacy-note'), style: muted),
-        const SizedBox(height: Gap.s),
+        const SizedBox(height: Gap.xs),
+        // The whole name (the app bar cuts a long one short), what it is and whether it is reporting.
+        Semantics(header: true, child: Text(readableName(r.name), key: const Key('observer-name'), maxLines: 3, overflow: TextOverflow.ellipsis, style: t.textTheme.headlineSmall)),
+        const SizedBox(height: Gap.xs),
         Row(children: [
           StatusDot(r.status, size: 12),
           const SizedBox(width: Gap.s),
-          Expanded(child: Text('${observerKindLabel(r.kind)} · ${observerStatusLabel(r.status)}', style: t.textTheme.titleSmall)),
+          Expanded(child: Text('${observerKindLabel(r.kind)} · ${observerStatusLabel(r.status)}', style: t.textTheme.titleMedium)),
         ]),
-        if (r.lastSeen != null) KvRow('Last seen', agoText(r.lastSeen)),
-        if (r.iata != null) KvRow('Area', r.iata!),
-        if (r.firmware != null) KvRow('Firmware', r.firmware!),
-        if (d.model != null) KvRow('Model', d.model!),
-        if (d.radio != null) KvRow('Radio', radioText(d.radio!), valueKey: const Key('observer-radio')),
-        if (d.uptimeS != null) KvRow('Up for', _uptime(d.uptimeS!)),
-        if (d.reboots7d != null) KvRow('Restarts in 7 days', '${d.reboots7d}${d.lastReboot == null ? '' : ', last ${agoText(d.lastReboot)}'}'),
-        if (d.qualityFlags.isNotEmpty) KvRow('Data quality', d.qualityFlags.join(', ')),
-        if (d.trusted == false) const KvRow('Data quality', 'Not trusted for hop naming'),
+        Text(r.lastSeen == null ? 'No report yet' : 'Last report ${agoText(r.lastSeen)}${r.iata == null ? '' : ' · area ${r.iata}'}',
+            key: const Key('observer-seen'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        if (r.dutyCycleWarn)
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.xs),
+            child: Text('Sending more than the duty-cycle limit', key: const Key('observer-duty-warn'), style: t.textTheme.bodyMedium?.copyWith(color: MeshSonarColors.of(context).beacon)),
+          ),
         if (r.kind == 'phone') Text('Phone observers never show a position.', style: muted),
         // MAP slice 5: the observer's small map (page `observer`), when the definition presets one and it has a public position.
         if (r.kind != 'phone' && r.position != null && MapPreview.presetOf('observer') != null)
@@ -151,30 +164,44 @@ class ObserverPageBody extends StatelessWidget {
             padding: const EdgeInsets.only(top: Gap.s),
             child: StillPlaceMap(page: 'observer', role: 'observer', name: r.name, lat: r.position!.lat, lon: r.position!.lon, freshness: switch (r.status) { 'online' => 'fresh', 'stale' => 'recent', _ => 'stale' }, repeaters: stillRepeatersOf(context, regionSlug: regionSlug)),
           ),
-        if (lastHour.isNotEmpty) NodeSection(id: 'observer-now', title: 'Now', children: lastHour),
+        if (lastHour.isNotEmpty) NodeSection(id: 'observer-now', title: 'Right now', children: lastHour),
+        if (hardware.isNotEmpty)
+          NodeSection(
+              id: 'observer-hardware',
+              title: 'Hardware',
+              collapsible: true,
+              summary: [?d.model, ?r.firmware, if (d.model == null && r.firmware == null) 'Radio settings, uptime, restarts'].join(' · '),
+              children: hardware),
         if (page.metrics != null) ..._metrics(context, page.metrics!),
         if (d.neighbours.isNotEmpty)
-          NodeSection(id: 'observer-neighbours', title: 'Neighbour report', children: [
-            if (d.neighbourReportAt != null) Text('Reported ${agoText(d.neighbourReportAt)}', style: muted),
+          NodeSection(id: 'observer-neighbours', title: 'Hears directly (${d.neighbours.length})', collapsible: true, summary: 'Nodes in radio range of this observer${d.neighbourReportAt == null ? '' : ' · reported ${agoText(d.neighbourReportAt)}'}', children: [
+            NodeMoreList(id: 'observer-neighbours', children: [
             for (final n in d.neighbours)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(n.node.label),
+                trailing: const Icon(Icons.chevron_right),
+                title: Text(readableName(n.node.label), maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text([if (n.snr != null) snrText(n.snr), if (n.heardAgoS != null) 'heard ${agoText(DateTime.now().toUtc().subtract(Duration(seconds: n.heardAgoS!)))}'].join(' · ')),
                 onTap: () => openNetworkNode(context, baseUrl: baseUrl, regionSlug: regionSlug, nodeKey: n.node.key),
               ),
+            ]),
           ]),
         if (d.topNodes.isNotEmpty)
-          NodeSection(id: 'observer-top', title: 'Heard most', children: [
+          NodeSection(id: 'observer-top', title: 'Heard most', collapsible: true, summary: 'Top: ${readableName(d.topNodes.first.$1.label)} · ${d.topNodes.first.$2} packets', children: [
+            NodeMoreList(id: 'observer-top', children: [
             for (final (n, c) in d.topNodes)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(n.label),
-                trailing: Text('$c packets'),
+                title: Text(readableName(n.label), maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text('$c ${c == 1 ? 'packet' : 'packets'}'),
+                trailing: n.key.length == 64 ? const Icon(Icons.chevron_right) : null,
                 onTap: n.key.length == 64 ? () => openNetworkNode(context, baseUrl: baseUrl, regionSlug: regionSlug, nodeKey: n.key) : null,
               ),
+            ]),
           ]),
         const SizedBox(height: Gap.m),
+        if (page.source == NetworkReadSource.legacy)
+          Text('Some parts (airtime per hour, restarts, the nodes it hears directly) are not available for this region yet.', key: const Key('observer-legacy-note'), style: muted),
         WebTwinLine(Uri(scheme: 'https', host: '$regionSlug.meshsonar.com', path: '/observers/${Uri.encodeComponent(r.id)}')),
       ],
     );
@@ -199,7 +226,7 @@ class ObserverPageBody extends StatelessWidget {
         table: ChartTable(head: const ['Time', 'Value'], rows: [for (final s in m.samples.reversed.take(96)) [_time(s.at), cell(s)]]),
         // The dashed line is named in the caption under the chart, never on top of the data line.
         caption: '${ref == null || refLabel == null ? '' : 'Dashed line: $refLabel (${trimNumber(ref, 1)} $unit). '}'
-            'Every ${m.fiveMinute ? '5 minutes' : 'hour'}, in your time zone. A missing sample is a gap; red ticks are restarts.',
+            'One reading every ${m.fiveMinute ? '5 minutes' : 'hour'}. Gaps are missing readings; red ticks are restarts.',
         chart: TimeLineChart(series: series, yLabel: unit, xFormat: _time, breakGap: gap, floorMarks: reboots, refLine: ref, legend: series.length > 1),
       );
     }

@@ -39,7 +39,7 @@ class _AdminAccessViewState extends State<AdminAccessView> {
         if (!c.isAdmin) {
           return const Padding(
             padding: EdgeInsets.all(Gap.xl),
-            child: Center(child: Text('The access list and passwords need the admin password.', key: Key('access-guest'), textAlign: TextAlign.center)),
+            child: Center(child: Text('You are logged in as a guest. Log in with the admin password to manage access.', key: Key('access-guest'), textAlign: TextAlign.center)),
           );
         }
         final acl = c.acl;
@@ -78,7 +78,7 @@ class _AdminAccessViewState extends State<AdminAccessView> {
                     title: 'Passwords',
                     icon: Icons.key_outlined,
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Passwords are typed twice, never shown again and never written to any log.', style: t.textTheme.bodyMedium),
+                      Text('Typed twice, then never shown again.', style: t.textTheme.bodyMedium),
                       const SizedBox(height: Gap.xs),
                       ListTile(
                         key: const Key('set-guest-password'),
@@ -94,7 +94,7 @@ class _AdminAccessViewState extends State<AdminAccessView> {
                         contentPadding: EdgeInsets.zero,
                         minVerticalPadding: Gap.s,
                         title: const Text('Admin password'),
-                        subtitle: const Text('If you lose the new one the only way back is a cable at the repeater.'),
+                        subtitle: const Text('Write it down. Losing it means a cable at the repeater.'),
                         trailing: Icon(Icons.dangerous_outlined, color: t.colorScheme.error),
                         onTap: () => showSettingEditor(context, c, settingFor('password')!),
                       ),
@@ -144,7 +144,7 @@ class _AdminAccessViewState extends State<AdminAccessView> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(mine ? 'Your radio' : (name ?? 'Unknown radio'), style: t.textTheme.titleSmall),
-              Text('${e.role.label}  -  key starts ${e.prefixHex.substring(0, 8)}', style: t.textTheme.bodySmall),
+              Text('${e.role.label} · key ${e.prefixHex.substring(0, 8)}', style: t.textTheme.bodySmall),
             ]),
           ),
           if (!mine && full != null)
@@ -155,6 +155,8 @@ class _AdminAccessViewState extends State<AdminAccessView> {
               icon: const Icon(Icons.manage_accounts_outlined),
               onPressed: _busy ? null : () => _role(context, e, full),
             ),
+          // A gap between the harmless button and the one that removes someone (build 76).
+          if (!mine) const SizedBox(width: Gap.m),
           if (!mine)
             IconButton(
               key: Key('remove-${e.prefixHex}'),

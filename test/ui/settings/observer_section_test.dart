@@ -13,6 +13,7 @@ import 'package:meshsonar/core/observer_engine.dart';
 import 'package:meshsonar/ui/radios/observer_join_screen.dart';
 import 'package:meshsonar/ui/settings/data_sharing.dart';
 import 'package:meshsonar/ui/settings/observer_section.dart';
+import 'package:meshsonar/ui/settings/settings_index.dart';
 
 import '../fakes.dart';
 import '../settings_test_kit.dart';
@@ -69,18 +70,35 @@ void main() {
   group('the section', () {
     testWidgetsT('empty: master switch, status, "MQTT feeds (0 of 10)", the plain wording and Add a feed', (tester) async {
       await _open(tester);
-      expect(find.byKey(const Key('observer-share-toggle')), findsOneWidget);
+      // Build 76: the Observer rows are the page "Observer and MQTT feeds" of Sharing & privacy. The master switch is ONE
+      // switch, on the first level (checked at the end of this test), not a second copy on this page.
+      expect(find.byKey(const Key('settings-page-observer')), findsOneWidget);
+      expect(find.byKey(const Key('observer-share-toggle')), findsNothing, reason: 'no second copy of the master switch');
       expect(find.byKey(const Key('observer-status')), findsOneWidget);
       expect(find.text('MQTT feeds (0 of 10)'), findsOneWidget);
       expect(find.byKey(const Key('mqtt-feeds-empty')), findsOneWidget);
       expect(find.text(mqttFeedsHelp), findsOneWidget);
-      for (final w in ['public packets', 'public key', 'Never your position', 'stays off until you turn it on']) {
+      // Build 76 cut the help to one short line; the long version (with the public key) is on "What MeshSonar shares".
+      for (final w in ['public packets', 'Never your position', 'private messages', 'each starts off']) {
         expect(mqttFeedsHelp, contains(w));
+      }
+      final flow = otherDataFlows.firstWhere((f) => f.title == 'MQTT feeds to other sites').body;
+      for (final w in ['public packets', 'public key', 'Never your position', 'off until you turn it on']) {
+        expect(flow, contains(w), reason: 'the full disclosure keeps "$w"');
       }
       final add = tester.widget<ListTile>(find.byKey(const Key('mqtt-add-feed')));
       expect(add.enabled, isTrue);
       final header = tester.getSemantics(find.byKey(const Key('mqtt-feeds-title')));
       expect(header.flagsCollection.isHeader, isTrue, reason: 'VoiceOver: the feeds list has a header');
+      // The master switch: first row of Sharing & privacy, with the key of both pre-76 switches.
+      await showSetting(tester, 'observer-share-toggle');
+      expect(find.byKey(const Key('settings-page-observer')), findsNothing, reason: 'back on the first level');
+      expect(find.byKey(const Key('observer-share-toggle')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('observer-share-toggle')), matching: find.byKey(const Key('telemetry-toggle'))),
+          findsOneWidget, reason: 'one switch, both keys');
+      expect(tester.widget<SwitchListTile>(find.byKey(const Key('telemetry-toggle'))).value, isTrue);
+      expect(tester.getTopLeft(find.byKey(const Key('telemetry-toggle'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('page-observer'))).dy),
+          reason: 'the switch comes before the row that opens the Observer page');
     });
 
     testWidgetsT('the master switch is Share with MeshSonar: off asks for the erase like Privacy, the feeds say why', (tester) async {
@@ -93,8 +111,13 @@ void main() {
       await tester.tap(find.byKey(const Key('telemetry-erase-keep')));
       await settleIo(tester);
       expect(find.textContaining('this phone shares nothing, with MeshSonar or any MQTT feed'), findsOneWidget);
-      expect(observerStatusLine(r.h.state), startsWith('Off. Turn on "Share with MeshSonar" in Settings > Observer'));
+      expect(observerStatusLine(r.h.state), startsWith('Off. Turn on "Share with MeshSonar" in Settings > $privacySectionTitle'));
       expect(r.engine.last!.sharing, isFalse, reason: 'the engine is told at once');
+      expect(tester.widget<Text>(find.byKey(const Key('page-observer-caption'))).data, 'Off: sharing is off.',
+          reason: 'the row that opens the Observer page says it too');
+      // On the Observer page the status row says where the switch is now.
+      await showSetting(tester, 'observer-status');
+      expect(find.textContaining('Turn on "Share with MeshSonar" in Settings > $privacySectionTitle'), findsOneWidget);
     });
 
     testWidgetsT('10 feeds: Add a feed is disabled and says why', (tester) async {
@@ -399,8 +422,14 @@ void main() {
         expect(all, isNot(contains(old)), reason: old);
       }
       expect(telemetryCategory.title, 'Share with MeshSonar');
-      expect(observerSettingsEntries.map((e) => e.title), containsAll(['Share with MeshSonar', 'Observer status', 'MQTT feeds']));
-      expect(observerJoinIntro, contains('Settings > Observer'));
+      // Build 76: the master switch is one row (Sharing & privacy, first level); its pre-76 Observer id is an alias of it.
+      expect(observerSettingsEntries.map((e) => e.title), containsAll(['Observer status', 'MQTT feeds']));
+      expect(settingsEntry('observer-share').id, 'telemetry-toggle');
+      expect(settingsEntry('observer-share').title, 'Share with MeshSonar');
+      expect(settingsEntry('observer-share').page, isNull, reason: 'first level');
+      expect(observerSettingsEntries.every((e) => e.page == 'observer' && e.section == 'privacy'), isTrue);
+      expect(settingsPage('observer').title, 'Observer and MQTT feeds');
+      expect(observerJoinIntro, contains('Settings > '));
       expect(otherDataFlows.map((f) => f.title), contains('MQTT feeds to other sites'));
     });
   });

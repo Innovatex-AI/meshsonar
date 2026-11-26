@@ -1,7 +1,6 @@
 // Medium's content (Drive plan 4.5, 5.2) as a list of widgets for the panel's scroll view, in order: unsaved warning, location
-// note, the ratio line with the Passenger switch, the 2x3 stat grid, "Heard last ping" (2 rows), then the list rows (antenna,
+// note, the ratio line, the 2x3 stat grid, "Heard last ping" (2 rows), then the list rows (antenna,
 // ping settings, log, map guide). WP3b finishes this content; this is the shell with every old footer function kept.
-import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 
 import '../../../app/app_state.dart';
@@ -53,8 +52,6 @@ class MediumContent {
     required AppState state,
     required DriveLiveStats liveStats,
     required GeoFix? fix,
-    required bool passenger,
-    required ValueChanged<bool> onPassenger,
     required VoidCallback openGuide,
     List<NearbyRepeater> nearby = const [],
     ValueChanged<String>? onPickNearby,
@@ -94,21 +91,6 @@ class MediumContent {
           ),
         );
 
-    Widget row(IconData icon, String title, VoidCallback onTap, {Key? key}) => GestureDetector(
-          key: key,
-          onTap: onTap,
-          behavior: HitTestBehavior.opaque,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: Row(children: [
-              Icon(icon, size: 20, color: c.textMuted),
-              const SizedBox(width: 12),
-              Expanded(child: Text(title, style: const TextStyle(fontSize: 16))),
-              Icon(Icons.chevron_right_rounded, color: c.textMuted),
-            ]),
-          ),
-        );
-
     final heardRows = <Widget>[];
     if (last != null && last.kind == PingKind.tx) {
       final ech = [...last.echoes]..sort((a, b) => (b.snrDb ?? -99).compareTo(a.snrDb ?? -99));
@@ -131,19 +113,11 @@ class MediumContent {
       if (s.locationNote != null && !driving) Padding(padding: const EdgeInsets.only(bottom: 8), child: LocationNoteBanner(state: s)),
       if (s.needsAntennaSetup && !driving) const Padding(padding: EdgeInsets.only(bottom: 8), child: AntennaSetupHint()),
       if (driving) ...[
-        Row(children: [
-          Expanded(
-            child: Text(
-              s.pingCount == 0 ? 'No pings yet' : '${s.heardCount} of ${s.pingCount} pings heard${pct == null ? '' : ' ($pct%)'}',
-              key: const Key('medium-ratio'),
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const Text('Passenger', style: TextStyle(fontSize: 15)),
-          const SizedBox(width: 8),
-          CupertinoSwitch(key: const Key('passenger-switch'), value: passenger, onChanged: onPassenger),
-        ]),
-        Text('Passenger keeps this open while the car moves', style: TextStyle(fontSize: 12, color: c.textMuted)),
+        Text(
+          s.pingCount == 0 ? 'No pings yet' : '${s.heardCount} of ${s.pingCount} pings heard${pct == null ? '' : ' ($pct%)'}',
+          key: const Key('medium-ratio'),
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         Row(children: [
           cell('Distance', s.units.distance(_distanceM(s.drivePings)), const Key('stat-distance')),
@@ -170,10 +144,12 @@ class MediumContent {
             behavior: HitTestBehavior.opaque,
             onTap: onPickNearby == null ? null : () => onPickNearby(n.key),
             child: SizedBox(
-              height: 44,
+              height: 48,
               child: Row(children: [
                 Expanded(child: Text(n.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16))),
                 Text(s.units.distance(n.distanceM), style: numberStyle(context, size: 14, weight: FontWeight.w500)),
+                // Says the row does something: it shows the repeater on the map (build 76; the rows looked like plain text).
+                if (onPickNearby != null) ...[const SizedBox(width: 8), Icon(Icons.my_location_rounded, size: 18, color: c.textMuted)],
               ]),
             ),
           ),
@@ -181,9 +157,13 @@ class MediumContent {
       ],
       // MeshTrack (build 69): a full-width row by the chips, so friends' sharing is in the panel, not a pill on the map.
       const MeshTrackPanelRow(),
-      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [AntennaChip(state: s), PingSettingsChip(state: s), LogButton(state: s)]),
-      const SizedBox(height: 4),
-      row(Icons.help_outline_rounded, 'Map guide', openGuide, key: const Key('medium-guide')),
+      // One list, every row labelled and 48 pt tall (build 76): the old chips did not say what they were.
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        AntennaChip(state: s),
+        PingSettingsChip(state: s),
+        LogButton(state: s),
+        DrivePanelRow(key: const Key('medium-guide'), icon: Icons.help_outline_rounded, label: 'Map guide', onTap: openGuide),
+      ]),
     ];
   }
 }

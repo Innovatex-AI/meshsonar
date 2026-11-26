@@ -37,6 +37,7 @@ final List<String> packetWindowChips = [for (final w in packetWindows.keys) if (
 
 enum _Load { loading, ready, error }
 
+
 class PacketListView extends StatefulWidget {
   final String baseUrl;
   final String regionSlug;
@@ -98,6 +99,9 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
 
   // My radio
   bool _mine = false;
+
+  /// A tap on 30d or 90d without a narrowing filter: the line that says why it did nothing.
+  bool _longHint = false;
   StreamSubscription<void>? _radioSub;
   List<LocalChannelKey> _keys = const [];
 
@@ -298,6 +302,23 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
     _setFilter(r.filter, window: r.window != null && packetWindows.containsKey(r.window) ? PacketWindow.named(r.window!) : null);
   }
 
+  /// "24h" as words: "24 hours".
+  static String _windowWords(String? w) {
+    final m = w == null ? null : RegExp(r'^(\d+)([mhd])$').firstMatch(w);
+    if (m == null) return w ?? 'window';
+    final n = int.parse(m.group(1)!);
+    final unit = switch (m.group(2)) { 'm' => 'minute', 'h' => 'hour', _ => 'day' };
+    return '$n $unit${n == 1 ? '' : 's'}';
+  }
+
+  /// The next longer window this filter may use (30 and 90 days need a narrowing filter); null at the end.
+  String? _longerWindow() {
+    final i = packetWindowChips.indexOf(_window.name ?? '');
+    if (i < 0 || i + 1 >= packetWindowChips.length) return null;
+    final next = packetWindowChips[i + 1];
+    return (next == '30d' || next == '90d') && !_filter.narrows ? null : next;
+  }
+
   NetworkRequest get _shareRequest => NetworkRequest.packetList(_filter, region: widget.regionSlug, window: _window.name, since: _window.since, until: _window.until);
 
   Future<void> _share() async {
@@ -355,6 +376,14 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
         _toolbar(context),
         if (!_mine) ...[
           _windowChips(context),
+          if (_longHint && !_filter.narrows)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Gap.l),
+              child: Row(key: const Key('packets-long-hint'), children: [
+                const Expanded(child: Text('30 and 90 days need a filter first: pick a node, observer or channel.')),
+                TextButton(key: const Key('packets-long-hint-filters'), onPressed: _openSheet, child: const Text('Filters')),
+              ]),
+            ),
           if (_filter.chips.isNotEmpty) _activeChips(context),
         ],
         Expanded(child: _mine && log != null ? _myRadio(context, log) : _network(context)),
@@ -417,8 +446,13 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
                   key: Key('packets-window-$w'),
                   label: Text(w),
                   selected: _window.name == w,
-                  tooltip: (w == '30d' || w == '90d') && !_filter.narrows ? 'Needs a node, observer, channel or hash filter' : null,
-                  onSelected: (w == '30d' || w == '90d') && !_filter.narrows ? null : (_) => _setFilter(_filter, window: PacketWindow.named(w)),
+                  // 30 and 90 days need a filter first: a tap says so in words (a greyed chip that does nothing explains nothing).
+                  onSelected: (w == '30d' || w == '90d') && !_filter.narrows
+                      ? (_) => setState(() => _longHint = true)
+                      : (_) {
+                          _longHint = false;
+                          _setFilter(_filter, window: PacketWindow.named(w));
+                        },
                 ),
               ),
           ]),
@@ -453,6 +487,8 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
       return ListView(physics: const AlwaysScrollableScrollPhysics(), children: const [
         SizedBox(height: 80),
         Center(child: CircularProgressIndicator(key: Key('packets-loading'))),
+        SizedBox(height: Gap.m),
+        Center(child: Text('Loading packets…')),
       ]);
     }
     if (_load == _Load.error) {
@@ -465,7 +501,13 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
           else ...[
             PacketNote(e.code == 'bad_filter' ? 'The server did not accept the filter: ${e.message}' : 'Packets did not load: ${e.message}',
                 key: const Key('packets-error'), icon: Icons.cloud_off),
-            Align(alignment: Alignment.centerLeft, child: FilledButton(onPressed: _reload, child: const Text('Try again'))),
+            // Full width, thumb height; with filters on, the other way out is to drop them.
+            SizedBox(width: double.infinity, height: 48, child: FilledButton(key: const Key('packets-retry'), onPressed: _reload, child: const Text('Try again'))),
+            if (!_filter.isEmpty)
+              SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: TextButton(key: const Key('packets-error-clear'), onPressed: () => _setFilter(const PacketFilter()), child: const Text('Clear the filters'))),
           ],
         ]),
       );
@@ -519,13 +561,24 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
           if (_rows.isEmpty) {
             if (i == 0) {
               if (_noFeedReason != null && !_mine) return NoPacketFeedCard(regionName: widget.regionSlug, reason: _noFeedReason);
+              final longer = _longerWindow();
               return Padding(
                 key: const Key('packets-empty'),
                 padding: const EdgeInsets.all(Gap.xl),
-                child: Text(
-                  _filter.isEmpty ? 'No packets in the last ${_window.name ?? 'window'}.' : 'No packets match these filters in this window.',
-                  textAlign: TextAlign.center,
-                ),
+                child: Column(children: [
+                  Text(
+                    _filter.isEmpty ? 'No packets in the last ${_windowWords(_window.name)}.' : 'No packets match these filters in the last ${_windowWords(_window.name)}.',
+                    textAlign: TextAlign.center,
+                  ),
+                  // The way forward, as buttons: drop the filters, or look further back.
+                  if (!_filter.isEmpty)
+                    TextButton(key: const Key('packets-empty-clear'), onPressed: () => _setFilter(const PacketFilter()), child: const Text('Clear the filters')),
+                  if (longer != null)
+                    TextButton(
+                        key: const Key('packets-empty-longer'),
+                        onPressed: () => _setFilter(_filter, window: PacketWindow.named(longer)),
+                        child: Text('Look back ${_windowWords(longer)}')),
+                ]),
               );
             }
             return footer;
@@ -559,8 +612,7 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
     final items = myRadioPackets(log, hashtagKeys: _keys);
     final notes = <Widget>[
       PacketNote(
-        'Packets your radio heard since the app opened (the last ${log.capacity}, kept in memory only). Decoded on this phone: Public and hashtag '
-        'channel text is shown; private channels and direct messages stay encrypted.',
+        'What your radio heard since the app opened (the last ${log.capacity}). Read on this phone only; private messages stay encrypted.',
         key: const Key('myradio-note'),
         icon: Icons.settings_input_antenna,
       ),
@@ -620,11 +672,12 @@ class _PacketRowTile extends StatelessWidget {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
     final obs = row.observerCount;
+    // What happened first, in plain words; the route kind (Flood / Direct) last.
     final sub = [
-      packetRouteLabel(row.route),
       row.hops == 0 ? 'heard direct' : '${row.hops} hop${row.hops == 1 ? '' : 's'}',
-      '$obs observer${obs == 1 ? '' : 's'}',
-      if (row.observationCount != null && row.observationCount! > obs) '${row.observationCount} heard',
+      'heard by $obs observer${obs == 1 ? '' : 's'}',
+      if (row.observationCount != null && row.observationCount! > obs) '${row.observationCount} times',
+      packetRouteLabel(row.route),
     ].join(' · ');
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       InkWell(
@@ -646,7 +699,7 @@ class _PacketRowTile extends StatelessWidget {
             IconButton(
               key: Key('packet-row-expand-${row.hash}'),
               tooltip: expanded == null ? 'Show who heard it' : 'Hide who heard it',
-              icon: Icon(expanded == null ? Icons.expand_more : Icons.expand_less),
+              icon: Icon(expanded == null ? Icons.hearing : Icons.expand_less),
               onPressed: onExpand,
             ),
           ]),
@@ -659,13 +712,16 @@ class _PacketRowTile extends StatelessWidget {
             if (s.connectionState != ConnectionState.done) {
               return const Padding(padding: EdgeInsets.all(Gap.s), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))));
             }
-            if (s.hasError) return Padding(padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s), child: Text('Observers did not load.', style: muted));
+            if (s.hasError) {
+              return Padding(
+                  padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s), child: Text('Who heard it did not load. Tap the row for the full packet.', style: muted));
+            }
             final list = s.data ?? const [];
             return Padding(
               key: ValueKey('packet-row-obs-${row.hash}'),
               padding: const EdgeInsets.fromLTRB(Gap.xl, 0, Gap.l, Gap.s),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                if (list.isEmpty) Text('No observer rows kept for this packet.', style: muted),
+                if (list.isEmpty) Text('No record of who heard this packet.', style: muted) else Text('Heard by', style: t.textTheme.labelMedium),
                 for (final o in list)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),

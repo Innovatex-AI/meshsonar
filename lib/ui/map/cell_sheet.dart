@@ -112,23 +112,13 @@ class CellSheet extends StatelessWidget {
           stat('Pings', '${c.pings}'),
           stat(
             'Heard by a repeater',
-            c.pings <= 0
-                ? '-'
-                : '${c.heard} of ${c.pings} (${heardPercent(c)})',
+            c.pings <= 0 ? 'No pings yet' : '${c.heard} of ${c.pings} (${heardPercent(c)})',
           ),
-          stat(
-            'Best SNR',
-            c.bestSnr == null ? '-' : '${formatSnrShort(c.bestSnr!)} dB',
-          ),
-          stat(
-            'Median SNR',
-            c.medianSnr == null ? '-' : '${formatSnrShort(c.medianSnr!)} dB',
-          ),
+          // Build 76: a figure nobody measured is left out (it was a row with a dash), and the two SNR rows say which is which.
+          if (c.bestSnr != null) stat('Best signal (SNR)', '${formatSnrShort(c.bestSnr!)} dB'),
+          if (c.medianSnr != null) stat('Typical signal (SNR)', '${formatSnrShort(c.medianSnr!)} dB'),
           stat('Repeaters heard', '${c.repeaters}'),
-          stat(
-            'Noise floor',
-            c.noiseFloor == null ? '-' : '${c.noiseFloor!.round()} dBm',
-          ),
+          if (c.noiseFloor != null) stat('Noise floor', '${c.noiseFloor!.round()} dBm'),
           stat('Last measured', lastSeenText(c.lastAt)),
         ],
       ),

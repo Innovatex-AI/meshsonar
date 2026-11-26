@@ -1,4 +1,4 @@
-// Drive tab map tools on screen: what the map draws for each base-map style (offline packs respected), the filter drawer (from
+// Drive tab map tools on screen: what the map draws for each base-map style, the filter drawer (from
 // the Map layers sheet), the map key and credits, and the ping sound + haptic settings. (The footer's base-map cycler and the
 // leaderboard trophy went with the old Drive layout in build 70.)
 import 'dart:io';
@@ -7,15 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/colour_palette.dart';
 import 'package:meshsonar/core/basemap.dart' show BasemapLook;
 import 'package:meshsonar/core/map_styles.dart';
-import 'package:meshsonar/core/offline_packs.dart' show NetworkKind;
+import 'package:meshsonar/core/network_kind.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/region_stats_api.dart';
 import 'package:meshsonar/ui/device_feedback.dart';
@@ -24,13 +22,11 @@ import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/map_key.dart';
 import 'package:meshsonar/ui/drive/drive_map_model.dart';
 import 'package:meshsonar/ui/map/map_layers.dart' show PingColorMode;
-import 'package:meshsonar/ui/map/offline_basemap.dart';
 import 'package:meshsonar/ui/ping_cue.dart';
 import 'package:meshsonar/ui/region/stats_panel.dart' show regionStatsApiFactory;
 import 'package:meshsonar/ui/theme.dart';
 
 import '../fakes.dart';
-import '../offline_basemap_test.dart' show basemapWith, cmhBox;
 import '../settings_controls_test.dart' show openSettings, show;
 
 class _Feedback implements DeviceFeedback {
@@ -100,8 +96,6 @@ void main() {
     );
   });
   tearDown(() {
-    OfflineBasemap.debugInstance = null;
-    OfflineBasemapLayer.debugBuilder = null;
     DeviceFeedbackScope.fallback = const NoDeviceFeedback();
     regionStatsApiFactory = (b) => RegionStatsApi(b);
     tmp.deleteSync(recursive: true);
@@ -148,60 +142,22 @@ void main() {
       }
     });
 
-    testWidgets('an installed offline pack is drawn for Chart, Street and Dark (light/dark look) but not for Topo', (tester) async {
-      late OfflineBasemap b;
-      await tester.runAsync(() async => b = await basemapWith(Directory('${tmp.path}/p'), {'CMH': cmhBox}));
-      OfflineBasemap.debugInstance = b;
-      final looks = <bool?>[];
-      OfflineBasemapLayer.debugBuilder = (_) => const SizedBox.shrink();
-      for (final s in [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark]) {
-        await mapWith(tester, s);
-        await tester.pump();
-        final layer = tester.widget<OfflineBasemapLayer>(find.byType(OfflineBasemapLayer));
-        looks.add(layer.dark);
-        expect(find.byType(BasemapLayer), findsOneWidget, reason: '${s.id}: the online basemap stays under the pack, skipping what it draws');
-      }
-      expect(looks, [null, false, true], reason: 'chart follows the theme, street is the light look, dark is forced dark');
-      for (final s in [BaseMapStyle.topo, BaseMapStyle.satellite]) {
-        await mapWith(tester, s);
-        await tester.pump();
-        expect(find.byType(OfflineBasemapLayer), findsNothing, reason: 'there is no offline ${s.id}');
-      }
-      await tester.pumpWidget(const SizedBox());
-      await tester.runAsync(() => b.debugClose());
-    });
-
-    testWidgets('Topo and Satellite with no connection say so (an honest message, never a blank map); Chart does not; back online it clears', (tester) async {
+    testWidgets('no connection: every base map says so (an honest message, never a silent blank map); back online it clears', (tester) async {
       final net = FakeNetworkMonitor(NetworkKind.offline);
-      late OfflineBasemap b;
-      await tester.runAsync(() async {
-        final root = Directory('${tmp.path}/np')..createSync(recursive: true);
-        File('${root.path}/packs.json').writeAsStringSync('{}');
-        b = OfflineBasemap.forTest();
-        await b.manager(root: root, client: MockClient((_) async => http.Response('', 404)), network: net);
-      });
-      OfflineBasemap.debugInstance = b;
-      for (final s in [BaseMapStyle.satellite, BaseMapStyle.topo]) {
+      CoverageMap.debugNetwork = net;
+      addTearDown(() => CoverageMap.debugNetwork = null);
+      for (final s in BaseMapStyle.values) {
         await mapWith(tester, s);
         await tester.pump();
         await tester.pump();
         expect(find.byKey(const Key('map-needs-network')), findsOneWidget, reason: s.id);
-        expect(find.textContaining('${s.label} needs a connection'), findsOneWidget);
-        expect(find.textContaining('Chart works offline'), findsOneWidget);
+        expect(find.textContaining('No connection.'), findsOneWidget, reason: s.id);
+        expect(find.textContaining('ffline'), findsNothing, reason: '${s.id}: nothing on the map mentions offline maps');
       }
-      await mapWith(tester, BaseMapStyle.chart);
-      await tester.pump();
-      await tester.pump();
-      expect(find.byKey(const Key('map-needs-network')), findsNothing, reason: 'Chart has the offline pack');
-      await mapWith(tester, BaseMapStyle.satellite);
-      await tester.pump();
-      await tester.pump();
-      expect(find.byKey(const Key('map-needs-network')), findsOneWidget);
       net.emit(NetworkKind.wifi);
       await tester.pump();
       expect(find.byKey(const Key('map-needs-network')), findsNothing, reason: 'online again');
       await tester.pumpWidget(const SizedBox());
-      await tester.runAsync(() => b.debugClose());
     });
   });
 
@@ -257,7 +213,7 @@ void main() {
       await tester.tap(find.byWidgetPredicate((w) => w is DropdownMenuItem<String?> && w.value == 'a1').last);
       await settleLive(tester);
       expect(find.text('Showing 1 of 2 of your pings, 0 of 0 network cells.'), findsOneWidget);
-      expect(find.textContaining('Network cells list no repeaters'), findsOneWidget);
+      expect(find.textContaining('Network cells are hidden while one is picked'), findsOneWidget);
       await stop(tester, h);
     });
   });

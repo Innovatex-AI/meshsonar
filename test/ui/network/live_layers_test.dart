@@ -107,20 +107,28 @@ void main() {
     testWidgets('the Live panel and the Layers panel never stack, and a drawn packet and Layers take turns', (tester) async {
       final fake = FakeSse();
       final c = await _pump(tester, fake);
-      // Layers open (the Live panel is at its header): the Live body is not there.
+      // Build 76: one sheet at a time. Layers open = the Live panel steps aside (no header under the Layers panel).
+      expect(find.byKey(const Key('live-panel-header')), findsOneWidget);
       await tester.tap(find.byKey(const Key('drive-map-layers')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
       expect(find.byKey(const Key('live-panel-body')), findsNothing);
-      // Opening the Live panel sends Layers back to its header: the two bodies are never open together.
+      expect(find.byKey(const Key('live-panel-header')), findsNothing, reason: 'two sheets never sit on top of each other');
+      // The Layers panel sits at the bottom of the map, in the Live panel's place.
+      expect(tester.getRect(find.byKey(const Key('map-panel-drive.layers'))).bottom, tester.getRect(find.byKey(const Key('live-map'))).bottom);
+      // Closing Layers brings the Live header back, collapsed and working.
+      await tester.tap(find.byKey(const Key('layers-done')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('layers-sheet')), findsNothing);
+      expect(find.byKey(const Key('live-panel-header')), findsOneWidget);
+      expect(find.byKey(const Key('live-map-pause')), findsOneWidget, reason: 'the Live header keeps working');
+      // The Live panel opens and closes as before.
       await tester.tap(find.byKey(const Key('live-panel-header')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('live-panel-body')), findsOneWidget);
-      expect(find.byKey(const Key('layers-sheet')), findsNothing, reason: 'one open panel per map');
-      expect(find.byKey(const Key('live-map-pause')), findsOneWidget, reason: 'the Live header keeps working');
-      // Back to Live collapsed, Layers open again, then a drawn packet takes the spot of the Layers panel.
       await tester.tap(find.byKey(const Key('live-panel-header')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -129,12 +137,9 @@ void main() {
         await settle();
       });
       await tester.pump(const Duration(milliseconds: 50));
-      // The Layers panel is still the map's panel (at its header): the button closes it, a second tap opens it again.
-      for (var i = 0; i < 2; i++) {
-        await tester.tap(find.byKey(const Key('drive-map-layers')));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
-      }
+      await tester.tap(find.byKey(const Key('drive-map-layers')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
       c.showPacket(c.feed.single);
       await tester.pump(const Duration(milliseconds: 400));

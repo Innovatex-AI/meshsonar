@@ -122,7 +122,7 @@ class NodeList extends StatelessWidget {
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, children: [
         Semantics(
           header: true,
-          child: Text('Nodes (${nodes.length} of ${Plan.maxNodes})', style: t.textTheme.titleSmall),
+          child: Text('In this plan (${nodes.length} of ${Plan.maxNodes})', style: t.textTheme.titleSmall),
         ),
         TextButton.icon(
           key: const Key('plan-node-add'),
@@ -135,7 +135,7 @@ class NodeList extends StatelessWidget {
       if (nodes.isEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-          child: PlanLine(AppSymbols.pin, 'No nodes yet. Long-press the map to drop a planned node.',
+          child: PlanLine(AppSymbols.pin, 'Nothing yet. Press and hold the map to add a spot.',
               key: const Key('plan-node-list-empty'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       for (final n in nodes)
@@ -235,20 +235,6 @@ class _NodeEditorState extends State<_NodeEditor> {
             icon: const AppSymbolIcon(AppSymbols.location, size: 18),
             label: const Text('Move on the map'),
           ),
-          secondaryAction: TextButton.icon(
-            key: const Key('node-delete'),
-            style: TextButton.styleFrom(foregroundColor: t.colorScheme.error, minimumSize: const Size.fromHeight(Hit.min)),
-            onPressed: () {
-              final name = n.name;
-              final nav = Navigator.of(context);
-              showAppToast(context, 'Deleted $name.', actionLabel: 'Undo', onAction: widget.controller.undo);
-              widget.controller.deleteNode(n.id);
-              unawaited(AppHaptics.light());
-              nav.pop(false);
-            },
-            icon: const AppSymbolIcon(AppSymbols.trash, size: 18),
-            label: const Text('Delete from the plan'),
-          ),
           children: [
             TextField(
               key: const Key('node-name'),
@@ -283,7 +269,7 @@ class _NodeEditorState extends State<_NodeEditor> {
               onChanged: n.existingKey != null ? null : (v) => _edit((x) => x.copyWith(mine: v)),
             ),
             if (n.existingKey != null)
-              Text('A network node is yours when you have claimed it (Settings > Claimed radios).', style: t.textTheme.bodySmall),
+              Text('A network node is yours when you have claimed it (Settings > Account > Claimed radios).', style: t.textTheme.bodySmall),
             const SizedBox(height: Gap.s),
             Semantics(header: true, child: Text('Mount', style: t.textTheme.titleSmall)),
             const SizedBox(height: Gap.xs),
@@ -345,6 +331,23 @@ class _NodeEditorState extends State<_NodeEditor> {
               subtitle: n.approximate ? 'Shared to about 1 km. Move it to set the exact spot.' : 'Position',
             ),
             if (nodeCanBeDrivenTo(n)) ...[const SizedBox(height: Gap.s), PlanNodeDriveActions(node: n)],
+            // Build 76: Delete sits alone at the very bottom, under a divider (it was the button right under "Move on the
+            // map"). It still deletes at once with Undo in the toast.
+            const Divider(height: Gap.xl),
+            OutlinedButton.icon(
+              key: const Key('node-delete'),
+              style: OutlinedButton.styleFrom(foregroundColor: t.colorScheme.error, side: BorderSide(color: t.colorScheme.error.withValues(alpha: 0.5)), minimumSize: const Size.fromHeight(Hit.min + 4)),
+              onPressed: () {
+                final name = n.name;
+                final nav = Navigator.of(context);
+                showAppToast(context, 'Deleted $name.', actionLabel: 'Undo', onAction: widget.controller.undo);
+                widget.controller.deleteNode(n.id);
+                unawaited(AppHaptics.light());
+                nav.pop(false);
+              },
+              icon: const AppSymbolIcon(AppSymbols.trash, size: 18),
+              label: const Text('Delete from the plan'),
+            ),
             const SizedBox(height: Gap.m),
           ],
         );
@@ -412,6 +415,14 @@ class _NodePicker extends StatefulWidget {
 
 class _NodePickerState extends State<_NodePicker> {
   String _q = '';
+  final TextEditingController _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
 
   void _add(PickableNode p) {
     try {
@@ -451,16 +462,32 @@ class _NodePickerState extends State<_NodePicker> {
       children: [
         TextField(
           key: const Key('node-picker-search'),
+          controller: _search,
+          textInputAction: TextInputAction.search,
+          autocorrect: false,
           decoration: InputDecoration(
             prefixIcon: const AppSymbolIcon(AppSymbols.magnifyingglass, size: 18),
-            hintText: 'Search by name or key',
+            hintText: 'Search repeaters by name',
             border: const OutlineInputBorder(),
-            suffixText: '${rows.length}',
+            // Build 76: a clear button while there is text (the count shows while the box is empty).
+            suffixText: _q.isEmpty ? '${rows.length}' : null,
+            suffixIcon: _q.isEmpty
+                ? null
+                : IconButton(
+                    key: const Key('node-picker-clear'),
+                    tooltip: 'Clear the search',
+                    constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+                    onPressed: () => setState(() {
+                      _search.clear();
+                      _q = '';
+                    }),
+                    icon: const AppSymbolIcon(AppSymbols.xmarkCircleFill, size: 18),
+                  ),
           ),
           onChanged: (v) => setState(() => _q = v),
         ),
         const SizedBox(height: Gap.s),
-        Text('Your radios first, then repeaters and rooms with a public position, nearest to the map first.', style: t.textTheme.bodySmall),
+        Text('Your radios first, then the nearest repeaters.', style: t.textTheme.bodySmall),
         if (loading) ConstrainedBox(constraints: const BoxConstraints(minHeight: 160), child: AppLoadingView(label: 'Loading the network\'s repeaters…')),
         if (failed)
           ConstrainedBox(
@@ -474,13 +501,22 @@ class _NodePickerState extends State<_NodePicker> {
               key: const Key('node-picker-empty'),
               symbol: AppSymbols.antenna,
               title: q.isEmpty ? 'No repeaters near here' : 'Nothing matches "$_q"',
-              message: q.isEmpty ? 'Move the map closer to a mesh, or long-press the map to drop a planned node.' : 'Try part of the name or the first characters of the key.',
+              message: q.isEmpty ? 'Move the map closer to a mesh, or press and hold the map to add a spot.' : 'Try part of the name or the start of the key.',
+              // The one button that fixes an empty search.
+              actionLabel: q.isEmpty ? null : 'Show all repeaters',
+              onAction: q.isEmpty
+                  ? null
+                  : () => setState(() {
+                        _search.clear();
+                        _q = '';
+                      }),
             ),
           ),
         for (final p in rows.take(200))
           ListTile(
             key: Key('node-pick-${p.key}'),
             contentPadding: EdgeInsets.zero,
+            minTileHeight: Hit.min + 8,
             leading: AppSymbolIcon(p.mine ? AppSymbols.personFill : AppSymbols.antenna),
             title: Text(p.name),
             subtitle: Text([

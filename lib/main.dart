@@ -8,10 +8,10 @@ import 'app/benign_errors.dart' show installBenignErrorFilter;
 import 'alerts/alerts_runtime.dart';
 import 'app/chat_wiring.dart';
 import 'app/map_definition_wiring.dart';
+import 'app/removed_map_packs.dart';
 import 'app/wiring.dart';
 import 'platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'ui/app.dart';
-import 'ui/map/offline_basemap.dart' show OfflineBasemap;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,8 +21,6 @@ Future<void> main() async {
     final services = await buildRealServices();
     // The map's remembered choices (layers, follow options) are read before the first frame so the Drive map never flashes defaults.
     await openSharedMapPrefs();
-    // Offline packs' coverage snapshots stand in for the coverage layers when the network fails (M2).
-    AppState.coverageOfflineTiles = OfflineBasemap.instance.coverageTile;
     final state = AppState(services);
     AlertsRuntime? alerts;
     try {
@@ -45,7 +43,8 @@ Future<void> main() async {
       return null;
     }));
     alerts?.startLaunchReconnect();
-    unawaited(OfflineBasemap.instance.refreshCoverageWhenStale());
+    // Build 76: downloadable map packs are gone; what an older build left on the phone is deleted (removed_map_packs.dart).
+    unawaited(removeOldMapPackFilesAtLaunch());
     unawaited(startMapDefinition(state.client.baseUrl));
   } catch (e) {
     runApp(StartupErrorApp(message: e.toString()));

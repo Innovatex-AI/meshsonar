@@ -36,7 +36,7 @@ String _date(DateTime t) {
 }
 
 const serverWeeksCaption =
-    'Weeks start on Monday, UTC. A drive counts in the week it started. Weeks the server lists no drive for are drawn as empty weeks.';
+    'Weeks start on Monday (UTC).';
 
 /// Plain words for a failed ask: (key suffix, text, offer retry).
 ({String id, String text, bool retry}) serverSummaryError(Object e) {
@@ -123,8 +123,7 @@ class _ServerBody extends StatelessWidget {
 
     final first = st.firstDriveAt;
     children.add(Text(
-      'Across all your drives on the server, from every phone and install on this account'
-      '${first == null ? '' : ', since ${_date(first)}'}. Drives only on this phone and not uploaded are not included.',
+      'Every drive you have uploaded, from any phone${first == null ? '' : ', since ${_date(first)}'}.',
       key: const Key('progress-server-scope'),
       style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
     ));
@@ -160,7 +159,7 @@ class _ServerBody extends StatelessWidget {
       ('distance', 'Distance', st.km == null ? '—' : u.distance(st.km! * 1000)),
       ('pings', 'Pings', n(st.pings)),
       ('heard', 'Heard', st.heardPercent == null ? '—' : '${st.heardPercent}%'),
-      ('cells', 'Grid cells', n(st.cells)),
+      ('cells', 'Cells mapped', n(st.cells)),
       ('repeaters', 'Repeaters heard', n(st.repeatersHeard)),
       ('first', 'First drive', first == null ? '—' : _date(first)),
       ('last', 'Latest drive', st.lastDriveAt == null ? '—' : _date(st.lastDriveAt!)),
@@ -258,8 +257,8 @@ class _ServerBody extends StatelessWidget {
         const SizedBox(height: Gap.l),
         ChartFrame(
           id: 'server-cells',
-          title: 'New grid cells per week',
-          summary: '${st.cells == null ? 'Grid cells not reported.' : '${groupInt(st.cells!)} grid cells in all.'} '
+          title: 'New cells per week',
+          summary: '${st.cells == null ? 'Cells not reported.' : '${groupInt(st.cells!)} cells in all.'} '
               '${last.newCells == null ? '' : 'This week ${last.newCells} new cell${last.newCells == 1 ? '' : 's'}.'} '
               '${peakCells == null ? '' : 'Most in ${weekName(peakCells)}, ${peakCells.newCells}.'}',
           caption: 'A cell is new the first time any of your drives pings in it (the website\'s coverage grid, about ${u.shortLength(220)} by ${u.shortLength(210)}). $serverWeeksCaption',
@@ -372,10 +371,10 @@ void _sheet(BuildContext context, ServerDrive x, Units u) {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(x.label ?? formatDateTime(x.startedAt), style: t.textTheme.titleMedium),
             const SizedBox(height: Gap.xs),
-            Text('This drive is on the server but not on this phone.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            Text('Uploaded, but not stored on this phone, so there is no map or report for it here.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             const SizedBox(height: Gap.s),
             row('Started', formatDateTime(x.startedAt)),
-            row('Ended', x.endedAt == null ? 'not recorded' : formatDateTime(x.endedAt!)),
+            if (x.endedAt != null) row('Ended', formatDateTime(x.endedAt!)),
             if (x.callsign != null) row('Driver', x.callsign!),
             row('Distance', x.km == null ? '—' : u.distance(x.km! * 1000)),
             row('Pings', x.pings == null ? '—' : groupInt(x.pings!)),
@@ -385,9 +384,15 @@ void _sheet(BuildContext context, ServerDrive x, Units u) {
             if (x.settledPings != null && x.confirmedPings != null && x.settledPings! > 0)
               row('Confirmed by the mesh', '${x.confirmedPings} of ${x.settledPings} settled pings'),
             if (review != null) row('Status', review),
-            if (x.flags.isNotEmpty) row('Flags', x.flags.join(', ')),
+            if (x.flags.isNotEmpty) row('Server notes', x.flags.join(', ')),
             const SizedBox(height: Gap.s),
-            Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close'))),
+            // A full-width 48 pt Done (build 76; it was a small text button in the bottom corner).
+            FilledButton.tonal(
+              key: const Key('progress-server-drive-done'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
           ]),
         ),
       );

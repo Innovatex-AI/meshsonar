@@ -36,7 +36,7 @@ const int chartWeeks = 26;
 
 /// "ISO weeks start on Monday, your phone's local time (EDT)."
 String weeksCaption(DateTime now) =>
-    'ISO weeks starting Monday, your phone\'s local time (${now.toLocal().timeZoneName}). A drive counts in the week it started.';
+    'Weeks start on Monday (${now.toLocal().timeZoneName}).';
 
 /// Distance as a plain number in the person's long-distance unit (km or mi), for bar heights.
 double _longUnits(double metres, Units u) => metres / u.metresPerLongUnit;
@@ -110,11 +110,23 @@ class _ProgressScreenState extends State<ProgressScreen> {
           if (d == null) return const Center(child: CircularProgressIndicator(key: Key('progress-loading')));
           final (p, local) = d;
           if (p.isEmpty) {
-            return const EmptyState(
-              key: Key('progress-empty'),
+            return EmptyState(
+              key: const Key('progress-empty'),
               icon: Icons.insights,
               title: 'No drives yet',
-              body: 'From drives stored on this phone. Start a drive on the Drive tab and your progress shows here.',
+              body: 'Your progress shows here after your first drive.',
+              // The next step is a button (build 76).
+              action: FilledButton.icon(
+                key: const Key('progress-empty-start'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                onPressed: () {
+                  final shell = ShellScope.maybeRead(context);
+                  Navigator.of(context).popUntil((r) => r.isFirst);
+                  shell?.select(AppTab.drive);
+                },
+                icon: const Icon(Icons.directions_car_rounded),
+                label: const Text('Go to Drive'),
+              ),
             );
           }
           return _ProgressBody(progress: p, unreadable: local.unreadable);
@@ -200,7 +212,7 @@ class _ProgressBody extends StatelessWidget {
       ('time', 'Time driving', formatDuration(p.driveTime)),
       ('pings', 'Pings', groupInt(p.pings)),
       ('heard', 'Heard', p.heardPercent == null ? '—' : '${p.heardPercent}%'),
-      ('cells', 'Grid cells', groupInt(p.totalCells)),
+      ('cells', 'Cells mapped', groupInt(p.totalCells)),
       ('repeaters', 'Repeaters heard', groupInt(p.totalRepeaters)),
       if (p.bestSnr != null) ('snr', 'Best SNR', '${_db(p.bestSnr!)} dB'),
     ];
@@ -209,8 +221,7 @@ class _ProgressBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
       children: [
         Text(
-          'From drives stored on this phone: ${p.drives.length} drive${p.drives.length == 1 ? '' : 's'} since ${formatDateTime(first)}. '
-          'Drives deleted from this phone or recorded on another phone are not included.',
+          '${p.drives.length} drive${p.drives.length == 1 ? '' : 's'} on this phone since ${formatDateTime(first)}.',
           key: const Key('progress-scope'),
           style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
         ),
@@ -317,11 +328,10 @@ class _WeekCharts extends StatelessWidget {
       const SizedBox(height: Gap.l),
       ChartFrame(
         id: 'progress-cells',
-        title: 'New grid cells per week',
-        summary: '${progress.totalCells} grid cells in all. This week ${plural(thisWeek.newCells, 'new cell')}. '
+        title: 'New cells per week',
+        summary: '${progress.totalCells} cells in all. This week ${plural(thisWeek.newCells, 'new cell')}. '
             'Most in ${weekName(all.reduce((a, b) => b.newCells > a.newCells ? b : a))}.',
-        caption: 'A cell is new the first time any drive on this phone pings in it (the website\'s coverage grid, '
-            'about ${u.shortLength(220)} by ${u.shortLength(210)}). ${weeksCaption(now)}',
+        caption: 'A cell (about ${u.shortLength(220)} across) is new the first time you ping in it. ${weeksCaption(now)}',
         table: ChartTable(head: const ['Week', 'New cells', 'Cells so far'], rows: [
           for (final w in all) [weekName(w), '${w.newCells}', '${w.totalCells}'],
         ]),
@@ -378,7 +388,7 @@ class _Records extends StatelessWidget {
       'longest-distance': 'Longest drive',
       'longest-time': 'Longest time out',
       'best-heard': 'Best heard %',
-      'most-new-cells': 'Most new grid cells',
+      'most-new-cells': 'Most new cells',
       'most-repeaters': 'Most repeaters on one drive',
       'best-snr': 'Best SNR',
     };

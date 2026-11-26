@@ -5,7 +5,6 @@
 //   * opens the chat store and builds ChatService + ChatController (retention applied at startup);
 //   * follows the radio session: on connect it binds the adapter, syncs channel slots, drains the radio's queue; on a drop
 //     it unbinds and the outbox keeps waiting; a reconnect (a new session object) binds again and resumes;
-//   * feeds the drive facts (driving, speed) to the passenger lock;
 //   * counts the pings this phone sent on the System (wardrive) channel row;
 //   * publishes the controller in [ChatWiring.controller] and, through lib/ui/chat/chat_tab_provider.dart, the Chat tab
 //     in [ChatTabHost.provider].
@@ -44,7 +43,6 @@ class ChatWiring {
   static StreamSubscription<dynamic>? _sessions;
   static StreamSubscription<ChatEvent>? _channelEvents;
   static PrivateChannelKeys? _privateKeys;
-  static VoidCallback? _appListener;
   static AppState? _app;
   static ChatTabProviderImpl? _provider;
 
@@ -105,13 +103,6 @@ class ChatWiring {
       if (e.kind == ChatEventKind.channelsChanged) unawaited(privateKeys.refresh());
     });
     unawaited(privateKeys.refresh());
-
-    ctl.updateDrive(driving: app.driving);
-    _appListener = () {
-      final fix = app.status.lastFix;
-      ctl.updateDrive(driving: app.driving, sessionId: app.currentSession?.id, speedMps: fix?.speedMps, fixAt: fix?.at);
-    };
-    app.addListener(_appListener!);
 
     app.onTxPing = (ping) {
       if (ping.kind != PingKind.tx) return;
@@ -187,9 +178,6 @@ class ChatWiring {
     _privateKeys?.clear();
     _privateKeys = null;
     _app?.privateChannelKeys = null;
-    final l = _appListener;
-    if (l != null) _app?.removeListener(l);
-    _appListener = null;
     _app?.onTxPing = null;
     _app = null;
     ChatTabHost.provider.value = null;

@@ -257,7 +257,7 @@ void main() {
       await tester.tap(find.text('Start fresh'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('mt-invite-qr')), findsOneWidget);
-      expect(find.textContaining('This is a new group link'), findsOneWidget);
+      expect(find.textContaining('New link.'), findsOneWidget);
       await tester.tap(find.text('Undo'));
       await tester.pump();
       expect(rig.ops.calls, contains('undoFresh:10'));

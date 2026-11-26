@@ -145,18 +145,15 @@ void main() {
     });
   });
 
-  test('passenger lock follows the drive: locked above walking pace, lifted per drive', () async {
+  test('build 76: no lock of any kind. The wiring feeds the controller no drive facts and a send is accepted', () async {
     final ctl = (await ChatWiring.attach(h.state))!;
-    final fast = DateTime.now();
-    ctl.updateDrive(driving: true, sessionId: 's1', speedMps: 15, fixAt: fast);
-    expect(ctl.composerLocked, isTrue);
-    expect(ctl.send('c:1', 'x').error, contains('moving'));
-    ctl.setPassenger(true);
-    expect(ctl.composerLocked, isFalse);
-    expect(ctl.isPassenger, isTrue);
-    ctl.updateDrive(driving: true, sessionId: 's2', speedMps: 15, fixAt: fast);
-    expect(ctl.composerLocked, isTrue, reason: 'new drive asks again');
-    ctl.updateDrive(driving: false);
-    expect(ctl.composerLocked, isFalse);
+    expect(await h.state.connectSimulator(), isTrue);
+    await until(() => ctl.radioId != null && ctl.store.channels.list(ctl.radioId!).isNotEmpty, what: 'Public channel row');
+    final pub = ctl.store.channels.list(ctl.radioId!).single;
+    // AppState changes (a drive starting, every GPS fix) used to reach the composer lock through a listener; nothing does now.
+    h.state.notifyListeners();
+    final sent = ctl.send(pub.convKey, 'typed on the road');
+    expect(sent.error, isNull);
+    expect(sent.ok, isTrue);
   });
 }

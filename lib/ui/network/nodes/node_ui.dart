@@ -1,6 +1,7 @@
 // Shared bits of the Nodes screens (AZ-3.4): the favourite star, the Watch button and its sheet, the status dot, a
 // section card, key-value rows, and plain value formatting (distance through Units, volts, clock offsets).
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../../../core/v1/nodes_api.dart';
 import '../../app.dart';
@@ -96,25 +97,138 @@ String radioText(String raw) {
 }
 
 /// One titled block of a page. Pages build a section only when it has data (a missing section is hidden).
+/// A [collapsible] section is one row (title, a one-line [summary], a chevron) that opens with a tap: the long and the
+/// rarely read parts of a page start closed, so the page is a few screens and not twenty.
 class NodeSection extends StatelessWidget {
   final String title;
   final String? id;
   final List<Widget> children;
-  const NodeSection({super.key, required this.title, required this.children, this.id});
+  final bool collapsible, initiallyOpen;
+
+  /// What the closed row says under its title (the headline figure, or what the section is in plain words).
+  final String? summary;
+  final Key? summaryKey;
+  const NodeSection(
+      {super.key, required this.title, required this.children, this.id, this.collapsible = false, this.initiallyOpen = false, this.summary, this.summaryKey});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final head = Semantics(header: true, child: Text(title, style: t.textTheme.titleMedium));
+    if (collapsible) {
+      return Padding(
+        key: id == null ? null : Key('node-section-$id'),
+        padding: const EdgeInsets.only(top: Gap.xs),
+        child: Theme(
+          data: t.copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            key: PageStorageKey('node-${id ?? title}-tile'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: Gap.s),
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+            initiallyExpanded: initiallyOpen,
+            title: head,
+            subtitle: summary == null
+                ? null
+                : Text(summary!, key: summaryKey, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            children: children,
+          ),
+        ),
+      );
+    }
     return Padding(
       key: id == null ? null : Key('node-section-$id'),
       padding: const EdgeInsets.only(top: Gap.l),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Semantics(header: true, child: Text(title, style: t.textTheme.titleMedium)),
+        head,
         const SizedBox(height: Gap.xs),
         ...children,
       ]),
     );
   }
+}
+
+/// A long list inside a section: the first [first] rows, then one "Show all N" button (44 pt) for the rest.
+class NodeMoreList extends StatefulWidget {
+  final String id;
+  final List<Widget> children;
+  final int first;
+  const NodeMoreList({super.key, required this.id, required this.children, this.first = 5});
+  @override
+  State<NodeMoreList> createState() => _NodeMoreListState();
+}
+
+class _NodeMoreListState extends State<NodeMoreList> {
+  bool _all = false;
+  @override
+  Widget build(BuildContext context) {
+    final rows = widget.children;
+    final cut = !_all && rows.length > widget.first + 1;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ...(cut ? rows.take(widget.first) : rows),
+      if (cut)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: Key('node-more-${widget.id}'),
+            style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+            onPressed: () => setState(() => _all = true),
+            child: Text('Show all ${rows.length}'),
+          ),
+        ),
+    ]);
+  }
+}
+
+final RegExp _hexName = RegExp(r'^[0-9a-fA-F]{24,}$');
+
+/// A name people can read: an observer or node that has no name arrives as its 64-character key, which wraps over two
+/// lines and says nothing. That becomes "Unnamed 212de2ca…"; a real name is returned as it came.
+String readableName(String name) => _hexName.hasMatch(name) ? 'Unnamed ${name.substring(0, 8).toLowerCase()}…' : name;
+
+/// "d03dac1d…46d3e1": a 64-character key on one line.
+String shortKey(String key) => key.length <= 20 ? key : '${key.substring(0, 8)}…${key.substring(key.length - 6)}';
+
+/// The public key on one line with a Copy button (the whole key goes to the clipboard).
+class NodeKeyRow extends StatelessWidget {
+  final String nodeKey;
+  final String label;
+  const NodeKeyRow(this.nodeKey, {super.key, this.label = 'Key'});
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    void copy() {
+      Clipboard.setData(ClipboardData(text: nodeKey));
+      showAppToast(context, 'Key copied');
+    }
+
+    return InkWell(
+      key: const Key('node-key-copy'),
+      onTap: copy,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(children: [
+          Text('$label  ', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          Expanded(
+            child: Text(shortKey(nodeKey),
+                key: const Key('node-key'), maxLines: 1, overflow: TextOverflow.ellipsis, semanticsLabel: 'Key $nodeKey', style: t.textTheme.bodyMedium),
+          ),
+          Icon(Icons.copy, size: 18, color: t.colorScheme.primary, semanticLabel: 'Copy the key'),
+          const SizedBox(width: Gap.xs),
+          Text('Copy', style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Clock drift people can read: a small drift in seconds per day; a huge figure (a clock that jumps, or two radios on
+/// one key) is said in words, not as "-67263900.0 s per day".
+String driftText(double sPerDay) {
+  final a = sPerDay.abs();
+  if (a >= 3600) return 'Jumps around (not a steady drift)';
+  final side = sPerDay >= 0 ? 'fast' : 'slow';
+  return a < 0.05 ? 'None measured' : '${a.toStringAsFixed(1)} s per day $side';
 }
 
 /// A label and its value; wraps instead of clipping at large text sizes.

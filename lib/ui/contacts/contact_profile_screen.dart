@@ -234,7 +234,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
                     value: c.onRadio ? 'On your radio' : 'Saved on your phone only',
                   ),
                   if (loose && (c.favourite || _c.conversationOf(c) != null))
-                    ProfileRow(key: const Key('contact-put-on-radio'), label: 'Put on radio now', onTap: () => _putOnRadio(c)),
+                    ProfileRow(key: const Key('contact-put-on-radio'), label: 'Put on my radio', onTap: () => _putOnRadio(c)),
                 ]),
                 if (planRows.isNotEmpty) ProfileGroup(rows: planRows),
                 ProfileGroup(rows: [
@@ -242,8 +242,15 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
                     key: const Key('contact-key-row'),
                     label: 'Public key',
                     semanticsLabel: 'Public key, ${middleEllipsis(c.publicKey)}. Tap to copy',
-                    valueWidget: Text(middleEllipsis(c.publicKey),
-                        key: const Key('contact-key'), maxLines: 1, overflow: TextOverflow.fade, softWrap: false, style: monoStyle.copyWith(color: col.textMuted)),
+                    // The copy glyph says the row does something: before, nothing showed that a tap copies the key.
+                    valueWidget: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Flexible(
+                        child: Text(middleEllipsis(c.publicKey),
+                            key: const Key('contact-key'), maxLines: 1, overflow: TextOverflow.fade, softWrap: false, style: monoStyle.copyWith(color: col.textMuted)),
+                      ),
+                      const SizedBox(width: Gap.s),
+                      AppSymbolIcon(AppSymbols.docOnDoc, size: 18, color: col.accent),
+                    ]),
                     onTap: () => _copyKey(c),
                   ),
                   _location(context, c, adv, now),
@@ -316,8 +323,18 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
               const SizedBox(height: Gap.s),
               IgnorePointer(child: widget.mapBuilder(context, c.lat!, c.lon!)),
               const SizedBox(height: Gap.s),
-              Text(coords, key: const Key('contact-coords'), style: monoStyle.copyWith(color: col.textMuted)),
-              Text('From $when. Hold to copy.', style: AppType.footnote.copyWith(color: col.textMuted)),
+              // Copy is a button now (it was a hidden long-press; the long-press still works).
+              Row(children: [
+                Expanded(child: Text(coords, key: const Key('contact-coords'), style: monoStyle.copyWith(color: col.textMuted))),
+                CupertinoButton(
+                  key: const Key('contact-coords-copy'),
+                  padding: const EdgeInsets.only(left: Gap.m),
+                  minimumSize: const Size(Hit.min, Hit.min),
+                  onPressed: () => _copyCoords(coords),
+                  child: Text('Copy', style: AppType.subhead.copyWith(color: col.accent, fontWeight: FontWeight.w600)),
+                ),
+              ]),
+              Text('From $when.', style: AppType.footnote.copyWith(color: col.textMuted)),
             ]),
           ),
         ),
@@ -330,8 +347,11 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     return ProfileRow(
       key: const Key('contact-notes'),
       label: 'Notes',
-      semanticsLabel: c.notes.isEmpty ? 'Notes, none. Add them in Edit' : 'Notes, ${c.notes}',
-      valueWidget: Text(c.notes.isEmpty ? 'None' : c.notes,
+      semanticsLabel: c.notes.isEmpty ? 'Notes, none. Tap to add' : 'Notes, ${c.notes}. Tap to edit',
+      // Tapping the row opens Edit (where notes are typed): "None" used to be a dead end.
+      chevron: true,
+      onTap: () => _edit(c),
+      valueWidget: Text(c.notes.isEmpty ? 'Add' : c.notes,
           textAlign: TextAlign.end, maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.body.copyWith(color: col.textMuted)),
     );
   }
@@ -445,8 +465,8 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     try {
       final ok = await _m.shareToNearbyRadios(c.publicKey);
       _say(ok
-          ? 'Sent. Only radios within direct range can hear it.'
-          : 'Your radio has no stored announcement from this contact, so it cannot send it. Share the link or QR code instead.');
+          ? 'Sent to radios in direct range.'
+          : 'Your radio cannot send this contact. Share the link or QR code instead.');
     } on RadioUnavailable {
       _say('The radio is not connected. Connect it and try again.');
     } catch (_) {
@@ -459,7 +479,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
       await _m.ensureOnRadio(c.publicKey);
       _say('${c.displayName} is on the radio now.');
     } on ContactTableFull {
-      _say('The radio\'s contact list is full and every contact on it is a favourite or in use. Free some room in Contacts first.');
+      _say('Your radio\'s contact list is full. Remove a contact you do not need, then try again.');
     } on RadioUnavailable {
       _say('The radio is not connected. Connect it and try again.');
     } catch (_) {

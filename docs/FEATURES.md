@@ -141,8 +141,8 @@ build 71 (`now`, `map`, `insights`) and build 71's `home` still resolve (`Networ
 
 One panel kind on every map (Live, Drive, Plan), twin of the site's float panel:
 
-1. Bottom-anchored, directly above the tab bar. Only the person moves it; a connection or data event never does (the two
-   driving-safety rules are the only exceptions: the Drive panel collapses at speed, the inspector clears itself while driving).
+1. Bottom-anchored, directly above the tab bar. Only the person moves it; a connection or data event never does, and neither does the
+   car moving (build 76: the speed-driven collapse of the Drive panel, the inspector's "Open when stopped" lock and its 12 s auto-clear were removed).
 2. The header is always visible and at least 44 pt: grabber, title, one status or count, chevron. Collapsed = header only.
 3. Tap the header or drag it to toggle. Same state names everywhere: Collapsed, Open (at most 60 % of the height), Full only
    for the work panels (Planner, Drive stats).
@@ -269,7 +269,6 @@ Files: profile `lib/core/power_profile.dart` (`PowerSettings`, `PowerProfile`, `
 | Observer uploads when locked | `battery-observer-uploads` | 60 s | 5 min | 15 min | 60 s / 5 / 15 min |
 | Drive data upload: Upload during a drive | `battery-drive-upload` | on | on | off | switch; works with Drives & uploads > Upload during the drive (both must be on) |
 | Radio and phone stats | `battery-stats` | 60 s | 60 s | 5 min | 60 s / 5 min |
-| Simple basemap while driving | `battery-simple-basemap` | off | off | on | switch |
 
 - **Rules.** The observer is never switched off by a mode, only how often it uploads; the radio's own message alert stays instant in every mode; a drive ended by "End a drive left open" is saved, never deleted.
 - **Diagnostics > Power counters** (`diagnostics-power-counters`, information row with Refresh): since the app started, GPS minutes by accuracy, screen-on, compass, map frames, radio commands, radio message checks, internet requests and timer wake-ups, each with a per-hour rate (no rate under one minute). Stays on the phone.
@@ -321,8 +320,8 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   **Long-press Send** on a direct message (person or room): **Send** (the saved route, searching on the last try) or **Send and search
   for a new route** (every try searches; like the official app's long-press Send). Channels have no such choice (they always reach
   everyone nearby).
-- **Safety while driving**: a drive is running and GPS speed above 8 km/h (unlocks below 6): the composer is replaced by "Typing is off while the
-  car is moving" with **I'm a passenger** (lasts for that drive). Reading and incoming banners work. A stale or missing speed never locks.
+- **Never locked (build 76, Andy Nov 25 2026).** The composer is always available: a running drive or the car's speed never disables typing or
+  sending, and there is no notice or switch about who is holding the phone.
 - **No chat in the Drive tab (build 62, Andy Nov 12 2026).** The Drive tab is for the coverage map and the drive. The old Messages
   row / button and the Chat-in-Drive sheet (`chat_drive_sheet.dart`) are gone; messaging lives only in the Chat tab (its own System /
   wardrive items are unchanged). Incoming-message banners and the Chat tab badge still work while driving.
@@ -474,8 +473,23 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
 - **The panel never moves because of the radio (build 62).** The Drive panel always opens at the Dock detent (the last detent is no longer
   restored: a panel left at Medium used to reopen mid-screen on launch and cover the map). A connect attempt, a reconnect or a failed
   connect shows in the Dock ("Connecting…" / "Reconnecting…" with Cancel) and never changes the detent; the map is usable with no radio.
-  Only the person's own drag or tap, or the driving auto-collapse (Medium to Dock), moves the panel. Test:
-  `test/ui/drive/panel_connect_dock_test.dart`.
+  Only the person's own drag or tap moves the panel (build 76: the driving auto-collapse is removed; an open panel stays open at any speed).
+  Test: `test/ui/drive/panel_connect_dock_test.dart`.
+- **One message, one action, on the tab bar (build 76, iPhone bug report "the floating panel").** In every link state the Dock is the one
+  place at the bottom of the Drive tab that says where the radio stands, with one action, and its bottom edge is the top of the tab bar:
+
+  | State | Dock title | Second line | Action |
+  |---|---|---|---|
+  | No radio | Not connected | none | Connect radio |
+  | Manual connect | Connecting… | the radio's name | Cancel |
+  | Automatic reconnect after launch (waiting or trying) | Reconnecting… | the radio's name | Cancel |
+  | Automatic reconnect gave up | Not connected | Could not reach (radio name) | Connect radio |
+  | Mid-drive reconnect | the driving Dock (Ping, Stop) | the 28 pt strip: "Radio lost - reconnecting" | Stop stays where it is |
+
+  The shell's alerts strip (`lib/ui/alerts/alerts_status_strip.dart`) does not show its radio row on the Drive tab (it does on every other
+  tab, with Reconnect). Its waiting-message warning still shows on the Drive tab; `AlertsStripSeat` then ends the Drive page at the top
+  of the strip so the panel rests on it. The panel has the same size in all of these states; the location strip no longer hides during a
+  connect try. Test: `test/ui/drive/panel_link_states_test.dart` (iPhone SE 375x667, 393x852, 430x932, bottom inset 0 and 34, text x1 to x3.1).
 - **One layout (build 70, item 70-2).** The map is full bleed and never resized: the panel slides over it between Dock, Medium
   (pulled further it rubber-bands, "Full", and rests on Medium) and the collapsed pill, by drag or fling. The old footer layout
   (map in a box, the full-screen button `map-fullscreen`, the heard box, the "No pings yet" map hint, the ping result flash, the
@@ -483,11 +497,12 @@ and ≥ 640 px) the map sits on the left and the controls on the right.
   the mini bar text stay. Test: `test/ui/drive/panel_detents_test.dart`, `test/ui/drive/drive_panel_test.dart`.
 - **Battery (build 70, battery plan A1/A3/A5/A11/A14).** The screen stays awake per the battery mode's Screen on knob (`PowerProfile.current.screenOn`): always while
   driving (Max data), only while the Drive tab is in front (Balanced), or never (Saver). The drive UI 1 s clocks (Dock hero,
-  Ping circle, mini bar, auto-collapse) run only while a drive runs, the widget is visible and the app is in front; hidden tabs
+  Ping circle, mini bar) run only while a drive runs, the widget is visible and the app is in front; hidden tabs
   get a disabled TickerMode. The puck/camera loop is capped to the profile's fps (30 fps while only the heading turns, and it
   sleeps when parked with under 2° of heading change). Map health is recorded only while Diagnostics > Map and GPS health
-  overlay is on. Zoom by speed aims at three zoom bands. Simple basemap (Saver) draws coverage on the plain chart grid while
-  driving. Test: `test/ui/drive/battery_ui_test.dart`.
+  overlay is on. Zoom by speed aims at three zoom bands. Starting a drive never changes or drops the basemap (the
+  "Simple basemap while driving" knob of builds 70 to 75 is gone). Tests: `test/ui/drive/battery_ui_test.dart`,
+  `test/ui/drive/drive_keeps_basemap_test.dart`.
 - **Live coverage map** (see [Map](#coverage-map)) with the region chip and up to two state chips top left, the status capsule
   top right and the Layers button (`drive-map-layers`).
 - **Unsaved banner** while pings are waiting to be written to the device.
@@ -608,8 +623,7 @@ meshsonar-infra `docs/planning/coverage-redesign-plan-2026-11-08.md`; colours: `
 - **Legend** from `/api/coverage/meta` (saved for offline use).
 - Without `coverageV2` (an older server) the map keeps the earlier behaviour below, minus the removed controls.
 
-Layers, bottom to top: a chart grid (visible with no tiles), a downloaded **offline region pack** where one covers the
-view (see [Offline maps](#offline-maps-region-packs)), otherwise **OpenStreetMap tiles** (colour-graded to the theme; after
+Layers, bottom to top: a chart grid (visible with no tiles), the **online basemap** (docs/MAP_TILES.md; tiles already seen are kept in the on-device tile cache) (colour-graded to the theme; after
 two tile errors a "Map offline. Pings still record." pill appears), **network coverage** (every driver's measured
 cells from `GET /api/cmh/public-coverage`, squares or H3 hexagons depending on the region's grid, coloured by best
 SNR on the website's own 4-step legend — a quiet "where hasn't this been driven" background layer; an area nobody
@@ -948,7 +962,7 @@ use it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Distance**, **Speed**, **Height and altitude**, **Temperature**, **Air pressure** (`unit-*`) | Each "Follows Units" by default; tap for a picker: Follow / Metric / Imperial (temperature °C / °F; pressure hPa / inHg / mmHg). Applies everywhere numbers are shown (all formatting goes through `core/units.dart`; reports say e.g. "Units: metric, with speed in mph"). Saved as `unit_overrides` in settings.json. |
 | | **Colour palette** | Standard or Colour-blind safe, each with a strip of its real colours; applies everywhere at once (see [Map legend and colour palettes](#map-legend-and-colour-palettes)). |
 | | **Heard list hold** | 1–10 pings (default 3). |
-| Map & offline maps (`maps`) | **Offline maps** | Opens the offline map packs screen (download, update, delete per region). |
+| Map (`maps`) | **Follow and direction** (`map-follow-options`) | Heading-up map, Zoom out at speed. (The Offline maps row was removed in 0.46.0.) |
 | Privacy & data sharing (`privacy`) | **One switch per data category** | From the registry in `ui/settings/data_sharing.dart`; first **Share with MeshSonar** (`telemetry-toggle`; was "Share packet headers" until 0.30.0, "Share what my radio hears (observer)" until 0.38). Since 0.30.0 it sends `meshsonar-telemetry/2` (phone observer, contract meshsonar-infra `docs/planning/phone-observer-contract-v2-2026-11-08.md`): raw bytes of public packets only (ADVERT, PATH, TRACE, and Public / # channel packets proven by MAC, with `channel`), the H3 res-7 cell, a random per-install observer id (Keychain; new after an erase) and the radio's model/firmware/preset/antenna mount; v1 headers only when the server refuses v2 (400 about the format). 5 s batches in front, 60 s or 50 packets in the background; the own-ping hold-back (90 s) applies only to packets heard while this phone's own ping is in flight (since P1, Nov 10 2026; otherwise no hold). The radio block sends the drive antenna profile's mount as `radio.antenna` (the Home observer antenna went with the Home observer in 0.38). The connected radio's own advert is never shared. **Heard adverts (APP-6):** every advert the radio hears is shared raw in drive mode too (signature included, so the server can name the repeater); a forged-short advert (payload under 101 bytes) never leaves the phone; the radio's contact list is not uploaded (no signature to verify). **Since 0.31.0 (contract §8, always-on observer):** own-ping echoes go as `own: true` (raw only for a publicly uploaded ping); during a drive `mode: drive` packets carry the exact `pos` (nearest drive fix ≤ 10 s, after privacy zones / start trim / end trim; Region only = none) instead of the cell; the observer reads a never-paused copy of the Rx stream (`MeshCoreCompanionLink.observerRxPackets`); a status heartbeat (`POST /observer/heartbeat {id, mode, radio}`) goes once at connect and every 5 min for every connected phone; the map's Observers layer draws online moving phones (`kind: mobile`, cell centre, 10-minute fade) and a Heard (no ping) coverage layer (`heardcells`, `capabilities.coverageHeard`). **Since 0.31.1 (§8.7):** at drive stop a durable `POST /observer/drive-end {id, drive_ref, started_at, ended_at, keep_from, keep_until, hidden}` (lib/core/drive_end.dart) tells the server which window of the drive's exact positions it may keep (start/end trim; none for a drive not uploaded, deleted or hidden). On by default (opt-out). The row shows its state: off, on but waiting for a key, or N headers waiting on the phone. Turning it **on** asks first and lists exactly what is shared and never shared. Turning it **off** stops collection at once and deletes the unsent queue; with a key it then offers to erase the server copy (`DELETE /api/cmh/telemetry`). **What is recorded (fixed Nov 8 2026, CR7):** never direct messages or other private point-to-point types; a channel packet only when its MAC verifies under the Public key or the key of a # channel this phone holds (a private channel, or one the phone cannot identify, fails closed, even when its one-byte hash matches Public's). This is also how Chat's routing reaches the network map: the repeats and arrival routes of Public and # channel messages, yours included, are packet headers. Direct-message routes are never shared (decision Nov 8). Group records queued before the fix carry no "checked" mark and are dropped on update. |
 | | **Observer location** (`telemetry-location`, Nov 8 2026) | Approximate (~5 km, the default: each packet carries the H3 res-7 cell the phone was in, never coordinates) or Region only (no cell). |
 | | **Observer everywhere** (0.38, Nov 15 2026; replaces the Home observer) | The phone is an observer whenever a radio is connected and the app runs, ON by default with one opt-out (**Share with MeshSonar**, `telemetry-toggle`; turning it off stops collection and deletes the unsent queue). No Home observer and no Drive observer mode: packets go as `observer.mode = background`, or `drive` while a drive records (exact `pos`, plan D1). The status heartbeat (`POST /observer/heartbeat`, `lib/core/observer_status.dart`) goes once at connect and every 5 min while sharing; `GET /observer/me` gives the status. A radio that drops by itself outside a drive comes back through the saved-radio auto-connect (Settings > Radio > Auto-connect; a radio released on purpose stays released). No background location (plan D4). The first-run disclosure is version 3 (`collectionDisclosureVersion`), so every user sees the rewritten text once. The server's `observer/home` endpoints stay for builds 61-63 until a later server cleanup. |
@@ -974,7 +988,6 @@ use it."); `test/ui/settings_no_dead_end_test.dart` enforces it.
 | | **Saved region data** | Bytes of the per-region cache and the shared ETag cache; **Clear** (asks) deletes them; they download again. |
 | | **Repeater names** (`refresh-repeaters`) | Count; tap to refresh (needs a key); **Forget saved names** (asks). |
 | | **Public node map** | Repeaters and bytes of the map.meshcore.io cache; **Clear** (asks); it downloads again around the next drive's first ping. |
-| | **Offline maps space** | Packs and bytes; opens the Offline maps screen to delete (each asks). |
 | | **Unsent problem report** | Only when one is saved; **Discard** (asks). |
 | Diagnostics (`diagnostics`) | **Diagnostic log** | Memory-only log since the app started. View (shown redacted), **Copy** (app line + settings snapshot + log, through `core/redact.dart`: keys/tokens/passwords replaced, coordinates rounded to 3 decimals; the snackbar says how many were hidden/rounded), **Clear** (asks). |
 | | **Report a problem** (`report-problem`) | See [Report a problem](#report-a-problem). |
@@ -1159,34 +1172,6 @@ Design, numbers and the asks for the server: [REGIONS_AT_SCALE.md](REGIONS_AT_SC
 - **Idle region detection** (`lib/core/idle_region_watcher.dart`): when not driving, a coarse, distance-filtered location stream (at most one fix per 20 s) feeds the region tracker so the Region tab follows the phone. It is cancelled during a drive and whenever the app is in the background, even with "Always" location granted (background location is for recording a drive only). The last fix is kept in `last_known_fix.json` so the next launch shows the right region before the first GPS fix. The radio preset is never changed silently: same preset notifies and switches, a different preset prompts.
 - **Telemetry uploader / phone observer** (`lib/core/telemetry_uploader.dart`, `telemetry.dart`, `observer_identity.dart`, `observer_status.dart`): on by default with a first-run disclosure and a visible opt-out in Settings. Sends `meshsonar-telemetry/2` to `POST /api/cmh/telemetry` with the driver key: headers and signal for every non-private packet, raw bytes only for public types (ADVERT, PATH, TRACE, MAC-proven Public / # channel packets), the ~5 km H3 res-7 cell (unless Region only), a random observer id and radio context; falls back to v1 headers on a 400 about the format. Never DMs, private channels, coordinates, names, the radio's public key, your own pings or your radio's own advert. Turning it off clears the queue and offers `DELETE` to erase what was already shared.
 - **Coverage timeline**: Map layers > Network coverage > Coverage options > "Coverage growth (as of)" slider with play/pause and a Live reset. Built from windowed `public-coverage?until=` calls; the first-data day comes from `region-timeline` (days only).
-
-## Offline maps (region packs)
-
-Settings > Map & offline maps > **Offline maps** (`lib/ui/settings/offline_packs_screen.dart`, logic in `lib/core/offline_packs.dart`).
-Packs are our own OpenStreetMap-derived vector tiles (PMTiles, OpenMapTiles schema, z0-14) hosted at
-`https://tiles.meshsonar.com/manifest.json`; today one pack: CMH (50.5 MB).
-
-- **Download** verifies size and SHA-256 before installing. Interrupted downloads keep a `.part` and resume with an
-  HTTP Range request; a `.part` from another version is discarded. A transfer that stalls for 30 s fails (Retry resumes).
-- **Download on Wi-Fi only** (default on). On cellular the app shows the pack size and asks: *Download now* or *Wait
-  for Wi-Fi*. Queued downloads start by themselves when Wi-Fi is back, when the app returns to the foreground, and
-  after a restart (with the app open; there is no iOS background transfer). Dropping to cellular mid-download pauses it
-  ("Waiting for Wi-Fi"). Pausing by hand is never resumed automatically.
-- **Updates**: a newer manifest version shows "Update available (size)"; the installed version stays in use until the
-  new one is verified, then the map switches to it.
-- **Storage**: per-pack size, total, Delete and Delete all (also removes partial and stray files). Free device space is
-  not shown (no plugin for it); a full disk gives "Not enough free space on this device" and keeps the partial file.
-- **Offline list**: the manifest is cached with its ETag (304 when unchanged); offline the screen shows the saved list
-  with "Offline - pack list as of <time>".
-- **On the map** (`lib/ui/map/offline_basemap.dart`): when an installed pack covers the view centre it replaces the
-  online OSM tiles; the map follows the camera into another pack (sticking with the current one where packs overlap)
-  and falls back to online tiles outside every pack. Style (`lib/core/offline_style.dart`): the online map's look,
-  i.e. OpenStreetMap Carto's colours and road hierarchy (motorway/trunk/primary/secondary/tertiary/minor with casings,
-  land use, parks, woods, water, rivers, buildings, rail, paths, state boundaries) passed through the same colour
-  matrix the app applies to online OSM tiles, so light stays grey/paper and dark stays the inverted chart. Labels:
-  cities/towns/villages/neighbourhoods by zoom, road names along roads, motorway refs, water names, with wide halos,
-  drawn with the bundled Barlow fonts (no glyph files in the app). The same style code writes the MapLibre web
-  styles (`tool/make_web_styles.dart`).
 
 ## Region tab offline
 

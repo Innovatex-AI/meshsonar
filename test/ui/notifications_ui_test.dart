@@ -215,6 +215,44 @@ void main() {
       expect(find.textContaining('Muted until'), findsOneWidget);
     });
 
+    // Build 76: the whole row opens the choices, not only the small button at its end.
+    testWidgetsT('tapping the whole row opens the same choices as its button, and a choice from there is applied', (tester) async {
+      final s = await install(tester);
+      final h = chat.Harness();
+      h.bob();
+      final ch = await h.channel(1, 'Ohio', ChannelKind.private);
+      h.service.handleInbound(dmEvent(100, 'hello'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      s.coordinator.attachChat(h.service);
+      h.service.handleInbound(InboundChannelText(radioId: chat.radioA, channelSlot: 1, timestamp: 101, text: 'Al: hi all'));
+      final now = DateTime.fromMillisecondsSinceEpoch(h.clock.ms);
+      await tester.pumpWidget(MaterialApp(home: ConversationAlertsScreen(s.runtime, clock: () => now)));
+      final row = find.byKey(Key('notif-conv-${ch.convKey}'));
+      expect(tester.widget<ListTile>(row).onTap, isNotNull);
+      expect(tester.getSize(row).height, greaterThanOrEqualTo(56));
+      // On the title, far from the button.
+      await tester.tap(find.descendant(of: row, matching: find.text('Ohio')));
+      await tester.pumpAndSettle();
+      expect(find.text('Alerts for Ohio'), findsOneWidget);
+      for (final choice in ['Only when mentioned', 'Mute for 1 hour', 'Mute for 8 hours', 'Mute for 24 hours', 'Mute until I turn it back on']) {
+        expect(find.text(choice), findsOneWidget, reason: choice);
+      }
+      await tester.tap(find.text('Mute until I turn it back on'));
+      await tester.pumpAndSettle();
+      expect(h.service.conversation(ch.convKey)!.notifyMode, NotifyMode.muted);
+      expect(find.descendant(of: row, matching: find.text('Muted until you turn it back on')), findsOneWidget);
+      expect(find.descendant(of: row, matching: find.byIcon(Icons.notifications_off_outlined)), findsOneWidget, reason: 'the icon says it too');
+      // A contact's row: the same sheet, without the mentions choice.
+      final bobRow = find.byKey(Key('notif-conv-${h.bobConv}'));
+      await tester.tap(find.descendant(of: bobRow, matching: find.text('Bob')));
+      await tester.pumpAndSettle();
+      expect(find.text('Alerts for Bob'), findsOneWidget);
+      expect(find.text('Only when mentioned'), findsNothing, reason: 'a contact has no mentions');
+      await tester.tap(find.text('Mute for 1 hour'));
+      await tester.pumpAndSettle();
+      expect(h.service.conversation(h.bobConv)!.mutedUntilMs, h.clock.ms + const Duration(hours: 1).inMilliseconds);
+    });
+
     testWidgetsT('without a chat service it says so', (tester) async {
       final s = await install(tester);
       await tester.pumpWidget(MaterialApp(home: ConversationAlertsScreen(s.runtime)));
@@ -280,7 +318,15 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('in-app-banner')), findsOneWidget);
       expect(find.text('ping from bob'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('in-app-banner')));
+      // Build 76: it is no taller than a header, and a tap that was already on its way to the control underneath goes to
+      // that control, not into a chat.
+      expect(tester.getSize(find.byKey(const Key('in-app-banner'))).height, kInAppBannerHeight);
+      await tester.tap(find.byKey(const Key('in-app-banner')), warnIfMissed: false);
+      await tester.pump();
+      expect(s.coordinator.takePendingOpen(), isNull, reason: 'no touches in the first 400 ms');
+      expect(find.byKey(const Key('in-app-banner')), findsOneWidget);
+      await tester.pump(kInAppBannerArmDelay + const Duration(milliseconds: 10));
+      await tester.tap(find.byKey(const Key('in-app-banner-open')));
       await tester.pump();
       expect(s.coordinator.takePendingOpen(), h.bobConv);
       expect(find.byKey(const Key('in-app-banner')), findsNothing);
@@ -290,6 +336,46 @@ void main() {
       expect(find.byKey(const Key('in-app-banner')), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
       expect(find.byKey(const Key('in-app-banner')), findsNothing);
+    });
+
+    testWidgetsT('the banner lets an early tap reach the control under it; X and a swipe up dismiss without opening', (tester) async {
+      final s = await install(tester);
+      final h = chat.Harness();
+      h.bob();
+      s.coordinator.attachChat(h.service);
+      s.coordinator.setForeground(true);
+      var under = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: InAppBannerHost(
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(width: double.infinity, height: 60, child: GestureDetector(key: const Key('under'), behavior: HitTestBehavior.opaque, onTap: () => under++)),
+            ),
+          ),
+        ),
+      ));
+      h.service.handleInbound(dmEvent(100, 'a long message that would have wrapped onto a second and a third line before'));
+      await tester.pump();
+      await tester.pump();
+      final at = tester.getCenter(find.byKey(const Key('in-app-banner-open')));
+      await tester.tapAt(at);
+      await tester.pump();
+      expect(under, 1, reason: 'the tap went to the header under the new banner');
+      expect(s.coordinator.takePendingOpen(), isNull);
+      await tester.pump(kInAppBannerArmDelay + const Duration(milliseconds: 10));
+      await tester.tap(find.byKey(const Key('in-app-banner-close')));
+      await tester.pump();
+      expect(find.byKey(const Key('in-app-banner')), findsNothing);
+      expect(s.coordinator.takePendingOpen(), isNull, reason: 'X does not open the chat');
+      h.service.handleInbound(dmEvent(101, 'second'));
+      await tester.pump();
+      await tester.pump(kInAppBannerArmDelay + const Duration(milliseconds: 10));
+      await tester.fling(find.byKey(const Key('in-app-banner')), const Offset(0, -120), 800);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('in-app-banner')), findsNothing);
+      expect(s.coordinator.takePendingOpen(), isNull, reason: 'a swipe up does not open the chat');
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgetsT('a notification tap switches the shell to the Chat tab and opens that conversation', (tester) async {
@@ -444,6 +530,12 @@ void main() {
       await tester.tap(find.byKey(const Key('ble-clear')));
       await tester.pump();
       expect(find.byKey(const Key('ble-line')), findsNothing);
+      // Build 76: an empty log says how to start it, and there is nothing left to clear.
+      expect(find.byKey(const Key('ble-empty')), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(find.byKey(const Key('ble-clear'))).onPressed, isNull);
+      for (final k in ['ble-add-note', 'ble-copy', 'ble-keeper-pull', 'ble-clear']) {
+        expect(tester.getSize(find.byKey(Key(k))).height, greaterThanOrEqualTo(48), reason: k);
+      }
     });
   });
 }

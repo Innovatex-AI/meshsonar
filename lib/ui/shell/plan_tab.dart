@@ -26,11 +26,24 @@ class PlanTab extends StatefulWidget {
 class _PlanTabState extends State<PlanTab> {
   final GlobalKey<PlannerScreenState> _planner = GlobalKey<PlannerScreenState>();
 
+  int _seenReselect = 0;
+  ShellController? _shell;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Subscribes to the shell: every openPlan (also while this tab is already showing) lands here.
     final shell = ShellScope.maybeOf(context);
+    if (!identical(shell, _shell)) {
+      _shell = shell;
+      _seenReselect = shell?.reselectCount ?? 0;
+    }
+    // Tapping the Plan tab again puts the sheet down, so the whole map shows (build 76; More and Chat go back to
+    // their lists the same way).
+    if (shell != null && shell.reselectCount != _seenReselect) {
+      _seenReselect = shell.reselectCount;
+      if (shell.tab == AppTab.plan) WidgetsBinding.instance.addPostFrameCallback((_) => _planner.currentState?.collapseSheet());
+    }
     final r = shell?.takePendingPlan();
     if (r == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _planner.currentState?.handle(r));

@@ -44,9 +44,6 @@ class PowerSettings {
   /// Radio + phone stats sampling interval for the drive report, seconds.
   final int statsEveryS;
 
-  /// Plain background instead of the full basemap while driving.
-  final bool simpleBasemap;
-
   /// Use Saver while iPhone Low Power Mode is on.
   final bool followLowPower;
 
@@ -64,7 +61,6 @@ class PowerSettings {
     required this.observerUploadBackS,
     required this.uploadDuringDrive,
     required this.statsEveryS,
-    required this.simpleBasemap,
     this.followLowPower = true,
   });
 
@@ -82,7 +78,6 @@ class PowerSettings {
     observerUploadBackS: 60,
     uploadDuringDrive: true,
     statsEveryS: 60,
-    simpleBasemap: false,
   );
 
   static const balanced = PowerSettings(
@@ -99,7 +94,6 @@ class PowerSettings {
     observerUploadBackS: 300,
     uploadDuringDrive: true,
     statsEveryS: 60,
-    simpleBasemap: false,
   );
 
   static const saver = PowerSettings(
@@ -116,7 +110,6 @@ class PowerSettings {
     observerUploadBackS: 900,
     uploadDuringDrive: false,
     statsEveryS: 300,
-    simpleBasemap: true,
   );
 
   static PowerSettings preset(BatteryMode m, {bool followLowPower = true}) => switch (m) {
@@ -139,7 +132,6 @@ class PowerSettings {
     int? observerUploadBackS,
     bool? uploadDuringDrive,
     int? statsEveryS,
-    bool? simpleBasemap,
     bool? followLowPower,
   }) =>
       PowerSettings(
@@ -156,7 +148,6 @@ class PowerSettings {
         observerUploadBackS: observerUploadBackS ?? this.observerUploadBackS,
         uploadDuringDrive: uploadDuringDrive ?? this.uploadDuringDrive,
         statsEveryS: statsEveryS ?? this.statsEveryS,
-        simpleBasemap: simpleBasemap ?? this.simpleBasemap,
         followLowPower: followLowPower ?? this.followLowPower,
       );
 
@@ -177,7 +168,6 @@ class PowerSettings {
         'observerUploadBackS': observerUploadBackS,
         'uploadDuringDrive': uploadDuringDrive,
         'statsEveryS': statsEveryS,
-        'simpleBasemap': simpleBasemap,
         'followLowPower': followLowPower,
       };
 
@@ -190,7 +180,8 @@ class PowerSettings {
 
   static int _int(Object? v, int d) => v is int ? v : d;
 
-  /// Unknown or missing fields fall back to Balanced; a preset mode always resolves to its preset values.
+  /// Unknown or missing fields fall back to Balanced; a preset mode always resolves to its preset values. A saved
+  /// `simpleBasemap` (builds 70 to 75: no basemap while driving, removed in build 76) is ignored.
   static PowerSettings fromJson(Map<String, dynamic> j) {
     final mode = _enum(BatteryMode.values, j['mode'], BatteryMode.balanced);
     final follow = j['followLowPower'] is bool ? j['followLowPower'] as bool : true;
@@ -210,7 +201,6 @@ class PowerSettings {
       observerUploadBackS: _int(j['observerUploadBackS'], b.observerUploadBackS),
       uploadDuringDrive: j['uploadDuringDrive'] is bool ? j['uploadDuringDrive'] as bool : b.uploadDuringDrive,
       statsEveryS: _int(j['statsEveryS'], b.statsEveryS),
-      simpleBasemap: j['simpleBasemap'] is bool ? j['simpleBasemap'] as bool : b.simpleBasemap,
       followLowPower: follow,
     );
   }

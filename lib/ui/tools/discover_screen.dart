@@ -23,6 +23,7 @@ class DiscoverScreen extends StatelessWidget {
   Widget build(BuildContext context) => ToolPage(
         id: 'discover',
         title: 'Discover nearby',
+        about: 'Discover nearby finds the repeaters, rooms and sensors in direct range of your radio and measures the signal both ways.',
         builder: (context, host, tools) => _DiscoverBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools, contact: contact),
       );
 }
@@ -100,14 +101,9 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
           key: const Key('discover-list'),
           padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(
-              'A scan sends one tiny packet that only radios in direct range hear. Nearby repeaters, rooms and sensors answer, and MeshSonar measures the signal in both directions.',
-              style: t.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: Gap.s),
-            Text('Repeaters answer 4 scans every 2 minutes, so MeshSonar counts them for you.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            Text('Finds what is in direct range of your radio and measures the signal both ways.', key: const Key('discover-intro'), style: t.textTheme.bodyMedium),
             if (widget.contact != null) _lookingFor(context, widget.contact!, results, scanning),
-            const ToolHeading('Look for'),
+            const SizedBox(height: Gap.m),
             Wrap(spacing: Gap.s, runSpacing: Gap.s, children: [
               for (final (type, label) in [(AdvType.repeater, 'Repeaters'), (AdvType.room, 'Rooms'), (AdvType.sensor, 'Sensors')])
                 ConstrainedBox(
@@ -139,6 +135,9 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
             ),
             const SizedBox(height: Gap.s),
             Text('Scans left: ${_d.requestsLeft} of 4', key: const Key('discover-left'), style: t.textTheme.bodyMedium),
+            // Why there is a count at all: said only once a scan has been used.
+            if (_d.requestsLeft < 4)
+              Text('Repeaters answer 4 scans every 2 minutes.', key: const Key('discover-limit'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             const SizedBox(height: Gap.xs),
             AirtimeNote(tools: tools, ms: _d.estimateAirtimeMs(), action: 'A scan'),
             const SizedBox(height: Gap.m),
@@ -156,7 +155,7 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
             if (_addNote != null)
               Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(_addNote!, key: const Key('discover-add-note'), style: t.textTheme.bodyMedium)),
             if (results.isNotEmpty) ...[
-              const ToolHeading('Found'),
+              ToolHeading('Found ${results.length}'),
               _map(context, results),
               const SizedBox(height: Gap.s),
               for (var i = 0; i < results.length; i++) _row(context, i, results[i]),
@@ -172,8 +171,10 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
     return switch (_d.status) {
       DiscoverStatus.cooldown => [NoteCard(m ?? 'Wait a little before the next scan.', key: const Key('discover-cooldown'), title: 'Waiting for the next scan')],
       DiscoverStatus.refused || DiscoverStatus.notConnected => [NoteCard(m ?? 'The scan did not go out.', key: const Key('discover-problem'), kind: NoteKind.problem, title: 'Scan failed')],
-      DiscoverStatus.done when _d.results.isEmpty => [NoteCard(m ?? 'Nothing answered.', key: const Key('discover-empty'), kind: NoteKind.info, title: 'Nothing answered')],
-      DiscoverStatus.idle => [Text('No scan yet. Tap Scan now.', key: const Key('discover-idle'), style: Theme.of(context).textTheme.bodyMedium)],
+      DiscoverStatus.done when _d.results.isEmpty => [
+          NoteCard('${m ?? 'Nothing answered.'} Move to a spot with a clearer view, or scan again in a minute.', key: const Key('discover-empty'), kind: NoteKind.info, title: 'Nothing answered'),
+        ],
+      DiscoverStatus.idle => [Text('No scan yet. Tap Scan now: one tiny packet goes out and whatever hears it answers.', key: const Key('discover-idle'), style: Theme.of(context).textTheme.bodyMedium)],
       _ => const [],
     };
   }
@@ -211,19 +212,27 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
     final me = widget.host.lastPosition;
     final km = me == null ? null : _d.distanceKm(n, me.lat, me.lon);
     final dist = km == null ? null : units.distance(km * 1000);
+    // The verdict in a word first (the weaker of the two directions decides), the numbers under it.
+    final word = snrWord(n.weakestSnrDb);
     final hearYou = 'They hear you at ${fmtSnr(n.snrTheyHeardDb)}';
     final youHear = 'You hear them at ${fmtSnr(n.snrHeardDb)} (${n.rssiDbm.round()} dBm)';
-    final label = '${n.displayName}, ${_typeWord(n.nodeType)}. $hearYou. $youHear.${dist == null ? '' : ' $dist away.'}${n.inContacts ? ' In your contacts.' : ''}';
-    return Padding(
+    final label = '${n.displayName}, ${_typeWord(n.nodeType)}. $hearYou. $youHear.${dist == null ? '' : ' $dist away.'}${n.inContacts ? ' In your contacts.' : ''} $word link.';
+    return Container(
       key: Key('discover-result-$i'),
-      padding: const EdgeInsets.symmetric(vertical: Gap.s),
+      margin: const EdgeInsets.only(bottom: Gap.s),
+      padding: const EdgeInsets.all(Gap.m),
+      decoration: BoxDecoration(color: t.colorScheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(Corners.small)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Semantics(
           container: true,
           label: label,
           excludeSemantics: true,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(n.displayName, style: t.textTheme.titleSmall),
+            // A Wrap: at large text the verdict drops under the name instead of squeezing it.
+            Wrap(spacing: Gap.m, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text(n.displayName, style: t.textTheme.titleSmall),
+              Text('$word link', key: Key('discover-result-$i-word'), style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary)),
+            ]),
             Text('${_typeWord(n.nodeType)} · key ${n.shortKey}${n.hasFullKey ? '' : ' (start only)'}${dist == null ? '' : ' · $dist away'}',
                 style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             const SizedBox(height: Gap.xs),
@@ -241,7 +250,7 @@ class _DiscoverBodyState extends State<_DiscoverBody> {
         else ...[
           OutlinedButton.icon(
             key: Key('discover-result-$i-add'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(kToolTarget)),
             onPressed: n.hasFullKey ? () => _add(n) : null,
             icon: const Icon(Icons.person_add_alt),
             label: const Text('Add to contacts'),

@@ -27,18 +27,43 @@ Future<void> openFinishedDriveReport(BuildContext context, String sessionId) => 
 
 /// Asks "Stop this drive?" and, on confirm, stops it. The Start/Stop button and the mini bar both go through here.
 Future<bool> confirmAndStopDrive(BuildContext context, AppState s) async {
-  if (!await confirmStopDrive(context)) return false;
-  unawaited(s.stopDrive());
+  // Build 76: "Stop and view report" does in one tap what took three (Stop, confirm, then find View report).
+  final v = await showAppActionSheet<String>(
+    context,
+    title: 'Stop this drive?',
+    message: _stopMessage(s.pingCount),
+    actions: [
+      const AppAction<String>('Stop drive', 'stop', destructive: true, key: Key('stop-drive-confirm')),
+      if (s.pingCount > 0) const AppAction<String>('Stop and view report', 'report', destructive: true, key: Key('stop-drive-report')),
+    ],
+    cancelLabel: 'Keep driving',
+    cancelKey: const Key('stop-drive-keep'),
+    sheetKey: const Key('stop-drive-dialog'),
+  );
+  if (v == null) return false;
+  if (v != 'report') {
+    unawaited(s.stopDrive());
+    return true;
+  }
+  await s.stopDrive();
+  final id = s.lastFinishedSessionId;
+  if (id != null && context.mounted) unawaited(openFinishedDriveReport(context, id));
   return true;
 }
 
+String _stopMessage(int? pings) => pings == null
+    ? 'It is saved on this phone.'
+    // A drive stopped before its first ping is empty: say so before the tap, not after.
+    : (pings == 0 ? 'No ping has been sent yet, so this drive will be empty.' : '$pings ${pings == 1 ? 'ping' : 'pings'} so far. The drive is saved on this phone.');
+
 /// "Stop this drive?" so a bump in the car can't end a drive. An iOS action sheet: the red Stop drive row, then a
 /// separate Keep driving (cancel). Returns true to stop; dismissing the sheet keeps driving.
-Future<bool> confirmStopDrive(BuildContext context) async {
+Future<bool> confirmStopDrive(BuildContext context, {int? pings}) async {
   final stop = await showAppActionSheet<bool>(
     context,
     title: 'Stop this drive?',
-    message: 'Pings stop and the drive is saved on this phone. Start drive begins a new one.',
+    // One short line that says what is kept (build 76; two sentences nobody read in a moving car).
+    message: _stopMessage(pings),
     actions: const [AppAction<bool>('Stop drive', true, destructive: true, key: Key('stop-drive-confirm'))],
     cancelLabel: 'Keep driving',
     cancelKey: const Key('stop-drive-keep'),
@@ -85,17 +110,64 @@ class AntennaChip extends StatelessWidget {
       return s.needsAntennaSetup ? const AntennaSetupHint() : const SizedBox.shrink();
     }
     final locked = recorded != null;
-    final t = Theme.of(context);
-    return ActionChip(
+    return DrivePanelRow(
       key: const Key('antenna-chip'),
-      tooltip: locked ? 'Antenna, locked while driving' : 'Change this radio\'s antenna',
-      avatar: Icon(
-        locked ? Icons.lock_rounded : Icons.settings_input_antenna_rounded,
-        size: 18,
-        color: t.colorScheme.onSurfaceVariant,
+      icon: locked ? Icons.lock_rounded : Icons.settings_input_antenna_rounded,
+      label: 'Antenna',
+      value: text,
+      semanticsHint: locked ? 'Fixed for this drive' : 'Change this radio\'s antenna',
+      onTap: locked ? null : () => showAntennaSheet(context),
+    );
+  }
+}
+
+/// One row of the Drive panel's list (build 76): icon, what it is, its current value, a chevron when it opens something.
+/// 48 pt tall, the whole row is the tap target. Replaces the unlabelled chips ("Handheld · 5 ft" said nothing about being
+/// the antenna) and the lone Log button.
+class DrivePanelRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? value;
+  final String? semanticsHint;
+  final VoidCallback? onTap;
+  const DrivePanelRow({super.key, required this.icon, required this.label, this.value, this.semanticsHint, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.fromTheme(Theme.of(context));
+    return Semantics(
+      button: onTap != null,
+      label: value == null ? label : '$label: $value',
+      hint: semanticsHint,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Corners.small),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(children: [
+            Icon(icon, size: 20, color: c.textMuted),
+            const SizedBox(width: 12),
+            // Label left, value right; at large text (or a long value) the value drops under the label instead of clipping.
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  children: [
+                    Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
+                    if (value != null) Text(value!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: c.textMuted)),
+                  ],
+                ),
+              ),
+            ),
+            if (onTap != null) Icon(Icons.chevron_right_rounded, color: c.textMuted) else const SizedBox(width: 4),
+          ]),
+        ),
       ),
-      label: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
-      onPressed: locked ? null : () => showAntennaSheet(context),
     );
   }
 }
@@ -186,23 +258,12 @@ class LogButton extends StatelessWidget {
   const LogButton({super.key = const Key('open-log'), required this.state});
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     final n = state.pingCount;
-    return SizedBox(
-      height: 48,
-      child: OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          visualDensity: VisualDensity.compact,
-          side: BorderSide(color: t.colorScheme.outlineVariant, width: 1.5),
-          textStyle: t.textTheme.labelLarge,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.small)),
-        ),
-        onPressed: () => openPingLog(context),
-        icon: const Icon(Icons.receipt_long_rounded, size: 20),
-        label: Text(n > 0 ? 'Log · $n' : 'Log'),
-      ),
+    return DrivePanelRow(
+      icon: Icons.receipt_long_rounded,
+      label: 'Ping log',
+      value: n == 0 ? 'No pings yet' : '$n ${n == 1 ? 'ping' : 'pings'}',
+      onTap: () => openPingLog(context),
     );
   }
 }

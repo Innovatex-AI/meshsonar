@@ -214,6 +214,11 @@ class MeshTrackDockButton extends StatelessWidget {
 
   static const double width = 56;
 
+  /// Icon only, on a Dock narrower than 400 pt (iPhone SE to iPhone 17, build 76): the 10 pt "MeshTrack" caption was hard
+  /// to read and its 56 pt square squeezed the status words beside it. VoiceOver still says MeshTrack.
+  static const double compactWidth = 48;
+  static bool compactFor(BuildContext context) => MediaQuery.sizeOf(context).width < 400;
+
   @override
   Widget build(BuildContext context) => _MtListen(builder: _build);
 
@@ -222,6 +227,7 @@ class MeshTrackDockButton extends StatelessWidget {
     final st = b.service.state;
     final tone = _toneColor(mtPanelLine(st).tone, c);
     void open() => unawaited(showGroupSheet(context));
+    final compact = compactFor(context);
     final label = MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.2)),
       child: FittedBox(
@@ -242,7 +248,7 @@ class MeshTrackDockButton extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: open,
           child: Container(
-            width: width,
+            width: compact ? compactWidth : width,
             height: 52,
             padding: const EdgeInsets.symmetric(horizontal: 3),
             decoration: BoxDecoration(
@@ -255,7 +261,7 @@ class MeshTrackDockButton extends StatelessWidget {
                 width: 28,
                 height: 22,
                 child: Stack(clipBehavior: Clip.none, children: [
-                  Center(child: Icon(Icons.people_alt_rounded, size: 21, color: tone ?? c.textPrimary)),
+                  Center(child: Icon(Icons.people_alt_rounded, size: compact ? 24 : 21, color: tone ?? c.textPrimary)),
                   if (tone != null)
                     Positioned(
                       right: -1,
@@ -269,8 +275,7 @@ class MeshTrackDockButton extends StatelessWidget {
                     ),
                 ]),
               ),
-              const SizedBox(height: 2),
-              label,
+              if (!compact) ...[const SizedBox(height: 2), label],
             ]),
           ),
         ),

@@ -17,6 +17,7 @@ import '../alerts/in_app_banner.dart';
 import '../always_location_screen.dart';
 import '../antenna_sheet.dart';
 import '../app.dart';
+import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart' show AppToastHost, ToastAnchor, dismissAppToast, showAppToast;
 import '../drive_screen.dart';
 import '../onboarding/ui_prefs.dart';
@@ -219,6 +220,13 @@ class _HomeShellState extends State<HomeShell> {
     super.dispose();
   }
 
+  /// A tap on the tab bar or the rail: a selection tick when the tab changes (Settings > Haptics switches it off).
+  void _onTabTap(int i) {
+    final t = AppTab.values[i];
+    if (t != _shell.tab) unawaited(AppHaptics.selection());
+    _shell.select(t);
+  }
+
   Widget _page(AppTab t) => switch (t) {
         AppTab.chat => const ChatTab(),
         AppTab.drive => const DriveScreen(),
@@ -230,6 +238,14 @@ class _HomeShellState extends State<HomeShell> {
   /// The Chat tab's icon, with the unread count when chat services report one.
   Widget _icon(AppTab t, {required bool selected}) {
     final icon = t.iconWidget(selected: selected);
+    // A drive that is recording shows a red dot on the Drive tab (build 76), so it is plain from any tab that it runs.
+    if (t == AppTab.drive) {
+      return Builder(builder: (context) {
+        final driving = AppScope.maybeOf(context)?.driving ?? false;
+        if (!driving) return icon;
+        return Badge(key: const Key('drive-badge'), smallSize: 9, backgroundColor: Theme.of(context).colorScheme.error, child: icon);
+      });
+    }
     if (t != AppTab.chat) return icon;
     return ListenableBuilder(
       listenable: Listenable.merge([ChatTabHost.provider, ChatTabHost.provider.value?.changes]),
@@ -271,7 +287,8 @@ class _HomeShellState extends State<HomeShell> {
                       if (_shell.visited.contains(t) || t == AppTab.drive)
                         TickerMode(
                           enabled: t == tab,
-                          child: t == AppTab.drive ? _page(t) : MediaQuery.removePadding(context: context, removeBottom: true, child: _page(t)),
+                          // Drive runs behind the tab bar, except while the alerts strip sits between them (AlertsStripSeat).
+                          child: t == AppTab.drive ? AlertsStripSeat(child: _page(t)) : MediaQuery.removePadding(context: context, removeBottom: true, child: _page(t)),
                         )
                       else
                         const SizedBox.shrink(),
@@ -287,7 +304,8 @@ class _HomeShellState extends State<HomeShell> {
                   child: InAppBannerHost(
                     child: Column(key: _contentKey, children: [
                       Expanded(child: pages),
-                      AlertsStatusStrip(bottomInset: onDrive ? barPad : 0),
+                      // Drive: the Dock says Reconnecting… / Not connected itself, so the strip's radio row is not repeated there.
+                      AlertsStatusStrip(bottomInset: onDrive ? barPad : 0, radioRow: !onDrive),
                       bar,
                       SizedBox(height: onDrive ? 0 : barPad),
                     ]),
@@ -302,7 +320,7 @@ class _HomeShellState extends State<HomeShell> {
                         key: const Key('shell-rail'),
                         selectedIndex: tab.index,
                         labelType: NavigationRailLabelType.all,
-                        onDestinationSelected: (i) => _shell.select(AppTab.values[i]),
+                        onDestinationSelected: _onTabTap,
                         destinations: [
                           for (final t in AppTab.values)
                             NavigationRailDestination(
@@ -334,7 +352,7 @@ class _HomeShellState extends State<HomeShell> {
                         surfaceTintColor: Colors.transparent,
                         elevation: 0,
                         selectedIndex: tab.index,
-                        onDestinationSelected: (i) => _shell.select(AppTab.values[i]),
+                        onDestinationSelected: _onTabTap,
                         destinations: [
                           for (final t in AppTab.values)
                             NavigationDestination(

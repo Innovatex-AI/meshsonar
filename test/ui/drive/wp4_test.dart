@@ -1,9 +1,7 @@
-// Drive WP4: inspector rules while driving (peek only, "Open when stopped", clears 12 s after the last touch), the Passenger/moving
-// lock, and the Nearby repeaters list.
+// Drive WP4: the map inspector (opens on a tap and stays; nothing locks it since build 76) and the Nearby repeaters list.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/region_repeaters_api.dart';
-import 'package:meshsonar/ui/drive/panel/auto_collapse.dart';
 import 'package:meshsonar/ui/drive/panel/panel_medium.dart';
 import 'package:meshsonar/ui/map/map_info_panel.dart';
 
@@ -24,43 +22,15 @@ void main() {
     expect(closed, 0);
   });
 
-  testWidgets('moving and not Passenger: locked at the peek, says Open when stopped, tap does not expand', (tester) async {
-    await tester.pumpWidget(host(MapInfoPanel(title: 'Otterbein Hill', summary: 's', busy: false, body: const Text('BODY'), onClose: () {}, locked: true)));
-    expect(find.byKey(const Key('info-panel-locked')), findsOneWidget);
-    expect(find.text('Open when stopped'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('info-panel-header')));
-    await tester.pump();
-    expect(find.text('BODY'), findsNothing);
-    // Close stays a 48 pt target.
-    expect(tester.getSize(find.byKey(const Key('link-clear'))).height, greaterThanOrEqualTo(48));
-  });
-
-  testWidgets('becoming locked collapses an open panel', (tester) async {
-    Widget p(bool locked) => host(MapInfoPanel(title: 't', summary: 's', busy: false, body: const Text('BODY'), onClose: () {}, locked: locked));
-    await tester.pumpWidget(p(false));
+  testWidgets('nothing locks the inspector: it opens on a tap and never says "Open when stopped"', (tester) async {
+    await tester.pumpWidget(host(MapInfoPanel(title: 'Otterbein Hill', summary: 's', busy: false, body: const Text('BODY'), onClose: () {})));
+    expect(find.text('Open when stopped'), findsNothing);
+    expect(find.byKey(const Key('info-panel-summary')), findsOneWidget);
     await tester.tap(find.byKey(const Key('info-panel-header')));
     await tester.pump();
     expect(find.text('BODY'), findsOneWidget);
-    await tester.pumpWidget(p(true));
-    expect(find.text('BODY'), findsNothing);
-  });
-
-  testWidgets('driving: clears itself 12 s after the last touch; a touch resets the timer', (tester) async {
-    var closed = 0;
-    await tester.pumpWidget(host(MapInfoPanel(title: 't', summary: 's', busy: false, body: const Text('B'), onClose: () => closed++, autoClear: kInspectorAutoClear)));
-    await tester.pump(const Duration(seconds: 8));
-    await tester.tap(find.byKey(const Key('info-panel-header')));
-    await tester.pump(const Duration(seconds: 8));
-    expect(closed, 0, reason: 'the touch at 8 s restarted the 12 s');
-    await tester.pump(const Duration(seconds: 5));
-    expect(closed, 1);
-  });
-
-  test('inspectorLocked only when driving, moving and Passenger is off', () {
-    expect(inspectorLocked(driving: true, moving: true, passenger: false), isTrue);
-    expect(inspectorLocked(driving: true, moving: true, passenger: true), isFalse);
-    expect(inspectorLocked(driving: true, moving: false, passenger: false), isFalse);
-    expect(inspectorLocked(driving: false, moving: true, passenger: false), isFalse);
+    // Close stays a 48 pt target.
+    expect(tester.getSize(find.byKey(const Key('link-clear'))).height, greaterThanOrEqualTo(48));
   });
 
   test('nearestRepeaters: nearest first, only placed repeaters and rooms, three at most', () {

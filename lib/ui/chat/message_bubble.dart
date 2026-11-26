@@ -558,7 +558,12 @@ class _MessageBubbleState extends State<MessageBubble> {
           if (s.separatorAbove) _Separator(text: w.separatorText),
           row,
           if (meta != null) Padding(padding: EdgeInsets.only(top: 2, left: showAvatar ? kBubbleAvatar + 6 + 4 : 4, right: 4), child: meta),
-          if (w.expanded && w.info != null) _InfoStrip(info: w.info!, mine: mine, onDetails: w.onDetails == null ? null : () => w.onDetails!(m.id)),
+          if (w.expanded && w.info != null) _InfoStrip(
+              info: w.info!,
+              mine: mine,
+              onDetails: w.onDetails == null ? null : () => w.onDetails!(m.id),
+              onCopy: w.onMenu == null || m.text.isEmpty ? null : () => w.onMenu!(m.id, const MessageMenuEntry(MessageMenuId.copy, 'Copy', AppSymbols.docOnDoc)),
+            ),
         ],
       ),
     );
@@ -576,9 +581,13 @@ class _MessageBubbleState extends State<MessageBubble> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppSymbolIcon(symbolFor(d.glyph), size: 13, color: color),
+            // One size up from the time line and semibold: Sent / Delivered / Not delivered reads at arm's length in a car mount.
+            AppSymbolIcon(symbolFor(d.glyph), size: 15, color: color),
             const SizedBox(width: 4),
-            Flexible(child: Text('${d.word} · $time', key: Key('status-${m.id}'), style: muted.copyWith(color: color), maxLines: 2, overflow: TextOverflow.ellipsis)),
+            Flexible(
+              child: Text('${d.word} · $time',
+                  key: Key('status-${m.id}'), style: AppType.footnote.copyWith(color: color, fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
       );
@@ -591,9 +600,9 @@ class _MessageBubbleState extends State<MessageBubble> {
         CupertinoButton(
           key: Key('resend-${m.id}'),
           padding: const EdgeInsets.symmetric(horizontal: Gap.xs),
-          minimumSize: Size(Hit.min, Hit.of(context) * 0.75),
+          minimumSize: Size(Hit.min, Hit.of(context)),
           onPressed: () => resend(m.id),
-          child: Text('Resend', style: AppType.caption.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
+          child: Text('Resend', style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
         ),
       ]);
     }
@@ -690,7 +699,8 @@ class _InfoStrip extends StatelessWidget {
   final MessageInfo info;
   final bool mine;
   final VoidCallback? onDetails;
-  const _InfoStrip({required this.info, required this.mine, this.onDetails});
+  final VoidCallback? onCopy;
+  const _InfoStrip({required this.info, required this.mine, this.onDetails, this.onCopy});
 
   @override
   Widget build(BuildContext context) {
@@ -727,14 +737,26 @@ class _InfoStrip extends StatelessWidget {
                   Flexible(child: Text([?info.signalText, ?info.signalWord].join(' · '), style: muted)),
                 ]),
               ),
-            if (onDetails != null)
-              CupertinoButton(
-                key: const Key('strip-details'),
-                padding: EdgeInsets.zero,
-                minimumSize: Size.square(Hit.of(context)),
-                onPressed: onDetails,
-                child: Text('Details', style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
-              ),
+            // Copy sits beside Details, so copying a message no longer needs a long-press.
+            if (onDetails != null || onCopy != null)
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                if (onCopy != null)
+                  CupertinoButton(
+                    key: const Key('strip-copy'),
+                    padding: const EdgeInsets.only(right: Gap.l),
+                    minimumSize: Size.square(Hit.of(context)),
+                    onPressed: onCopy,
+                    child: Text('Copy', style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
+                  ),
+                if (onDetails != null)
+                  CupertinoButton(
+                    key: const Key('strip-details'),
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.square(Hit.of(context)),
+                    onPressed: onDetails,
+                    child: Text('Details', style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
+                  ),
+              ]),
           ],
         ),
       ),

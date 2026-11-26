@@ -32,7 +32,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _name = TextEditingController();
   String? _error;
   bool _busy = false;
-  bool _showPaste = false;
+  // The link field is on the screen from the start: it used to need a tap on the tile first.
+  bool _showPaste = true;
 
   ContactManager get _m => widget.controller.manager;
 
@@ -68,7 +69,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       final t = input.trim();
       r = t.toLowerCase().startsWith('meshcore://') || !_bareKey ? await _m.addFromLink(t) : await _m.addByKey(t, name: _name.text.trim());
     } catch (_) {
-      r = const AddContactResult(error: 'Something went wrong adding that contact. Check the link and try again.');
+      r = const AddContactResult(error: 'That did not work. Check the link and try again.');
     }
     if (!mounted) return;
     setState(() => _busy = false);
@@ -120,10 +121,10 @@ class _AddContactScreenState extends State<AddContactScreen> {
           child: Column(
             key: const Key('my-contact'),
             children: [
-              Text('My contact', style: t.textTheme.titleLarge),
+              Text('My QR code', style: t.textTheme.titleLarge),
               const SizedBox(height: Gap.m),
               if (link == null)
-                Text('Connect your radio first. The code is made from your radio\'s identity.', style: t.textTheme.bodyLarge, textAlign: TextAlign.center)
+                Text('Connect your radio to show your code.', style: t.textTheme.bodyLarge, textAlign: TextAlign.center)
               else ...[
                 Text('Someone who scans this adds you as a contact.', style: t.textTheme.bodyMedium, textAlign: TextAlign.center),
                 const SizedBox(height: Gap.m),
@@ -190,8 +191,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
           key: const Key('add-contact'),
           padding: const EdgeInsets.all(Gap.l),
           children: [
-            _tile(const Key('add-scan'), Icons.qr_code_scanner_rounded, 'Scan a QR code', 'Point the camera at their contact code.', _scan),
-            _tile(const Key('add-paste-tile'), Icons.content_paste_rounded, 'Paste a link or key', 'A meshcore:// link, or a 64-character key.', () => setState(() => _showPaste = !_showPaste)),
+            _tile(const Key('add-scan'), Icons.qr_code_scanner_rounded, 'Scan a QR code', 'Point the camera at their code.', _scan),
+            _tile(const Key('add-paste-tile'), Icons.content_paste_rounded, 'Paste a link or key', 'A meshcore:// link, or their public key.', () => setState(() => _showPaste = true)),
             if (_showPaste)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: Gap.s),
@@ -225,14 +226,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         key: const Key('add-submit'),
                         style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
                         onPressed: _busy || _text.text.trim().isEmpty ? null : () => _submit(_text.text),
-                        child: Text(_busy ? 'Adding' : 'Add contact'),
+                        child: Text(_busy ? 'Adding…' : 'Add contact'),
                       ),
                     ),
                   ]),
                 ]),
               ),
             if (!_showPaste && _error != null) Padding(padding: const EdgeInsets.all(Gap.s), child: Text(_error!, style: TextStyle(color: t.colorScheme.error))),
-            _tile(const Key('add-mine'), Icons.qr_code_2_rounded, 'Show my contact', 'Let someone scan you.', _showMine),
+            _tile(const Key('add-mine'), Icons.qr_code_2_rounded, 'Show my QR code', 'Let someone scan it to add you.', _showMine),
           ],
         ),
       ),

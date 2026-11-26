@@ -51,6 +51,9 @@ abstract class PlanMode {
   /// What the mode does, for VoiceOver on the chip.
   String get hint;
 
+  /// The one line the sheet shows under the chips: what this mode answers, in plain words (build 76).
+  String get what => hint;
+
   /// Does this mode need nodes in the plan before it can show anything? (The planner shows its quick starts above the
   /// body of a mode that does while the plan is empty.)
   bool get needsNodes => true;
@@ -285,6 +288,8 @@ class WhereToDriveMode extends PlanMode {
   AppSymbol get symbol => AppSymbols.car;
   @override
   String get hint => 'Places near you that nobody has measured yet.';
+  @override
+  String get what => 'Where should I drive next?';
   @override
   bool get needsNodes => false;
   @override

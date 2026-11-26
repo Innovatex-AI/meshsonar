@@ -109,7 +109,7 @@ class _ContactEditSheetState extends State<ContactEditSheet> {
       }
       return null;
     } on ContactTableFull {
-      return 'The radio\'s contact list is full and every contact on it is a favourite or in use. Free some room in Contacts first.';
+      return 'Your radio\'s contact list is full. Remove a contact you do not need, then try again.';
     } on RadioUnavailable {
       return 'The radio is not connected. Connect it and try again.';
     } catch (_) {
@@ -176,16 +176,16 @@ class _ContactEditSheetState extends State<ContactEditSheet> {
             Expanded(
               child: ListView(controller: widget.scroll, padding: const EdgeInsets.only(top: Gap.m, bottom: Gap.xl), children: [
                 ProfileGroup(
-                  footer: 'Only changes the name on this phone. They still advertise as ${live.name}.',
+                  footer: 'Changes the name on this phone only. Their own name is ${live.name}.',
                   rows: [
                     _field(const Key('rename-field'), _name, 'Name', maxLength: 31),
                     if (_name.text.trim() != live.name)
-                      ProfileRow(key: const Key('rename-reset'), label: 'Use advertised name', onTap: () => _name.text = live.name),
+                      ProfileRow(key: const Key('rename-reset'), label: 'Use their own name', onTap: () => _name.text = live.name),
                   ],
                 ),
                 ProfileGroup(rows: [_field(const Key('edit-notes'), _notes, 'Notes', lines: 4)], footer: 'Notes stay on this phone.'),
                 ProfileGroup(rows: [
-                  AppSwitchTile(switchKey: const Key('edit-favourite'), title: 'Favourite', value: _favourite, onChanged: (v) => setState(() => _favourite = v)),
+                  AppSwitchTile(switchKey: const Key('edit-favourite'), title: 'Favourite', subtitle: 'Listed first in Contacts.', value: _favourite, onChanged: (v) => setState(() => _favourite = v)),
                   AppSwitchTile(
                     switchKey: const Key('edit-keep-on-radio'),
                     title: 'Keep on my radio',

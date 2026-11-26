@@ -1,4 +1,4 @@
-// Chat-in-Drive sheet, banners, passenger lock in the composer, and every main screen at phone / iPad
+// Banners, the composer (never locked: build 76), and every main screen at phone / iPad
 // sizes, text scale 2.5 and dark mode (no overflow, 48 dp targets, labelled targets).
 import 'dart:typed_data';
 
@@ -25,28 +25,16 @@ void main() {
   setUp(() => kit = ChatKit());
   tearDown(() => kit.dispose());
 
-  group('Passenger lock in the composer', () {
-    testWidgets('moving: composer replaced by the lock with I am a passenger; tapping it brings the composer back', (tester) async {
+  group('The composer is never locked (build 76)', () {
+    testWidgets('typing and sending always work; no lock notice exists', (tester) async {
       setSize(tester);
       final ch = await kit.channel(1, 'Ohio');
       await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ch.convKey)));
       await tester.pump();
-      final now = DateTime.fromMillisecondsSinceEpoch(kit.clockMs);
-      kit.controller.updateDrive(driving: true, sessionId: 'd1', speedMps: 12, fixAt: now);
-      await tester.pump();
-      expect(find.byKey(const Key('composer-locked')), findsOneWidget);
-      expect(find.byKey(const Key('composer-field')), findsNothing);
-      // incoming messages still arrive while locked
-      kit.incoming(ch, 'Ann', 'ping from the road');
-      await flush(tester);
-      expect(find.text('ping from the road'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('passenger-button')));
-      await tester.pump();
       expect(find.byKey(const Key('composer-field')), findsOneWidget);
-      // slow down / stop the drive: composer stays
-      kit.controller.updateDrive(driving: false);
-      await tester.pump();
-      expect(find.byKey(const Key('composer-field')), findsOneWidget);
+      expect(find.byKey(const Key('composer-locked')), findsNothing);
+      expect(find.textContaining('car is moving'), findsNothing);
+      expect(kit.controller.send(ch.convKey, 'from the road').error, isNull);
     });
   });
 
@@ -124,17 +112,6 @@ void main() {
         await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
         await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
         await expectLater(tester, meetsGuideline(textContrastGuideline));
-      });
-      testWidgets('${e.key}: composer locked while moving', (tester) async {
-        setSize(tester, w: w, h: h, scale: scale);
-        await seed();
-        final ch = kit.store.channels.bySlot(radioA, 1)!;
-        kit.controller.updateDrive(driving: true, sessionId: 'd', speedMps: 15, fixAt: DateTime.fromMillisecondsSinceEpoch(kit.clockMs));
-        await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ch.convKey), brightness: b));
-        await tester.pump();
-        expect(tester.takeException(), isNull);
-        expect(find.byKey(const Key('composer-locked')), findsOneWidget);
-        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       });
       testWidgets('${e.key}: channel info', (tester) async {
         setSize(tester, w: w, h: h, scale: scale);

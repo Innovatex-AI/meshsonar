@@ -5,6 +5,7 @@
 //
 // Plain public constructor: Claimed radios opens it (button "Claim several repeaters", shown while AppState.repeaterBatchEnabled).
 import 'package:flutter/material.dart';
+import '../drive/drive_controls.dart' show openConnect;
 
 import '../../app/app_state.dart';
 import '../../app/repeater_batch.dart';
@@ -110,7 +111,7 @@ class _ClaimRepeatersScreenState extends State<ClaimRepeatersScreen> {
       const Text(claimDisclosure, key: Key('claim-several-intro')),
       const SizedBox(height: Gap.s),
       Text(
-        'Your radio logs in to one repeater at a time, so do them one after another. Each repeater has its own admin password.',
+        'One repeater at a time. Each has its own admin password.',
         style: t.textTheme.bodySmall,
       ),
       const SizedBox(height: Gap.m),
@@ -120,10 +121,18 @@ class _ClaimRepeatersScreenState extends State<ClaimRepeatersScreen> {
           color: t.colorScheme.errorContainer,
           child: Padding(
             padding: const EdgeInsets.all(Gap.m),
-            child: Text(
-              'Connect your radio first (More > Radio). It talks to the repeaters for you, so it has to be within reach of each one.',
-              style: TextStyle(color: t.colorScheme.onErrorContainer),
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Connect your radio first. It talks to the repeaters for you, so it must be within reach of each one.', style: TextStyle(color: t.colorScheme.onErrorContainer)),
+                const SizedBox(height: Gap.s),
+                // Build 76: the way out is a button here, not directions to another tab.
+                FilledButton.tonalIcon(
+                  key: const Key('claim-several-connect'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                  icon: const Icon(Icons.bluetooth_searching),
+                  label: const Text('Connect radio'),
+                  onPressed: () => openConnect(context),
+                ),
+            ]),
           ),
         ),
       const SizedBox(height: Gap.m),
@@ -155,7 +164,7 @@ class _ClaimRepeatersScreenState extends State<ClaimRepeatersScreen> {
               key: const Key('claim-several-clear'),
               style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
               onPressed: b.clearClaimed,
-              child: const Text('Clear the claimed ones from this list'),
+              child: const Text('Clear the finished ones'),
             ),
           ),
       ],

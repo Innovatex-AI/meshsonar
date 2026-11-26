@@ -45,9 +45,16 @@ class MapFilterSheet extends StatelessWidget {
             children: [
               Row(children: [
                 Expanded(child: Text('Filter the map', style: t.textTheme.titleLarge)),
-                TextButton(key: const Key('filter-reset'), onPressed: f.isNone ? null : () => model.filter = MapFilter.none, child: const Text('Reset')),
+                TextButton(key: const Key('filter-reset'), style: TextButton.styleFrom(minimumSize: const Size(48, 48)), onPressed: f.isNone ? null : () => model.filter = MapFilter.none, child: const Text('Reset')),
               ]),
-              Text('Narrows what is drawn. Nothing is deleted.', style: t.textTheme.bodySmall),
+              // What the filter leaves on the map, at the top where it is seen while the chips are tapped (build 76; it was the
+              // last line, under the fold).
+              Text(
+                'Showing $shown of $total of your pings, $cellsShown of $cellsTotal network cells.',
+                key: const Key('filter-counts'),
+                style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              Text('Nothing is deleted.', style: t.textTheme.bodySmall),
               const SizedBox(height: Gap.m),
               Text('Result', style: t.textTheme.labelLarge),
               const SizedBox(height: Gap.xs),
@@ -95,7 +102,7 @@ class MapFilterSheet extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: Gap.xs),
                   child: Text(
-                    'Shows only your pings this repeater heard. Network cells list no repeaters, so they are hidden while one is picked.',
+                    'Only your pings this repeater heard. Network cells are hidden while one is picked.',
                     style: t.textTheme.bodySmall,
                   ),
                 ),
@@ -103,15 +110,9 @@ class MapFilterSheet extends StatelessWidget {
                 key: const Key('filter-own'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text('My pings only'),
-                subtitle: const Text('Hides the network-wide cells; what is left is what this phone recorded.'),
+                subtitle: const Text('Hides everyone else\'s cells.'),
                 value: f.ownOnly,
                 onChanged: (v) => model.filter = f.copyWith(ownOnly: v),
-              ),
-              const Divider(),
-              Text(
-                'Showing $shown of $total of your pings, $cellsShown of $cellsTotal network cells.',
-                key: const Key('filter-counts'),
-                style: t.textTheme.bodySmall,
               ),
             ],
           ),

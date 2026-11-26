@@ -1,6 +1,6 @@
 # Roadmap and known gaps
 
-> **Status Nov 12 2026 (V1-PLAN DOC-1):** the app is 0.36.0+62 (iOS, TestFlight). It now has the chat redesign (DMs, channels, rooms, delivery states), the always-on phone observer, plain and end-to-end-encrypted private photos, offline map packs, the Drive panel redesign, and the Analyze tab. The live to-do list is `meshsonar-infra/docs/V1-PLAN.md`; Android is v1.1 (below). Items here that mention Android are still accurate; the rest of this list is history.
+> **Status Nov 12 2026 (V1-PLAN DOC-1):** the app is 0.36.0+62 (iOS, TestFlight). It now has the chat redesign (DMs, channels, rooms, delivery states), the always-on phone observer, plain and end-to-end-encrypted private photos, the Drive panel redesign, and the Analyze tab. The live to-do list is `meshsonar-infra/docs/V1-PLAN.md`; Android is v1.1 (below). Items here that mention Android are still accurate; the rest of this list is history.
 
 Gaps found while documenting v0.2.0, with file references. Priorities: **P1** affects data or field use, **P2**
 affects correctness or polish, **P3** is housekeeping. Items fixed since are listed at the end.
@@ -12,7 +12,7 @@ affects correctness or polish, **P3** is housekeeping. Items fixed since are lis
 | P1 | **Background operation on iOS: device check** | Code state (verified in the App Store audit): drives ask "While Using" and then the one-time "Always" upgrade after an explainer (`lib/ui/always_location_screen.dart`); `UIBackgroundModes` location + bluetooth-central, `allowBackgroundLocationUpdates` and the blue indicator are on during a drive only; between drives nothing runs in the background. Still unverified on a real device: auto-pings, BLE and the 1 s tick with the phone locked or navigation in front, and behaviour when the person keeps "While Using". |
 | P1 | **Android device testing** | Untested. Check runtime BLE permissions, **`POST_NOTIFICATIONS` (never requested; the foreground-service notification may be hidden on Android 13+)**, screen-off pinging through the geolocator foreground service, and the BLE scan on Android ≤ 11. See [PORTING.md](PORTING.md#android). |
 | P2 | **BLE edge cases not exercised on hardware** | PIN pairing/bonding (`ble_pin` in DEVICE_INFO); a radio already connected to the MeshCore app; small MTUs (SELF_INFO is 58 B + name; DEVICE_INFO is 82 B); write-without-response backpressure; several radios in range; iOS `remoteId` changes; Windows (`flutter_blue_plus_winrt` 0.0.22). On Linux with no system D-Bus, a scan logged an **unhandled** `SocketException` from the BlueZ client instead of a stream error. |
-| Done (0.32.0) | **Tile provider** | Every map draws our own Protomaps vector tiles (api.meshsonar.com/basemap) with OpenFreeMap as the fallback; OSM's community server is no longer used (a test enforces it). Offline region packs carry the same map plus coverage. See docs/MAP_TILES.md. |
+| Done (0.32.0) | **Tile provider** | Every map draws our own Protomaps vector tiles (api.meshsonar.com/basemap) with OpenFreeMap as the fallback; OSM's community server is no longer used (a test enforces it). (Downloadable offline region packs were removed in 0.46.0.) See docs/MAP_TILES.md. |
 | P2 | **Store distribution** | iOS needs a paid Apple Developer account (TestFlight/App Store); free signing expires after 7 days. Android needs a real release keystore (currently the debug key) and a Play listing. |
 | P2 | **Desktop export** | `share_plus` can't share files on Linux (`UnimplementedError`), so Export and Share report fail there. Add "Save as…". |
 
@@ -53,7 +53,6 @@ of a full drive, sync and report.
 ## Possible next steps (not started)
 
 - **Web build** with an IndexedDB store, Web Bluetooth, and CORS on CMAT. Checklist in [PORTING.md](PORTING.md#web).
-- Offline map tiles for the drive area (see Tile provider above).
 - Import of a Drive Format v1 file (the inverse of Export), e.g. to move drives between phones.
 
 ## Fixed in the field-robustness pass (Unreleased)

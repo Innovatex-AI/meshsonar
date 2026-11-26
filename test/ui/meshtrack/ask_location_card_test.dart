@@ -178,7 +178,7 @@ void main() {
     expect(find.byKey(const Key('ask-location-asking')), findsOneWidget, reason: 'still asking at 29 s');
     await r.pass(tester, const Duration(seconds: 2));
     expect(find.text('No answer from Maya Chen.'), findsOneWidget);
-    expect(find.text('They may be out of range, or their radio may not answer location requests.'), findsOneWidget);
+    expect(find.text('They may be out of range, or their radio does not share its location.'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
     await tapAsk(tester, 'ask-location-retry');
     expect(find.byKey(const Key('ask-location-asking')), findsOneWidget);

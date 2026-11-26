@@ -1,4 +1,4 @@
-// Settings > Privacy & data sharing > "How you appear": callsign, display name, anonymous drives and the leaderboard opt-in.
+// Settings > Sharing & privacy > "How you appear": callsign, display name, anonymous drives and the leaderboard opt-in.
 // The same four settings as the website's /me/privacy "How you appear" (callsign, display name, Stay anonymous, List me on
 // the leaderboard), edited here first and mirrored on the server (lib/app/driver_settings_controller.dart). Shown only when
 // the server has `driverSettings` and this phone has a driver key; an older server keeps today's behaviour.
@@ -13,18 +13,18 @@ import 'settings_kit.dart';
 
 /// The searchable rows (spread into [privacySettingsEntries]); each id is a SettingsAnchor in [PrivacyProfileRows].
 const List<SettingsEntry> privacyProfileEntries = [
-  SettingsEntry('profile-callsign', 'privacy', 'Callsign',
+  SettingsEntry('profile-callsign', 'driver', 'Callsign',
       'Your public name on drives and the leaderboard. Leave it empty and you show as "Driver N".',
-      keywords: ['callsign', 'name', 'call sign', 'public name', 'ke4bfi', 'driver'], available: profileRowsAvailable),
-  SettingsEntry('profile-display', 'privacy', 'Display name',
+      page: 'profile', was: 'Privacy & data sharing', keywords: ['callsign', 'name', 'call sign', 'public name', 'ke4bfi', 'driver'], available: profileRowsAvailable),
+  SettingsEntry('profile-display', 'driver', 'Display name',
       'An optional longer name shown next to your callsign.',
-      keywords: ['display name', 'name', 'nickname', 'how you appear'], available: profileRowsAvailable),
-  SettingsEntry('profile-anonymous', 'privacy', 'Stay anonymous',
+      page: 'profile', was: 'Privacy & data sharing', keywords: ['display name', 'name', 'nickname', 'how you appear'], available: profileRowsAvailable),
+  SettingsEntry('profile-anonymous', 'driver', 'Stay anonymous',
       'Public pages say "anonymous" instead of your callsign. Your drives still count toward coverage.',
-      keywords: ['anonymous', 'hide my name', 'private', 'callsign', 'drives'], available: profileRowsAvailable),
-  SettingsEntry('profile-leaderboard', 'privacy', 'List me on the leaderboard',
+      page: 'profile', was: 'Privacy & data sharing', keywords: ['anonymous', 'hide my name', 'private', 'callsign', 'drives'], available: profileRowsAvailable),
+  SettingsEntry('profile-leaderboard', 'driver', 'List me on the leaderboard',
       'Shows your callsign with your distance, drives and squares covered. Off by default.',
-      keywords: ['leaderboard', 'rank', 'ranking', 'opt in', 'public', 'stats'], available: profileRowsAvailable),
+      page: 'profile', was: 'Privacy & data sharing', keywords: ['leaderboard', 'rank', 'ranking', 'opt in', 'public', 'stats'], available: profileRowsAvailable),
 ];
 
 /// The server takes `driverSettings` and this phone has a driver key.

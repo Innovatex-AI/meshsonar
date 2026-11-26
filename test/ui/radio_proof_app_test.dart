@@ -123,6 +123,10 @@ void main() {
       expect(find.text('This radio is on KE4BFI\'s account. Is that you?'), findsOneWidget);
       expect(find.textContaining('Yes, add this'), findsOneWidget);
       expect(find.text('No, the radio is mine now'), findsOneWidget);
+      // Build 76: one card per answer, and Not now is a full-width 48 pt button.
+      expect(find.byKey(const Key('radio-proof-yes-card')), findsOneWidget);
+      expect(find.byKey(const Key('radio-proof-no-card')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('radio-proof-later'))).height, greaterThanOrEqualTo(48));
       expect(h.proof.decides, 0);
       await tester.tap(find.byKey(const Key('radio-proof-join')));
       await settle(tester, () => h.proof.decides > 0);
@@ -247,6 +251,72 @@ void main() {
       expect(find.byKey(const Key('device-remove-d2')), findsOneWidget);
       expect(find.textContaining(_driverKey), findsNothing);
       expect(h.proof.wire.where((w) => w.startsWith('driver')), isEmpty);
+      expect(find.text('Phones and tablets on your account. No key to copy.'), findsOneWidget, reason: 'the intro is one short line');
+      expect(find.byKey(const Key('person-notices-title')), findsNothing, reason: 'no empty Notices heading');
+      // the list people come for is above the setting about it
+      expect(tester.getTopLeft(find.byKey(const Key('device-d1'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('ask-first-switch'))).dy));
+      for (final k in ['device-rename-d1', 'device-rename-d2', 'device-remove-d2']) {
+        expect(tester.getSize(find.byKey(Key(k))).height, greaterThanOrEqualTo(44), reason: k);
+      }
+    });
+
+    testWidgets('375 pt wide at 2x text: devices, notices and the rename sheet lay out with no overflow', (tester) async {
+      final h = await open(tester, caps: _on, connect: false);
+      tester.view.physicalSize = const Size(750, 1334);
+      tester.view.devicePixelRatio = 2;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      h.proof.notices = [
+        PersonNotice(id: 'n1', kind: 'join_request', createdAt: DateTime.utc(2026, 11, 22, 9), pubkey: k('a'), nodeName: 'Truck Radio', deviceName: 'iPad'),
+      ];
+      await openScreen(tester, const PersonDevicesScreen());
+      await settle(tester, () => find.byKey(const Key('notice-n1')).evaluate().isNotEmpty);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.widgetWithText(FilledButton, 'Yes, add it'), findsOneWidget);
+      final scroll = find.descendant(of: find.byKey(const Key('person-devices-screen')), matching: find.byType(Scrollable)).first;
+      await tester.scrollUntilVisible(find.byKey(const Key('device-rename-d2')), 200, scrollable: scroll);
+      await tester.ensureVisible(find.byKey(const Key('device-rename-d2')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('device-rename-d2')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('device-rename-cancel')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.byKey(const Key('person-devices-website')), 300, scrollable: scroll);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('rename: Done on the keyboard saves, trimmed', (tester) async {
+      final h = await open(tester, caps: _on, connect: false);
+      await openScreen(tester, const PersonDevicesScreen());
+      await settle(tester, () => find.byKey(const Key('device-d2')).evaluate().isNotEmpty);
+      await tester.tap(find.byKey(const Key('device-rename-d2')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('device-rename-field')), ' Truck iPad ');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester, () => h.proof.wire.contains('rename d2 Truck iPad'));
+      expect(h.proof.wire, contains('rename d2 Truck iPad'));
+    });
+
+    testWidgets('notices: requests come first, the newest three show, Show all opens the rest', (tester) async {
+      final h = await open(tester, caps: _on, connect: false);
+      h.proof.notices = [
+        for (var i = 1; i <= 5; i++) PersonNotice(id: 'j$i', kind: 'device_joined', createdAt: DateTime.utc(2026, 11, 20, i), deviceName: 'Phone $i'),
+        PersonNotice(id: 'req', kind: 'join_request', createdAt: DateTime.utc(2026, 11, 19), pubkey: k('a'), nodeName: 'Truck Radio', deviceName: 'iPad'),
+      ];
+      await openScreen(tester, const PersonDevicesScreen());
+      await settle(tester, () => find.byKey(const Key('notice-req')).evaluate().isNotEmpty);
+      await tester.pumpAndSettle();
+      expect(find.text('Notices (6 new)'), findsOneWidget);
+      expect(tester.getTopLeft(find.byKey(const Key('notice-req'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('notice-j1'))).dy), reason: 'what waits for an answer is on top');
+      expect(find.byKey(const Key('notice-j2')), findsOneWidget);
+      expect(find.byKey(const Key('notice-j3')), findsNothing);
+      await tester.tap(find.byKey(const Key('person-notices-all')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notice-j5')), findsOneWidget);
+      expect(find.byKey(const Key('person-notices-all')), findsNothing);
     });
 
     testWidgets('rename, remove (with confirm) and ask me first', (tester) async {

@@ -12,6 +12,7 @@ import '../../radio/tools/tool_frames.dart' show maxTraceHops, traceHashSizes;
 import '../../radio/tools/trace_tool.dart';
 import '../app.dart';
 import 'contact_ref.dart';
+import 'discover_screen.dart';
 import '../map/still/path_layer.dart';
 import 'tool_kit.dart';
 import 'tools_host.dart';
@@ -27,6 +28,7 @@ class TraceScreen extends StatelessWidget {
   Widget build(BuildContext context) => ToolPage(
         id: 'trace',
         title: 'Trace path',
+        about: 'Trace path sends one small packet along repeaters you choose, and each one reports how well it heard it.',
         builder: (context, host, tools) => _TraceBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools, contact: contact),
       );
 }
@@ -156,10 +158,24 @@ class _TraceBodyState extends State<_TraceBody> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text(
-                'Send one small packet along a chain of repeaters you choose. Each repeater reports how well it heard the packet. '
-                'The last repeater in the chain must be one your radio can hear directly. If any repeater in the chain is missing or out of range, nothing comes back.',
-                style: t.textTheme.bodyMedium,
+              Text('Pick repeaters in order. Each reports how well it heard your packet.', key: const Key('trace-intro'), style: t.textTheme.bodyMedium),
+              // The two rules that decide whether anything comes back: one tap away, not a paragraph above the form.
+              Theme(
+                data: t.copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  key: const Key('trace-how'),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: Gap.s),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  title: Text('What makes a trace come back', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.primary)),
+                  children: [
+                    Text(
+                      'The last repeater must be one your radio hears directly: the answer comes back from it. '
+                      'If any repeater in the chain is missing or out of range, nothing comes back.',
+                      style: t.textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
               ),
               const ToolHeading('Path'),
               if (_loading)
@@ -168,15 +184,41 @@ class _TraceBodyState extends State<_TraceBody> {
                   SizedBox(width: Gap.m),
                   Flexible(child: Text('Reading your radio’s contacts')),
                 ])
-              else if (_loadError != null)
-                NoteCard(_loadError!, kind: NoteKind.problem, title: 'Contacts not read')
-              else if (_pickable.isEmpty)
+              else if (_loadError != null) ...[
+                NoteCard(_loadError!, kind: NoteKind.problem, title: 'Contacts not read'),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    key: const Key('trace-load-retry'),
+                    style: TextButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+                    onPressed: _loadContacts,
+                    child: const Text('Try again'),
+                  ),
+                ),
+              ] else if (_pickable.isEmpty) ...[
                 const NoteCard('Your radio has no repeaters in its contact list yet. Use Discover nearby to find some and add them.',
                     key: Key('trace-no-contacts'), title: 'No repeaters yet'),
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.s),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      key: const Key('trace-open-discover'),
+                      style: FilledButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+                      onPressed: () async {
+                        await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DiscoverScreen()));
+                        if (mounted) await _loadContacts();
+                      },
+                      icon: const Icon(Icons.radar),
+                      label: const Text('Open Discover nearby'),
+                    ),
+                  ),
+                ),
+              ],
               if (_hops.isEmpty && !_loading && _pickable.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: Gap.s),
-                  child: Text('No hops chosen yet. Add the repeaters in the order the packet should travel.', key: const Key('trace-no-hops'), style: t.textTheme.bodyMedium),
+                  child: Text('No hops yet. Add the first repeater: one your radio hears directly works best.', key: const Key('trace-no-hops'), style: t.textTheme.bodyMedium),
                 ),
               for (var i = 0; i < _hops.length; i++) _hopRow(context, i),
               const SizedBox(height: Gap.s),
@@ -216,7 +258,7 @@ class _TraceBodyState extends State<_TraceBody> {
               Padding(
                 padding: const EdgeInsets.only(top: Gap.s),
                 child: Text(
-                  'The radio sends the first $_hashSize byte${_hashSize == 1 ? '' : 's'} of each repeater’s key. A 1-byte hash can match more than one repeater; 2 or 4 bytes tell them apart.',
+                  'How much of each repeater’s key is sent. Longer tells look-alike repeaters apart; 2 bytes suits most meshes.',
                   style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
                 ),
               ),
@@ -240,6 +282,11 @@ class _TraceBodyState extends State<_TraceBody> {
                 busy: _trace.running,
                 onPressed: _hops.isEmpty ? null : _run,
               ),
+              if (_hops.isEmpty && !_trace.running)
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.xs),
+                  child: Text('Add at least one hop to send.', key: const Key('trace-send-why'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                ),
               const SizedBox(height: Gap.s),
               AirtimeNote(tools: tools, ms: _trace.estimateAirtimeMs(_hops.isEmpty ? 1 : _hops.length, _hashSize), action: 'This trace'),
               const ToolHeading('Result'),
@@ -265,7 +312,7 @@ class _TraceBodyState extends State<_TraceBody> {
                     style: TextButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TraceViewerScreen.local(result))),
                     icon: const Icon(Icons.timeline),
-                    label: const Text('Open in Trace Viewer'),
+                    label: const Text('See it hop by hop'),
                   ),
                 ),
               ..._savedSection(context),
@@ -339,7 +386,7 @@ class _TraceBodyState extends State<_TraceBody> {
     return [
       const ToolHeading('Saved traces'),
       if (items.isEmpty)
-        Text('Nothing saved. Save a trace that worked to compare it with a later one.', key: const Key('trace-no-saved'), style: t.textTheme.bodyMedium)
+        Text('Nothing saved yet. Save a trace that worked, then compare a later one with it to see if a link got better or worse.', key: const Key('trace-no-saved'), style: t.textTheme.bodyMedium)
       else ...[
         for (final s in items) _savedRow(context, s),
         const SizedBox(height: Gap.s),
@@ -402,6 +449,12 @@ class _TraceBodyState extends State<_TraceBody> {
               _compare.remove(s.id);
               _comparison = null;
               if (_viewed?.id == s.id) _viewed = null;
+            });
+            // One tap deleted it; one tap brings it back.
+            if (!context.mounted) return;
+            showAppToast(context, 'Saved trace deleted', actionLabel: 'Undo', onAction: () async {
+              await _trace.store.save(s);
+              if (mounted) setState(() {});
             });
           },
           icon: const Icon(Icons.delete_outline),

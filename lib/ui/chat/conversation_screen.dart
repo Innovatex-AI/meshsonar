@@ -515,7 +515,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
         const AppAction('Search in conversation', _Menu.search, symbol: AppSymbols.magnifyingglass, key: Key('menu-search')),
         if (_kind == ConvKind.dm && contact != null) const AppAction('Route', _Menu.route, symbol: AppSymbols.route, key: Key('menu-route')),
         AppAction(muted ? 'Unmute' : 'Mute', _Menu.mute, symbol: muted ? AppSymbols.bell : AppSymbols.bellSlash, key: const Key('menu-mute')),
-        AppAction(_kind == ConvKind.channel ? 'Channel info' : 'Contact info', _Menu.info, symbol: AppSymbols.infoCircle, key: const Key('menu-info')),
+        // Pin and delete used to need a swipe or a long-press in the list: here they are one tap away.
+        if (row != null && !row.isSystem)
+          AppAction(row.pinned ? 'Unpin' : 'Pin to top', _Menu.pin, symbol: row.pinned ? AppSymbols.pinFill : AppSymbols.pin, key: const Key('menu-pin')),
+        if (_channel != null || contact != null)
+          AppAction(_kind == ConvKind.channel ? 'Channel info' : 'Contact info', _Menu.info, symbol: AppSymbols.infoCircle, key: const Key('menu-info')),
+        if (row != null && !row.isSystem && (row.isChannel || row.hasHistory))
+          AppAction(row.isChannel ? 'Delete channel' : 'Clear messages', _Menu.delete, destructive: true, symbol: AppSymbols.trash, key: const Key('menu-delete')),
       ],
     );
     if (choice == null || !mounted) return;
@@ -531,8 +537,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
       case _Menu.mute:
         await ChatListActions(c, navigator: _nav).muteConversation(context, key: widget.convKey, title: _title, muted: muted);
         if (mounted) setState(() {});
+      case _Menu.pin:
+        if (row != null) ChatListActions(c, navigator: _nav).togglePin(row);
       case _Menu.info:
         _openInfo();
+      case _Menu.delete:
+        if (row == null) return;
+        final gone = await ChatListActions(c, navigator: _nav).delete(context, row);
+        // A deleted channel has nothing left to show: back to the list.
+        if (gone && row.isChannel && mounted && Navigator.canPop(context)) Navigator.of(context).pop();
     }
   }
 
@@ -820,7 +833,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   Widget _searchBody(BuildContext context, AppColors colors) {
     if (_query.text.trim().isEmpty) {
-      return _Empty(symbol: AppSymbols.magnifyingglass, title: 'Search this conversation', body: 'Type a word to find it in the messages kept on this phone.');
+      return _Empty(symbol: AppSymbols.magnifyingglass, title: 'Search this conversation', body: 'Type a word.');
     }
     if (_results.isEmpty) {
       return _Empty(symbol: AppSymbols.magnifyingglass, title: noMatchesTitle(_query.text), body: noMatchesTextBody);
@@ -910,7 +923,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (_error != null) {
       return ErrorState(
         title: 'Could not open this conversation',
-        message: 'The messages on this phone could not be read. Your messages are not lost; close this screen and open it again.',
+        message: 'Your messages are not lost. Try again.',
         onRetry: () => setState(() {
           _loading = true;
           _initialLoad();
@@ -1026,18 +1039,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
           symbol: AppSymbols.numberSign,
           title: 'No messages in $_title yet',
           body: off
-              ? 'This channel is not on your radio right now, so nothing can arrive or be sent. Open Channel info to put it back on the radio.'
-              : 'Everyone who has this channel on their radio and is in range of a repeater will see what you write here. Say hello.',
+              ? 'This channel is not on your radio, so nothing can be sent or received. Use the button below to put it back.'
+              : 'Everyone on this channel in range will see what you write. Say hello.',
         );
       case ConvKind.room:
-        return _Empty(key: const Key('conv-empty'), symbol: AppSymbols.bubbles, title: 'No posts in $_title yet', body: 'Posts to the room are kept by the room server. Write the first one.');
+        return _Empty(key: const Key('conv-empty'), symbol: AppSymbols.bubbles, title: 'No posts in $_title yet', body: 'The room keeps posts for people who join later. Write the first one.');
       case ConvKind.dm:
-        return _Empty(key: const Key('conv-empty'), symbol: AppSymbols.message, title: 'No messages with $_title yet', body: 'Say hello. You get a Delivered mark when their radio confirms it arrived.');
+        return _Empty(key: const Key('conv-empty'), symbol: AppSymbols.message, title: 'No messages with $_title yet', body: 'Say hello. It shows Delivered when their radio gets it.');
     }
   }
 }
 
-enum _Menu { search, route, mute, info }
+enum _Menu { search, route, mute, pin, info, delete }
 
 /// Avatar 32 + name (headline) with a small chevron + the subtitle, as ONE 44 pt target.
 class _TitleBlock extends StatelessWidget {

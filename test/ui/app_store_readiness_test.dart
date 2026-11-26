@@ -58,7 +58,10 @@ void main() {
 
     testWidgets('the driver-key request form (where data is first given) links to it', (tester) async {
       final h = await open(tester, key: false);
-      await showSetting(tester, 'key-privacy-policy');
+      // Build 76: the form is on its own page behind "Create my key".
+      await showSetting(tester, 'key-create');
+      await tester.tap(find.byKey(const Key('key-create')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('key-privacy-policy')));
       await tester.pumpAndSettle();
       expect(h.openedUrls.map((u) => u.toString()), contains(privacyPolicyUrl));
@@ -84,9 +87,14 @@ void main() {
       final h = await open(tester);
       await openScreen(tester);
       await see(tester, 'delete-account-website');
-      expect(find.text(deleteAccountText), findsOneWidget);
-      await tester.ensureVisible(find.byKey(const Key('delete-account-website')));
+      // Build 76: one line on the page, the full text one tap away.
+      expect(find.text(deleteAccountShort), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('delete-account-details')));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('delete-account-details')));
+      await tester.pumpAndSettle();
+      expect(find.text(deleteAccountText), findsOneWidget);
+      await see(tester, 'delete-account-website');
       await tester.tap(find.byKey(const Key('delete-account-website')));
       await tester.pumpAndSettle();
       expect(h.openedUrls.single.path, '/me/privacy');
@@ -109,6 +117,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(h.store.sessionsById, isEmpty);
       expect(find.byKey(const Key('delete-drives-result')), findsOneWidget);
+    });
+
+    testWidgets('delete all drives with no drives on the phone: says so, no dialog with a red button', (tester) async {
+      await open(tester);
+      await openScreen(tester);
+      await see(tester, 'delete-all-drives');
+      await tester.tap(find.byKey(const Key('delete-all-drives')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delete-drives-dialog')), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const Key('delete-drives-result'))).data, 'There are no drives on this phone.');
     });
 
     testWidgets('remove the driver key from this phone', (tester) async {

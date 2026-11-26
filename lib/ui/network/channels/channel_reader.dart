@@ -85,6 +85,9 @@ class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindi
   String? _emptyReason;
   bool _loadingOlder = false;
 
+  /// Scrolled well up from the newest message (the "Latest" button shows).
+  bool _away = false;
+
   bool _foreground = true;
 
   /// False while its tab or section is not the one showing (tickers are off there).
@@ -139,6 +142,9 @@ class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindi
     if (!_scroll.hasClients) return;
     final p = _scroll.position;
     if (p.pixels >= p.maxScrollExtent - 300) unawaited(_loadOlder());
+    // far from the newest: offer a way straight back down
+    final away = p.pixels > 600;
+    if (away != _away) setState(() => _away = away);
     // reaching the bottom shows what was waiting
     if (_pending.isNotEmpty && p.pixels <= 0) setState(_showPending);
   }
@@ -250,12 +256,18 @@ class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindi
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Column(children: [
-      SizedBox(
-        height: 48,
+      ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
         child: Row(children: [
           IconButton(key: const Key('channel-back'), tooltip: 'Back to channels', icon: const Icon(Icons.arrow_back), onPressed: widget.onBack),
           Expanded(
-            child: Semantics(header: true, child: Text(_title, key: const Key('channel-title'), maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.titleMedium)),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Semantics(header: true, child: Text(_title, key: const Key('channel-title'), maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.titleMedium)),
+              // People look for a box to type in: say that this is a reader, and where the newest message is.
+              if (!_private)
+                Text('Read-only · newest at the bottom',
+                    key: const Key('channel-readonly'), maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ]),
           ),
           if (!_private) ...[
             IconButton(
@@ -284,7 +296,15 @@ class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindi
         PacketNote('This is a private channel: its text cannot be read without its key, so there is nothing to show here.', key: Key('channel-private'), icon: Icons.lock_outline),
       ]);
     }
-    if (_load == _Load.loading) return const Center(child: CircularProgressIndicator());
+    if (_load == _Load.loading) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: Gap.m),
+          Text('Loading messages…', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        ]),
+      );
+    }
     if (_load == _Load.error) {
       final e = _error;
       if (e is V1Error && e.offline) return SingleChildScrollView(child: RegionOfflineEmpty(what: 'this channel', onRetry: _reload));
@@ -295,13 +315,14 @@ class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindi
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(
               notFound
-                  ? 'This region does not know that channel.'
+                  ? 'This channel is not in this region.'
                   : (e is V1NotLive ? 'Channels are not available on this server yet.' : (e is V1Error ? e.message : 'The messages did not load.')),
               key: const Key('channel-error'),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: Gap.m),
-            if (!notFound) FilledButton(onPressed: _reload, child: const Text('Try again')),
+            if (!notFound) FilledButton(key: const Key('channel-retry'), onPressed: _reload, child: const Text('Try again')),
+            if (notFound) FilledButton(key: const Key('channel-error-back'), onPressed: widget.onBack, child: const Text('Back to channels')),
           ]),
         ),
       );
@@ -313,12 +334,17 @@ class _ChannelReaderViewState extends State<ChannelReaderView> with WidgetsBindi
         else
           Padding(
             padding: const EdgeInsets.all(Gap.xl),
-            child: Text(_emptyReason ?? 'No messages heard on this channel yet.', key: const Key('channel-empty'), textAlign: TextAlign.center),
+            child: Column(children: [
+              Text(_emptyReason ?? 'No messages heard on this channel yet.', key: const Key('channel-empty'), textAlign: TextAlign.center),
+              const SizedBox(height: Gap.m),
+              OutlinedButton(key: const Key('channel-empty-refresh'), onPressed: _reload, child: const Text('Check again')),
+            ]),
           ),
       ]);
     }
     final n = _rows.length;
-    final pill = _pending.isEmpty ? null : '${_pending.length} new';
+    // "N new" while newer messages wait; plain "Latest" when the person has just scrolled far up.
+    final pill = _pending.isNotEmpty ? '${_pending.length} new' : (_away ? 'Latest' : null);
     return Stack(children: [
       Column(children: [
         if (_asOf != null) Padding(padding: const EdgeInsets.fromLTRB(Gap.l, Gap.xs, Gap.l, 0), child: RegionOfflineAsOf(asOf: _asOf!, onRetry: _reload)),

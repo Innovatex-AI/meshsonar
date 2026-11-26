@@ -161,7 +161,7 @@ void main() {
       await openRegionTab(tester);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('region-machine-derived-note')), findsOneWidget);
-      expect(find.textContaining('Machine-derived outline'), findsOneWidget);
+      expect(find.textContaining('Approximate border'), findsOneWidget);
       expect(find.textContaining('Bratislava, SK'), findsWidgets);
     });
 
@@ -178,7 +178,7 @@ void main() {
 
     testWidgets('the note widget on its own', (tester) async {
       await tester.pumpWidget(MaterialApp(theme: meshSonarTheme(Brightness.dark), home: const Scaffold(body: MachineDerivedNote(regionName: 'Bratislava, SK'))));
-      expect(find.textContaining('approximate near the edge'), findsOneWidget);
+      expect(find.textContaining('outlined automatically and not reviewed yet'), findsOneWidget);
     });
   });
 }

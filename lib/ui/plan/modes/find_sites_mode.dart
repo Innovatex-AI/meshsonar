@@ -59,6 +59,8 @@ class FindSitesMode extends PlanMode {
   @override
   String get hint => 'Where a new repeater would help most: in the part of the map you are looking at, or near you.';
   @override
+  String get what => 'Where would a new repeater help most?';
+  @override
   bool get needsNodes => false;
   @override
   Widget buildSheet(PlanModeContext context) => FindSitesBody(context, key: const ValueKey('plan-mode-body-sites'));
@@ -402,13 +404,14 @@ class SiteRow extends StatelessWidget {
                 ),
               ),
           ]),
-        Wrap(spacing: Gap.xs, runSpacing: 0, children: [
-          TextButton.icon(
+        // Build 76: Add is the card's one filled button (three look-alike text links hid the main action).
+        Wrap(spacing: Gap.s, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          FilledButton.tonalIcon(
             key: Key('$keyBase-add-${s.id}'),
-            style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+            style: FilledButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
             onPressed: inPlan ? null : onAdd,
             icon: AppSymbolIcon(inPlan ? AppSymbols.checkmarkCircleFill : AppSymbols.plus, size: 18),
-            label: Text(inPlan ? 'In the plan' : 'Add', semanticsLabel: inPlan ? 'Pin $pin is in the plan' : 'Add pin $pin to the plan'),
+            label: Text(inPlan ? 'In the plan' : 'Add to plan', semanticsLabel: inPlan ? 'Pin $pin is in the plan' : 'Add pin $pin to the plan'),
           ),
           TextButton.icon(
             key: Key('$keyBase-show-${s.id}'),
@@ -639,7 +642,7 @@ class _FindSitesBodyState extends State<FindSitesBody> {
     final t = Theme.of(context);
     final r = _res;
     return [
-      Text('Ranks up to $kMaxSites places in the part of the map above this sheet. Only the view and the plan\'s radio settings are sent.',
+      Text('Finds the best $kMaxSites places in the map area you can see. Only that area and the radio settings are sent.',
           style: t.textTheme.bodyMedium),
       const SizedBox(height: Gap.s),
       sitesPrimaryButton(
@@ -670,7 +673,7 @@ class _FindSitesBodyState extends State<FindSitesBody> {
           key: const Key('sites-empty'),
           symbol: AppSymbols.magnifyingglass,
           title: 'No sites in this view',
-          message: 'Zoom out or move the map, then find sites again.',
+          message: 'Zoom out or move the map, then try again.',
           actionLabel: 'Try again',
           onAction: () => unawaited(_run()),
         ),
@@ -707,7 +710,7 @@ class _FindSitesBodyState extends State<FindSitesBody> {
         busy: c.busy,
         onPressed: () => unawaited(_verify()),
       ),
-      if (c.busy) const PlanLine(AppSymbols.clock, 'The server runs one site at a time; each can take up to a minute the first time.'),
+      if (c.busy) const PlanLine(AppSymbols.clock, 'One site at a time. Each can take up to a minute.'),
       const SizedBox(height: Gap.xs),
       sitesSecondaryButton(
         key: const Key('sites-drive-map'),

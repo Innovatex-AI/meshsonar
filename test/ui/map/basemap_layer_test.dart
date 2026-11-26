@@ -1,6 +1,6 @@
 // The vector basemap's tile path (ui/map/basemap_layer.dart): our tiles through the shared MeshTileProvider (cache, gate,
-// stats), a 204 "empty tile" is a tile and not a failure, failures count toward the OpenFreeMap fallback, pack-covered
-// tiles are never requested, and every map shows the credit of the source drawn.
+// stats), a 204 "empty tile" is a tile and not a failure, failures count toward the OpenFreeMap fallback,
+// and every map shows the credit of the source drawn.
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,10 +20,10 @@ void main() {
     health = BasemapHealth(client: () => throw StateError('no probe in these tests'));
   });
 
-  NetworkBasemapTileProvider provider(ScriptClient c, {bool Function(int, int, int)? skip}) => NetworkBasemapTileProvider(
+  NetworkBasemapTileProvider provider(ScriptClient c) => NetworkBasemapTileProvider(
     source: BasemapSource.ours,
     urlTemplate: () => OurBasemap.tileUrl,
-    tiles: MeshTileProvider(client: c, cache: MemCache(), gate: TileFetchGate(), stats: MapTileStats(), shouldSkip: skip),
+    tiles: MeshTileProvider(client: c, cache: MemCache(), gate: TileFetchGate(), stats: MapTileStats()),
     health: health,
     retryDelays: const [Duration(milliseconds: 5), Duration(milliseconds: 10)],
   );
@@ -118,12 +118,6 @@ void main() {
     expect(basemapBackgroundColor(BasemapSource.ours, dark: true, look: BasemapLook.labels), isNull);
     expect(parseStyleColor('rgb(18, 20, 23)'), const Color(0xFF121417));
     expect(parseStyleColor('hsl(0,0%,0%)'), isNull);
-  });
-
-  test('a tile an installed pack draws is not requested', () async {
-    final c = ScriptClient();
-    await expectLater(provider(c, skip: (z, x, y) => true).provide(TileIdentity(12, 1, 1)), throwsA(isA<ProviderException>()));
-    expect(c.sent, isEmpty);
   });
 
   test('OpenFreeMap: its TileJSON URL template, max zoom 14', () async {

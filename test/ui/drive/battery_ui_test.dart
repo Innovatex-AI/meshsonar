@@ -1,7 +1,7 @@
 // Build 70 battery plan, the UI slice: A1 the wakelock follows PowerProfile.current.screenOn (always / Drive tab only / never),
 // A5 the drive UI 1 s clocks run only while a drive is running, visible and in front (DockHero and PingCircle have none with no
-// drive), A3 the puck frame cap, A14 the speed-zoom bands, A4 AppState no longer notifies on every position-only engine tick, and
-// the simple basemap while driving.
+// drive), A3 the puck frame cap, A14 the speed-zoom bands, A4 AppState no longer notifies on every position-only engine tick.
+// (The simple basemap while driving was removed in build 76: test/ui/drive/drive_keeps_basemap_test.dart.)
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/app_state.dart' show RadioKind;
@@ -11,8 +11,6 @@ import 'package:meshsonar/radio/radio_api.dart';
 import 'package:meshsonar/ui/device_feedback.dart';
 import 'package:meshsonar/ui/drive/drive_clock.dart';
 import 'package:meshsonar/ui/drive/panel/panel_dock.dart';
-import 'package:meshsonar/ui/map/basemap_layer.dart' show simpleBasemapNow;
-import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/live_puck.dart' show puckFrameCap;
 import 'package:meshsonar/ui/shell/mini_drive_bar.dart';
 
@@ -191,18 +189,5 @@ void main() {
       z = easeTowardSnapped(z, -0.65, 0.1, 1.5);
     }
     expect(z, -0.65, reason: 'the eased zoom stops changing');
-  });
-
-  testWidgets('simple basemap: Saver while driving draws the map with no basemap tiles', (tester) async {
-    expect(simpleBasemapNow(driving: true), isFalse, reason: 'Balanced keeps the basemap');
-    PowerProfile.debugReset(PowerSettings.saver);
-    expect(simpleBasemapNow(driving: false), isFalse, reason: 'only while driving');
-    expect(simpleBasemapNow(driving: true), isTrue);
-    final h = await driving(tester);
-    expect(tester.widget<CoverageMap>(find.byType(CoverageMap)).plainBasemap, isTrue);
-    await h.state.stopDrive();
-    await _pump(tester);
-    expect(tester.widget<CoverageMap>(find.byType(CoverageMap)).plainBasemap, isFalse);
-    await stop(tester, h);
   });
 }

@@ -258,7 +258,7 @@ class _ReportBody extends StatelessWidget {
           const SizedBox(height: 10),
           _Highlights(report: r),
           if (r.cells.isNotEmpty) ...[
-            const _Heading('Grids mapped', icon: Icons.grid_on),
+            const _Heading('Where you mapped', icon: Icons.grid_on),
             _CellMap(report: r),
           ],
           const _Heading('The drive', icon: Icons.speed),
@@ -266,6 +266,16 @@ class _ReportBody extends StatelessWidget {
           if (r.snrSeries.isNotEmpty) ...[
             const _Heading('Signal over the drive', icon: Icons.show_chart),
             _Panel(key: const Key('report-snr-chart'), child: SnrSection(report: r)),
+          ],
+          // Build 76: what a driver asks first (which repeaters, where it worked) comes before the radio charts; it used to
+          // sit ten screens down, after noise floor, RSSI, hops, speed, GPS, context and weather.
+          if (r.repeaters.isNotEmpty) ...[
+            _Heading('Repeaters heard', icon: Icons.emoji_events_outlined, trailing: '${r.repeaters.length}'),
+            _Leaderboard(report: r),
+          ],
+          if (r.bestCell != null || r.worstCell != null) ...[
+            const _Heading('Best and worst spots', icon: Icons.place_outlined),
+            _Spots(report: r),
           ],
           const _Heading('Noise floor', icon: Icons.graphic_eq),
           _Panel(key: const Key('report-noise'), child: NoiseSection(report: r)),
@@ -295,17 +305,10 @@ class _ReportBody extends StatelessWidget {
           ],
           DriveContextSection(sessionId: r.session.id, pings: r.sortedPings),
           DriveWeatherSection(sessionId: r.session.id, pings: r.sortedPings),
-          if (r.repeaters.isNotEmpty) ...[
-            _Heading('Repeater leaderboard', icon: Icons.emoji_events_outlined, trailing: '${r.repeaters.length}'),
-            _Leaderboard(report: r),
-          ],
-          if (r.bestCell != null || r.worstCell != null) ...[
-            const _Heading('Best and worst spots', icon: Icons.place_outlined),
-            _Spots(report: r),
-          ],
           const SizedBox(height: 18),
           FilledButton.icon(
             key: const Key('report-share-button'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
             onPressed: onShare,
             icon: const Icon(Icons.ios_share),
             label: const Text('Share report'),
@@ -313,9 +316,15 @@ class _ReportBody extends StatelessWidget {
           const SizedBox(height: 8),
           OutlinedButton.icon(
             key: const Key('report-csv-button'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
             onPressed: r.sortedPings.isEmpty ? null : onCsv,
             icon: const Icon(Icons.table_chart_outlined),
-            label: const Text('Export CSV (contains your exact track)'),
+            label: const Text('Export CSV'),
+          ),
+          // The warning is a line of its own (build 76): inside the button it wrapped to two lines on every iPhone.
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('The CSV contains your exact track.', key: const Key('report-csv-note'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
           ),
         ],
       ),
@@ -438,10 +447,11 @@ class _Hero extends StatelessWidget {
             child: _HeroStat(
               valueKey: const Key('report-grids'),
               value: '${r.gridsMapped}',
-              label: 'grids mapped',
+              label: 'cells mapped',
               badge: r.newGrids > 0 ? '+${r.newGrids} new' : null,
             ),
           ),
+          const SizedBox(width: 10),
           Expanded(
             child: _HeroStat(
               valueKey: const Key('report-heard'),
@@ -449,6 +459,7 @@ class _Hero extends StatelessWidget {
               label: 'pings heard',
             ),
           ),
+          const SizedBox(width: 10),
           Expanded(
             child: _HeroStat(
               valueKey: const Key('report-repeaters'),
@@ -513,9 +524,9 @@ class _Highlights extends StatelessWidget {
     final c = Theme.of(context).colorScheme;
     final items = <(IconData, Color, String)>[];
     if (r.earlierDrives == 0 && r.cells.isNotEmpty) {
-      items.add((Icons.flag_outlined, c.primary, 'First drive on this phone: every grid is new.'));
+      items.add((Icons.flag_outlined, c.primary, 'First drive on this phone: every cell is new.'));
     } else if (r.newGrids > 0) {
-      items.add((Icons.grid_on, c.primary, '${r.newGrids} grid${r.newGrids == 1 ? '' : 's'} you\'d never driven before.'));
+      items.add((Icons.grid_on, c.primary, '${r.newGrids} cell${r.newGrids == 1 ? '' : 's'} you had never driven before.'));
     }
     final newReps = r.newRepeaters;
     if (newReps.isNotEmpty && r.earlierDrives > 0) {
@@ -690,8 +701,7 @@ class _CellMap extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: Text(
-          '${r.gridsMapped} cells (≈220 m, the same grid as MeshSonar\'s coverage map) · ${r.gridsWithCoverage} with coverage · '
-          '${r.newGrids} new',
+          '${r.gridsMapped} cell${r.gridsMapped == 1 ? '' : 's'} · ${r.gridsWithCoverage} heard · ${r.newGrids} new',
           key: const Key('report-grid-caption'),
           style: t.textTheme.bodySmall,
         ),

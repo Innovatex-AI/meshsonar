@@ -38,6 +38,27 @@ class _DecodePacketScreenState extends State<DecodePacketScreen> {
   bool _busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    _hex.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Paste and decode in one tap (build 76). An empty clipboard says so under the field.
+  Future<void> _paste() async {
+    final d = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    final text = d?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      setState(() => _error = 'Nothing to paste: copy a packet as hex first.');
+      return;
+    }
+    _hex.text = text;
+    await _decode();
+  }
+
+  @override
   void dispose() {
     _hex.dispose();
     super.dispose();
@@ -115,25 +136,48 @@ class _DecodePacketScreenState extends State<DecodePacketScreen> {
               autocorrect: false,
               enableSuggestions: false,
               style: AppType.mono.copyWith(fontSize: 16),
+              onSubmitted: (_) => _decode(),
               decoration: InputDecoration(
-                hintText: 'Paste the packet as hex, e.g. 1504e2a73c4f…',
+                labelText: 'Packet bytes (hex)',
+                hintText: 'e.g. 1504e2a73c4f…',
                 errorText: _error,
                 errorMaxLines: 4,
                 border: const OutlineInputBorder(),
+                suffixIcon: _hex.text.isEmpty
+                    ? null
+                    : IconButton(
+                        key: const Key('decode-clear'),
+                        tooltip: 'Clear',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(() {
+                          _hex.clear();
+                          _result = null;
+                          _error = null;
+                          _known = false;
+                        }),
+                      ),
               ),
             ),
             const SizedBox(height: Gap.s),
-            Wrap(spacing: Gap.s, runSpacing: Gap.s, children: [
-              FilledButton.icon(key: const Key('decode-run'), onPressed: _busy ? null : _decode, icon: const Icon(Icons.manage_search), label: const Text('Decode')),
-              OutlinedButton.icon(
-                key: const Key('decode-paste'),
-                icon: const Icon(Icons.content_paste),
-                label: const Text('Paste'),
-                onPressed: () async {
-                  final d = await Clipboard.getData(Clipboard.kTextPlain);
-                  if (d?.text != null) _hex.text = d!.text!;
-                },
+            // Two thumb-sized buttons side by side: with an empty field the main one is Paste (it decodes straight away).
+            Row(children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: _hex.text.trim().isEmpty
+                      ? FilledButton.icon(key: const Key('decode-paste'), onPressed: _busy ? null : _paste, icon: const Icon(Icons.content_paste), label: const Text('Paste and decode'))
+                      : FilledButton.icon(key: const Key('decode-run'), onPressed: _busy ? null : _decode, icon: const Icon(Icons.manage_search), label: const Text('Decode')),
+                ),
               ),
+              if (_hex.text.trim().isNotEmpty) ...[
+                const SizedBox(width: Gap.s),
+                SizedBox(
+                  height: 48,
+                  child: OutlinedButton.icon(key: const Key('decode-paste'), onPressed: _busy ? null : _paste, icon: const Icon(Icons.content_paste), label: const Text('Paste')),
+                ),
+              ],
+            ]),
+            Wrap(spacing: Gap.s, runSpacing: Gap.s, children: [
               if (noKey)
                 OutlinedButton(
                   key: const Key('decode-ask-server'),
@@ -148,12 +192,23 @@ class _DecodePacketScreenState extends State<DecodePacketScreen> {
                 ),
             ]),
             if (_busy) const LinearProgressIndicator(key: Key('decode-busy')),
-            Text('Decoded on this phone; nothing you paste is stored or sent unless the phone cannot read the type.', style: t.textTheme.bodySmall),
+            Padding(
+              padding: const EdgeInsets.only(top: Gap.xs),
+              child: Text('Read on this phone. Nothing you paste is stored; it is sent to the server only when the phone cannot read it.',
+                  style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ),
           ]),
         ),
         Expanded(
           child: r == null
-              ? ListView(padding: const EdgeInsets.all(Gap.l), children: [WebTwinLine(Uri.https(networkApexHost, '/tools/decode'))])
+              ? ListView(padding: const EdgeInsets.all(Gap.l), children: [
+                  // What this is for and where the hex comes from, instead of an empty page.
+                  Text('See what is inside a radio packet', key: const Key('decode-intro'), style: t.textTheme.titleMedium),
+                  const SizedBox(height: Gap.xs),
+                  Text('Copy a packet as hex (the copy button on any packet page, or your radio\'s Rx log), then tap Paste and decode. You get who sent it, what kind it is and every byte explained.',
+                      style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  WebTwinLine(Uri.https(networkApexHost, '/tools/decode')),
+                ])
               : PacketDetailBody(key: ValueKey('decode-${r.hash}-${r.source.name}'), d: r, expandSections: true, web: Uri.https(networkApexHost, '/tools/decode')),
         ),
       ]),

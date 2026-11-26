@@ -58,7 +58,7 @@ void main() {
   testWidgets('idle, not connected: Not connected / Connect radio dock, capsule says No radio, region chip is present', (tester) async {
     final h = await pump(tester);
     expect(find.text('Not connected'), findsOneWidget);
-    expect(find.text('Connect your radio to begin'), findsOneWidget);
+    expect(find.byKey(const Key('dock-subtitle')), findsNothing, reason: 'build 76: the state and the one action, no second sentence');
     expect(find.text('Connect radio'), findsOneWidget);
     expect(find.byKey(const Key('capsule-radio')), findsOneWidget);
     expect(tester.widget<Text>(find.byKey(const Key('capsule-radio'))).data, 'No radio');
@@ -116,7 +116,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byKey(const Key('drive-panel-strip')), findsOneWidget);
     expect(tester.getSize(find.byKey(const Key('drive-panel-strip'))).height, 28);
-    expect(find.text('Location is off for MeshSonar'), findsWidgets);
+    expect(find.text('Location is off'), findsWidgets);
     expect(find.byKey(const Key('dock-strip-action')), findsOneWidget);
     final btn = tester.getTopLeft(find.byKey(const Key('start-stop')));
     final fb = tester.widget<FilledButton>(find.byKey(const Key('start-stop')));

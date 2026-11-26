@@ -1,5 +1,6 @@
 // While MeshSonar is in front, an incoming message shows as a banner at the top of the app instead of an OS notification.
 // Tap = open that conversation (AlertCoordinator.pendingOpen). Not shown for the conversation already on screen.
+// Compact (48 pt), with an X and a swipe up to dismiss, and it takes no touches for its first 400 ms.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,12 @@ import 'package:flutter/material.dart';
 import '../../alerts/alert_coordinator.dart';
 import '../../alerts/alerts_runtime.dart';
 import '../theme.dart';
+
+/// The banner's height: a navigation header's, so it never covers more than the header it sits on.
+const double kInAppBannerHeight = 48;
+
+/// How long a new banner ignores touches (they go to whatever is underneath).
+const Duration kInAppBannerArmDelay = Duration(milliseconds: 400);
 
 class InAppBannerHost extends StatefulWidget {
   final Widget child;
@@ -21,6 +28,10 @@ class _InAppBannerHostState extends State<InAppBannerHost> {
   StreamSubscription<InAppBanner>? _sub;
   InAppBanner? _banner;
   Timer? _timer;
+  Timer? _armTimer;
+
+  /// False for the first [kInAppBannerArmDelay] after a banner appears: it takes no touches yet.
+  bool _armed = false;
 
   @override
   void initState() {
@@ -39,7 +50,14 @@ class _InAppBannerHostState extends State<InAppBannerHost> {
 
   void _show(InAppBanner b) {
     if (!mounted) return;
-    setState(() => _banner = b);
+    setState(() {
+      _banner = b;
+      _armed = false;
+    });
+    _armTimer?.cancel();
+    _armTimer = Timer(kInAppBannerArmDelay, () {
+      if (mounted) setState(() => _armed = true);
+    });
     _timer?.cancel();
     _timer = Timer(widget.visibleFor, () {
       if (mounted) setState(() => _banner = null);
@@ -51,12 +69,21 @@ class _InAppBannerHostState extends State<InAppBannerHost> {
     AlertsHost.runtime.removeListener(_rebind);
     unawaited(_sub?.cancel());
     _timer?.cancel();
+    _armTimer?.cancel();
     super.dispose();
+  }
+
+  void _close() {
+    _timer?.cancel();
+    _armTimer?.cancel();
+    if (mounted) setState(() => _banner = null);
   }
 
   @override
   Widget build(BuildContext context) {
     final b = _banner;
+    final cs = Theme.of(context).colorScheme;
+    final ink = cs.onInverseSurface;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -69,44 +96,70 @@ class _InAppBannerHostState extends State<InAppBannerHost> {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(Gap.m, Gap.s, Gap.m, 0),
-                child: Material(
-                  key: const Key('in-app-banner'),
-                  elevation: 6,
-                  borderRadius: BorderRadius.circular(12),
-                  color: Theme.of(context).colorScheme.inverseSurface,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      _coord?.pendingOpen.value = b.convKey;
-                      _timer?.cancel();
-                      setState(() => _banner = null);
-                    },
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.m),
-                        child: Row(
-                          children: [
-                            Icon(Icons.chat_bubble_rounded, color: Theme.of(context).colorScheme.onInverseSurface),
-                            const SizedBox(width: Gap.m),
+                padding: const EdgeInsets.fromLTRB(Gap.m, Gap.xs, Gap.m, 0),
+                // For the first moments the banner lets touches through: a tap already on its way to the header or the
+                // section strip underneath reaches that control instead of opening a chat (build 75 screen-tour bug).
+                child: IgnorePointer(
+                  ignoring: !_armed,
+                  // Flick it up to put it away without opening the conversation (as iOS banners do).
+                  child: Dismissible(
+                    key: ValueKey('in-app-banner-swipe-${b.convKey}-${b.title}-${b.body}'),
+                    direction: DismissDirection.up,
+                    onDismissed: (_) => _close(),
+                    child: MediaQuery.withClampedTextScaling(
+                      maxScaleFactor: 1.3,
+                      child: Material(
+                        key: const Key('in-app-banner'),
+                        elevation: 6,
+                        borderRadius: BorderRadius.circular(12),
+                        color: cs.inverseSurface,
+                        clipBehavior: Clip.antiAlias,
+                        // Compact: one line of sender, one line of text, no taller than a navigation header.
+                        child: SizedBox(
+                          height: kInAppBannerHeight,
+                          child: Row(children: [
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(b.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onInverseSurface)),
-                                  Text(b.body,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(color: Theme.of(context).colorScheme.onInverseSurface)),
-                                ],
+                              child: Semantics(
+                                button: true,
+                                hint: 'Opens the conversation',
+                                child: InkWell(
+                                  key: const Key('in-app-banner-open'),
+                                  onTap: () {
+                                    _coord?.pendingOpen.value = b.convKey;
+                                    _close();
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: Gap.m),
+                                    child: Row(children: [
+                                      Icon(Icons.chat_bubble_rounded, size: 20, color: ink),
+                                      const SizedBox(width: Gap.m),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Text(b.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, height: 1.2, fontWeight: FontWeight.w700, color: ink)),
+                                            Text(b.body, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, height: 1.2, color: ink)),
+                                          ],
+                                        ),
+                                      ),
+                                    ]),
+                                  ),
+                                ),
                               ),
                             ),
-                          ],
+                            // A clear way to put it away that is not "open the chat".
+                            Semantics(
+                              button: true,
+                              label: 'Dismiss',
+                              excludeSemantics: true,
+                              child: InkWell(
+                                key: const Key('in-app-banner-close'),
+                                onTap: _close,
+                                child: SizedBox(width: kInAppBannerHeight, height: kInAppBannerHeight, child: Icon(Icons.close_rounded, size: 20, color: ink)),
+                              ),
+                            ),
+                          ]),
                         ),
                       ),
                     ),

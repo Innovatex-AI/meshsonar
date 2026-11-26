@@ -1,7 +1,8 @@
 // StatusCapsule (Drive plan 4.1, 4.12, 4.20): the one top-trailing chip that says what the radio and the GPS are doing. It replaces
 // the AppBar's ConnectionChip. Tap = the connection sheet (same destination as before). Colour is never the only signal: each dot
 // has a word. At text scale >= 2.0 it collapses to a 44 pt dot button with a word-bearing VoiceOver label while the dock line
-// carries the words. Debug builds with the simulator radio show an amber "SIM" badge here (there is no map-corner tag).
+// carries the words. The simulator radio shows a quiet outlined "SIM" tag here and a green dot like any
+// working radio (build 76: the amber dot and amber tag read as a fault).
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
@@ -39,8 +40,8 @@ class StatusCapsule extends StatelessWidget {
     final String radioWord = link.connected ? 'Radio' : (link.link == RadioLink.notConnected ? 'No radio' : link.statusLabel);
     final _Level radio = switch (link.link) {
       RadioLink.notConnected => _Level.idle,
-      RadioLink.connecting || RadioLink.reconnecting || RadioLink.simulator => _Level.warn,
-      RadioLink.connected => _Level.ok,
+      RadioLink.connecting || RadioLink.reconnecting => _Level.warn,
+      RadioLink.connected || RadioLink.simulator => _Level.ok,
     };
 
     // GPS: only has a health value while a drive runs; idle it follows the location permission.
@@ -150,8 +151,8 @@ class StatusCapsule extends StatelessWidget {
                       Container(
                         key: const Key('chip-simulated'),
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(color: c.warning, borderRadius: BorderRadius.circular(6)),
-                        child: Text('SIM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.bg)),
+                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: c.outline)),
+                        child: Text('SIM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.textMuted)),
                       ),
                     ],
                   ],

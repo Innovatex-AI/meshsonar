@@ -15,26 +15,27 @@ class SimulatedTag extends StatelessWidget {
       message: 'Simulator mode: the position moves along a demo route and the radio is simulated.',
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: mc.beacon,
+          // Build 76: a quiet outlined tag in plain words; the solid orange capitals read as an alarm.
+          color: t.colorScheme.surface,
           borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: t.colorScheme.outlineVariant),
         ),
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: dense ? 4 : 7, vertical: dense ? 1 : 3),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.science_rounded, size: dense ? 10 : 13, color: mc.onBeacon),
+              Icon(Icons.science_rounded, size: dense ? 11 : 14, color: mc.textMuted),
               SizedBox(width: dense ? 2 : 4),
               Flexible(
                 child: Text(
-                  'SIMULATED GPS & RADIO',
+                  'Simulated drive',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: t.textTheme.labelSmall?.copyWith(
-                    color: mc.onBeacon,
-                    fontSize: dense ? 9 : 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
+                    color: t.colorScheme.onSurface,
+                    fontSize: dense ? 10 : 12,
+                    fontWeight: FontWeight.w700,
                     height: 1.1,
                   ),
                 ),

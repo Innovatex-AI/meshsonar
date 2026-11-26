@@ -42,6 +42,13 @@ void main() {
       expect(labelBudgetForZoom(15), 80);
       expect([for (final z in [8.9, 9.0, 11.0, 12.0, 13.0, 14.0]) labelBudgetForZoom(z)], [0, 12, 24, 40, 56, 80]);
     });
+
+    test('while a drive runs: about a third of the names, never under 4 or over 16, zero stays zero', () {
+      expect([for (final b in [0, 12, 24, 40, 56, 80]) drivingLabelBudget(b)], [0, 4, 8, 14, 16, 16]);
+      for (final z in [9.0, 11.0, 12.0, 13.0, 14.0]) {
+        expect(drivingLabelBudget(labelBudgetForZoom(z)), lessThan(labelBudgetForZoom(z)));
+      }
+    });
   });
 
   group('placement', () {

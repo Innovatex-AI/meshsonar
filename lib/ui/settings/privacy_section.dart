@@ -1,4 +1,4 @@
-// Settings > Privacy & data sharing: one switch per kind of data collection (from the registry in data_sharing.dart),
+// Settings > Sharing & privacy: one switch per kind of data collection (from the registry in data_sharing.dart),
 // the erase action for what the server holds, the full "What MeshSonar shares" page, the location explainer and the
 // website's privacy zones. Turning sharing on asks first; turning it off stops it at once and offers the erase.
 import 'package:flutter/material.dart';
@@ -13,7 +13,7 @@ import '../always_location_screen.dart';
 import '../app.dart';
 import 'data_sharing.dart';
 import 'delete_my_data.dart';
-import 'privacy_profile_rows.dart';
+import 'privacy_profile_rows.dart' show privacyProfileEntries;
 import 'privacy_zones_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -24,74 +24,150 @@ const List<SettingsEntry> privacySettingsEntries = [
   ...privacyProfileEntries,
   SettingsEntry('telemetry-toggle', 'privacy', 'Share with MeshSonar',
       'Whenever your radio is connected and the app is open, your phone is an observer: public packets and signal strength your radio hears go to the live map. Never private messages or private channels.',
-      keywords: ['telemetry', 'observer', 'share what my radio hears', 'sharing', 'data collection', 'opt out', 'live feed', 'packets', 'packet headers', 'privacy']),
+      was: 'Privacy & data sharing', keywords: ['telemetry', 'observer', 'master switch', 'turn off', 'share', 'share what my radio hears', 'sharing', 'data collection', 'opt out', 'live feed', 'packets', 'packet headers', 'privacy']),
   SettingsEntry('telemetry-location', 'privacy', 'Observer location',
       'Approximate (~5 km hexagon, the default) or Region only. Never your exact position.',
-      keywords: ['location', 'observer', 'approximate', 'region only', 'hexagon', '5 km', 'privacy', 'telemetry']),
+      page: 'observer', was: 'Privacy & data sharing', keywords: ['location', 'observer', 'approximate', 'region only', 'hexagon', '5 km', 'privacy', 'telemetry']),
   // Drive-context categories (stream 7; titles = lib/core/data_categories.dart).
   SettingsEntry('collect-motion-toggle', 'privacy', 'Motion and altitude',
       'GPS height, direction of travel and accuracy, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['altitude', 'height', 'heading', 'course', 'gps accuracy', 'data collection', 'opt out']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['altitude', 'height', 'heading', 'course', 'gps accuracy', 'data collection', 'opt out']),
   SettingsEntry('collect-barometer-toggle', 'privacy', 'Air pressure',
       'Phone barometer during a drive, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['barometer', 'pressure', 'hpa', 'inhg', 'motion & fitness', 'sensor', 'data collection', 'opt out']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['barometer', 'pressure', 'hpa', 'inhg', 'motion & fitness', 'sensor', 'data collection', 'opt out']),
   SettingsEntry('collect-phone_battery-toggle', 'privacy', 'Phone battery',
       'Battery level and charging during a drive, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['battery', 'charging', 'low power', 'data collection', 'opt out']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['battery', 'charging', 'low power', 'data collection', 'opt out']),
   SettingsEntry('collect-device-toggle', 'privacy', 'Phone and app details',
       'System version, phone model code and app build, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['device', 'model', 'ios version', 'android version', 'build', 'data collection', 'opt out']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['device', 'model', 'ios version', 'android version', 'build', 'data collection', 'opt out']),
   SettingsEntry('collect-radio_health-toggle', 'privacy', 'Radio health',
       'Radio battery, uptime, error flags, packet counters and airtime during a drive, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['radio battery', 'uptime', 'airtime', 'counters', 'stats', 'errors', 'data collection', 'opt out']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['radio battery', 'uptime', 'airtime', 'counters', 'stats', 'errors', 'data collection', 'opt out']),
   SettingsEntry('collect-radio_config-toggle', 'privacy', 'Radio settings',
       'Board, firmware and power limits of your radio, saved with your drive (uploaded with it when the server accepts it).',
-      keywords: ['firmware', 'board', 'max power', 'radio settings', 'data collection', 'opt out']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['firmware', 'board', 'max power', 'radio settings', 'data collection', 'opt out']),
   SettingsEntry('collect-weather-toggle', 'privacy', 'Weather for my drives',
       'The server looks up weather near your uploaded drives, on a coarse grid, when it supports it. Data: Open-Meteo.com.',
-      keywords: ['weather', 'temperature', 'open-meteo', 'data collection', 'opt out']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['weather', 'temperature', 'open-meteo', 'data collection', 'opt out']),
   SettingsEntry('telemetry-erase-now', 'privacy', 'Erase shared observer packets',
       'Asks the server to delete every packet this phone sent as an observer.',
-      keywords: ['delete', 'erase', 'remove', 'telemetry', 'gdpr'], available: _privacyHasKey),
-  SettingsEntry('delete-my-data', 'privacy', 'Delete my data and account',
+      page: 'observer', was: 'Privacy & data sharing', keywords: ['delete', 'erase', 'remove', 'telemetry', 'gdpr'], available: _privacyHasKey),
+  SettingsEntry('delete-my-data', 'driver', 'Delete my data and account',
       'Deletes the drive context and observer packets the server holds for you, the context and drives saved on this phone, and your account on the website.',
-      keywords: ['delete', 'erase', 'remove', 'gdpr', 'my data', 'privacy', 'forget', 'context', 'weather', 'sensors', 'account', 'driver key', 'drives']),
+      was: 'Privacy & data sharing', keywords: ['delete', 'erase', 'remove', 'gdpr', 'my data', 'privacy', 'forget', 'context', 'weather', 'sensors', 'account', 'driver key', 'drives']),
   SettingsEntry('privacy-policy', 'privacy', 'Privacy policy',
       'What MeshSonar shows in public and what stays yours, on meshsonar.com.',
-      keywords: ['privacy policy', 'policy', 'terms', 'legal']),
+      was: 'Privacy & data sharing', keywords: ['privacy policy', 'policy', 'terms', 'legal']),
   SettingsEntry('privacy-what-shared', 'privacy', 'What MeshSonar shares',
       'Everything that leaves this phone, where it goes, and what never does.',
-      keywords: ['data', 'collected', 'disclosure', 'shared', 'privacy policy']),
+      page: 'sharing', was: 'Privacy & data sharing', keywords: ['data', 'collected', 'disclosure', 'shared', 'privacy policy']),
   SettingsEntry('privacy-location', 'privacy', 'Location while driving',
       'Why the app asks for "Always" location and what it is never used for.',
-      keywords: ['gps', 'always', 'background', 'location', 'permission', 'tracking']),
+      was: 'Privacy & data sharing', keywords: ['gps', 'always', 'background', 'location', 'permission', 'tracking']),
   SettingsEntry('privacy-zones', 'privacy', 'Privacy zones',
       'Places where your pings are hidden from the public map, and how much of the start and end of each drive is trimmed.',
-      keywords: ['privacy zone', 'zones', 'home', 'hide', 'trim', 'start and end', 'private', 'map', 'location']),
-  SettingsEntry('privacy-zones-website', 'privacy', 'Manage privacy zones on the website',
-      'Hide pings near places like home, on the website. Applies to drives on the server.',
-      keywords: ['home', 'hide', 'zone', 'website']),
+      was: 'Privacy & data sharing', keywords: ['privacy zone', 'zones', 'home', 'hide', 'website', 'trim', 'start and end', 'private', 'map', 'location']),
 ];
 
 bool _privacyHasKey(AppState s) => s.hasKey;
 
-const String privacyHelp =
-    'Everything that leaves this phone is listed here, with its own switch where you can turn '
-    'it off. Turning one off stops it at once.';
+const String privacyHelp = 'What leaves this phone, and the switch for each part.';
 
-List<Widget> privacySectionRows(BuildContext context) {
+Widget _linkRow(BuildContext context, String id, IconData icon, {String? subtitle, Widget? trailing, required VoidCallback onTap}) =>
+    ListTile(
+      key: Key(id),
+      leading: Icon(icon),
+      title: Text(settingsEntry(id).title),
+      subtitle: Text(subtitle ?? settingsEntry(id).summary),
+      trailing: trailing ?? const Icon(Icons.chevron_right),
+      onTap: onTap,
+    );
+
+/// Sharing & privacy, first level: "Location while driving".
+Widget privacyLocationRow(BuildContext context) => SettingsAnchor(
+      id: 'privacy-location',
+      child: _linkRow(context, 'privacy-location', Icons.location_on_outlined,
+          subtitle: 'Why the app asks for "Always", and what it is never used for.',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AlwaysLocationScreen(explainOnly: true)))),
+    );
+
+/// Sharing & privacy, first level: "Privacy zones". The pre-76 row "Manage privacy zones on the website" is a link on
+/// that page now; its id stays as a second anchor here so an old link or search still lands on this row.
+Widget privacyZonesRow(BuildContext context) {
+  final s = AppScope.of(context);
+  return SettingsAnchor(
+    id: 'privacy-zones-website',
+    child: SettingsAnchor(
+      id: 'privacy-zones',
+      child: _linkRow(context, 'privacy-zones', Icons.shield_outlined,
+          subtitle: privacyZonesSummary(s, AppScope.unitsOf(context)),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PrivacyZonesScreen()))),
+    ),
+  );
+}
+
+/// Sharing & privacy, first level: the privacy policy (opens the browser).
+Widget privacyPolicyRow(BuildContext context) {
+  final s = AppScope.of(context);
+  return SettingsAnchor(
+    id: 'privacy-policy',
+    child: _linkRow(context, 'privacy-policy', Icons.policy_outlined,
+        subtitle: 'Opens in your browser.',
+        trailing: const Icon(Icons.open_in_new, size: 18),
+        onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl))),
+  );
+}
+
+/// About: the terms of service (V1-PLAN LAUNCH-1): one page on the hub host.
+Widget termsOfServiceRow(BuildContext context) {
+  final s = AppScope.of(context);
+  return SettingsAnchor(
+    id: 'terms-of-service-link',
+    child: _linkRow(context, 'terms-of-service-link', Icons.gavel_outlined,
+        subtitle: 'Opens in your browser.',
+        trailing: const Icon(Icons.open_in_new, size: 18),
+        onTap: () => s.openWebPage('/terms')),
+  );
+}
+
+/// Account, first level: "Delete my data and account".
+Widget deleteMyDataRow(BuildContext context) {
+  final s = AppScope.of(context);
+  return SettingsAnchor(
+    id: 'delete-my-data',
+    child: _linkRow(context, 'delete-my-data', Icons.delete_forever_outlined,
+        subtitle: s.contextErasePending
+            ? 'An erase is waiting to reach the server; it is retried automatically.'
+            : 'On the server, on this phone, or both. Download a copy first.',
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DeleteMyDataScreen()))),
+  );
+}
+
+/// How many of the per-item switches are on ("5 of 7 on"), for the "What is shared" row.
+String sharingItemsCaption(AppState s) {
+  final items = [for (final c in dataCategories) if (!identical(c, telemetryCategory)) c];
+  final on = items.where((c) => c.isOn(s.settings)).length;
+  return '$on of ${items.length} kinds of drive data on.';
+}
+
+/// The "What is shared" page: one switch per kind of drive data, then the full list of everything that leaves the phone.
+List<Widget> sharingPageRows(BuildContext context) => [
+      for (final c in dataCategories)
+        if (!identical(c, telemetryCategory)) SettingsAnchor(id: c.toggleKey, child: DataCategoryTile(category: c)),
+      SettingsAnchor(
+        id: 'privacy-what-shared',
+        child: _linkRow(context, 'privacy-what-shared', Icons.fact_check_outlined,
+            subtitle: 'The full list: everything that leaves this phone, and what never does.',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WhatIsSharedScreen()))),
+      ),
+    ];
+
+/// The observer rows that belong to the privacy registry: where the observer says it is, and the erase of what it sent.
+List<Widget> observerPrivacyRows(BuildContext context) {
   final s = AppScope.of(context);
   return [
-    const PrivacyProfileRows(),
-    for (final c in dataCategories) ...[
-      SettingsAnchor(
-        id: c.toggleKey,
-        child: DataCategoryTile(category: c),
-      ),
-      if (identical(c, telemetryCategory)) ...[
-        const SettingsAnchor(id: 'telemetry-location', child: TelemetryLocationTile()),
-      ],
-    ],
+    const SettingsAnchor(id: 'telemetry-location', child: TelemetryLocationTile()),
     if (s.hasKey)
       for (final c in dataCategories)
         if (c.eraseFromServer != null)
@@ -104,88 +180,11 @@ List<Widget> privacySectionRows(BuildContext context) {
               subtitle: Text(
                 c.erasePending?.call(s) == true
                     ? 'An erase is waiting to reach the server; it is retried automatically.'
-                    : 'Asks the server to delete every one this phone sent. Sharing stays as it is.',
+                    : 'Deletes every one this phone sent. Sharing stays as it is.',
               ),
               onTap: () => eraseCategory(context, s, c),
             ),
           ),
-    SettingsAnchor(
-      id: 'delete-my-data',
-      child: ListTile(
-        key: const Key('delete-my-data'),
-        leading: const Icon(Icons.delete_forever_outlined),
-        title: Text(settingsEntry('delete-my-data').title),
-        subtitle: Text(
-          s.contextErasePending
-              ? 'An erase is waiting to reach the server; it is retried automatically.'
-              : settingsEntry('delete-my-data').summary,
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DeleteMyDataScreen())),
-      ),
-    ),
-    SettingsAnchor(
-      id: 'privacy-what-shared',
-      child: ListTile(
-        key: const Key('privacy-what-shared'),
-        leading: const Icon(Icons.fact_check_outlined),
-        title: Text(settingsEntry('privacy-what-shared').title),
-        subtitle: Text(settingsEntry('privacy-what-shared').summary),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const WhatIsSharedScreen())),
-      ),
-    ),
-    SettingsAnchor(
-      id: 'privacy-location',
-      child: ListTile(
-        key: const Key('privacy-location'),
-        leading: const Icon(Icons.location_on_outlined),
-        title: Text(settingsEntry('privacy-location').title),
-        subtitle: const Text(locationSummary),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AlwaysLocationScreen(explainOnly: true))),
-      ),
-    ),
-    SettingsAnchor(
-      id: 'privacy-policy',
-      child: ListTile(
-        key: const Key('privacy-policy'),
-        leading: const Icon(Icons.policy_outlined),
-        title: Text(settingsEntry('privacy-policy').title),
-        subtitle: Text(settingsEntry('privacy-policy').summary),
-        trailing: const Icon(Icons.open_in_new, size: 18),
-        onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
-      ),
-    ),
-    SettingsAnchor(
-      id: 'privacy-zones',
-      child: ListTile(
-        key: const Key('privacy-zones'),
-        leading: const Icon(Icons.shield_outlined),
-        title: Text(settingsEntry('privacy-zones').title),
-        subtitle: Text(privacyZonesSummary(s, AppScope.unitsOf(context))),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PrivacyZonesScreen())),
-      ),
-    ),
-    SettingsAnchor(
-      id: 'privacy-zones-website',
-      child: ListTile(
-        key: const Key('privacy-zones-website'),
-        leading: const Icon(Icons.open_in_new),
-        title: Text(settingsEntry('privacy-zones-website').title),
-        subtitle: Text('Optional: the same page on ${s.webPage('/me/privacy')}. Everything on it is also in the app.'),
-        onTap: () => s.openWebPage('/me/privacy'),
-      ),
-    ),
-    // Terms of service (V1-PLAN LAUNCH-1): one page on the hub host, also linked from the website's sign-in, privacy page and footer.
-    ListTile(
-      key: const Key('terms-of-service-link'),
-      leading: const Icon(Icons.gavel_outlined),
-      title: const Text('Terms of service'),
-      subtitle: Text('On ${s.webPage('/terms')}: use of MeshSonar, photos and chat, reports.'),
-      onTap: () => s.openWebPage('/terms'),
-    ),
   ];
 }
 
@@ -209,9 +208,9 @@ class TelemetryLocationTile extends StatelessWidget {
           SegmentedButton<bool>(
             key: const Key('telemetry-location-selector'),
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: true, label: Text(telemetryLocationRegionLabel)),
-              ButtonSegment(value: false, label: Text(telemetryLocationApproxLabel)),
+            segments: [
+              ButtonSegment(value: true, label: segmentLabel(telemetryLocationRegionLabel)),
+              ButtonSegment(value: false, label: segmentLabel(telemetryLocationApproxLabel)),
             ],
             selected: {regionOnly},
             onSelectionChanged: enabled ? (v) => s.updateSettings(s.settings.copyWith(telemetryRegionOnly: v.first)) : null,
@@ -245,11 +244,17 @@ class DataCategoryTile extends StatelessWidget {
       key: Key(c.toggleKey),
       secondary: Icon(categoryIcon(c.coreId)),
       title: Text(c.title),
-      subtitle: Text(status == null ? c.summary : '${c.summary}\n$status'),
+      // What it is in one sentence (the full text is on "What MeshSonar shares"), then where it stands.
+      subtitle: Text(status == null ? _firstSentence(c.summary) : '${_firstSentence(c.summary)}\n$status'),
       value: on,
       onChanged: (v) => setDataCategory(context, s, c, v),
     );
   }
+}
+
+String _firstSentence(String text) {
+  final i = text.indexOf('. ');
+  return i < 0 ? text : text.substring(0, i + 1);
 }
 
 /// The icon of a category's switch.
@@ -446,8 +451,26 @@ class WhatIsSharedScreen extends StatelessWidget {
           key: const Key('what-shared-screen'),
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
+            // What is on right now, and the way to the switches, before the long read.
+            Card(
+              key: const Key('what-shared-summary'),
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                leading: const Icon(Icons.toggle_on_outlined),
+                title: Text('${dataCategories.where((c) => c.isOn(s.settings)).length} of ${dataCategories.length} on'),
+                subtitle: const Text('Change them in Settings > Sharing & privacy.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+            ),
             for (final c in dataCategories) ...[
-              head('${c.title}: ${c.isOn(s.settings) ? 'on' : 'off'}'),
+              Padding(
+                padding: const EdgeInsets.only(top: 20, bottom: 6),
+                child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, runSpacing: 4, children: [
+                  Semantics(header: true, child: Text(c.title, style: t.textTheme.titleMedium)),
+                  _OnOffPill(on: c.isOn(s.settings), id: c.id),
+                ]),
+              ),
               Text(c.disclosureLead),
               const SizedBox(height: 6),
               for (final x in c.shared) line(Icons.check, x),
@@ -464,9 +487,40 @@ class WhatIsSharedScreen extends StatelessWidget {
               Text(p.head, style: t.textTheme.titleSmall),
               Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(p.body)),
             ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('what-shared-policy'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              onPressed: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('Privacy policy'),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "On" / "Off" next to a heading: a word and a colour, so the state reads at a glance and without colour.
+class _OnOffPill extends StatelessWidget {
+  final bool on;
+  final String id;
+  const _OnOffPill({required this.on, required this.id});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final colour = on ? c.primary : c.onSurfaceVariant;
+    return Container(
+      key: Key('what-shared-state-$id'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colour.withValues(alpha: 0.45)),
+      ),
+      child: Text(on ? 'On' : 'Off', style: TextStyle(color: colour, fontWeight: FontWeight.w700)),
     );
   }
 }

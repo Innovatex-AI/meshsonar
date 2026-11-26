@@ -173,7 +173,7 @@ void main() {
       await withRoute();
       rig.chat.contacts.detach();
       await pumpRoute(tester, keyN(1));
-      expect(find.text('Radio not connected'), findsOneWidget);
+      expect(find.text('Radio not connected'), findsNWidgets(2), reason: 'Find and Test both say why');
       await tester.tap(find.byKey(const Key('route-find')));
       await tester.pumpAndSettle();
       expect(find.text('Connect your radio to look for a route.'), findsOneWidget);

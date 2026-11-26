@@ -157,7 +157,7 @@ class _SetupBodyState extends State<_SetupBody> {
           padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
           children: [
             Text(
-              'Changes are written to your radio and kept on it. After each one MeshSonar reads the radio back to check, and you can undo the last change. Nothing here happens by itself.',
+              'Each change is saved on your radio and checked. You can undo the last one.',
               style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: Gap.m),
@@ -213,7 +213,8 @@ class _SetupBodyState extends State<_SetupBody> {
     );
   }
 
-  ButtonStyle get _big => FilledButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget));
+  /// Full width (build 76): a Save button is one thumb-sized target per card, not a small pill on the left.
+  ButtonStyle get _big => FilledButton.styleFrom(minimumSize: const Size.fromHeight(kToolTarget));
 
   // ------------------------------------------------------------ name
 
@@ -251,7 +252,7 @@ class _SetupBodyState extends State<_SetupBody> {
           child: const Text('Save name'),
         ),
       ),
-    ], subtitle: 'Shown to others in adverts and as the sender of your chat messages.');
+    ], subtitle: 'What other people see for this radio.');
   }
 
   // ------------------------------------------------------------ position
@@ -286,15 +287,15 @@ class _SetupBodyState extends State<_SetupBody> {
       const SizedBox(height: Gap.s),
       OutlinedButton.icon(
         key: const Key('setup-position-phone'),
-        style: OutlinedButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget)),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(kToolTarget)),
         onPressed: _busy ? null : _usePhone,
         icon: const Icon(Icons.my_location),
         label: const Text('Use my phone’s location'),
       ),
       const SizedBox(height: Gap.m),
-      Wrap(spacing: Gap.m, runSpacing: Gap.s, children: [
-        SizedBox(
-          width: 170,
+      // Side by side at every phone width (build 76): two fixed 170 pt boxes wrapped onto two rows on an iPhone.
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
           child: TextField(
             key: const Key('setup-lat-field'),
             controller: _lat,
@@ -303,8 +304,8 @@ class _SetupBodyState extends State<_SetupBody> {
             decoration: const InputDecoration(labelText: 'Latitude'),
           ),
         ),
-        SizedBox(
-          width: 170,
+        const SizedBox(width: Gap.m),
+        Expanded(
           child: TextField(
             key: const Key('setup-lon-field'),
             controller: _lon,
@@ -340,7 +341,7 @@ class _SetupBodyState extends State<_SetupBody> {
         value: c.advertSharesPosition,
         onChanged: _busy ? null : (on) => _togglePositionPolicy(on),
       ),
-    ], subtitle: 'Adverts are public. This is the position your radio announces, not your live location.');
+    ], subtitle: 'Where this radio says it is. Not your live location.');
   }
 
   Future<void> _togglePositionPolicy(bool on) async {
@@ -360,20 +361,20 @@ class _SetupBodyState extends State<_SetupBody> {
 
   // ------------------------------------------------------------ behaviour
 
-  Widget _behaviourCard(RadioConfig c) => _card('behaviour', 'Contacts and acknowledgements', [
+  Widget _behaviourCard(RadioConfig c) => _card('behaviour', 'Contacts and delivery', [
         SwitchListTile(
           key: const Key('setup-manual-add'),
           contentPadding: EdgeInsets.zero,
           title: const Text('Add new contacts myself'),
-          subtitle: const Text('On: nodes that advertise are not added to the radio’s contact list until you add them (for example from Discover nearby). Off: the radio adds them by itself.'),
+          subtitle: const Text('On: you choose who is added. Off: the radio adds every node it hears.'),
           value: c.manualAdd,
           onChanged: _busy ? null : (v) => _run('behaviour', () => setup.setBehaviour(manualAdd: v)),
         ),
         SwitchListTile(
           key: const Key('setup-multi-acks'),
           contentPadding: EdgeInsets.zero,
-          title: const Text('Extra acknowledgements'),
-          subtitle: const Text('On: the radio sends a second acknowledgement for direct messages it receives, which helps on weak links and costs a little airtime.'),
+          title: const Text('Confirm delivery twice'),
+          subtitle: const Text('Helps on weak links. Uses a little more airtime.'),
           value: c.multiAcks != 0,
           onChanged: _busy ? null : (v) => _run('behaviour', () => setup.setBehaviour(multiAcks: v ? 1 : 0)),
         ),
@@ -463,7 +464,7 @@ class _SetupBodyState extends State<_SetupBody> {
     final problems = target?.problems() ?? const <String>[];
     final same = target != null && target.matches(c.params);
     final canApply = !_busy && target != null && problems.isEmpty && !same && !_driveBlocks;
-    return _card('airwaves', 'The airwaves', [
+    return _card('airwaves', 'Power and frequency', [
       _driveGuard(),
       // ---- TX power
       Text('TX power', style: t.textTheme.titleSmall),
@@ -518,7 +519,7 @@ class _SetupBodyState extends State<_SetupBody> {
         ]),
       const SizedBox(height: Gap.m),
       Text('Choose new settings', style: t.textTheme.titleSmall),
-      Text('MeshSonar never applies a preset by itself. Pick one, check the comparison, then press Apply.',
+      Text('Pick one, check the comparison, then press Apply.',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       RadioGroup<_Choice>(
         groupValue: _choice,
@@ -570,13 +571,13 @@ class _SetupBodyState extends State<_SetupBody> {
         alignment: AlignmentDirectional.centerStart,
         child: FilledButton.icon(
           key: const Key('setup-apply'),
-          style: FilledButton.styleFrom(minimumSize: const Size(kToolTarget, kToolTarget), backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(kToolTarget), backgroundColor: t.colorScheme.error, foregroundColor: t.colorScheme.onError),
           onPressed: canApply ? () => _confirmApply(c, target) : null,
           icon: const Icon(Icons.settings_input_antenna),
-          label: const Text('Apply radio parameters'),
+          label: const Text('Apply frequency settings'),
         ),
       ),
-    ], subtitle: 'Frequency, bandwidth, spreading factor and coding rate decide which radios can hear yours.');
+    ], subtitle: 'Must match the repeaters around you, or they cannot hear this radio.');
   }
 
   Widget _communityPicker() {
@@ -623,49 +624,55 @@ class _SetupBodyState extends State<_SetupBody> {
 
   Widget _customFields() => Padding(
         padding: const EdgeInsets.only(top: Gap.s),
-        child: Wrap(spacing: Gap.m, runSpacing: Gap.s, crossAxisAlignment: WrapCrossAlignment.end, children: [
-          SizedBox(
-            width: 150,
-            child: TextField(
-              key: const Key('setup-freq-field'),
-              controller: _freq,
-              onChanged: (_) => setState(() {}),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-              decoration: const InputDecoration(labelText: 'Frequency (MHz)'),
+        // Two rows of two (build 76): fixed-width boxes left a ragged wrap at 375 pt.
+        child: Column(children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: TextField(
+                key: const Key('setup-freq-field'),
+                controller: _freq,
+                onChanged: (_) => setState(() {}),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                decoration: const InputDecoration(labelText: 'Frequency (MHz)'),
+              ),
             ),
-          ),
-          SizedBox(
-            width: 150,
-            child: TextField(
-              key: const Key('setup-bw-field'),
-              controller: _bw,
-              onChanged: (_) => setState(() {}),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-              decoration: const InputDecoration(labelText: 'Bandwidth (kHz)'),
+            const SizedBox(width: Gap.m),
+            Expanded(
+              child: TextField(
+                key: const Key('setup-bw-field'),
+                controller: _bw,
+                onChanged: (_) => setState(() {}),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                decoration: const InputDecoration(labelText: 'Bandwidth (kHz)'),
+              ),
             ),
-          ),
-          SizedBox(
-            width: 130,
-            child: DropdownButtonFormField<int>(
-              key: const Key('setup-sf-field'),
-              initialValue: _sf,
-              decoration: const InputDecoration(labelText: 'Spreading factor'),
-              items: [for (var i = 5; i <= 12; i++) DropdownMenuItem(value: i, child: Text('SF$i'))],
-              onChanged: (v) => setState(() => _sf = v ?? _sf),
+          ]),
+          const SizedBox(height: Gap.s),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                key: const Key('setup-sf-field'),
+                initialValue: _sf,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Spreading factor'),
+                items: [for (var i = 5; i <= 12; i++) DropdownMenuItem(value: i, child: Text('SF$i'))],
+                onChanged: (v) => setState(() => _sf = v ?? _sf),
+              ),
             ),
-          ),
-          SizedBox(
-            width: 130,
-            child: DropdownButtonFormField<int>(
-              key: const Key('setup-cr-field'),
-              initialValue: _cr,
-              decoration: const InputDecoration(labelText: 'Coding rate'),
-              items: [for (var i = 5; i <= 8; i++) DropdownMenuItem(value: i, child: Text('CR$i'))],
-              onChanged: (v) => setState(() => _cr = v ?? _cr),
+            const SizedBox(width: Gap.m),
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                key: const Key('setup-cr-field'),
+                initialValue: _cr,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Coding rate'),
+                items: [for (var i = 5; i <= 8; i++) DropdownMenuItem(value: i, child: Text('CR$i'))],
+                onChanged: (v) => setState(() => _cr = v ?? _cr),
+              ),
             ),
-          ),
+          ]),
         ]),
       );
 
@@ -699,27 +706,25 @@ class _ConfirmApplySheetState extends State<_ConfirmApplySheet> {
     return AppSheetScaffold(
       key: const Key('setup-confirm'),
       controller: widget.controller,
-      title: 'Change the airwaves your radio uses?',
+      title: 'Change your radio\'s frequency settings?',
       primaryAction: FilledButton(
         key: const Key('setup-confirm-apply'),
         style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
         onPressed: _understood ? () => Navigator.pop(context, true) : null,
-        child: const Text('Apply radio parameters'),
+        child: const Text('Apply frequency settings'),
       ),
       secondaryAction: TextButton(key: const Key('setup-confirm-cancel'), onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
       children: [
         Icon(Icons.warning_amber_rounded, color: cs.error, size: 36),
         const SizedBox(height: Gap.s),
-        Text('From:  ${widget.from.label}', key: const Key('setup-confirm-from')),
-        Text('To:  ${widget.target.label}', key: const Key('setup-confirm-to'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text('Now:  ${widget.from.label}', key: const Key('setup-confirm-from')),
+        Text('New:  ${widget.target.label}', key: const Key('setup-confirm-to'), style: const TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: Gap.m),
-        const Text('This takes effect immediately and changes which radios can hear yours.'),
+        const Text('This happens at once and changes which radios can hear yours.'),
         const SizedBox(height: Gap.s),
-        const Text('Your radio will stop hearing, and being heard by, every radio and repeater that is not on the new settings.'),
+        const Text('Radios and repeaters on the old settings will no longer hear it. It may disconnect you from other devices that use this radio.'),
         const SizedBox(height: Gap.s),
-        const Text('It may disconnect you from other devices that use this radio, and from friends who are on the old settings.'),
-        const SizedBox(height: Gap.s),
-        const Text('MeshSonar will read the radio back to check, and you can undo it straight after.'),
+        const Text('You can undo it straight after.'),
         if (widget.driveRecording) ...[
           const SizedBox(height: Gap.s),
           const Text('A drive is recording: it will contain both settings.', style: TextStyle(fontWeight: FontWeight.w700)),

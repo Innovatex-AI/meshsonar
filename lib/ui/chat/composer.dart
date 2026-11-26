@@ -1,6 +1,6 @@
 // The compose bar (chat plan 4.3): a pill that grows to five lines, a send button whose ring fills with the bytes used (the
 // number appears inside it at 20 or fewer left), a quick-replies chip strip, an @mention strip, a one-line "Trimmed to fit"
-// caption after an over-long paste, the offline hint and the passenger lock. No reply feature (cut, R07).
+// caption after an over-long paste and the offline hint. No reply feature (cut, R07).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -156,7 +156,7 @@ class _ComposerState extends State<Composer> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() => _trimmed = true);
-      _trimTimer = Timer(const Duration(seconds: 3), () {
+      _trimTimer = Timer(const Duration(seconds: 5), () {
         if (mounted) setState(() => _trimmed = false);
       });
     });
@@ -248,11 +248,9 @@ class _ComposerState extends State<Composer> {
       sheetKey: const Key('photo-source-sheet'),
       title: 'Send a photo',
       message: private
-          ? 'The photo is shrunk, its details (like location) removed and then encrypted on this phone. MeshSonar stores only '
-              'the encrypted copy; the link in the message holds the key, so only people who get the message can open it. '
-              'It is deleted after 30 days.'
-          : 'The photo is shrunk and its details (like location) removed on this phone, then stored on the MeshSonar '
-              'server. The message carries a short link to it.',
+          ? 'Location is removed and the photo is encrypted on this phone. Only people who get the message can open it. '
+              'Deleted after 30 days.'
+          : 'Location is removed on this phone. The photo is stored on the MeshSonar server and the message carries a link to it.',
       actions: const [
         AppAction('Take Photo', PhotoPickSource.camera, symbol: AppSymbols.camera, key: Key('photo-camera')),
         AppAction('Choose from Library', PhotoPickSource.library, symbol: AppSymbols.photo, key: Key('photo-library')),
@@ -349,10 +347,10 @@ class _ComposerState extends State<Composer> {
         text = j.progress >= 1 ? 'Processing…' : 'Uploading photo ${(j.progress * 100).round()}%';
       case _PhotoStage.waitingForRoom:
         final n = _bytesToCut(j.result!.url);
-        text = 'Photo uploaded. Its link needs ${utf8.encode(j.result!.url).length + 1} bytes: cut $n ${n == 1 ? 'byte' : 'bytes'} from your message to add it.';
+        text = 'Photo ready. Shorten your message by $n ${n == 1 ? 'character' : 'characters'} to add it.';
         tone = colors.warning;
       case _PhotoStage.failed:
-        text = j.error ?? 'Upload failed.';
+        text = j.error ?? 'Could not send the photo.';
         tone = colors.danger;
     }
     Widget btn(Key key, String label, VoidCallback onTap) => CupertinoButton(
@@ -430,7 +428,6 @@ class _ComposerState extends State<Composer> {
 
   @override
   Widget build(BuildContext context) {
-    if (c.composerLocked) return _LockedComposer(controller: c);
     final colors = AppColors.of(context);
     final max = c.service.maxTextBytes(widget.convKey);
     final b = ByteBudget.of(_text.text, max);
@@ -454,8 +451,8 @@ class _ComposerState extends State<Composer> {
     }
 
     final note = offAir
-        ? 'This channel is not on your radio, so nothing can be sent or received.'
-        : (!c.hasRadioIdentity ? 'Connect your radio once to start chatting.' : (!c.radioConnected ? 'Will send when radio connects' : null));
+        ? 'This channel is not on your radio.'
+        : (!c.hasRadioIdentity ? 'Connect your radio once to start chatting.' : (!c.radioConnected ? 'Radio not connected. Sends when it connects.' : null));
 
     final bar = Container(
       decoration: BoxDecoration(
@@ -473,7 +470,7 @@ class _ComposerState extends State<Composer> {
               if (_trimmed)
                 Padding(
                   padding: const EdgeInsets.only(left: Gap.m, bottom: Gap.xs),
-                  child: Text('Trimmed to fit', key: const Key('composer-trimmed'), style: AppType.footnote.copyWith(color: colors.warning)),
+                  child: Text('Too long for one message: the end was cut off', key: const Key('composer-trimmed'), style: AppType.footnote.copyWith(color: colors.warning)),
                 ),
               ?strip,
               if (_job != null) _photoStrip(colors),
@@ -488,7 +485,7 @@ class _ComposerState extends State<Composer> {
                         padding: const EdgeInsets.symmetric(horizontal: Gap.s),
                         minimumSize: Size.square(Hit.of(context)),
                         onPressed: widget.onChannelInfoWhenOffRadio,
-                        child: Text('Put it back on the radio', style: AppType.footnote.copyWith(color: colors.accent, fontWeight: FontWeight.w600)),
+                        child: Text('Put it back', style: AppType.footnote.copyWith(color: colors.accent, fontWeight: FontWeight.w600)),
                       ),
                   ]),
                 ),
@@ -664,7 +661,7 @@ class _SendButton extends StatelessWidget {
     final Widget inner = budget.showNumber
         ? Text('${budget.left < 0 ? 0 : budget.left}', key: const Key('composer-left'), style: AppType.num(12, weight: FontWeight.w700).copyWith(color: ink))
         : AppSymbolIcon(offline ? AppSymbols.clock : AppSymbols.arrowUpCircleFill, size: 18, color: ink, scaleWithText: false);
-    final label = budget.full ? 'Send. No bytes left' : (budget.showNumber ? 'Send. ${budget.left} bytes left' : 'Send');
+    final label = budget.full ? 'Send. No room left' : (budget.showNumber ? 'Send. Room for ${budget.left} more' : (offline ? 'Send when the radio connects' : 'Send'));
     return Semantics(
       button: true,
       enabled: enabled,
@@ -717,47 +714,4 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) => old.fraction != fraction || old.color != color || old.track != track;
-}
-
-/// What replaces the composer while the car is moving.
-class _LockedComposer extends StatelessWidget {
-  final ChatController controller;
-  const _LockedComposer({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppColors.of(context);
-    // At the largest text sizes the notice is taller than the room under the messages: cap it and let it scroll.
-    return Container(
-      key: const Key('composer-locked'),
-      color: c.surfaceHigh,
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.45),
-      child: SingleChildScrollView(
-        child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(Gap.m),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                AppSymbolIcon(AppSymbols.carFill, color: c.textPrimary),
-                const SizedBox(width: Gap.m),
-                Expanded(child: Text('Typing is off while the car is moving. Messages still arrive here.', style: AppType.callout.copyWith(color: c.textPrimary))),
-              ]),
-              const SizedBox(height: Gap.s),
-              CupertinoButton.filled(
-                key: const Key('passenger-button'),
-                minimumSize: Size.square(Hit.of(context)),
-                onPressed: () => controller.setPassenger(true),
-                child: const Text("I'm a passenger"),
-              ),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
 }

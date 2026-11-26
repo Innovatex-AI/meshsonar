@@ -53,6 +53,11 @@ const Duration kLabelFade = Duration(milliseconds: 120);
 /// zoom 9 / 11 / 12 / 13 / 14).
 int labelBudgetForZoom(double zoom, {MapLabelSpec? spec}) => (spec ?? ActiveMapDefinition.current.labelSpec).budgetAt(zoom);
 
+/// The budget while a drive is running on the Drive map (build 76): a third of [budget], between 4 and 16, so the road stays
+/// readable in a car mount. The priority order is unchanged, so the names kept are the selected repeater, the ones that heard
+/// the last ping, the ones heard this drive, then the nearest. Zero stays zero.
+int drivingLabelBudget(int budget) => budget <= 0 ? 0 : (budget / 3).ceil().clamp(4, 16);
+
 /// Label font size: 12 below zoom 12, 13 from 12, 14 from 14 (`labels.spec.size`).
 double labelFontSizeForZoom(double zoom, {MapLabelSpec? spec}) => (spec ?? ActiveMapDefinition.current.labelSpec).sizeAt(zoom);
 
@@ -375,6 +380,9 @@ class RepeaterNameLabels extends StatefulWidget {
   /// The person's Label size (Small 0.85, Normal 1.0, Large 1.25); null = the saved choice ([MapPrefs.labelScale]).
   final double? labelScale;
 
+  /// A drive is running on this map: fewer names ([drivingLabelBudget]).
+  final bool fewer;
+
   const RepeaterNameLabels({
     super.key,
     required this.sources,
@@ -391,6 +399,7 @@ class RepeaterNameLabels extends StatefulWidget {
     this.showNames = true,
     this.darkMap,
     this.labelScale,
+    this.fewer = false,
   });
 
   static const ValueKey<String> paintKey = ValueKey('repeater-name-labels-paint');
@@ -450,6 +459,7 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
     final size = camera.size;
     final fontSize = labelFontSizeForZoom(zoom, spec: spec) * scale;
     final version = Object.hash(
+      widget.fewer,
       spec.hashCode,
       ActiveMapDefinition.current.version,
       identityHashCode(widget.badges),
@@ -643,7 +653,7 @@ class RepeaterNameLabelsState extends State<RepeaterNameLabels> {
       },
       bounds: bounds,
       obstacles: obstacles,
-      budget: labelBudgetForZoom(zoom, spec: spec),
+      budget: widget.fewer ? drivingLabelBudget(labelBudgetForZoom(zoom, spec: spec)) : labelBudgetForZoom(zoom, spec: spec),
     );
     final plan = [
       for (final p in placed)

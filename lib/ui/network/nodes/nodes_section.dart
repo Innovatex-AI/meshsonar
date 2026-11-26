@@ -137,6 +137,21 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
     _debounce = Timer(const Duration(milliseconds: 350), () => _set(_q.copyWith(q: v)));
   }
 
+  bool get _filtered => _mine || _q.roles.isNotEmpty || _q.statuses.isNotEmpty || _q.lastHeard != null;
+
+  /// Back to every node: the chips off (the search text stays).
+  void _clearFilters() {
+    setState(() => _mine = false);
+    _set(_q.copyWith(roles: const {}, statuses: const {}, clearLastHeard: true));
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _search.clear();
+    setState(() {});
+    _set(_q.copyWith(q: ''));
+  }
+
   Widget _chip(String label, bool on, VoidCallback tap, {Key? key}) => Padding(
         padding: const EdgeInsets.only(right: Gap.s),
         child: FilterChip(key: key, label: Text(label), selected: on, onSelected: (_) => tap()),
@@ -150,6 +165,11 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: Gap.l),
       child: Row(children: [
+        if (_filtered)
+          Padding(
+            padding: const EdgeInsets.only(right: Gap.s),
+            child: ActionChip(key: const Key('nodes-clear-filters'), avatar: const Icon(Icons.close, size: 18), label: const Text('Clear'), onPressed: _clearFilters),
+          ),
         _chip('My nodes', _mine, () => setState(() => _mine = !_mine), key: const Key('nodes-mine')),
         for (final r in nodeRoles)
           _chip('${nodeRoleLabel(r)}${count(_roleCounts, r)}', _q.roles.contains(r), () => _set(_q.copyWith(roles: toggle(_q.roles, r))), key: Key('nodes-role-$r')),
@@ -157,7 +177,7 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
           _chip('${nodeStatusLabel(s)}${count(_statusCounts, s)}', _q.statuses.contains(s), () => _set(_q.copyWith(statuses: toggle(_q.statuses, s))),
               key: Key('nodes-status-$s')),
         for (final w in const ['1h', '24h', '7d'])
-          _chip('Heard in $w', _q.lastHeard == w, () => _set(_q.lastHeard == w ? _q.copyWith(clearLastHeard: true) : _q.copyWith(lastHeard: w)),
+          _chip(const {'1h': 'Heard last hour', '24h': 'Heard today', '7d': 'Heard this week'}[w]!, _q.lastHeard == w, () => _set(_q.lastHeard == w ? _q.copyWith(clearLastHeard: true) : _q.copyWith(lastHeard: w)),
               key: Key('nodes-heard-$w')),
       ]),
     );
@@ -176,9 +196,19 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
           child: TextField(
             key: const Key('nodes-search'),
             controller: _search,
-            onChanged: _onSearch,
+            onChanged: (v) {
+              setState(() {}); // the clear button shows with the first letter
+              _onSearch(v);
+            },
             textInputAction: TextInputAction.search,
-            decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Name or key prefix', isDense: true, border: OutlineInputBorder()),
+            autocorrect: false,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
+              hintText: 'Search nodes by name or ID',
+              isDense: true,
+              border: const OutlineInputBorder(),
+              suffixIcon: _search.text.isEmpty ? null : IconButton(key: const Key('nodes-search-clear'), tooltip: 'Clear the search', icon: const Icon(Icons.close), onPressed: _clearSearch),
+            ),
           ),
         ),
         _filters(context),
@@ -188,7 +218,7 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
             padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
             child: Text(
               [
-                if (_legacy) 'From the region roster: filters are applied on this phone, usefulness and clock come with the new node service.',
+                if (_legacy) 'A simpler list for this region: grades and clock figures are not available here yet.',
                 ?_statusNote,
               ].join(' '),
               key: const Key('nodes-legacy-note'),
@@ -198,7 +228,14 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
       ];
       Widget body;
       if (_state == _Load.loading && _rows.isEmpty) {
-        body = const Padding(padding: EdgeInsets.all(Gap.xl), child: Center(child: CircularProgressIndicator()));
+        body = Padding(
+            key: const Key('nodes-loading'),
+            padding: const EdgeInsets.all(Gap.xl),
+            child: Column(children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: Gap.m),
+              Text('Loading the nodes of this region…', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ]));
       } else if (_state == _Load.error && _rows.isEmpty) {
         body = _error?.offline == true
             ? RegionOfflineEmpty(what: 'the node list', onRetry: _load)
@@ -207,14 +244,33 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
                 child: Column(children: [
                   Text(_error?.message ?? 'The node list did not load.', key: const Key('nodes-error'), textAlign: TextAlign.center),
                   const SizedBox(height: Gap.m),
-                  FilledButton(onPressed: _load, child: const Text('Try again')),
+                  FilledButton(key: const Key('nodes-retry'), onPressed: _load, child: const Text('Try again')),
                 ]),
               );
       } else if (rows.isEmpty) {
         body = Padding(
           padding: const EdgeInsets.all(Gap.xl),
-          child: Text(_mine ? 'None of your nodes is in this list. Star a node to add it to My nodes.' : 'No node matches these filters.',
-              key: const Key('nodes-empty'), textAlign: TextAlign.center),
+          child: Column(children: [
+            Text(
+                _mine
+                    ? 'None of your nodes is in this list. Open a node and tap the star to add it to My nodes.'
+                    : _search.text.isNotEmpty
+                        ? 'No node matches "${_search.text}".'
+                        : 'No node matches these filters.',
+                key: const Key('nodes-empty'),
+                textAlign: TextAlign.center),
+            if (_filtered || _search.text.isNotEmpty) ...[
+              const SizedBox(height: Gap.m),
+              OutlinedButton(
+                key: const Key('nodes-empty-clear'),
+                onPressed: () {
+                  if (_search.text.isNotEmpty) _clearSearch();
+                  if (_filtered) _clearFilters();
+                },
+                child: const Text('Show every node'),
+              ),
+            ],
+          ]),
         );
       } else {
         body = const SizedBox.shrink();
@@ -261,19 +317,24 @@ class _NodeTile extends StatelessWidget {
       nodeRoleLabel(row.role),
       nodeStatusLabel(row.status),
       row.lastHeardAt == null ? 'never heard' : 'heard ${agoText(row.lastHeardAt)}',
-      if (row.relayed24h != null) '${row.relayed24h} relayed in 24 h',
+      if (row.relayed24h != null && row.relayed24h! > 0) 'relayed ${row.relayed24h} today',
       if (row.usefulnessGrade != null) 'grade ${row.usefulnessGrade}',
     ];
     return ListTile(
       key: Key('node-row-${row.key}'),
       onTap: onTap,
       leading: Padding(padding: const EdgeInsets.only(top: 6), child: StatusDot(row.status)),
+      minTileHeight: 56,
       title: Row(children: [
-        Flexible(child: Text(row.label, maxLines: 2, overflow: TextOverflow.ellipsis)),
+        Flexible(child: Text(readableName(row.label), maxLines: 2, overflow: TextOverflow.ellipsis)),
         if (fav) ...[const SizedBox(width: Gap.xs), Icon(Icons.star, size: 16, color: MeshSonarColors.of(context).beacon, semanticLabel: 'Favourite')],
       ]),
       subtitle: Text(bits.join(' · '), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-      trailing: Text(row.prefix, style: t.textTheme.labelMedium),
+      // The short ID stays (radio people read it), small; the chevron says a tap opens the node.
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(row.prefix, style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant), semanticsLabel: 'ID ${row.prefix}'),
+        const Icon(Icons.chevron_right),
+      ]),
     );
   }
 }

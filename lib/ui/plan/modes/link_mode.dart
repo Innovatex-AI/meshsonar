@@ -105,6 +105,8 @@ class LinkMode extends PlanMode {
   @override
   String get hint => 'Will one node hear another: pick two nodes of the plan or from the network.';
   @override
+  String get what => 'Will these two radios hear each other?';
+  @override
   Widget buildSheet(PlanModeContext context) => LinkModeBody(context, key: ValueKey('plan-mode-body-link-${context.intent?.seq}'));
 }
 
@@ -541,7 +543,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         key: const Key('plan-mode-link'),
         symbol: AppSymbols.route,
         title: nodes.isEmpty ? 'Add two nodes to check a link' : 'Add one more node to check a link',
-        message: 'Long-press the map to drop a planned node, or add a repeater or your own radio from the network.',
+        message: 'Press and hold the map to add a spot, or add a repeater from the network.',
         actionLabel: 'Add from the network',
         onAction: ctx.openNodePicker,
       );
@@ -570,7 +572,8 @@ class LinkModeBodyState extends State<LinkModeBody> {
         ),
       ]),
       if (_b == null) const PlanLine(AppSymbols.infoCircle, 'Pick end B: choose it above or tap a node on the map.', key: Key('link-pick-b')),
-      Text('Tip: tap a node on the map to make it an end; move a node and the link is checked again.', style: t.textTheme.bodySmall),
+      // Only until there is a result (build 76): after that the screen shows the answer, not a tip.
+      if (res == null) Text('Tip: tap a node on the map to pick it as an end.', key: const Key('link-tip'), style: t.textTheme.bodySmall),
       if (km != null) PlanFact('Straight line', units.distance(km * 1000)),
       if (km != null && km > 40)
         PlanLine(AppSymbols.exclamationTriangle, 'The ends are ${units.distance(km * 1000)} apart; a link check reads terrain for up to ${units.distance(40000)}. Add a relay between them.',
@@ -647,6 +650,17 @@ class LinkModeBodyState extends State<LinkModeBody> {
           liveRegion: true,
           child: PlanLine(verdictSymbol(v), '${linkVerdictWords(v)} (Estimate)', key: const Key('link-verdict'), color: colour, style: t.textTheme.titleLarge),
         ),
+      // Build 76: the verdict in a plain sentence with the next step, before any dB figure.
+      if (v != null)
+        Text(
+          switch (v) {
+            PlanVerdict.likely => 'These two should hear each other.',
+            PlanVerdict.marginal => 'It may work some of the time. A higher antenna on either end helps.',
+            PlanVerdict.unlikely => 'Something is in the way. Try a higher antenna, or a relay between them.',
+          },
+          key: const Key('link-plain'),
+          style: t.textTheme.bodyLarge,
+        ),
       if (d.marginDb != null)
         PlanFact('Link margin after the ${fadeMarginDb.round()} dB fade margin (${directionWords(rq.direction)})', dbWords(d.marginDb!, signed: true)),
       // ---- the profile
@@ -669,7 +683,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         key: const Key('link-scrub-readout'),
         style: t.textTheme.bodySmall,
       ),
-      Text('Ground with the earth\'s curve, the straight line of sight, and the shaded Fresnel zone (the thin line inside it is its 60 % edge).',
+      Text('Shaded: the space the signal needs clear of hills.',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       // ---- what to change
       if (raise > 0 || ridge != null) _header(context, 'What to change'),
@@ -884,7 +898,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         onTap: () => unawaited(showPlanSettings(context, ctx.controller, regionPreset: AppScope.read(context).siteConfig?.radioPreset)),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: Hit.min),
-          child: PlanLine(AppSymbols.antenna, 'Radio ${radioWords(p.radio)}. Tap to change it for this plan.'),
+          child: PlanLine(AppSymbols.antenna, 'Radio: ${radioWords(p.radio)}. Change'),
         ),
       ),
       SliderTile(
@@ -920,7 +934,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         label: (v) => '${(v / 10).toStringAsFixed(1)} dB/km',
         onChanged: (v) => ctx.controller.setClutter(PlanClutter(canopyM: p.clutter.canopyM, dbPerKm: v / 10)),
       ),
-      Text('Tree and clutter loss are estimates: the terrain data is bare earth. Change them if you know the area.',
+      Text('The map data has no trees or buildings. Change these if you know the area.',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
     ];
   }

@@ -1,28 +1,13 @@
-// Settings > Map & offline maps: download region maps for use with no signal (the packs screen does the work).
+// Settings > Map: how the map follows you (heading-up, zoom out at speed).
 import 'package:flutter/material.dart';
 
 import '../../core/map_prefs.dart';
 
-import 'offline_packs_screen.dart';
-import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String mapsHelp = 'The map loads tiles over the network as you look around. An offline map keeps one region on '
-    'this phone so the map still draws with no signal.';
+const String mapsHelp = 'How the map follows you.';
 
 List<Widget> mapsSectionRows(BuildContext context) => [
-      SettingsAnchor(
-        id: 'offline-maps',
-        child: ListTile(
-          key: const Key('offline-maps'),
-          leading: const Icon(Icons.map_outlined),
-          title: Text(settingsEntry('offline-maps').title),
-          subtitle: const Text('Download a region so the map works with no signal. Each map uses storage; delete it '
-              'any time on that screen.'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const OfflinePacksScreen())),
-        ),
-      ),
       SettingsAnchor(id: 'map-follow-options', child: const MapFollowOptions()),
     ];
 
@@ -42,7 +27,7 @@ class MapFollowOptions extends StatelessWidget {
             key: const Key('map-heading-up-setting'),
             secondary: const Icon(Icons.navigation_outlined),
             title: const Text('Heading-up map'),
-            subtitle: const Text('The map turns so the way you are driving is up. Off keeps north at the top.'),
+            subtitle: const Text('The way you are driving is up. Off: north is up.'),
             value: p.headingUp,
             onChanged: (v) => p.headingUp = v,
           ),
@@ -50,7 +35,7 @@ class MapFollowOptions extends StatelessWidget {
             key: const Key('map-zoom-speed-setting'),
             secondary: const Icon(Icons.zoom_out_map_outlined),
             title: const Text('Zoom out at speed'),
-            subtitle: const Text('Eases the map out a little on the highway so more road shows. Off keeps the zoom you set.'),
+            subtitle: const Text('Shows more road on the highway.'),
             value: p.zoomBySpeed,
             onChanged: (v) => p.zoomBySpeed = v,
           ),

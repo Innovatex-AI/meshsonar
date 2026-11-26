@@ -51,19 +51,19 @@ class _ContactsSettingsSheetState extends State<ContactsSettingsSheet> {
             key: const Key('contacts-settings'),
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('New nodes', style: t.textTheme.titleLarge),
+              Text('Manage contacts', style: t.textTheme.titleLarge),
               const SizedBox(height: Gap.s),
               if (!on) Text('Connect your radio to change this.', key: const Key('settings-offline'), style: t.textTheme.bodyLarge),
               SwitchListTile(
                 key: const Key('set-ask'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Ask me before adding new nodes'),
-                subtitle: const Text('Off: the radio adds every node it hears and its list fills with strangers.'),
+                title: const Text('Ask before adding anyone new'),
+                subtitle: const Text('Off: your radio saves everyone it hears.'),
                 value: p?.askBeforeAdding ?? false,
                 onChanged: on ? (v) => _set(p.copyWith(askBeforeAdding: v)) : null,
               ),
               if (on && p.askBeforeAdding && !p.autoAddSupported)
-                Text('This radio\'s firmware cannot add some kinds automatically. Every new node waits for you.', style: t.textTheme.bodyMedium),
+                Text('This radio cannot add by kind, so everyone new waits for you.', style: t.textTheme.bodyMedium),
               if (detail) ...[
                 Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text('Still add automatically', style: t.textTheme.titleSmall)),
                 for (final e in <(String, String, bool, ContactPolicy Function(bool))>[
@@ -76,8 +76,8 @@ class _ContactsSettingsSheetState extends State<ContactsSettingsSheet> {
                 SwitchListTile(
                   key: const Key('set-overwrite'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('When the radio list is full, replace the oldest'),
-                  subtitle: const Text('Never a favourite. Your phone keeps the replaced contact.'),
+                  title: const Text('Replace the oldest when the radio is full'),
+                  subtitle: const Text('Never a favourite. Your phone keeps them.'),
                   value: p.overwriteOldest,
                   onChanged: (v) => _set(p.copyWith(overwriteOldest: v)),
                 ),
@@ -86,16 +86,16 @@ class _ContactsSettingsSheetState extends State<ContactsSettingsSheet> {
                   isExpanded: true,
                   key: const Key('set-hops'),
                   initialValue: hops,
-                  decoration: const InputDecoration(labelText: 'Only add nodes within'),
+                  decoration: const InputDecoration(labelText: 'Only add when heard within'),
                   items: [for (final e in _hops.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
                   onChanged: (v) => v == null ? null : _set(p.copyWith(maxHops: v)),
                 ),
               ],
               if (_error != null) Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(_error!, style: TextStyle(color: t.colorScheme.error))),
               const SizedBox(height: Gap.l),
-              Text('Ignored nodes', style: t.textTheme.titleLarge),
+              Text('Ignored', style: t.textTheme.titleLarge),
               if (ignored.isEmpty)
-                Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text('None. A node you ignore is hidden from New nodes nearby and can be restored here.', style: t.textTheme.bodyMedium))
+                Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text('No one. Anyone you ignore in New nodes nearby is listed here.', style: t.textTheme.bodyMedium))
               else
                 for (final a in ignored)
                   ListTile(

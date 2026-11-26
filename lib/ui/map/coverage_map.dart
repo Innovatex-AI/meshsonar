@@ -119,8 +119,9 @@ import '../../core/map_filter.dart' show GeoBounds;
 import '../../core/map_styles.dart';
 import 'cell_raster_layer.dart';
 import 'tile_source.dart';
-import '../../core/offline_packs.dart' show NetworkKind, PackSchema;
-import '../../core/basemap.dart' show BasemapSource, BasemapSourceX, OurBasemap;
+import '../../core/network_kind.dart';
+import '../../platform/network_monitor.dart';
+import '../../core/basemap.dart' show BasemapSource, BasemapSourceX;
 import '../../platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'live_puck.dart';
 import 'map_layers.dart';
@@ -145,19 +146,11 @@ import 'layers/m3_layers.dart';
 import '../design/anchored_sheet.dart';
 import '../design/map_panel.dart';
 import '../../core/m3_data.dart' show RedundancyCell, RepeaterEstimate, SnrLink;
-import 'offline_basemap.dart';
 import 'sheets/map_hit_sheet.dart';
 import '../ping_detail_sheet.dart' show PingDetailSheet;
 import 'sheets/observer_sheet.dart' show ObserverSheet, ObserverSheetContext;
 import 'sheets/repeater_sheet.dart' show RepeaterListSheet, RepeaterSheet, RepeaterSheetContext;
 import '../claims/claim_widgets.dart' show OwnedByYouChip;
-
-/// Whether an installed offline pack is drawn under [style] (Chart, Light, Dark), and so whether its area's network tiles may
-/// be skipped. False for Topo and Satellite: no pack draws them, their tiles always come from the network or the tile cache.
-bool styleDrawsOfflinePack(BaseMapStyle style) => style.usesOfflinePack;
-
-/// Whether the network tile at a spot is skipped: only when a pack covers it AND the style draws the pack.
-bool skipsNetworkTile({required BaseMapStyle style, required bool packCovers}) => styleDrawsOfflinePack(style) && packCovers;
 
 /// A line from a ping to a repeater it heard.
 class PingLink {
@@ -277,10 +270,6 @@ class CoverageMap extends StatefulWidget {
   /// Load OpenStreetMap tiles. Defaults to on, except under `flutter test` (no network, no plugins there).
   final bool? showTiles;
 
-  /// Coverage on a plain background: no basemap tiles at all (no vector, satellite or offline-pack layer), only the chart
-  /// grid under the data. The Drive map sets it from [simpleBasemapNow] (Saver's "Simple basemap" while driving, build 70).
-  final bool plainBasemap;
-
   /// Prefix -> display name (falls back to the repeater's cached name).
   final String Function(String prefix)? repeaterLabel;
 
@@ -362,6 +351,10 @@ class CoverageMap extends StatefulWidget {
   /// This is the main map (the Drive tab's): it answers "Open the map here" from previews (main_map_focus.dart).
   final bool takesFocusRequests;
 
+  /// A drive is running on this map (the Drive tab's): repeater names use the smaller driving budget so the road reads at a
+  /// glance. The Names switch in Layers still turns them all off or back on.
+  final bool fewerNames;
+
   /// "What do the colours mean?" in the Credits sheet. Null = no button.
   final VoidCallback? openLegend;
 
@@ -380,10 +373,6 @@ class CoverageMap extends StatefulWidget {
   /// Compass) and this opens the layers sheet. Null = the older FAB buttons.
   final VoidCallback? onLayers;
 
-  /// Inspector rules while a drive runs (Drive plan 4.9): [inspectorLocked] keeps it at the one-line peek ("Open when stopped"),
-  /// [inspectorAutoClear] closes it after that long without a touch.
-  final bool inspectorLocked;
-  final Duration? inspectorAutoClear;
 
   /// Overlay clearances (see MapOverlayHost.topClearance / bottomClearance): the full-bleed Drive map keeps its slots out of the
   /// status bar and above the panel without ever being resized.
@@ -398,8 +387,7 @@ class CoverageMap extends StatefulWidget {
   /// it. Null = [bottomClearance].
   final double? panelInset;
 
-  /// The base map under the data (street / dark / topo cycler). Offline region packs are drawn for every style that
-  /// [BaseMapStyle.usesOfflinePack].
+  /// The base map under the data (street / dark / topo cycler).
   final BaseMapStyle baseStyle;
 
   /// Called (after the frame) with the part of the world on screen when the map opens and as it moves: the host works out
@@ -446,7 +434,6 @@ class CoverageMap extends StatefulWidget {
     this.showLinks = true,
     this.interactive = true,
     this.rotatable = false,
-    this.plainBasemap = false,
     this.showTiles,
     this.repeaterLabel,
     this.fallbackCenter,
@@ -474,6 +461,7 @@ class CoverageMap extends StatefulWidget {
     this.regionBorders = const [],
     this.legend,
     this.takesFocusRequests = false,
+    this.fewerNames = false,
     this.openLegend,
     this.viewController,
     this.banner,
@@ -481,8 +469,6 @@ class CoverageMap extends StatefulWidget {
     this.topTrailing,
     this.bottom,
     this.onLayers,
-    this.inspectorLocked = false,
-    this.inspectorAutoClear,
     this.topClearance = 0,
     this.bottomClearance = 0,
     this.panelHost,
@@ -504,6 +490,11 @@ class CoverageMap extends StatefulWidget {
   /// True unless running under `flutter test`.
   /// Tests only: the HTTP client the tile provider uses (serves real tile files from disk).
   static http.Client? debugTileClient;
+
+  /// Tests only: the phone's network (null = connectivity_plus).
+  @visibleForTesting
+  static NetworkMonitor? debugNetwork;
+  static final NetworkMonitor _phoneNetwork = ConnectivityNetworkMonitor();
 
   static bool tilesByDefault = () {
     try {
@@ -1066,9 +1057,7 @@ class _CoverageMapState extends State<CoverageMap> {
           ),
         ),
         onClose: _clearLinks,
-        locked: widget.inspectorLocked,
         bottomSafe: _panelInset == 0,
-        autoClear: widget.inspectorAutoClear,
       );
     }
     if (v2 != null && p == null && ping == null) {
@@ -1094,9 +1083,7 @@ class _CoverageMapState extends State<CoverageMap> {
         ),
         onFit: !_linkBusy && (set?.ends.isNotEmpty ?? false) ? _fitLinks : null,
         onClose: _clearLinks,
-        locked: widget.inspectorLocked,
-      bottomSafe: _panelInset == 0,
-        autoClear: widget.inspectorAutoClear,
+        bottomSafe: _panelInset == 0,
       );
     }
     if (ping != null) {
@@ -1117,9 +1104,7 @@ class _CoverageMapState extends State<CoverageMap> {
         body: PingDetailSheet(ping: ping, lookup: lookup, scrollController: _pingScroll),
         onFit: n > 0 ? _fitLinks : null,
         onClose: _clearLinks,
-        locked: widget.inspectorLocked,
-      bottomSafe: _panelInset == 0,
-        autoClear: widget.inspectorAutoClear,
+        bottomSafe: _panelInset == 0,
       );
     }
     final set = _currentLinks();
@@ -1162,9 +1147,7 @@ class _CoverageMapState extends State<CoverageMap> {
       body: body,
       onFit: canFit ? _fitLinks : null,
       onClose: _clearLinks,
-      locked: widget.inspectorLocked,
-      bottomSafe: _panelInset == 0,
-      autoClear: widget.inspectorAutoClear,
+        bottomSafe: _panelInset == 0,
     );
   }
 
@@ -1441,12 +1424,7 @@ class _CoverageMapState extends State<CoverageMap> {
     if (widget.takesFocusRequests) MainMapFocus.notifier.addListener(_onFocusRequest);
     _prefs.addListener(_onPrefs);
     if (widget.puck != null) unawaited(openSharedMapPrefs());
-    if (widget.showTiles ?? CoverageMap.tilesByDefault) {
-      _pack.basemap.addListener(_onPacksChanged);
-      _pack.basemap.ensureOpen();
-      _pack.update(_initialCenter.latitude, _initialCenter.longitude);
-      _watchNetwork();
-    }
+    if (widget.showTiles ?? CoverageMap.tilesByDefault) _watchNetwork();
   }
 
   /// The phone's own view of the network closes or opens the tile gate at once (no doomed requests while offline).
@@ -1471,7 +1449,7 @@ class _CoverageMapState extends State<CoverageMap> {
   void _watchNetwork() {
     TileFetchGate.debugForceOffline.addListener(_onForcedOffline);
     _tiles().gate.recoveries.addListener(_onTilesRecovered);
-    final net = _pack.basemap.network;
+    final net = CoverageMap.debugNetwork ?? CoverageMap._phoneNetwork;
     unawaited(net.current().then((k) {
       _tiles().gate.setPhoneOnline(k != NetworkKind.offline);
       _offline.value = k == NetworkKind.offline;
@@ -1494,33 +1472,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   bool _headingUpApplied = false;
 
-  MeshTileProvider _tiles() => _tileProvider ??= MeshTileProvider(shouldSkip: _packDraws, client: CoverageMap.debugTileClient);
-
-  /// True when the installed pack draws tile z/x/y, so no request is made for it.
-  bool _packDraws(int z, int x, int y) {
-    // Only for a style the pack is drawn under. Topo and Satellite draw no pack, so inside a pack area they must fetch their
-    // tiles like anywhere else (before build 72 they were skipped too and those styles stayed blank there).
-    if (!styleDrawsOfflinePack(BaseMapStyle.effective(widget.baseStyle, ActiveMapDefinition.current))) return false;
-    final code = _pack.code;
-    if (code == null) return false;
-    final ip = _pack.basemap.managerOrNull?.installed[code];
-    final r = _pack.reader;
-    if (ip == null || r == null || z < r.header.minZoom) return false;
-    final n = math.pow(2, z).toDouble();
-    final lon = (x + 0.5) / n * 360 - 180;
-    final lat = math.atan(0.5 * (math.exp(math.pi * (1 - 2 * (y + 0.5) / n)) - math.exp(-math.pi * (1 - 2 * (y + 0.5) / n)))) * 180 / math.pi;
-    return ip.covers(lat, lon);
-  }
-
-  // Offline region pack drawn under the overlays; follows the camera centre (see OfflinePackSelection).
-  late final OfflinePackSelection _pack = OfflinePackSelection(OfflineBasemap.instance);
-
-  void _onPacksChanged() {
-    if (!mounted) return;
-    _pack.refresh();
-    _tileReset.add(null);
-    setState(() {});
-  }
+  MeshTileProvider _tiles() => _tileProvider ??= MeshTileProvider(client: CoverageMap.debugTileClient);
 
   @override
   void didUpdateWidget(CoverageMap old) {
@@ -1756,7 +1708,6 @@ class _CoverageMapState extends State<CoverageMap> {
     unawaited(_tileReset.close());
     _tileProvider?.close(); // the map owns the provider; a tile layer's own dispose() does not close it
     _pingScroll.dispose();
-    _pack.basemap.removeListener(_onPacksChanged);
     _ownSource?.dispose();
     _ownFeed?.dispose();
     if (_ownsVc) _vc.dispose();
@@ -1918,28 +1869,6 @@ class _CoverageMapState extends State<CoverageMap> {
     return d;
   }
 
-  /// Dashed outlines of the installed offline packs (the one in use drawn stronger): where the map works with no signal.
-  List<Widget> _packOutlines(MeshSonarColors mc) {
-    final m = _pack.basemap.managerOrNull;
-    if (m == null || m.installed.isEmpty) return const [];
-    return [
-      PolygonLayer(
-        key: const Key('pack-outlines'),
-        polygons: [
-          for (final ip in m.installed.values)
-            if (ip.bbox.length == 4)
-              Polygon(
-                points: [LatLng(ip.bbox[1], ip.bbox[0]), LatLng(ip.bbox[1], ip.bbox[2]), LatLng(ip.bbox[3], ip.bbox[2]), LatLng(ip.bbox[3], ip.bbox[0])],
-                color: Colors.transparent,
-                borderColor: (ip.code == _pack.code ? mc.beacon : mc.textMuted).withValues(alpha: ip.code == _pack.code ? 0.85 : 0.5),
-                borderStrokeWidth: ip.code == _pack.code ? 2 : 1.2,
-                pattern: _dashed,
-              ),
-        ],
-      ),
-    ];
-  }
-
   /// The app layer slots in the active Map Definition's drawing order. Predicted / Heard / Measured are one slot (`measured`,
   /// drawn in the definition's order inside it); Repeaters and All MeshCore repeaters are one painter, placed at the lower of
   /// the two; Observers and Moving phones one marker layer at the lower of the two.
@@ -1971,15 +1900,13 @@ class _CoverageMapState extends State<CoverageMap> {
     final style = BaseMapStyle.effective(widget.baseStyle, ActiveMapDefinition.current);
     // MAP slice 1: the coverage summary ladder (null on an older definition: build 72 drawing).
     final ladder = ActiveMapDefinition.current.coverageLadder;
-    final tiles = !widget.plainBasemap && (widget.showTiles ?? CoverageMap.tilesByDefault);
+    final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
     final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
     // The tile request queue holds what this screen can ask for at once (a request beyond it is dropped and its tile stays blank).
     if (tiles && BasemapTuning.enabled) {
       final screen = MediaQuery.sizeOf(context);
       _tiles().gate.ensureRoom(waiting: BasemapTuning.requestsFor(screen), concurrent: BasemapTuning.requestConcurrencyFor(screen));
     }
-    // A downloaded region pack covering the map wins over online tiles; no pack (or a corrupt one) means online as before.
-    final offlinePack = tiles && style.usesOfflinePack ? _pack.reader : null;
     _ensureSorted();
     _ensureMarkers();
     final latest = _latestCache;
@@ -2084,7 +2011,6 @@ class _CoverageMapState extends State<CoverageMap> {
             onLongPress: widget.interactive && widget.onLongPress != null ? (_, point) => _onLongPress(point) : null,
             onPositionChanged: (camera, hasGesture) {
               _reportBounds();
-              if (tiles && _pack.update(camera.center.latitude, camera.center.longitude)) setState(() {});
               if (camera.zoom != _lastZoom) {
                 _lastZoom = camera.zoom;
                 widget.onZoomChanged?.call(camera.zoom);
@@ -2109,23 +2035,13 @@ class _CoverageMapState extends State<CoverageMap> {
           ),
           children: [
             ChartGrid(color: mc.mapGrid),
-            // Online + disk-cached tiles everywhere, except where an installed offline pack draws (no request for those); the
-            // pack's vector tiles go on top of that. Where a pack ends the online/cached tiles carry on: never a blank edge.
+            // Online tiles, kept in the on-device tile cache once seen.
             // Chart / Light / Dark: our vector basemap (OpenFreeMap fallback), every tile through the same cache and gate.
             if (tiles && style.isVector)
               BasemapLayer(key: ValueKey('basemap-${style.id}'), dark: style.darkLook, look: style.look, tiles: _tiles(), reset: _tileReset.stream),
             // Satellite: Esri (our proxy) then NAIP then our names, from the definition (ui/map/satellite_layers.dart).
             if (tiles && style.isSatellite)
               ...satelliteLayers(ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),
-            if (offlinePack != null)
-              OfflineBasemapLayer(
-                key: ValueKey('offline-pack-${_pack.code}${style == BaseMapStyle.chart ? '' : '-${style.id}'}'),
-                reader: offlinePack,
-                schema: _pack.basemap.managerOrNull?.installed[_pack.code]?.schema ?? PackSchema.openmaptiles,
-                // Dark forces the dark look, Light the light look; Chart follows the app theme.
-                dark: style.darkLook,
-              ),
-            if (tiles && style.usesOfflinePack) ..._packOutlines(mc),
             // The definition's layers, in its drawing order (bottom to top: borders, predicted, heard, measured, drive, links,
             // network, live, repeaters, observers, phones). The app's drive extras (ping dots, the position, names) stay on top.
             for (final id in _paintOrder()) ...?_layerWidgets(id, {
@@ -2332,6 +2248,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 listenable: Listenable.merge([?rosterSource, ?networkSource]),
                 builder: (context, _) => RepeaterNameLabels(
                   showNames: layerState.isOn(kLabelsLayerId),
+                  fewer: widget.fewerNames,
                   badges: _badgesFor(rosterSource, networkSource, layerState.isOn('heard'), latest?.id, legacyLit),
                   sources: [
                     if (rosterSource != null) (rosterSource, kRosterLayerId),
@@ -2394,7 +2311,7 @@ class _CoverageMapState extends State<CoverageMap> {
                     children: [
                       Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
                       const SizedBox(width: 4),
-                      const Flexible(child: Text('Offline map', maxLines: 1)),
+                      const Flexible(child: Text('Map offline', maxLines: 1)),
                     ],
                   ),
                 ),
@@ -2409,7 +2326,7 @@ class _CoverageMapState extends State<CoverageMap> {
       attribution: BasemapSourceBuilder(
         controller: _controller,
         builder: (context, source) {
-          final credit = _creditText(style, source, offlinePack != null);
+          final credit = _creditText(style, source);
           return networkSource == null
               ? AttributionLine(style: style, text: credit, onInfo: () => _openCredits(context, style, tiles, null))
               : ListenableBuilder(
@@ -2450,27 +2367,16 @@ class _CoverageMapState extends State<CoverageMap> {
     );
   }
 
-  /// The credit of what the base map draws now: Topo's own line, the offline pack's, or the online source's (ours / OpenFreeMap).
-  String _creditText(BaseMapStyle style, BasemapSource source, bool packDrawn) {
-    if (style.isSatellite) return satelliteCredit(ActiveMapDefinition.current);
-    if (packDrawn) {
-      final ip = _pack.basemap.managerOrNull?.installed[_pack.code];
-      return ip == null || ip.schema == PackSchema.protomaps ? OurBasemap.attribution : '© OpenStreetMap contributors';
-    }
-    return source.attribution;
-  }
+  /// The credit of what the base map draws now: Satellite's own line, or the online source's (ours / OpenFreeMap).
+  String _creditText(BaseMapStyle style, BasemapSource source) =>
+      style.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : source.attribution;
 
   void _openCredits(BuildContext context, BaseMapStyle style, bool tiles, String? meshCoreCredit) {
     showMapCredits(
       context,
       style: style,
       sourceState: tiles
-          ? SourceChip(
-              stats: _tileStats,
-              gate: _tiles().gate,
-              packName: _pack.code == null ? null : (_pack.basemap.managerOrNull?.installed[_pack.code]?.name ?? _pack.code),
-              clock: _now,
-            )
+          ? SourceChip(stats: _tileStats, gate: _tiles().gate, clock: _now)
           : null,
       colourKey: widget.mapKey,
       imageryCredits: style.isSatellite ? (ActiveMapDefinition.current.satellite?.credits ?? const []) : const [],
@@ -2490,9 +2396,8 @@ class _CoverageMapState extends State<CoverageMap> {
   Widget? _bottomColumn(BuildContext context, bool tiles, MeshSonarColors mc, ThemeData t, BaseMapStyle style) {
     final children = <Widget>[
       ?widget.bottom,
-      // Topo and Satellite come from the network only (no offline pack draws them): with no connection say so, honestly, and point at
-      // the map that does work offline, instead of leaving a blank or half-drawn map (M3).
-      if (tiles && style.needsNetwork)
+      // The map comes from the network: with no connection say so, honestly, instead of leaving a blank or half-drawn map.
+      if (tiles)
         ValueListenableBuilder<bool>(
           valueListenable: _offline,
           builder: (context, off, _) => !off
@@ -2506,7 +2411,7 @@ class _CoverageMapState extends State<CoverageMap> {
                       children: [
                         Icon(Icons.cloud_off_rounded, size: 13, color: mc.textMuted),
                         const SizedBox(width: 4),
-                        Flexible(child: Text('${style.label} needs a connection. Saved tiles only. Chart works offline.', overflow: TextOverflow.ellipsis, maxLines: 2, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
+                        Flexible(child: Text('No connection. Only places you have already seen are drawn.', overflow: TextOverflow.ellipsis, maxLines: 2, style: t.textTheme.labelSmall?.copyWith(fontSize: 11))),
                       ],
                     ),
                   ),

@@ -3,7 +3,7 @@
 // (meshcore-insights src/components/tools/map-style.ts). Pure Dart.
 //
 // Why vector, drawn on the phone: the app's map engine is flutter_map, which draws raster tiles natively and vector tiles
-// through vector_map_tiles (already used for the offline packs since WP13). Neither our tile server nor OpenFreeMap serves
+// through vector_map_tiles. Neither our tile server nor OpenFreeMap serves
 // raster tiles, and a raster render farm would be a new server to run; vector_map_tiles renders our .bin tiles to
 // images on the phone (raster mode, so every overlay keeps working as before) with labels as Flutter text in SF Pro.
 // So no glyph files are needed in the app and the server's Noto glyphs are only for the website (decision M2, HANDOFF).

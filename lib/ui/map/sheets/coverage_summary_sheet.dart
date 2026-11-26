@@ -46,7 +46,7 @@ class CoverageSummarySheet extends StatelessWidget {
         if (m != null) ...[
           band(m.band),
           Text(
-            'Summary of ${m.cells} measured ${m.cells == 1 ? 'cell' : 'cells'}${m.snrMean == null ? '' : ', mean ${formatSnrShort(m.snrMean!)} dB'}, ${coverageSharePct(m.share)} of this area driven.',
+            '${m.cells} measured ${m.cells == 1 ? 'cell' : 'cells'}${m.snrMean == null ? '' : ', mean ${formatSnrShort(m.snrMean!)} dB'}. ${coverageSharePct(m.share)} of this area driven.',
             key: const Key('coverage-summary-measured'),
             style: t.textTheme.bodyLarge?.copyWith(fontFeatures: AppType.tabular),
           ),
@@ -55,18 +55,19 @@ class CoverageSummarySheet extends StatelessWidget {
           if (m != null) const SizedBox(height: Gap.s),
           band(p.band, predicted: true),
           Text(
-            'Summary of ${p.cells} estimated ${p.cells == 1 ? 'cell' : 'cells'}, ${coverageSharePct(p.share)} of this area.',
+            '${p.cells} estimated ${p.cells == 1 ? 'cell' : 'cells'}, ${coverageSharePct(p.share)} of this area.',
             key: const Key('coverage-summary-predicted'),
             style: t.textTheme.bodyLarge,
           ),
         ],
         if (i != null && m == null && p == null) Text('Nothing measured or predicted in this area yet.', style: muted),
         const SizedBox(height: Gap.s),
-        Text('A summary picture of many small cells, not a measurement of its own. Zoom in to see the cells.', style: muted),
+        Text('This is many small cells seen from far away. Zoom in to see each one.', style: muted),
         if (onZoomIn != null)
           Padding(
             padding: const EdgeInsets.only(top: Gap.s),
-            child: FilledButton.tonal(key: const Key('coverage-summary-zoom-in'), onPressed: onZoomIn, child: const Text('Zoom in')),
+            // Full width, 48 pt (build 76).
+            child: FilledButton.tonalIcon(key: const Key('coverage-summary-zoom-in'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)), onPressed: onZoomIn, icon: const Icon(Icons.zoom_in_rounded), label: const Text('Zoom in to the cells')),
           ),
       ],
     );

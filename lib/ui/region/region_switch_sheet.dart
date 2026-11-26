@@ -14,6 +14,7 @@ import '../../core/region_search.dart' show shortNameOf;
 import '../app.dart';
 import '../onboarding/ui_prefs.dart';
 import '../design/app_surfaces.dart';
+import 'region_switcher.dart' show showRegionSwitcher;
 
 /// Switches to [region] at once and says so with an Undo toast; Undo puts back the previous pick (or "Follow my
 /// location" if there was none). Returns true: the region was switched. No confirm sheet.
@@ -58,21 +59,38 @@ Future<void> showNearestRegionsSheet(BuildContext context) {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Text('No MeshSonar region covers this location. Pings you send here are still recorded.', style: t.textTheme.bodyMedium),
+              child: Text('No MeshSonar region covers this location. Your pings here are still saved. Tap a region to view it.',
+                  style: t.textTheme.bodyMedium),
             ),
             if (near.isEmpty)
-              const Padding(padding: EdgeInsets.all(12), child: Text('No regions loaded yet. Connect to the internet once and they will be remembered.')),
+              const Padding(
+                  key: Key('nearest-regions-empty'),
+                  padding: EdgeInsets.all(12),
+                  child: Text('No regions loaded yet. Connect to the internet once and they will be remembered.')),
             for (final r in near)
               ListTile(
                 key: Key('nearest-region-${r.code}'),
                 minTileHeight: 56,
                 leading: const Icon(Icons.map_outlined),
-                title: Text(shortNameOf(r)),
-                subtitle: Text(r.code),
+                title: Text(shortNameOf(r), maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text(r == near.first ? '${r.code} · nearest to you' : r.code),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
                   final nav = Navigator.of(sheet);
                   if (await confirmRegionSwitch(sheet, r)) nav.pop();
+                },
+              ),
+            // Every other region is one tap away (build 76: the sheet used to end at five rows).
+            if (s.regionIndex.length > near.length)
+              ListTile(
+                key: const Key('nearest-regions-all'),
+                minTileHeight: 56,
+                leading: const Icon(Icons.search),
+                title: Text('Search all ${s.regionIndex.length} regions'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  if (context.mounted) unawaited(showRegionSwitcher(context));
                 },
               ),
           ]),

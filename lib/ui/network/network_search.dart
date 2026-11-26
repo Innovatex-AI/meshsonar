@@ -26,7 +26,7 @@ class NetworkSearchField extends StatelessWidget {
     final t = Theme.of(context);
     return Semantics(
       button: true,
-      label: 'Search nodes, keys, packets, observers and regions',
+      label: 'Search nodes, observers, packets and regions',
       excludeSemantics: true,
       child: Material(
         color: t.colorScheme.onSurface.withValues(alpha: 0.08),
@@ -43,8 +43,9 @@ class NetworkSearchField extends StatelessWidget {
                 Icon(Icons.search, size: 20, color: t.colorScheme.onSurfaceVariant),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Search nodes, keys, packets, regions',
-                      maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  // Short enough for one line on a 375 pt phone (it wrapped to two with "keys" in it).
+                  child: Text(region == null ? 'Search every region' : 'Search this region',
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                 ),
               ]),
             ),
@@ -178,6 +179,17 @@ class _NetworkSearchSheetState extends State<NetworkSearchSheet> {
     }
   }
 
+  /// What a hit is, in a word, shown under its title so a row says what a tap opens.
+  static String _kindWord(SearchKind k) => switch (k) {
+        SearchKind.node => 'Node',
+        SearchKind.packet => 'Packet',
+        SearchKind.observer => 'Observer',
+        SearchKind.channel => 'Channel',
+        SearchKind.message => 'Message',
+        SearchKind.region => 'Region',
+        SearchKind.other => 'Result',
+      };
+
   static IconData _icon(SearchKind k) => switch (k) {
         SearchKind.node => Icons.cell_tower,
         SearchKind.packet => Icons.podcasts,
@@ -195,27 +207,40 @@ class _NetworkSearchSheetState extends State<NetworkSearchSheet> {
     final note = r == null || !r.local
         ? null
         : switch (r.localReason) {
-            'offline' => 'Offline: searching what this phone already has.',
-            'error' => 'The server search did not answer; showing what this phone already has.',
-            _ => 'Searching what this phone already has (the server search arrives with the new API).',
+            'offline' => 'You are offline. These are results saved on this phone.',
+            'error' => 'The server did not answer. These are results saved on this phone.',
+            _ => 'Results saved on this phone.',
           };
+    final where = widget.region?.name;
     return ListView(
       key: const Key('network-search-sheet'),
       controller: widget.controller,
+      // Dragging the results puts the keyboard away, so the rows under it can be reached.
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Semantics(
+            header: true,
+            child: Text(where == null ? 'Search every region' : 'Search $where',
+                key: const Key('network-search-title'), maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.titleMedium),
+          ),
+        ),
         TextField(
           key: const Key('network-search-input'),
           controller: _text,
           autofocus: true,
           textInputAction: TextInputAction.search,
+          autocorrect: false,
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
-            hintText: 'Name, key prefix, packet hash, region',
+            hintText: 'A name, a place or an ID',
             suffixIcon: _text.text.isEmpty
                 ? null
                 : IconButton(
-                    tooltip: 'Clear',
+                    key: const Key('network-search-clear'),
+                    tooltip: 'Clear the search',
                     icon: const Icon(Icons.clear),
                     onPressed: () {
                       _text.clear();
@@ -234,17 +259,57 @@ class _NetworkSearchSheetState extends State<NetworkSearchSheet> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(note, key: const Key('network-search-local'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           ),
-        if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.error))),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(children: [
+              Expanded(child: Text(_error!, key: const Key('network-search-error'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.error))),
+              // The failed search can be run again without retyping.
+              TextButton(
+                  key: const Key('network-search-retry'),
+                  onPressed: () {
+                    _debounce?.cancel();
+                    _run(_text.text);
+                  },
+                  child: const Text('Try again')),
+            ]),
+          ),
         if (r != null && r.hits.isEmpty)
           Padding(
+            key: const Key('network-search-empty'),
             padding: const EdgeInsets.only(top: 24),
-            child: Text('Nothing matches "${r.query}".', key: const Key('network-search-empty'), textAlign: TextAlign.center),
+            child: Column(children: [
+              Text('Nothing matches "${r.query}".', textAlign: TextAlign.center, style: t.textTheme.bodyLarge),
+              const SizedBox(height: 4),
+              Text(
+                  widget.region == null
+                      ? 'Check the spelling, or try fewer letters.'
+                      : 'Check the spelling, or try fewer letters. This searches ${widget.region!.name} only: pick All regions to search everywhere.',
+                  textAlign: TextAlign.center,
+                  style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            ]),
           ),
         if (r == null && !_loading)
           Padding(
+            key: const Key('network-search-hint'),
             padding: const EdgeInsets.only(top: 16),
-            child: Text('Type at least 2 characters: a node or observer name, the start of a key (a7, 3cd0), a packet hash, or a region.',
-                style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Type two letters or more. You can search for:', style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              for (final (icon, text) in const [
+                (Icons.cell_tower, 'A repeater or observer, by name'),
+                (Icons.public, 'A region, by city or code'),
+                (Icons.tag, 'A node or packet, by the start of its ID'),
+              ])
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    Icon(icon, size: 20, color: t.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(text, style: t.textTheme.bodyMedium)),
+                  ]),
+                ),
+            ]),
           ),
         for (final h in r?.hits ?? const <SearchHit>[])
           ListTile(
@@ -252,7 +317,8 @@ class _NetworkSearchSheetState extends State<NetworkSearchSheet> {
             contentPadding: EdgeInsets.zero,
             leading: Icon(_icon(h.kind)),
             title: Text(h.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-            subtitle: h.subtitle == null ? null : Text(h.subtitle!),
+            // Every row says what it is ("Node", "Region"), then the detail the search gave.
+            subtitle: Text([_kindWord(h.kind), if (h.subtitle != null && h.subtitle!.trim().isNotEmpty) h.subtitle!].join(' · '), maxLines: 2, overflow: TextOverflow.ellipsis),
             trailing: h.request == null ? null : const Icon(Icons.chevron_right),
             enabled: h.request != null,
             onTap: h.request == null ? null : () => Navigator.of(context).pop(h),

@@ -33,7 +33,8 @@ void main() {
     await Harness().pumpApp(tester);
     await tapShellTab(tester, 'More');
     await tester.pumpAndSettle();
-    const rows = ['more-drives', 'more-radio', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-chat', 'more-settings', 'more-help', 'more-about'];
+    // Build 76 order: what people open most first (Drives, Radio, Settings), then the rest.
+    const rows = ['more-drives', 'more-radio', 'more-settings', 'more-chat', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-help', 'more-about'];
     final list = find.byKey(const Key('more-list'));
     expect(find.descendant(of: list, matching: find.byType(ListTile)), findsNWidgets(rows.length));
     var lastY = double.negativeInfinity;
@@ -56,6 +57,7 @@ void main() {
     for (final k in ['more-howItWorks', 'more-method', 'more-legend', 'more-report', 'more-myReports', 'more-privacy-policy']) {
       expect(_inMore(k), findsOneWidget, reason: '$k is under Help');
     }
+    expect(_inMore('more-tour'), findsOneWidget, reason: 'build 76: the intro is one tap away under Help');
     expect(find.textContaining('square'), findsNothing, reason: 'cells are hexagons (coverage v2)');
     await drain(tester);
   });

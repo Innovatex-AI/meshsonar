@@ -339,10 +339,15 @@ class _LoginSheetState extends State<LoginSheet> {
                   ),
                 ),
                 const SizedBox(height: Gap.xs),
-                Text(m.isRoom ? LoginCopy.roomField : LoginCopy.field, key: const Key('login-help'), style: t.textTheme.bodySmall),
+                // The result sits right under the field (build 76): at the bottom of the list it was behind the keyboard,
+                // so "wrong password" could not be seen without scrolling.
+                _status(context),
+                // The two help lines show only while the field is empty: once someone types, they are noise.
+                if (_pw.text.isEmpty) Text(m.isRoom ? LoginCopy.roomField : LoginCopy.field, key: const Key('login-help'), style: t.textTheme.bodySmall),
                 if (_pw.text.isEmpty) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(factoryPasswordHint, key: const Key('login-defaults'), style: t.textTheme.bodySmall?.copyWith(color: c.textMuted))),
-                Row(children: [
-                  Flexible(child: Text('No password?', style: t.textTheme.bodyMedium)),
+                // A Wrap (build 76): at the largest text sizes the button ran off the right edge of the sheet.
+                Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  Text('No password?', style: t.textTheme.bodyMedium),
                   CupertinoButton(
                     key: const Key('login-guest'),
                     minimumSize: const Size(Hit.min, Hit.min),
@@ -361,7 +366,7 @@ class _LoginSheetState extends State<LoginSheet> {
                   AppSwitchTile(
                     switchKey: const Key('login-remember'),
                     title: 'Remember on this iPhone',
-                    subtitle: 'Kept in the iPhone Keychain, only on this phone.',
+                    subtitle: 'Saved on this phone only.',
                     value: m.rememberOn,
                     onChanged: waiting ? null : m.setRemember,
                   ),
@@ -380,13 +385,11 @@ class _LoginSheetState extends State<LoginSheet> {
                   alignment: Alignment.centerLeft,
                   onPressed: () => setState(() => _more = !_more),
                   child: Row(children: [
-                    Expanded(child: Text('More options', style: t.textTheme.bodyLarge)),
+                    Expanded(child: Text('Trouble connecting?', style: t.textTheme.bodyLarge)),
                     AppSymbolIcon(_more ? AppSymbols.chevronDown : AppSymbols.chevronRight, size: 16),
                   ]),
                 ),
                 if (_more) _routeChoice(context),
-                const SizedBox(height: Gap.s),
-                _status(context),
                 const SizedBox(height: Gap.l),
               ],
             ),
@@ -401,11 +404,13 @@ class _LoginSheetState extends State<LoginSheet> {
                 onPressed: waiting ? () { m.cancel(); } : (_pw.text.isEmpty ? null : () => _go()),
                 child: Text(waiting ? 'Cancel login' : 'Log in'),
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: Gap.xs),
-                child: Text(waiting ? '${LoginCopy.waiting}   ${m.elapsed} s' : LoginCopy.waiting,
-                    key: const Key('login-wait'), textAlign: TextAlign.center, style: t.textTheme.bodySmall?.copyWith(color: c.textMuted)),
-              ),
+              // Only while it waits (build 76): before that the line was one more thing to read.
+              if (waiting)
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.xs),
+                  child: Text('${LoginCopy.waiting}   ${m.elapsed} s',
+                      key: const Key('login-wait'), textAlign: TextAlign.center, style: t.textTheme.bodySmall?.copyWith(color: c.textMuted)),
+                ),
             ]),
           ),
         ]),

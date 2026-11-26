@@ -162,7 +162,6 @@ class _SessionsScreenState extends State<SessionsScreen> {
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final prefs = uiPrefsFor(s);
-    final t = Theme.of(context);
     final list = s.sessions.where((x) => !_hidden.contains(x.session.id)).toList();
     final unsyncedTotal = list.fold<int>(0, (a, x) => a + x.unsyncedCount);
     final namesPending = list.where((x) => x.unsyncedCount == 0 && x.sessionResendPending).length;
@@ -207,8 +206,19 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     child: EmptyState(
                       icon: Icons.directions_car,
                       title: 'No drives yet',
-                      body: 'Start a drive on the Drive tab. Drives are saved on this phone and listed here.',
-                      action: Text('Pull down to refresh.', style: t.textTheme.bodySmall),
+                      body: 'Your drives are saved on this phone and listed here.',
+                      // The next step is a button (build 76; it was the sentence "Start a drive on the Drive tab").
+                      action: FilledButton.icon(
+                        key: const Key('drives-empty-start'),
+                        style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                        onPressed: () {
+                          final shell = ShellScope.maybeRead(context);
+                          Navigator.of(context).popUntil((r) => r.isFirst);
+                          shell?.select(AppTab.drive);
+                        },
+                        icon: const Icon(Icons.directions_car_rounded),
+                        label: const Text('Go to Drive'),
+                      ),
                     ),
                   ),
                 for (final x in list)
@@ -337,11 +347,12 @@ class _SessionCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      [if (label != null) formatDateTime(ses.startedAt), if (ses.channel != null) ses.channel!].join(' · '),
-                      style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant),
-                    ),
+                    // Build 76: the second line is the date of a named drive, nothing else. The channel ("#wardriving" on every
+                    // card) is on the drive's own page, so an unnamed drive's card is one line shorter.
+                    if (label != null) ...[
+                      const SizedBox(height: 2),
+                      Text(formatDateTime(ses.startedAt), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+                    ],
                   ]),
                 ),
                 if (active)
@@ -390,18 +401,22 @@ class _SessionCard extends StatelessWidget {
                       padding: EdgeInsets.all(12),
                       child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                     )
-                  else
-                    IconButton(
+                  // Build 76: the two buttons say what they do ("Sync", "Share"; they were two bare icons), and Sync is
+                  // only there when something waits to upload (it used to sit greyed out on every synced drive).
+                  else if (summary.hasSomethingToSync)
+                    TextButton.icon(
                       key: ValueKey('sync-$id'),
-                      tooltip: 'Sync now',
-                      onPressed: summary.hasSomethingToSync ? () => s.syncSession(id) : null,
-                      icon: const Icon(Icons.cloud_upload_outlined),
+                      style: TextButton.styleFrom(minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 10)),
+                      onPressed: () => s.syncSession(id),
+                      icon: const Icon(Icons.cloud_upload_outlined, size: 20),
+                      label: const Text('Sync'),
                     ),
-                  IconButton(
+                  TextButton.icon(
                     key: ValueKey('export-$id'),
-                    tooltip: 'Export & share',
+                    style: TextButton.styleFrom(minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 10)),
                     onPressed: () => s.exportAndShare(id),
-                    icon: const Icon(Icons.ios_share),
+                    icon: const Icon(Icons.ios_share, size: 20),
+                    label: const Text('Share'),
                   ),
                 ],
               ),

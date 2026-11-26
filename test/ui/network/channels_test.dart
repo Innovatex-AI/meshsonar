@@ -262,7 +262,7 @@ void main() {
       expect(find.byType(ChannelsSection), findsOneWidget, reason: 'the section stays on stage: nothing is pushed over the Network tab');
       await t.tap(find.byKey(const Key('channel-back')));
       await settle(t);
-      expect(find.text('Heard in yvr, san, lax +2'), findsOneWidget);
+      expect(find.textContaining('Heard in yvr, san, lax +2'), findsOneWidget);
       expect(find.byType(ChannelReaderView), findsNothing, reason: 'the link opens once, not on every rebuild');
     });
   });
@@ -276,7 +276,8 @@ void main() {
       await settle(t);
       expect(t.getTopLeft(find.text('message number 3')).dy, greaterThan(t.getTopLeft(find.text('message number 1')).dy));
       expect(find.byKey(const Key('channel-msg-hidden-m0002')), findsOneWidget);
-      expect(find.text('heard by 3 · 7 hops · SNR 12.5 dB'), findsNWidgets(3));
+      expect(find.text('7 hops · heard by 3 observers'), findsNWidgets(3), reason: 'short and plain; the signal figure is on the actions sheet');
+      expect(find.byKey(const Key('channel-readonly')), findsOneWidget, reason: 'the header says it is a reader');
       expect(find.byKey(const Key('channel-start')), findsOneWidget);
       expect(t.getSize(find.byKey(const Key('channel-msg-more-m0003'))), const Size(44, 44));
       expect(t.takeException(), isNull);
@@ -463,6 +464,59 @@ void main() {
       await t.tap(find.byKey(const Key('report-send')));
       await settle(t);
       expect(find.text('Reports are not switched on yet. Nothing was sent.'), findsOneWidget);
+    });
+  });
+
+  group('build 76', () {
+    testWidgets('channel list: an intro line says what a tap does; several private channels sit in one closed row', (t) async {
+      phone(t);
+      s.channelRows = [
+        ...channels,
+        {...channels[1], 'id': 'enc:aa'},
+        {...channels[1], 'id': 'enc:bb'},
+      ];
+      await t.pumpWidget(app(const Scaffold(body: ChannelsSection(baseUrl: base, regionSlug: 'cmh'))));
+      await settle(t);
+      expect(find.byKey(const Key('channels-intro')), findsOneWidget);
+      expect(find.text('Private channels (3)'), findsOneWidget);
+      expect(find.byKey(const Key('channel-row-enc:fc')), findsNothing, reason: 'closed until asked for');
+      expect(find.byKey(const Key('channel-row-public')), findsOneWidget);
+      await t.tap(find.text('Private channels (3)'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('channel-row-enc:fc')), findsOneWidget);
+      expect(find.byKey(const Key('channel-private-enc:aa')), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('search: the count is on top, the clear button shows at once, and a one-channel search with no hit offers every channel', (t) async {
+      phone(t);
+      await t.pumpWidget(app(const ChannelSearchScreen(baseUrl: base, regionSlug: 'cmh', debounce: Duration(milliseconds: 10))));
+      await settle(t);
+      await t.enterText(find.byKey(const Key('channel-search-field')), 'test');
+      await t.pump();
+      expect(find.byKey(const Key('channel-search-clear')), findsOneWidget);
+      await settle(t);
+      expect(t.widget<Text>(find.byKey(const Key('channel-search-count'))).data, startsWith('1 result, newest first.'));
+      expect(t.getTopLeft(find.byKey(const Key('channel-search-count'))).dy, lessThan(t.getTopLeft(find.byKey(const Key('channel-msg-m0007'))).dy));
+    });
+
+    testWidgets('search: an error has Try again', (t) async {
+      phone(t);
+      var asked = 0;
+      channelsApiFactory = (b) => ChannelsApi(b,
+          client: MockClient((r) async {
+            if (r.url.path == '/v1/messages/search') asked++;
+            return js({'error': {'code': 'internal', 'message': 'Search is busy.', 'requestId': 'r'}}, 500);
+          }));
+      await t.pumpWidget(app(const ChannelSearchScreen(baseUrl: base, regionSlug: 'cmh', debounce: Duration(milliseconds: 10))));
+      await settle(t);
+      await t.enterText(find.byKey(const Key('channel-search-field')), 'test');
+      await settle(t);
+      expect(find.byKey(const Key('channel-search-error')), findsOneWidget);
+      final before = asked;
+      await t.tap(find.byKey(const Key('channel-search-retry')));
+      await settle(t);
+      expect(asked, greaterThan(before), reason: 'Try again asks the server again');
     });
   });
 

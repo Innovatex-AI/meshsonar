@@ -103,6 +103,8 @@ void main() {
     expect(find.byKey(const Key('more-radio-screen')), findsOneWidget);
     expect(find.byKey(const Key('network-subtitle')), findsOneWidget);
     expect(find.byKey(const Key('network-radio-card')), findsOneWidget);
+    // Build 76: set-up and the region check sit above the radio card and the repeaters, not under them.
+    expect(tester.getTopLeft(find.byKey(const Key('more-radioSetup'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('network-radio-card'))).dy));
     final list = find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first;
     for (final k in ['more-radioSettings', 'more-radioSetup', 'more-noiseFloor', 'more-telemetry']) {
       await tester.scrollUntilVisible(find.byKey(Key(k)), 200, scrollable: list);
@@ -144,11 +146,34 @@ void main() {
     await back();
 
     // In Settings (the rows that only jumped there): the MoreItem still opens the section for code that asks.
-    for (final item in [MoreItem.myRadios, MoreItem.wardriving, MoreItem.notifications, MoreItem.privacy, MoreItem.observer]) {
+    // Build 76: a section that kept its place opens Settings at it; the two that became pages (Claimed radios, Observer)
+    // open Settings with that page on top, so Back lands in Settings.
+    const landsOn = <MoreItem, (String section, String? page)>{
+      MoreItem.myRadios: ('driver', 'claims'),
+      MoreItem.wardriving: ('wardriving', null),
+      MoreItem.notifications: ('notifications', null),
+      MoreItem.privacy: ('privacy', null),
+      MoreItem.observer: ('privacy', 'observer'),
+    };
+    for (final MapEntry(key: item, value: (section, page)) in landsOn.entries) {
       shell.openMore(item);
       await tester.pumpAndSettle();
-      expect(find.byType(SettingsScreen), findsOneWidget, reason: item.name);
+      if (page == null) {
+        expect(find.byType(SettingsScreen), findsOneWidget, reason: item.name);
+        expect(find.byType(SettingsPageScreen), findsNothing, reason: item.name);
+        expect(find.byKey(Key('section-$section')), findsOneWidget, reason: item.name);
+      } else {
+        expect(find.byType(SettingsScreen, skipOffstage: false), findsOneWidget, reason: '${item.name}: Settings is under the page');
+        expect(find.byKey(Key('settings-page-$page')), findsOneWidget, reason: item.name);
+        expect(tester.widget<SettingsPageScreen>(find.byType(SettingsPageScreen)).pageId, page, reason: item.name);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(SettingsScreen), findsOneWidget, reason: '${item.name}: Back lands in Settings');
+        expect(find.byKey(Key('page-$page')), findsOneWidget, reason: '${item.name}: at the row that opens the page');
+        expect(find.byKey(Key('section-$section')), findsOneWidget, reason: item.name);
+      }
       await back();
+      expect(find.byType(SettingsScreen), findsNothing, reason: '${item.name}: More is back at its list');
     }
 
     // Under Radio: the lists (the old "repeaters" row), the four radio tools in its Tools menu, and the rest as rows.

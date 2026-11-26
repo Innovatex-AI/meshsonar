@@ -1,4 +1,5 @@
-// First-run intro: three short pages, skippable, shown once.
+// First-run intro: four short pages, skippable, shown once. Build 76: the radio page is second (one tap to Connect),
+// every page is two short sentences, and the tabs page is a list.
 import 'package:flutter/material.dart';
 
 import '../../app/build_flags.dart';
@@ -77,32 +78,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _Page(
                         key: const Key('onboarding-page-1'),
                         art: const SonarIllustration(),
-                        title: 'Your MeshCore radio, in one app',
-                        body: 'Use one radio to map where your mesh really reaches, plan where to build next, and '
-                            'check what you built. MeshSonar pings your channel as you drive and listens for the '
-                            'repeaters that echo it. Every ping is saved with GPS, including the ones nobody heard.',
+                        title: 'Map where your mesh reaches',
+                        body: 'Drive with your MeshCore radio. MeshSonar sends a ping, listens for the repeaters that '
+                            'answer, and colours the map with what it heard.',
                       ),
-                      _Page(
-                        key: const Key('onboarding-page-tabs'),
-                        art: const _TabsArt(),
-                        title: 'Find your way around',
-                        body: 'Network: your region live. Packets, map, nodes, channels and analytics.\n'
-                            'Drive: record a drive, ping, and see coverage live.\n'
-                            'Chat: contacts and channels, once your radio is connected.\n'
-                            'Plan: tools for deciding where to build.\n'
-                            'More: your radio, drives, settings, help and this tour.',
-                      ),
+                      // Second, not third (build 76): one tap from the first page to a connected radio.
                       _Page(
                         key: const Key('onboarding-page-2'),
                         art: const RadioLinkIllustration(),
                         title: 'Connect your radio',
-                        body: 'Pair your MeshCore companion radio over Bluetooth. MeshSonar needs a radio to send pings and hear '
-                            'repeaters echo them. Your phone asks for Bluetooth permission the first time.',
+                        body: widget.replay
+                            ? 'MeshSonar talks to your radio over Bluetooth. Connect it from the Drive tab.'
+                            : 'Turn your radio on and keep it close. Your phone asks to use Bluetooth: tap Allow.',
                         actions: widget.replay
                             ? const []
                             : [
                           FilledButton.icon(
                             key: const Key('onboarding-connect'),
+                            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                             onPressed: () => widget.onFinish(OnboardingExit.connectRadio),
                             icon: const Icon(Icons.bluetooth_searching),
                             label: const Text('Connect radio'),
@@ -111,20 +104,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           OutlinedButton.icon(
                             key: const Key('onboarding-simulator'),
                             style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(48),
                                 foregroundColor: Colors.white, side: const BorderSide(color: Colors.white38)),
                             onPressed: () => widget.onFinish(OnboardingExit.simulator),
                             icon: const Icon(Icons.science),
-                            label: const Text('Try the Simulator'),
+                            label: const Text('No radio? Try a demo'),
                           ),
                         ],
                       ),
-                      _Page(
-                        key: const Key('onboarding-page-3'),
-                        art: const KeyCloudIllustration(),
+                      const _Page(
+                        key: Key('onboarding-page-tabs'),
+                        art: SizedBox.shrink(),
+                        artHeight: 0,
+                        title: 'Find your way around',
+                        body: '',
+                        below: _TabsList(),
+                      ),
+                      const _Page(
+                        key: Key('onboarding-page-3'),
+                        art: KeyCloudIllustration(),
                         title: 'Nothing to sign up for',
-                        body: 'MeshSonar sets up your driver key by itself. Drives are always saved on this phone and '
-                            'upload to the MeshSonar coverage map automatically. When you start a drive your phone asks for Location, '
-                            'so each ping can be placed on the map. Add a callsign any time in Settings.',
+                        body: 'No account, no password. Your drives are saved on this phone and added to the shared '
+                            'coverage map. Your phone asks for Location when you start your first drive.',
                       ),
                     ],
                   ),
@@ -146,8 +147,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             borderRadius: BorderRadius.circular(5),
                           ),
                         )),
-                      const Spacer(),
-                      FilledButton(
+                      // The button takes the room the dots leave: at large text on a narrow phone its label shrinks to
+                      // fit, it never overflows the row.
+                      Expanded(
+                        child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
                         key: const Key('onboarding-next'),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
@@ -155,8 +160,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           minimumSize: const Size(140, 52),
                         ),
                         onPressed: _next,
-                        child: Text(_page == _count - 1 ? 'Get started' : 'Next'),
-                      ),
+                        child: FittedBox(fit: BoxFit.scaleDown, child: Text(_page == _count - 1 ? 'Get started' : (_page == 1 && !widget.replay ? 'Later' : 'Next'))),
+                      ))),
                     ],
                   ),
                 ),
@@ -169,26 +174,43 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-/// The five tab icons in a row: art for the "find your way around" page.
-class _TabsArt extends StatelessWidget {
-  const _TabsArt();
+/// What each of the five tabs is for: its icon, its name and one short line (build 76: a list that reads at a glance,
+/// in place of an icon strip over a centred paragraph).
+class _TabsList extends StatelessWidget {
+  const _TabsList();
+
+  static String _what(AppTab t) => switch (t) {
+        AppTab.network => 'The mesh around you, live',
+        AppTab.drive => 'Record a drive and see coverage',
+        AppTab.chat => 'Messages through your radio',
+        AppTab.plan => 'Work out where to build next',
+        AppTab.more => 'Your radio, drives, settings, help',
+      };
+
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           for (final t in AppTab.values)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(16)),
-                  child: IconTheme(data: const IconThemeData(color: Brand.glow, size: 26), child: t.iconWidget(selected: true)),
-                ),
-                const SizedBox(height: 6),
-                Text(t.label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-              ]),
+            MergeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(14)),
+                    child: IconTheme(data: const IconThemeData(color: Brand.glow, size: 24), child: t.iconWidget(selected: true)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(t.label, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                      Text(_what(t), style: TextStyle(color: Colors.white.withValues(alpha: 0.82), fontSize: 15)),
+                    ]),
+                  ),
+                ]),
+              ),
             ),
         ],
       );
@@ -199,7 +221,11 @@ class _Page extends StatelessWidget {
   final String title;
   final String body;
   final List<Widget> actions;
-  const _Page({super.key, required this.art, required this.title, required this.body, this.actions = const []});
+
+  /// Shown under the title in place of a paragraph (the tab list).
+  final Widget? below;
+  final double artHeight;
+  const _Page({super.key, required this.art, required this.title, required this.body, this.actions = const [], this.below, this.artHeight = 210});
 
   @override
   Widget build(BuildContext context) {
@@ -215,18 +241,24 @@ class _Page extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(height: 210, child: ExcludeSemantics(child: Center(child: art))),
-                  const SizedBox(height: 28),
+                  if (artHeight > 0) ...[
+                    SizedBox(height: artHeight, child: ExcludeSemantics(child: Center(child: art))),
+                    const SizedBox(height: 28),
+                  ],
                   Text(title,
                       textAlign: TextAlign.center,
                       style: t.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                   const SizedBox(height: 14),
-                  Text(body,
-                      textAlign: TextAlign.center,
-                      style: t.textTheme.bodyLarge?.copyWith(color: Colors.white.withValues(alpha: 0.82), height: 1.45)),
+                  if (body.isNotEmpty)
+                    Text(body,
+                        textAlign: TextAlign.center,
+                        style: t.textTheme.bodyLarge?.copyWith(color: Colors.white.withValues(alpha: 0.82), height: 1.45)),
+                  ?below,
                   if (actions.isNotEmpty) ...[
                     const SizedBox(height: 24),
-                    for (final a in actions) Padding(padding: const EdgeInsets.only(bottom: 10), child: SizedBox(width: 280, child: a)),
+                    // Full width (to 360): a thumb reaches them at either edge.
+                    for (final a in actions)
+                      Padding(padding: const EdgeInsets.only(bottom: 10), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 360), child: SizedBox(width: double.infinity, child: a))),
                   ],
                 ],
               ),

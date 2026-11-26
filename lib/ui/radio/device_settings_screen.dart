@@ -220,8 +220,10 @@ class _BodyState extends State<_Body> with WidgetsBindingObserver {
           if (info != null) 'Protocol ${info.firmwareVerCode}',
           if (capacity != null) '$capacity contacts max',
         ].join(' · ')),
-        InsetGroup(header: 'General', footer: 'MeshSonar does not update firmware. Tap Firmware to open the official flasher.', rows: [
+        InsetGroup(header: 'This radio', footer: 'Firmware opens the official MeshCore flasher in your browser.', rows: [
+          // Build 76: what people change first. Name, then position, power and frequency (it was five groups down).
           InsetRow(key: const Key('row-name'), title: 'Name', value: cfg.name, onTap: () => _push(const RadioSetupScreen())),
+          InsetRow(key: const Key('row-setup'), title: 'Position, power and frequency', onTap: () => _push(const RadioSetupScreen())),
           if (d.available(DeviceFeature.battery) && batt != null)
             InsetRow(key: const Key('row-battery'), title: 'Battery & storage', value: battText, onTap: () => _batterySheet()),
           InsetRow(
@@ -241,7 +243,7 @@ class _BodyState extends State<_Body> with WidgetsBindingObserver {
             switchKey: const Key('row-ask-switch'),
           ),
           if (canAutoAdd) InsetRow(key: const Key('row-autoadd'), title: 'Auto-add by type', onTap: () => _autoAdd(policy, false)),
-          if (canAutoAdd) InsetRow(key: const Key('row-hops'), title: 'Max hops, overwrite oldest', onTap: () => _autoAdd(policy, true)),
+          if (canAutoAdd) InsetRow(key: const Key('row-hops'), title: 'Distance limit and a full list', onTap: () => _autoAdd(policy, true)),
           InsetRow(
             key: const Key('row-contact-count'),
             title: 'Contacts on this radio',
@@ -259,7 +261,16 @@ class _BodyState extends State<_Body> with WidgetsBindingObserver {
           ),
           InsetRow(key: const Key('row-telemetry'), title: 'Who can request my telemetry', value: _telemetrySummary(tel), onTap: () => _telemetry(tel)),
         ]),
-        InsetGroup(header: 'Routing', rows: [
+        InsetGroup(header: 'Tools', rows: [
+          InsetRow(key: const Key('row-tools'), title: 'Radio tools', subtitle: 'Trace path, Discover, Rx log, Noise floor', onTap: () => _push(const _ToolsList())),
+        ]),
+        InsetGroup(header: 'Security', rows: [
+          InsetRow(key: const Key('row-pin'), title: 'Bluetooth PIN', onTap: _pin),
+          InsetRow(key: const Key('row-export'), title: 'Export backup', subtitle: 'Encrypted with a passphrase', onTap: _export),
+          InsetRow(key: const Key('row-import'), title: 'Import backup', onTap: _import),
+        ]),
+        // Expert rows together, below everything a new owner needs (build 76: Routing and Console were mixed in above).
+        InsetGroup(header: 'Advanced', footer: 'Most people never need these.', rows: [
           if (d.available(DeviceFeature.pathHashMode))
             InsetRow(
                 key: const Key('row-hash'),
@@ -274,19 +285,13 @@ class _BodyState extends State<_Body> with WidgetsBindingObserver {
             onChanged: (v) => _write(() => d.setMultiAcks(v)),
             switchKey: const Key('row-acks-switch'),
           ),
+          if (d.available(DeviceFeature.console)) InsetRow(key: const Key('row-console'), title: 'Console', subtitle: 'Type commands to the radio', onTap: () => _push(DeviceConsoleScreen(tool: d))),
         ]),
-        InsetGroup(header: 'Radio', rows: [
-          InsetRow(key: const Key('row-setup'), title: 'Radio setup', subtitle: 'Frequency, power, position', onTap: () => _push(const RadioSetupScreen())),
-          InsetRow(key: const Key('row-tools'), title: 'Tools', subtitle: 'Trace, Discover, Rx log', onTap: () => _push(const _ToolsList())),
-          if (d.available(DeviceFeature.console)) InsetRow(key: const Key('row-console'), title: 'Console', onTap: () => _push(DeviceConsoleScreen(tool: d))),
+        // Build 76: restart and erase are two groups, never one under the other, and both ask first.
+        InsetGroup(groupKey: const Key('group-restart'), footer: 'Nothing is erased. The radio disconnects while it restarts.', rows: [
+          InsetRow(key: const Key('row-reboot'), title: 'Reboot radio', chevron: false, onTap: _reboot),
         ]),
-        InsetGroup(header: 'Security', rows: [
-          InsetRow(key: const Key('row-pin'), title: 'Bluetooth PIN', onTap: _pin),
-          InsetRow(key: const Key('row-export'), title: 'Export backup', subtitle: 'Encrypted with a passphrase', onTap: _export),
-          InsetRow(key: const Key('row-import'), title: 'Import backup', onTap: _import),
-        ]),
-        InsetGroup(rows: [
-          InsetRow(key: const Key('row-reboot'), title: 'Reboot radio', destructive: true, chevron: false, onTap: _reboot),
+        InsetGroup(groupKey: const Key('group-erase'), header: 'Erase', footer: 'Erases the identity key, contacts and channels. You type a word to confirm.', rows: [
           InsetRow(key: const Key('row-reset'), title: 'Factory reset', destructive: true, chevron: false, onTap: _reset),
         ]),
         if (hidden.isNotEmpty)
@@ -388,7 +393,17 @@ class _BodyState extends State<_Body> with WidgetsBindingObserver {
   }
 
   Future<void> _reboot() async {
-    if (_driveBlocks('rebooting the radio')) return;
+    if (_driveBlocks('restarting the radio')) return;
+    // Build 76: one tap used to restart the radio at once, from a row right above Factory reset.
+    final ok = await showAppAlert(
+      context,
+      title: 'Reboot ${d.snapshot?.config.name ?? 'this radio'}?',
+      message: 'Nothing is erased. The radio disconnects while it restarts.',
+      confirmLabel: 'Reboot',
+      dialogKey: const Key('reboot-confirm'),
+      confirmKey: const Key('reboot-confirm-ok'),
+    );
+    if (ok != true || !mounted) return;
     await _write(d.reboot);
   }
 
@@ -441,12 +456,13 @@ class _ToolsList extends StatelessWidget {
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.only(top: Gap.m), children: [
           InsetGroup(rows: [
-            InsetRow(key: const Key('tool-trace'), title: 'Trace', onTap: () => open(const TraceScreen())),
-            InsetRow(key: const Key('tool-discover'), title: 'Discover', onTap: () => open(const DiscoverScreen())),
-            InsetRow(key: const Key('tool-adverts'), title: 'Adverts', onTap: () => open(const AdvertsScreen())),
-            InsetRow(key: const Key('tool-rxlog'), title: 'Rx log', onTap: () => open(const RxLogScreen())),
-            InsetRow(key: const Key('tool-noise'), title: 'Noise floor', onTap: () => open(const NoiseScreen())),
-            InsetRow(key: const Key('tool-telemetry'), title: 'Telemetry', onTap: () => open(const TelemetryScreen())),
+            // Build 76: each tool says what it is for, in the same words as Network > Tools (tools_section.dart).
+            InsetRow(key: const Key('tool-trace'), title: 'Trace path', subtitle: 'Send a test packet along repeaters you choose', onTap: () => open(const TraceScreen())),
+            InsetRow(key: const Key('tool-discover'), title: 'Discover', subtitle: 'Find repeaters in direct range of your radio', onTap: () => open(const DiscoverScreen())),
+            InsetRow(key: const Key('tool-adverts'), title: 'Adverts', subtitle: 'Announce your radio and see who else announced', onTap: () => open(const AdvertsScreen())),
+            InsetRow(key: const Key('tool-rxlog'), title: 'Rx log', subtitle: 'Every packet your radio hears, live', onTap: () => open(const RxLogScreen())),
+            InsetRow(key: const Key('tool-noise'), title: 'Noise floor', subtitle: 'How quiet the channel is at your radio', onTap: () => open(const NoiseScreen())),
+            InsetRow(key: const Key('tool-telemetry'), title: 'Telemetry', subtitle: 'Battery and sensor readings from a node', onTap: () => open(const TelemetryScreen())),
           ]),
         ]),
       ),

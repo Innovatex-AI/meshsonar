@@ -37,9 +37,9 @@ const _sortLabels = {
   RegionSort.drives: 'Drives',
   RegionSort.drivers: 'Drivers',
   RegionSort.pings: 'Pings',
-  RegionSort.heardPct: 'Heard',
-  RegionSort.cellsHeardPct: 'Cells',
-  RegionSort.repeatersHeard: 'Repeaters',
+  RegionSort.heardPct: 'Pings heard %',
+  RegionSort.cellsHeardPct: 'Area heard %',
+  RegionSort.repeatersHeard: 'Repeaters heard',
 };
 
 num? _sortValue(RegionFigures f, RegionSort s) {
@@ -374,8 +374,16 @@ class _RegionsScreenState extends State<RegionsScreen> {
     final compare = _compareRows(regions);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All regions'),
-        actions: [IconButton(key: const Key('regions-refresh'), tooltip: 'Refresh', onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh))],
+        // Build 76: named as the row that opens it ("Every region"); "All regions" is the Network tab's hub view.
+        title: const Text('Every region'),
+        actions: [
+          IconButton(
+              key: const Key('regions-refresh'),
+              tooltip: 'Refresh the numbers',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: _busy ? null : _refresh,
+              icon: const Icon(Icons.refresh))
+        ],
       ),
       body: regions.isEmpty
           ? const EmptyState(icon: Icons.map_outlined, title: 'No regions loaded yet', body: 'Connect to the internet once and they are remembered.')
@@ -387,6 +395,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
                     key: const Key('regions-search'),
                     controller: _search,
                     textInputAction: TextInputAction.search,
+                    autocorrect: false,
+                    onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
                       hintText: 'Search ${regions.length} regions',
@@ -394,12 +404,9 @@ class _RegionsScreenState extends State<RegionsScreen> {
                           ? null
                           : IconButton(
                               key: const Key('regions-search-clear'),
-                              tooltip: 'Clear',
+                              tooltip: 'Clear the search',
                               icon: const Icon(Icons.close),
-                              onPressed: () => setState(() {
-                                    _search.clear();
-                                    _query = '';
-                                  })),
+                              onPressed: _clearSearch),
                     ),
                     onChanged: (v) => setState(() => _query = v),
                   ),
@@ -409,21 +416,30 @@ class _RegionsScreenState extends State<RegionsScreen> {
                 Padding(
                   key: const Key('regions-figures-asof'),
                   padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
-                  child: Text(
-                    'Numbers as of ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_figuresAsOf!.toLocal()))}'
-                    ' (the server refreshes them every few minutes).',
-                    style: Theme.of(context).textTheme.bodySmall,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Tap a region to view it. Numbers as of ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_figuresAsOf!.toLocal()))}.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                 ),
               if (_paused)
                 const Padding(
                   key: Key('regions-paused'),
                   padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
-                  child: Text('The server asked for a pause (too many requests). Numbers continue in a minute.'),
+                  child: Text('Too many requests just now. The numbers continue in about a minute.'),
                 ),
               Expanded(
-                child: ListView.builder(
+                child: RefreshIndicator(
+                  // Pull down to refresh (the same as the button in the bar, in reach of a thumb).
+                  onRefresh: () async {
+                    if (!_busy) _refresh();
+                  },
+                  child: ListView.builder(
                   key: const Key('regions-screen'),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(12),
                   itemCount: (compare == null ? 0 : 1) + items.length + (items.isEmpty ? 1 : 0),
                   itemBuilder: (context, i) {
@@ -435,7 +451,10 @@ class _RegionsScreenState extends State<RegionsScreen> {
                       return Padding(
                         key: const Key('regions-no-match'),
                         padding: const EdgeInsets.all(Gap.xl),
-                        child: Text('No region matches "$_query".'),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('No region matches "$_query". Try a city, a country or a three-letter code.'),
+                          TextButton(key: const Key('regions-search-reset'), onPressed: _clearSearch, child: const Text('Show every region')),
+                        ]),
                       );
                     }
                     return switch (items[i]) {
@@ -456,10 +475,16 @@ class _RegionsScreenState extends State<RegionsScreen> {
                     };
                   },
                 ),
+                ),
               ),
             ]),
     );
   }
+
+  void _clearSearch() => setState(() {
+        _search.clear();
+        _query = '';
+      });
 
   /// The flat list the builder walks: hub group headers then their regions, then countries; or ranked search results.
   List<_Item> _itemsOf(BuildContext context, List<RegionIndexEntry> regions) {
@@ -513,6 +538,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
       child: ExpansionTile(
         key: const Key('regions-compare-tile'),
         title: const Text('Compare regions'),
+        // A full-height row to open and close (the default tile is denser than a thumb likes).
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         subtitle: Text(
           _mode == _FigureMode.bulk
               ? '${loaded.length} of ${regions.length} regions have drives${loaded.length > rows.length ? ' (top ${rows.length} shown)' : ''}.'
@@ -550,9 +577,9 @@ class _RegionsScreenState extends State<RegionsScreen> {
             DataColumn(label: Text('Drives'), numeric: true),
             DataColumn(label: Text('Drivers'), numeric: true),
             DataColumn(label: Text('Pings'), numeric: true),
-            DataColumn(label: Text('Heard'), numeric: true),
-            DataColumn(label: Text('Cells'), numeric: true),
-            DataColumn(label: Text('Repeaters'), numeric: true),
+            DataColumn(label: Text('Pings heard'), numeric: true),
+            DataColumn(label: Text('Area heard'), numeric: true),
+            DataColumn(label: Text('Repeaters heard'), numeric: true),
           ],
           rows: [
             for (final f in rows)
@@ -621,7 +648,7 @@ class _FigureTileState extends State<_FigureTile> {
 
   String _line(Units units) {
     final f = widget.figures;
-    if (f == null) return widget.asked ? 'Loading numbers…' : 'Numbers load when this row is on screen';
+    if (f == null) return 'Loading numbers…';
     final s = f.stats;
     if (s == null) return 'Numbers unavailable right now';
     if (s.isEmpty) return 'No drives yet';
@@ -635,9 +662,16 @@ class _FigureTileState extends State<_FigureTile> {
     return Card(
       child: ListTile(
         key: Key('regions-tile-${r.code}'),
-        title: Text(r.name),
+        title: Text(r.name, maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: Text('${r.code} · ${_line(AppScope.unitsOf(context))}'),
-        trailing: widget.viewing ? const Chip(label: Text('Viewing')) : const Icon(Icons.chevron_right),
+        // The region on screen now: a tick and the word, small enough that the name keeps its width on a phone.
+        trailing: widget.viewing
+            ? Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.check, size: 18, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 4),
+                Text('Viewing', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.primary)),
+              ])
+            : const Icon(Icons.chevron_right),
         onTap: () => widget.onTap(r),
       ),
     );

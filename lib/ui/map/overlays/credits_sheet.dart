@@ -8,9 +8,8 @@ import 'package:flutter/material.dart';
 import '../../../core/map_styles.dart';
 import '../../../platform/open_url.dart';
 import '../../design/app_surfaces.dart' show showAppSheet;
-import '../../theme.dart';
 
-/// Opens the sheet. [sourceState] is the live "Online map / Offline map: CMH / Saved map / No map here" line; [colourKey] is
+/// Opens the sheet. [sourceState] is the live "Online map / Saved map / No map here" line; [colourKey] is
 /// the map key widget; [meshCoreCredit] is the layer's attribution text when its data is on the map.
 Future<void> showMapCredits(
   BuildContext context, {
@@ -59,12 +58,14 @@ class CreditsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final mc = MeshSonarColors.of(context);
     Widget head(String s) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 4), child: Text(s, style: t.textTheme.titleSmall));
-    Widget link(String label, Uri u) => TextButton(
+    // A link says it leaves the app (the arrow), and is 48 pt tall (build 76).
+    Widget link(String label, Uri u) => TextButton.icon(
       onPressed: () => openExternalUrl(u),
-      style: TextButton.styleFrom(alignment: Alignment.centerLeft, minimumSize: const Size(44, 44), padding: EdgeInsets.zero),
-      child: Text(label),
+      style: TextButton.styleFrom(alignment: Alignment.centerLeft, minimumSize: const Size(48, 48), padding: EdgeInsets.zero),
+      iconAlignment: IconAlignment.end,
+      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+      label: Text(label),
     );
     return SingleChildScrollView(
       key: const Key('credits-sheet'),
@@ -75,6 +76,19 @@ class CreditsSheet extends StatelessWidget {
       children: [
         Text('Map credits', style: t.textTheme.titleLarge),
         if (sourceState != null) ...[head('Base map right now'), Align(alignment: Alignment.centerLeft, key: const Key('credits-source'), child: sourceState!)],
+        // What the map shows comes first (build 76): it is what most people open this sheet for; the licences follow.
+        if (colourKey != null) ...[head('What the colours mean'), KeyedSubtree(key: const Key('credits-key'), child: colourKey!)],
+        if (openLegend != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton.icon(
+              key: const Key('credits-legend'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+              onPressed: openLegend,
+              icon: const Icon(Icons.help_outline_rounded),
+              label: const Text('Map guide'),
+            ),
+          ),
         head('Map data'),
         Column(
           key: const Key('credits-osm'),
@@ -120,27 +134,13 @@ class CreditsSheet extends StatelessWidget {
         ],
         head('Base map'),
         Text(
-          'Road and dark maps: MeshSonar\'s own vector tiles built by Protomaps from OpenStreetMap data. When they cannot be '
-          'reached, or outside North America, the map comes from OpenFreeMap (also OpenStreetMap data). The credit line '
-          'on the map names the one you are looking at.',
+          'MeshSonar\'s own tiles, built with Protomaps from OpenStreetMap data. When they cannot be reached, or outside '
+          'North America, OpenFreeMap draws the map instead. The line on the map names the one in use.',
           key: const Key('credits-basemap'),
           style: t.textTheme.bodyMedium,
         ),
         link('protomaps.com', _protomaps),
         link('openfreemap.org', _openfreemap),
-        head('Offline maps'),
-        Text('Offline region maps are the same Protomaps map, served by MeshSonar, with the same credit.', style: t.textTheme.bodyMedium?.copyWith(color: mc.textMuted)),
-        if (colourKey != null) ...[head('What the colours mean'), KeyedSubtree(key: const Key('credits-key'), child: colourKey!)],
-        if (openLegend != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: TextButton.icon(
-              key: const Key('credits-legend'),
-              onPressed: openLegend,
-              icon: const Icon(Icons.help_outline_rounded),
-              label: const Text('What do the colours mean?'),
-            ),
-          ),
       ],
     ));
   }

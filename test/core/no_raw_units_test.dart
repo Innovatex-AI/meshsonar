@@ -21,6 +21,11 @@ const List<String> allowedLines = [
   r'~ 60}m',
   // Elapsed time ("1m05s" since a ping), not distance.
   r"return '${m}m",
+  // A clock time ("today 14:05") and a countdown in seconds ("Hides in 20 s"): time, not distance. The pattern reads
+  // `$hm` as `$h` + m and `$_left` as `$_le` + ft.
+  r"return 'today $hm';",
+  r"return 'yesterday $hm';",
+  r'in $_left s. Keep it private.',
   // The fixed ~220 m size of a grid cell, a fact about the map grid rather than a measurement.
   '(≈220 m, the same grid',
   // The fixed ~5 km size of the weather grid cell (0.05 degrees) the server looks up, a fact about the source.

@@ -2,7 +2,6 @@
 // 1. Every basemap style has its OWN renderer identity (id + version): vector_map_tiles keys its rendered-tile caches, in
 //    memory and on disk, and its isolate registries on it. Builds 57 to 71 had none, so all seven were "default / none".
 // 2. The renders those builds left on disk are deleted once, and only those.
-// 3. Network tiles inside an offline pack's area are skipped only under a style that draws the pack.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -11,13 +10,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/basemap.dart';
 import 'package:meshsonar/core/basemap_styles.g.dart';
 import 'package:meshsonar/core/map_prefs.dart';
-import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/ui/map/basemap_cache.dart';
 import 'dart:ui' show Size;
 
 import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapTuning, basemapTheme;
-import 'package:meshsonar/ui/map/coverage_map.dart' show skipsNetworkTile, styleDrawsOfflinePack;
-import 'package:meshsonar/ui/map/offline_basemap.dart' show offlineMapStyle;
 import 'package:meshsonar/ui/map/tile_source.dart' show TileFetchGate;
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
@@ -63,16 +59,15 @@ void main() {
       expect((s['metadata'] as Map)['version'], '$basemapRenderVersion');
     });
 
-    test('the nine themes the app can draw have nine distinct renderer identities, none of them the old shared one', () {
+    test('the seven themes the app can draw have seven distinct renderer identities, none of them the old shared one', () {
       final themes = <String, vtr.Theme>{
         for (final dark in [false, true])
           for (final look in BasemapLook.values)
             if (look != BasemapLook.labels) 'ours-$dark-${look.name}': basemapTheme(BasemapSource.ours, dark: dark, look: look),
         'ours-labels': basemapTheme(BasemapSource.ours, dark: true, look: BasemapLook.labels),
         for (final dark in [false, true]) 'ofm-$dark': basemapTheme(BasemapSource.openFreeMap, dark: dark),
-        for (final dark in [false, true]) 'pack-legacy-$dark': vtr.ThemeReader().read(offlineMapStyle(dark: dark)),
       };
-      expect(themes, hasLength(9));
+      expect(themes, hasLength(7));
       final seen = <String, String>{};
       for (final e in themes.entries) {
         final id = rendererIdentity(e.value);
@@ -151,20 +146,6 @@ void main() {
       final prefs = MapPrefs();
       expect(await BasemapRenderCache.purgeOld(prefs), 0);
       expect(prefs.basemapCachePurged, basemapRenderVersion);
-    });
-  });
-
-  group('offline pack and network tiles', () {
-    test('only Chart, Light and Dark draw a pack', () {
-      expect({for (final s in BaseMapStyle.values) s.id: styleDrawsOfflinePack(s)}, {'chart': true, 'street': true, 'dark': true, 'topo': false, 'satellite': false});
-    });
-
-    test('a network tile is skipped only where a pack covers it AND the style draws the pack', () {
-      for (final s in BaseMapStyle.values) {
-        expect(skipsNetworkTile(style: s, packCovers: false), isFalse, reason: '${s.id}: no pack there, always fetched');
-        expect(skipsNetworkTile(style: s, packCovers: true), s == BaseMapStyle.topo || s == BaseMapStyle.satellite ? isFalse : isTrue,
-            reason: '${s.id} inside a pack area');
-      }
     });
   });
 

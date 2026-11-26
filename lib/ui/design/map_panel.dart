@@ -1,9 +1,8 @@
 // MapPanel: the one panel that sits on a map (build 71). Twin of the site's float-panel.
 // Rules (meshsonar-infra docs/planning/app-build-71-gateway-plan.md, "One shared panel"):
 //   1. Bottom-anchored, directly above the tab bar. Only the person moves it; a connection or data event never does.
-//      The ONLY automatic moves in the app are the two driving-safety rules: the Drive panel collapses from Open at speed
-//      (lib/ui/drive/panel/auto_collapse.dart) and the map inspector clears itself 12 s after the last touch while driving
-//      (MapInfoPanel.autoClear). Nothing else may move a panel.
+//      Nothing else may move a panel either: since build 76 the car moving does not (the Drive panel's collapse at speed
+//      and the inspector's lock and 12 s auto-clear while driving were removed).
 //   2. The header is always visible and at least 44 pt: grabber, title, one status or count, chevron. Collapsed = header only.
 //   3. Tap the header or drag it to toggle. Same state names everywhere: Collapsed, Open (at most 60 % of the height), Full
 //      (work panels only: Planner, Drive stats).
@@ -229,9 +228,6 @@ class MapPanel extends StatefulWidget {
   /// phone, open on a wide screen (transient panels: open).
   final MapPanelState? initialState;
 
-  /// Stays at its header: a tap or drag does not open it (the inspector while the car moves).
-  final bool locked;
-
   /// The share of the height Open may take.
   final double openFraction;
 
@@ -260,7 +256,6 @@ class MapPanel extends StatefulWidget {
     this.action,
     this.onClose,
     this.initialState,
-    this.locked = false,
     this.openFraction = kMapPanelOpen,
     this.bottomSafe = true,
     this.onStateChanged,
@@ -299,7 +294,7 @@ class _MapPanelState extends State<MapPanel> {
     final first = widget.initialState ?? (_transient || wide ? MapPanelState.open : MapPanelState.collapsed);
     _state = _clamp(_transient ? first : (MapPanelStore.read(widget.id) ?? first));
     // A panel that starts open is the map's open panel; told after this frame, so no listener rebuilds during build.
-    if (_state != MapPanelState.collapsed && !widget.locked) {
+    if (_state != MapPanelState.collapsed) {
       final id = widget.id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && widget.id == id && _state != MapPanelState.collapsed) _group?.claim(id);
@@ -344,7 +339,7 @@ class _MapPanelState extends State<MapPanel> {
   /// The person moved the panel.
   void _set(MapPanelState next) {
     next = _clamp(next);
-    if (widget.locked || next == _state) return;
+    if (next == _state) return;
     setState(() => _state = next);
     if (!_transient) MapPanelStore.write(widget.id, next);
     next == MapPanelState.collapsed ? _group?.release(widget.id) : _group?.claim(widget.id);
@@ -379,7 +374,7 @@ class _MapPanelState extends State<MapPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.locked ? MapPanelState.collapsed : _state!;
+    final state = _state!;
     final collapsed = state == MapPanelState.collapsed;
     final mq = MediaQuery.of(context);
     final headerH = mapPanelHeaderHeight(context);
@@ -441,7 +436,7 @@ class _MapPanelState extends State<MapPanel> {
     final muted = t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant);
     final order = [MapPanelState.collapsed, MapPanelState.open, if (widget.allowFull) MapPanelState.full];
     final at = order.indexOf(state);
-    final canUp = !widget.locked && at < order.length - 1, canDown = !widget.locked && at > 0;
+    final canUp = at < order.length - 1, canDown = at > 0;
     final row = Padding(
       padding: const EdgeInsets.only(left: Layout.screenMargin, right: 4),
       child: Row(
@@ -467,7 +462,7 @@ class _MapPanelState extends State<MapPanel> {
             ),
           ),
           ?widget.action,
-          if (!widget.locked) Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: MapPanelChevron(collapsed: collapsed)),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: MapPanelChevron(collapsed: collapsed)),
           if (widget.onClose != null)
             IconButton(
               key: widget.closeKey ?? Key('map-panel-${widget.id}-close'),
@@ -482,10 +477,10 @@ class _MapPanelState extends State<MapPanel> {
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      button: !widget.locked,
+      button: true,
       label: '${widget.title} panel',
       value: mapPanelStateLabel(state),
-      onTap: widget.locked ? null : _toggle,
+      onTap: _toggle,
       increasedValue: canUp ? mapPanelStateLabel(order[at + 1]) : null,
       decreasedValue: canDown ? mapPanelStateLabel(order[at - 1]) : null,
       onIncrease: canUp ? () => _step(1) : null,
@@ -493,7 +488,7 @@ class _MapPanelState extends State<MapPanel> {
       child: GestureDetector(
         key: widget.headerKey ?? Key('map-panel-${widget.id}-header'),
         behavior: HitTestBehavior.opaque,
-        onTap: widget.locked ? null : _toggle,
+        onTap: _toggle,
         onVerticalDragStart: (_) => _drag = 0,
         onVerticalDragUpdate: (d) => _drag += d.delta.dy,
         onVerticalDragEnd: _dragEnd,

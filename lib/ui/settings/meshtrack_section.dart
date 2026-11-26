@@ -1,6 +1,6 @@
 // Settings > MeshTrack (plan section 7): Groups (opens the Group sheet; "Share on every drive" lives in each group's
 // menu there), "Position friends see" (Exact / Approximate), Rate (Smart / Low traffic) and Answer "Where are you?"
-// while sharing. The position choice is never called "precision": that word belongs to Settings > Observer.
+// while sharing. The position choice is never called "precision": that word belongs to Settings > Sharing & privacy.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,19 +16,19 @@ const String meshTrackHelp = 'See friends on the map while you drive. Your posit
 
 /// The Settings entries of this section, spread into settings_index.dart in display order.
 const List<SettingsEntry> meshTrackSettingsEntries = [
-  SettingsEntry('meshtrack-groups', 'meshtrack', 'Groups',
+  SettingsEntry('meshtrack-groups', 'privacy', 'Groups',
       'Your MeshTrack groups: whose positions you see and who gets yours. Make, join, invite or leave a group.',
-      keywords: ['meshtrack', 'track', 'tracking', 'friends', 'group', 'family', 'share', 'share location', 'location', 'position', 'where', 'invite', 'join', 'new group', 'qr', 'map', 'crew'],
+      page: 'meshtrack', was: 'MeshTrack', keywords: ['meshtrack', 'track', 'tracking', 'friends', 'group', 'family', 'share', 'share location', 'location', 'position', 'where', 'invite', 'join', 'new group', 'qr', 'map', 'crew'],
       available: meshTrackAvailable),
-  SettingsEntry('meshtrack-position', 'meshtrack', 'Position friends see',
+  SettingsEntry('meshtrack-position', 'privacy', 'Position friends see',
       'Exact sends where you are to within a few steps. Approximate sends only the neighbourhood.',
-      keywords: ['meshtrack', 'exact', 'approximate', 'rough', 'privacy', 'location', 'friends'], available: meshTrackAvailable),
-  SettingsEntry('meshtrack-rate', 'meshtrack', 'Update rate',
+      page: 'meshtrack', was: 'MeshTrack', keywords: ['meshtrack', 'exact', 'approximate', 'rough', 'privacy', 'location', 'friends'], available: meshTrackAvailable),
+  SettingsEntry('meshtrack-rate', 'privacy', 'Update rate',
       'Smart sends more often at speed and on turns and nothing while parked. Low traffic sends half as often.',
-      keywords: ['meshtrack', 'rate', 'how often', 'interval', 'airtime', 'low traffic', 'smart'], available: meshTrackAvailable),
-  SettingsEntry('meshtrack-answer', 'meshtrack', 'Answer "Where are you?"',
+      page: 'meshtrack', was: 'MeshTrack', keywords: ['meshtrack', 'rate', 'how often', 'interval', 'airtime', 'low traffic', 'smart'], available: meshTrackAvailable),
+  SettingsEntry('meshtrack-answer', 'privacy', 'Answer "Where are you?"',
       'While you share with a group, a friend\'s "Where are you?" gets your position back.',
-      keywords: ['meshtrack', 'request', 'where are you', 'answer', 'reply', 'ask'], available: meshTrackAvailable),
+      page: 'meshtrack', was: 'MeshTrack', keywords: ['meshtrack', 'request', 'where are you', 'answer', 'reply', 'ask'], available: meshTrackAvailable),
 ];
 
 /// MeshTrack is in this build (AppFlags.meshTrack) and wired.

@@ -385,7 +385,7 @@ void main() {
       for (final id in ['chart', 'street', 'dark', 'topo', 'satellite']) {
         expect(find.byKey(Key('base-map-$id')), findsOneWidget);
       }
-      expect(find.text('needs signal'), findsNWidgets(2), reason: 'Topo and Satellite come from the network only');
+      expect(find.text('needs signal'), findsNothing, reason: 'every base map comes from the network now (build 76): no tile is singled out');
       await t.tap(find.byKey(const Key('base-map-dark')));
       await t.pumpAndSettle();
       expect(m.baseStyle.id, 'dark');

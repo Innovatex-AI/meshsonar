@@ -93,9 +93,12 @@ void main() {
     expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1');
     expect(find.byKey(const Key('site-page-loading')), findsOneWidget);
     expect(find.text('RF / Signal'), findsOneWidget);
+    // Build 76: a first load says what is loading (it was a blank page with a thin bar).
+    expect(find.text('Loading RF / Signal…'), findsOneWidget);
     engine.finish();
     await tester.pump();
     expect(find.byKey(const Key('site-page-loading')), findsNothing);
+    expect(find.byKey(const Key('site-page-loading-label')), findsNothing);
     expect(engine.scripts, everyElement(siteEmbedScript));
     expect(engine.scripts, isNotEmpty);
     expect(tester.takeException(), isNull);
@@ -170,12 +173,17 @@ void main() {
     expect(find.byKey(const Key('site-page-error')), findsOneWidget);
     expect(find.textContaining("Can't reach MeshSonar"), findsOneWidget);
     expect(tester.getSize(find.text('Try again')).height, greaterThan(0));
+    // Build 76: the error page also offers the browser.
+    await tester.tap(find.byKey(const Key('site-page-error-browser')));
+    await tester.pump();
+    expect(opened.single.toString(), '$base/status');
     await tester.tap(find.text('Try again'));
     await tester.pump();
     expect(engine.loads.length, 2);
     expect(find.byKey(const Key('site-page-error')), findsNothing);
     await tester.pump(const Duration(seconds: 26));
     expect(find.byKey(const Key('site-page-error')), findsOneWidget);
+    expect(find.text('This page is slow to load'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -232,6 +240,14 @@ void main() {
     expect(analyticsTabs.first.slug, 'overview');
     expect(analyticsTabs[1].label, 'RF / Signal');
     expect(analyticsTabs.last.slug, 'prefix-tool');
+    // Build 76: the list is shown under plain headings; every page is still there, once.
+    final grouped = [analyticsStartSlug, for (final g in analyticsGroups) ...g.$2];
+    expect(grouped.toSet().length, grouped.length, reason: 'no page twice');
+    expect(grouped.toSet(), {for (final t in analyticsTabs) t.slug}, reason: 'no page lost');
+    expect(find.text('START HERE').evaluate().isNotEmpty || find.text('Start here').evaluate().isNotEmpty, isTrue);
+    for (final t in analyticsTabs) {
+      expect(find.byKey(Key('analytics-tab-${t.slug}')), findsOneWidget, reason: t.slug);
+    }
     expect(tester.getSize(find.byKey(const Key('analytics-tab-overview'))).height, greaterThanOrEqualTo(44));
     await tester.ensureVisible(find.byKey(const Key('analytics-tab-prefix-tool')));
     await tester.pump();

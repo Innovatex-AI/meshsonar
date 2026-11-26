@@ -24,7 +24,7 @@ class AttributionLine extends StatelessWidget {
   /// Opens the Credits sheet.
   final VoidCallback? onInfo;
 
-  /// The credit of the source drawn right now (ours, OpenFreeMap or an offline pack); null = [attributionText].
+  /// The credit of the source drawn right now (ours or OpenFreeMap); null = [attributionText].
   final String? text;
   const AttributionLine({super.key, required this.style, this.showMeshCore = false, this.onInfo, this.text});
 
@@ -37,7 +37,9 @@ class AttributionLine extends StatelessWidget {
     final ink = t.colorScheme.onSurface;
     final halo = t.colorScheme.surface;
     TextStyle base(Color c) => (t.textTheme.labelSmall ?? const TextStyle()).copyWith(
-      fontSize: 12,
+      // 11 pt (build 76, was 12): the smallest size that still reads, so the credit takes less of the map. It stays one
+      // visible line naming the tile source; it never collapses to the bare (i) (see the header).
+      fontSize: 11,
       height: 1.25,
       color: c,
       shadows: pill

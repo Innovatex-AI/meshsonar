@@ -9,16 +9,25 @@ import '../claims/my_radios_screen.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String myRadiosHelp = 'Claim a radio to manage it: its name, whether its position is public, giving it up. '
-    'Every radio keeps feeding and counting whether or not it is claimed.';
+const String myRadiosHelp = 'Claim a radio to manage its name and whether its position is public.';
 
 String? _whyNot(BuildContext context, {bool needsRadio = false}) {
   final s = AppScope.of(context);
-  if (!s.hasKey) return 'Needs a driver key. Add one under Account & driver key.';
+  if (!s.hasKey) return 'Needs a driver key. Add one under Settings > Account.';
   if (s.uploadSiteConfig?.nodeClaims != true) return 'This server does not offer radio claims yet.';
   if (!s.keyApproved) return 'Needs a driver key the server accepts.';
   if (needsRadio && !s.connected) return 'Connect your radio first (More > Radio).';
   return null;
+}
+
+/// "3 radios" / "None yet" / why it cannot be used: the Claimed radios row on the first level of Account.
+String claimsCaption(BuildContext context) {
+  final s = AppScope.of(context);
+  final why = _whyNot(context);
+  if (why != null) return why;
+  final n = s.claims.active.length;
+  if (!s.claims.loadedOnce) return 'The radios you manage, and claiming one.';
+  return n == 0 ? 'None yet. Claim your radio or a repeater you run.' : '$n ${n == 1 ? 'radio' : 'radios'} claimed.';
 }
 
 List<Widget> myRadiosSectionRows(BuildContext context) {
@@ -38,8 +47,8 @@ List<Widget> myRadiosSectionRows(BuildContext context) {
         subtitle: listWhy != null
             ? SettingsWhyNot(listWhy)
             : Text(s.claims.loadedOnce
-                ? (n == 0 ? 'None yet. Claim your radio or a repeater you run.' : '$n ${n == 1 ? 'radio' : 'radios'}. Edit a name, hide a position, give one up.')
-                : settingsEntry('my-radios').summary),
+                ? (n == 0 ? 'None yet.' : '$n ${n == 1 ? 'radio' : 'radios'}. Rename, hide a position, give one up.')
+                : 'Rename, hide a position, give one up.'),
         trailing: listWhy == null ? const Icon(Icons.chevron_right) : null,
         onTap: listWhy == null ? () => open(const MyRadiosScreen()) : null,
       ),
@@ -50,7 +59,7 @@ List<Widget> myRadiosSectionRows(BuildContext context) {
         key: const Key('claim-my-radio'),
         leading: const Icon(Icons.settings_input_antenna),
         title: Text(settingsEntry('claim-my-radio').title),
-        subtitle: ownWhy != null ? SettingsWhyNot(ownWhy) : Text(settingsEntry('claim-my-radio').summary),
+        subtitle: ownWhy != null ? SettingsWhyNot(ownWhy) : const Text('The connected radio signs a message. No password.'),
         trailing: ownWhy == null ? const Icon(Icons.chevron_right) : null,
         onTap: ownWhy == null ? () => open(const ClaimRadioScreen()) : null,
       ),
@@ -61,7 +70,7 @@ List<Widget> myRadiosSectionRows(BuildContext context) {
         key: const Key('claim-repeater'),
         leading: const Icon(Icons.cell_tower),
         title: Text(settingsEntry('claim-repeater').title),
-        subtitle: repWhy != null ? SettingsWhyNot(repWhy) : Text(settingsEntry('claim-repeater').summary),
+        subtitle: repWhy != null ? SettingsWhyNot(repWhy) : const Text('With its admin password, which never leaves your phone.'),
         trailing: repWhy == null ? const Icon(Icons.chevron_right) : null,
         onTap: repWhy == null ? () => open(const ClaimRepeaterScreen()) : null,
       ),
