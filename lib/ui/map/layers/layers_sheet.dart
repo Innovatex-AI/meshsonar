@@ -30,7 +30,6 @@ import '../../design/map_panel.dart';
 import '../../design/app_surfaces.dart';
 import '../../design/app_symbols.dart';
 import '../../design/app_widgets.dart' show AppSwitchTile;
-import '../../design/map_tokens.dart';
 import '../../design/tokens.dart' show Hit;
 import '../../drive/drive_map_model.dart';
 import '../../../core/coverage_query.dart' show CoverageSince, CoverageSource;
@@ -431,18 +430,11 @@ class _NavRow extends StatelessWidget {
   }
 }
 
-/// The base maps the definition offers (Chart, Light, Dark; Topo and Satellite when it advertises them) as 72 x 72 tiles (replaces the cycling button and its toast, U10).
+/// The base maps the app offers (Road, Light, Dark; Topo and Satellite when the definition advertises them), each a real thumbnail
+/// of the style (build 77, Round 1 N3; assets/map/thumbs), the chosen one outlined in the accent with a tick.
 class _BaseMapPicker extends StatelessWidget {
   final MapLayersModel model;
   const _BaseMapPicker({required this.model});
-
-  static Color _tint(BaseMapStyle s, Brightness b) => switch (s) {
-    BaseMapStyle.chart => b == Brightness.dark ? const Color(0xFF2B2F36) : MapTokens.landLight,
-    BaseMapStyle.street => const Color(0xFFF2EFE9),
-    BaseMapStyle.dark => const Color(0xFF1B1F24),
-    BaseMapStyle.topo => const Color(0xFFEFE9D6),
-    BaseMapStyle.satellite => const Color(0xFF3F5B3A),
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -452,11 +444,12 @@ class _BaseMapPicker extends StatelessWidget {
     return Padding(
       key: const Key('layers-base-map'),
       padding: const EdgeInsets.symmetric(horizontal: Gap.l),
-      // One row (build 76): four tiles fit an iPhone SE without wrapping to a second line; more scroll sideways.
+      // One row: up to five tiles share the row's width (bigger targets on a bigger phone); on a phone too narrow for five at
+      // 60 pt (an iPhone SE) the row scrolls sideways.
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [LayoutBuilder(builder: (context, box) {
-        // Up to four tiles share the row's width (bigger targets on a bigger phone); more than four scroll sideways.
         final n = model.availableBaseStyles.length;
-        final w = n <= 4 && box.maxWidth.isFinite ? ((box.maxWidth - (n - 1) * Gap.s) / n).clamp(72.0, 120.0) : 72.0;
+        final share = box.maxWidth.isFinite ? (box.maxWidth - (n - 1) * Gap.s) / n : 0.0;
+        final w = n <= 5 && share >= 60 ? share.clamp(60.0, 120.0) : 72.0;
         return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -467,7 +460,7 @@ class _BaseMapPicker extends StatelessWidget {
             Semantics(
               button: true,
               selected: s == sel,
-              label: '${s.labelIn(ActiveMapDefinition.current)} base map. ${s.blurb}',
+              label: '${s.label} base map. ${s.blurb}',
               child: ExcludeSemantics(
                 child: GestureDetector(
                   key: Key('base-map-${s.id}'),
@@ -480,20 +473,36 @@ class _BaseMapPicker extends StatelessWidget {
                         Container(
                           width: w,
                           height: 56,
-                          decoration: BoxDecoration(
-                            color: _tint(s, t.brightness),
+                          foregroundDecoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: s == sel ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: s == sel ? 3 : 1),
                           ),
-                          child: Center(
-                            child: s == sel
-                                ? AppSymbolIcon(AppSymbols.checkmarkCircleFill, size: 22, color: t.colorScheme.primary)
-                                : null,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.asset(
+                                  s.thumbnailAsset(appDark: t.brightness == Brightness.dark),
+                                  key: Key('base-map-thumb-${s.id}'),
+                                  fit: BoxFit.cover,
+                                  excludeFromSemantics: true,
+                                  errorBuilder: (_, _, _) => ColoredBox(color: t.colorScheme.surfaceContainerHighest),
+                                ),
+                                if (s == sel)
+                                  Center(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(color: t.colorScheme.surface, shape: BoxShape.circle),
+                                      child: AppSymbolIcon(AppSymbols.checkmarkCircleFill, size: 22, color: t.colorScheme.primary),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 2),
                         // The chosen map's name is bold in the accent colour, so the choice reads without the tick too.
-                        Text(s.labelIn(ActiveMapDefinition.current), style: t.textTheme.labelMedium?.copyWith(fontWeight: s == sel ? FontWeight.w700 : null, color: s == sel ? t.colorScheme.primary : null), maxLines: 1),
+                        Text(s.label, style: t.textTheme.labelMedium?.copyWith(fontWeight: s == sel ? FontWeight.w700 : null, color: s == sel ? t.colorScheme.primary : null), maxLines: 1),
                       ],
                     ),
                   ),

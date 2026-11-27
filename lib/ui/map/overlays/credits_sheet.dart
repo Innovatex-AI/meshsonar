@@ -134,8 +134,8 @@ class CreditsSheet extends StatelessWidget {
         ],
         head('Base map'),
         Text(
-          'MeshSonar\'s own tiles, built with Protomaps from OpenStreetMap data. When they cannot be reached, or outside '
-          'North America, OpenFreeMap draws the map instead. The line on the map names the one in use.',
+          'Drawn with Protomaps: MeshSonar\'s own tiles, built from OpenStreetMap data. When they cannot be reached, or outside '
+          'North America, OpenFreeMap draws the map instead. "Base map right now" above says which one is drawing.',
           key: const Key('credits-basemap'),
           style: t.textTheme.bodyMedium,
         ),

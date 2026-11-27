@@ -13,7 +13,6 @@ import 'package:flutter_test/flutter_test.dart';
 /// Files allowed to hard-code a map colour, and why.
 const Map<String, String> kColourAllowlist = {
   'lib/ui/map/layers/clustered_points_layer.dart': 'cluster count ink (near-black or white by the bubble colour); the cluster painter is the old layer, going with MAP slice 7',
-  'lib/ui/map/layers/layers_sheet.dart': 'the basemap choice swatches of the Layers sheet; the sheet moves onto the MapPanel shell in a later slice',
   'lib/ui/map/layers/link_lines_layer.dart': 'white outline of the link end cap; the link style moves into the definition with the snrLink layer',
   'lib/ui/map/layers/m3_layers.dart': 'fallback colours for a definition that lacks the ramp (the layer is not drawn then)',
   'lib/ui/map/layers/repeater_name_labels.dart': 'Colors.grey fallback ink for a label with no freshness colour',

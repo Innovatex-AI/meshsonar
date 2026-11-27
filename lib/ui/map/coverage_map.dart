@@ -121,7 +121,7 @@ import 'cell_raster_layer.dart';
 import 'tile_source.dart';
 import '../../core/network_kind.dart';
 import '../../platform/network_monitor.dart';
-import '../../core/basemap.dart' show BasemapSource, BasemapSourceX;
+import '../../core/basemap.dart' show BasemapSource, BasemapLook;
 import '../../platform/map_prefs_store.dart' show openSharedMapPrefs;
 import 'live_puck.dart';
 import 'map_layers.dart';
@@ -379,6 +379,11 @@ class CoverageMap extends StatefulWidget {
   final double topClearance;
   final double bottomClearance;
 
+  /// Where the credit pill sits (build 77, Round 1 decision 5): this far above the map's bottom, at ONE fixed spot just above
+  /// the panel's resting height. It never rides up with the panel; a panel pulled up over it covers it. Null = [bottomClearance]
+  /// as it is when no transient panel is open (a map with no panel of its own).
+  final double? creditClearance;
+
   /// The map's one transient panel slot (design/anchored_sheet.dart): the inspector, a tapped observer, and whatever the
   /// host shows through this controller (layers, legend). Null = the map keeps its own.
   final MapPanelHostController? panelHost;
@@ -471,6 +476,7 @@ class CoverageMap extends StatefulWidget {
     this.onLayers,
     this.topClearance = 0,
     this.bottomClearance = 0,
+    this.creditClearance,
     this.panelHost,
     this.panelInset,
     this.baseStyle = BaseMapStyle.chart,
@@ -510,9 +516,39 @@ class CoverageMap extends StatefulWidget {
 
   static const String userAgentPackageName = 'com.meshsonar.app';
 
+  /// Build 77 (Round 1 F2): the base map's names drawn as a second vector layer above the coverage on the full maps. False keeps
+  /// one layer (names inside the base, under the coverage), the switch for a device that fails the map performance gate with
+  /// two vector layers (docs/MAP_PERFORMANCE.md).
+  static bool labelsAbove = true;
+
   @override
   State<CoverageMap> createState() => _CoverageMapState();
 }
+
+/// The slots of the map in drawing order, bottom to top: the definition's layer order, then the app's own slots, with the base
+/// map's names right above the last coverage layer.
+List<String> coverageMapPaintOrder() {
+  final out = <String>[];
+  for (final id in definitionLayerIds(ActiveMapDefinition.current)) {
+    final slot = switch (id) {
+      'predicted' || kHeardCellsLayerId || 'measured' => 'measured',
+      kRosterLayerId || kNetworkLayerId => kNetworkLayerId,
+      'phones' => 'observers',
+      _ => id,
+    };
+    if (!out.contains(slot)) out.add(slot);
+  }
+  for (final slot in const ['borders', 'measured', 'hexes', 'links', kNetworkLayerId, 'observers']) {
+    if (!out.contains(slot)) out.add(slot); // a definition without the layer still gets the app's drawing (switch is off)
+  }
+  // The base map's names go right above the last coverage layer (F2): over the cells, under links, repeaters and people.
+  final lastCoverage = math.max(out.indexOf('measured'), out.indexOf('hexes'));
+  out.insert(lastCoverage + 1, 'basemapLabels');
+  return out;
+}
+
+/// The coverage layers that turn the data-first base map and the names-above pass on (BaseMapStyle.resolve).
+const Set<String> kCoverageLayerIds = {'measured', 'predicted', kHeardCellsLayerId, 'hexes', 'redundancy'};
 
 class _CoverageMapState extends State<CoverageMap> {
   static final StrokePattern _dashed = StrokePattern.dashed(segments: const [10, 8]);
@@ -1872,22 +1908,12 @@ class _CoverageMapState extends State<CoverageMap> {
   /// The app layer slots in the active Map Definition's drawing order. Predicted / Heard / Measured are one slot (`measured`,
   /// drawn in the definition's order inside it); Repeaters and All MeshCore repeaters are one painter, placed at the lower of
   /// the two; Observers and Moving phones one marker layer at the lower of the two.
-  List<String> _paintOrder() {
-    final out = <String>[];
-    for (final id in definitionLayerIds(ActiveMapDefinition.current)) {
-      final slot = switch (id) {
-        'predicted' || kHeardCellsLayerId || 'measured' => 'measured',
-        kRosterLayerId || kNetworkLayerId => kNetworkLayerId,
-        'phones' => 'observers',
-        _ => id,
-      };
-      if (!out.contains(slot)) out.add(slot);
-    }
-    for (final slot in const ['borders', 'measured', 'hexes', 'links', kNetworkLayerId, 'observers']) {
-      if (!out.contains(slot)) out.add(slot); // a definition without the layer still gets the app's drawing (switch is off)
-    }
-    return out;
-  }
+  List<String> _paintOrder() => coverageMapPaintOrder();
+
+  /// Tests: the overlay boxes names and clusters keep out of.
+  @visibleForTesting
+  List<Rect> debugOverlayRects() => _overlayRects();
+
 
   static List<Widget>? _layerWidgets(String slot, Map<String, List<Widget> Function()> build) => build[slot]?.call();
 
@@ -1902,6 +1928,13 @@ class _CoverageMapState extends State<CoverageMap> {
     final ladder = ActiveMapDefinition.current.coverageLadder;
     final tiles = widget.showTiles ?? CoverageMap.tilesByDefault;
     final wide = MediaQuery.sizeOf(context).shortestSide >= 600;
+    final layerStateNow = widget.layerState ?? kDefaultLayerState;
+    final resolved = BaseMapStyle.resolve(
+      style,
+      appDark: t.brightness == Brightness.dark,
+      coverageOn: kCoverageLayerIds.any(layerStateNow.isOn) && (widget.coverageV2 != null || widget.networkCells.isNotEmpty || widget.pings.isNotEmpty),
+      labelsAbove: CoverageMap.labelsAbove,
+    );
     // The tile request queue holds what this screen can ask for at once (a request beyond it is dropped and its tile stays blank).
     if (tiles && BasemapTuning.enabled) {
       final screen = MediaQuery.sizeOf(context);
@@ -1944,6 +1977,8 @@ class _CoverageMapState extends State<CoverageMap> {
       topClearance: widget.topClearance,
       // The buttons and the credit stay above the transient panel's header.
       bottomClearance: transient ? _panelInset + mapPanelHeaderHeight(context) + (_panelInset == 0 ? MediaQuery.paddingOf(context).bottom : 0) : widget.bottomClearance,
+      // The credit stays where it rests; the transient panel covers it (decision 5).
+      attributionClearance: widget.creditClearance ?? widget.bottomClearance,
       map: FlutterMap(
           mapController: _controller,
           options: MapOptions(
@@ -1953,7 +1988,7 @@ class _CoverageMapState extends State<CoverageMap> {
             minZoom: 3,
             maxZoom: 18,
             // Where a tile is not drawn yet the map shows the STYLE's background (a Dark map stays dark), not the app theme's.
-            backgroundColor: _styleBackground(context, style, tiles) ?? mc.mapBackground,
+            backgroundColor: _styleBackground(resolved, tiles) ?? mc.mapBackground,
             interactionOptions: InteractionOptions(
               flags: !widget.interactive
                   ? InteractiveFlag.none
@@ -2035,16 +2070,18 @@ class _CoverageMapState extends State<CoverageMap> {
           ),
           children: [
             ChartGrid(color: mc.mapGrid),
-            // Online tiles, kept in the on-device tile cache once seen.
-            // Chart / Light / Dark: our vector basemap (OpenFreeMap fallback), every tile through the same cache and gate.
-            if (tiles && style.isVector)
-              BasemapLayer(key: ValueKey('basemap-${style.id}'), dark: style.darkLook, look: style.look, tiles: _tiles(), reset: _tileReset.stream),
-            // Satellite: Esri (our proxy) then NAIP then our names, from the definition (ui/map/satellite_layers.dart).
-            if (tiles && style.isSatellite)
-              ...satelliteLayers(ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),
+            // Online tiles, kept in the on-device tile cache once seen. Build 77 (Round 1 F2 / N3): what the choice draws is
+            // BaseMapStyle.resolve: with coverage on, Road / Light / Dark draw the data-first map, and the names are a second pass
+            // ABOVE the coverage ('basemapLabels' in the paint order). Satellite: Esri (our proxy) then NAIP (satellite_layers.dart).
+            if (tiles)
+              ...basemapLayersFor(resolved, ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),
             // The definition's layers, in its drawing order (bottom to top: borders, predicted, heard, measured, drive, links,
             // network, live, repeaters, observers, phones). The app's drive extras (ping dots, the position, names) stay on top.
             for (final id in _paintOrder()) ...?_layerWidgets(id, {
+              // The base map's names, over every coverage layer and under the repeaters (nothing on the OpenFreeMap fallback).
+              'basemapLabels': () => [
+                if (tiles) ?basemapLabelsLayerFor(resolved, ActiveMapDefinition.current, tiles: _tiles(), reset: _tileReset.stream),
+              ],
               'borders': () => [
                 if (layerState.isOn('borders') && widget.regionBorders.isNotEmpty)
                   RegionBordersLayer(key: const Key('region-borders-layer'), rings: widget.regionBorders),
@@ -2323,7 +2360,7 @@ class _CoverageMapState extends State<CoverageMap> {
       controls: _controls(context, pos, latest),
       bottom: _bottomColumn(context, tiles, mc, t, style),
       // The credit: always mounted (Drive plan section 8), bottom-right, tapped (i) opens the Credits sheet.
-      attribution: BasemapSourceBuilder(
+      attribution: KeyedSubtree(key: _creditKey, child: BasemapSourceBuilder(
         controller: _controller,
         builder: (context, source) {
           final credit = _creditText(style, source);
@@ -2342,17 +2379,16 @@ class _CoverageMapState extends State<CoverageMap> {
                   },
                 );
         },
-      ),
+      )),
     );
     return MapPanelHost(controller: _panelHost, bottomInset: _panelInset, panel: inspector, child: overlays);
   }
 
   /// The background of the vector style drawn now (ours; OpenFreeMap's styles use the same colours); null for Satellite and for
   /// a map that draws no tiles.
-  Color? _styleBackground(BuildContext context, BaseMapStyle style, bool tiles) {
-    if (!tiles || !style.isVector) return null;
-    final dark = style.darkLook ?? Theme.of(context).brightness == Brightness.dark;
-    return basemapBackgroundColor(BasemapSource.ours, dark: dark, look: style.look);
+  Color? _styleBackground(ResolvedBasemap r, bool tiles) {
+    if (!tiles || r.base == null) return null;
+    return basemapBackgroundColor(BasemapSource.ours, dark: r.dark, look: r.base ?? BasemapLook.road);
   }
 
   /// The top-leading slot's content with the legend card under it (the app keeps the lower-left corner free, Drive plan 9.3, so
@@ -2367,9 +2403,10 @@ class _CoverageMapState extends State<CoverageMap> {
     );
   }
 
-  /// The credit of what the base map draws now: Satellite's own line, or the online source's (ours / OpenFreeMap).
+  /// The credit on the map (decision 5): "© OpenStreetMap" for our tiles and the OpenFreeMap fallback (who draws it, Protomaps or
+  /// OpenFreeMap, is named in the credits sheet), Satellite's longer imagery line on Satellite.
   String _creditText(BaseMapStyle style, BasemapSource source) =>
-      style.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : source.attribution;
+      style.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : kOsmCreditShort;
 
   void _openCredits(BuildContext context, BaseMapStyle style, bool tiles, String? meshCoreCredit) {
     showMapCredits(
@@ -2508,6 +2545,9 @@ class _CoverageMapState extends State<CoverageMap> {
 
   final GlobalKey _stackKey = GlobalKey(debugLabel: 'map-bottom-stack');
   final GlobalKey _buttonsKey = GlobalKey(debugLabel: 'map-buttons');
+
+  /// The credit pill: names and clusters keep out of its box (Round 1 F3: it was missing from the avoid list).
+  final GlobalKey _creditKey = GlobalKey(debugLabel: 'map-credit');
   late final Map<MapSlot, GlobalKey> _slotKeys = {
     MapSlot.banner: GlobalKey(debugLabel: 'slot-banner'),
     MapSlot.topLeading: GlobalKey(debugLabel: 'slot-top-leading'),
@@ -2522,7 +2562,7 @@ class _CoverageMapState extends State<CoverageMap> {
       final mapBox = context.findRenderObject();
       if (mapBox is! RenderBox || !mapBox.hasSize) return const [];
       final out = <Rect>[];
-      for (final k in [_stackKey, _buttonsKey, ..._slotKeys.values]) {
+      for (final k in [_stackKey, _buttonsKey, _creditKey, ..._slotKeys.values]) {
         final c = k.currentContext;
         if (c == null || !c.mounted) continue;
         final o = c.findRenderObject();

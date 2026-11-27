@@ -1,8 +1,8 @@
 // Every map in the app shows its tile credit without interaction (OSM Attribution Guidelines; unified map plan M0 / M2, audit
 // 03 table 1.0 found 11 mini maps without one). Source-level: each file that builds a FlutterMap must draw the shared credit
-// (MiniMapCredit / BasemapCredit, or the Drive map's AttributionLine), which names the source actually drawn
-// ("Protomaps © OpenStreetMap contributors", or OpenFreeMap's credit on the fallback). A hard-coded OSM line is no longer
-// enough: it would be wrong whenever the fallback draws.
+// (MiniMapCredit / BasemapCredit, or the full map's AttributionLine): "© OpenStreetMap" on our tiles and the OpenFreeMap
+// fallback (build 77 decision 5; who draws the map, Protomaps or OpenFreeMap, is named in the credits sheet), the imagery
+// credit on Satellite.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -43,9 +43,9 @@ void main() {
     expect(File('lib/ui/map/map_preview.dart').readAsStringSync(), contains('const MiniMapCredit()'));
   });
 
-  test('the mini map credit follows the source drawn', () {
+  test('the mini map credit is the short OpenStreetMap credit (imagery credit on Satellite), build 77 decision 5', () {
     final src = File('lib/ui/map/basemap_layer.dart').readAsStringSync();
-    expect(src, contains('basemapSourceAt(MapCamera.of(context)).attribution'));
+    expect(src, contains("style.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : kOsmCreditShort"));
     expect(File('lib/ui/map/overlays/mini_map_credit.dart').readAsStringSync(), contains('typedef MiniMapCredit = BasemapCredit'));
   });
 }

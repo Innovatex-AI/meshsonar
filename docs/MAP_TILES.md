@@ -119,12 +119,20 @@ glyph PBFs) needs no server copy. Decision recorded in meshsonar-infra HANDOFF (
 
 ## Licences and attribution
 
-- The credit is always on the map, no interaction needed: the Drive map's `AttributionLine` (12 pt, bottom right, (i) opens
-  the Credits sheet) and every small map's `MiniMapCredit` (= `BasemapCredit`). Both name the source drawn right now:
-  **"Protomaps © OpenStreetMap contributors"** on our tiles, **"OpenFreeMap © OpenStreetMap
-  contributors"** on the fallback, the definition's imagery credits on Satellite ("Powered by Esri. Source: Esri, Maxar, Earthstar
-  Geographics, and the GIS User Community", "Imagery: USGS National Map (NAIP)", plus ours). test/lint/map_credit_test.dart fails if a FlutterMap has no
-  shared credit or draws its own raster tile layer.
+- The credit is always on the map, no interaction needed (build 77, Round 1 decision 5, Andy 2026-11-27: "there has to be a
+  way to do attibution and it not interfere with the map on an iphone"). Every map shows **"© OpenStreetMap"** on a small pill
+  (dark on a dark map, light on a light one): the full maps' `AttributionLine`, with an (i) that opens the Credits sheet, and
+  every small map's `MiniMapCredit` (= `BasemapCredit`). The line names the data, OpenStreetMap; who draws it is named in the
+  Credits sheet: **Protomaps** on our tiles, **OpenFreeMap** on the fallback ("Base map right now" says which is drawing).
+  On Satellite the pill carries the definition's longer imagery credit at the same spot ("Powered by Esri. Source: Esri,
+  Maxar, Earthstar Geographics, and the GIS User Community", "Imagery: USGS National Map (NAIP)", plus "© OpenStreetMap" for
+  our names over it): Esri's terms require it on the map. The pill never collapses to the bare (i).
+- Where it sits: ONE fixed spot in the bottom-right corner, just above the panel's resting height
+  (`CoverageMap.creditClearance` / `MapOverlayHost.attributionClearance`). It does not ride up with the panel; a panel pulled
+  up over it covers it (Apple's own rule for map credits, and OpenStreetMap's guidelines allow it: the credit is visible
+  without a tap whenever the panel is down). Repeater names and cluster bubbles keep out of its box.
+- test/lint/map_credit_test.dart fails if a FlutterMap has no shared credit or draws its own raster tile layer;
+  test/ui/map/b77_map_core_test.dart pins the text, the pill and the fixed spot.
 - OpenStreetMap data © OpenStreetMap contributors (ODbL). Protomaps basemap layers (@protomaps/basemaps, BSD-3-Clause).
   OpenFreeMap: OpenMapTiles styles (BSD-3-Clause code, CC-BY 4.0 design), free and keyless.
 - Esri World Imagery: terms require the attribution on the map (the proxy holds the key; never in the app). USGS National Map

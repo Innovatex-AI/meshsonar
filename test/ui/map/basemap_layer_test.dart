@@ -147,7 +147,7 @@ void main() {
     ),
   );
 
-  testWidgets('every map credits the source it draws: ours in Ohio, OpenFreeMap in London', (tester) async {
+  testWidgets('every small map draws the one short credit pill, ours in Ohio and OpenFreeMap in London', (tester) async {
     BasemapHealth.instance = BasemapHealth(client: () => throw StateError('offline test'));
     final drawn = <BasemapSource>[];
     BasemapLayer.debugBuilder = (s, dark) {
@@ -160,11 +160,11 @@ void main() {
     });
     await tester.pumpWidget(mapAt(const LatLng(39.96, -83.0)));
     expect(drawn.last, BasemapSource.ours);
-    expect(find.text('Protomaps © OpenStreetMap contributors'), findsOneWidget);
+    expect(find.text('© OpenStreetMap'), findsOneWidget, reason: 'decision 5: the short credit on every source');
     await tester.pumpWidget(mapAt(const LatLng(51.5, -0.12)));
     await tester.pump();
     expect(drawn.last, BasemapSource.openFreeMap);
-    expect(find.text('OpenFreeMap © OpenStreetMap contributors'), findsOneWidget);
+    expect(find.text('© OpenStreetMap'), findsOneWidget);
     expect(find.textContaining('openstreetmap.org'), findsNothing);
   });
 
