@@ -4,6 +4,8 @@ import 'map/active_map_definition.dart';
 
 import 'package:flutter/material.dart';
 
+import '../core/time_format.dart' show use24HourClock;
+
 import '../app/app_state.dart';
 import '../core/units.dart';
 import '../platform/accessibility_channel.dart';
@@ -44,6 +46,7 @@ class AppScope extends InheritedNotifier<AppState> {
 /// Navigator and its Overlay, so all of those get the same style a Material would give (`textTheme.bodyMedium`) instead.
 /// Pinned by test/ui/no_debug_underline_test.dart.
 Widget meshSonarAppBuilder(BuildContext context, Widget? child) {
+  use24HourClock = MediaQuery.alwaysUse24HourFormatOf(context); // build 77: times follow the phone's 12/24-hour choice
   return DefaultTextStyle(style: Theme.of(context).textTheme.bodyMedium ?? const TextStyle(), child: child ?? const SizedBox.shrink());
 }
 

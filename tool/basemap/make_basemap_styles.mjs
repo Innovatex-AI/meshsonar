@@ -15,14 +15,27 @@
 //     phone, so no glyph PBFs are needed and Barlow is not used (app-typeface decision, Nov 2 2026);
 //   - icons (sprites), shields and one-way arrows are dropped: the app ships no sprite sheet and the map is about the mesh.
 // Website token values (src/styles.css :root / .dark) are copied below; re-run when the website palette changes.
+//
+// Build 77 (redesign Round 1, N3 / F2 / F14):
+//   - protomaps-data-light / protomaps-data-dark: the "data-first" road map the app draws while coverage is on (dataFirst()
+//     below): no building outlines until street zoom, side streets dimmer than main roads, brighter water, fewer street
+//     names, and names in full ink on a solid halo so they read when they are drawn ABOVE the coverage. The app splits each
+//     into a base without names and a names-only pass at run time (lib/core/basemap.dart, BasemapLook.dataBase / dataLabels);
+//     Topo is split the same way. Nothing extra is generated for the split.
+//   - on the dark road map and the dark fallback, names are ink at 80 % instead of slate (grey on grey was hard to read).
+//   - `--thumbs <dir>` also writes MapLibre versions of the picker styles (same layers and colours, before the reduction
+//     for the phone renderer) for tool/basemap/make_basemap_thumbs.mjs, which renders assets/map/thumbs/*.png from them.
 import { createRequire } from "node:module";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, "../..");
-const web = path.resolve(process.argv[2] ?? path.join(app, "../meshcore-insights"));
+const argv = process.argv.slice(2);
+const thumbsAt = argv.indexOf("--thumbs");
+const thumbsDir = thumbsAt >= 0 ? path.resolve(argv.splice(thumbsAt, 2)[1]) : null;
+const web = path.resolve(argv[0] ?? path.join(app, "../meshcore-insights"));
 const require = createRequire(path.join(web, "package.json"));
 const { layers: pmLayers, namedFlavor } = require("@protomaps/basemaps");
 
@@ -78,7 +91,8 @@ function tint(layers, theme) {
       else if (/road|highway|street|bridge|tunnel|path|rail/.test(id)) set("line-color", col(t.ink, /casing|case/.test(id) ? (dark ? 0.12 : 0.1) : (dark ? 0.2 : 0.16)));
     } else if (l.type === "symbol") {
       if (/water|river|lake/.test(id)) set("text-color", col(t.likely, 0.85));
-      else set("text-color", col(t.slate));
+      // App only (build 77): on the dark map slate names were grey on grey; ink at 80 % reads. Light keeps slate.
+      else set("text-color", dark ? col(t.ink, 0.8) : col(t.slate));
       set("text-halo-color", col(t.paper, 0.9));
     }
   }
@@ -157,10 +171,75 @@ function sanitize(layers, { omt }) {
   return out;
 }
 
-function protomaps(theme) {
+/** The tinted Protomaps road layers of [theme] (MapLibre form, before sanitize()). */
+function protomapsTinted(theme) {
   const flavor = namedFlavor(theme === "dark" ? "black" : "white");
-  const all = pmLayers("protomaps", flavor, { lang: "en" }).filter((l) => l.id !== "pois");
-  return { version: 8, name: `meshsonar-protomaps-${theme}`, ...identity(`meshsonar-protomaps-${theme}`), sources: { protomaps: { type: "vector" } }, layers: sanitize(tint(all, theme), { omt: false }) };
+  return tint(pmLayers("protomaps", flavor, { lang: "en" }).filter((l) => l.id !== "pois"), theme);
+}
+function protomaps(theme) {
+  return { version: 8, name: `meshsonar-protomaps-${theme}`, ...identity(`meshsonar-protomaps-${theme}`), sources: { protomaps: { type: "vector" } }, layers: sanitize(protomapsTinted(theme), { omt: false }) };
+}
+
+/** Build 77 "data-first" knobs: the road map under coverage. Alphas are [dark, light] of the theme's ink / water / green. */
+const DATA = {
+  road: { highway: [0.36, 0.3], major: [0.27, 0.22], link: [0.16, 0.13], minor: [0.1, 0.075], service: [0.06, 0.05], rail: [0.08, 0.07], runway: [0.14, 0.12] },
+  casing: [0.12, 0.1], // main roads only; side-street casings are not drawn
+  water: [0.36, 0.28],
+  waterway: [0.6, 0.5],
+  park: [0.07, 0.06],
+  building: [0.05, 0.04],
+  buildingMinZoom: 16, // street zoom: no building outlines under coverage before it
+  minorNamesMinZoom: 16, // side-street names one zoom later than the road map (15)
+  roadName: [0.92, 0.85],
+  halo: 0.92,
+  haloWidth: 1.5,
+};
+/** Which road class a Protomaps road layer id draws. */
+function roadClass(id) {
+  if (/runway/.test(id)) return "runway";
+  if (/rail/.test(id)) return "rail";
+  if (/highway/.test(id)) return "highway";
+  if (/major/.test(id)) return "major";
+  if (/link/.test(id)) return "link";
+  if (/minor_service|other|pier|taxiway/.test(id)) return "service";
+  return "minor";
+}
+/** The data-first road map: the tinted road layers with the busy parts taken out or turned down (see DATA). */
+function dataFirst(layers, theme) {
+  const t = TOKENS[theme], i = theme === "dark" ? 0 : 1;
+  const out = [];
+  for (const l of layers) {
+    const id = l.id;
+    if (l.type === "fill") {
+      if (/water/.test(id)) l.paint["fill-color"] = col(t.likely, DATA.water[i]);
+      else if (id === "landuse_park") l.paint["fill-color"] = col(t.strong, DATA.park[i]);
+      else if (/building/.test(id)) {
+        l.minzoom = DATA.buildingMinZoom;
+        l.paint["fill-color"] = col(t.ink, DATA.building[i]);
+      } else if (/landuse/.test(id)) continue; // the faint land-use washes: not worth a layer under coverage
+    } else if (l.type === "line") {
+      if (/^water/.test(id)) l.paint["line-color"] = col(t.likely, DATA.waterway[i]);
+      else if (/^roads_/.test(id)) {
+        const k = roadClass(id);
+        if (/casing/.test(id)) {
+          if (k !== "highway" && k !== "major") continue;
+          l.paint["line-color"] = col(t.ink, DATA.casing[i]);
+        } else l.paint["line-color"] = col(t.ink, DATA.road[k][i]);
+      }
+    } else if (l.type === "symbol") {
+      if (id === "address_label") continue;
+      if (id === "roads_labels_minor") l.minzoom = DATA.minorNamesMinZoom;
+      if (/water/.test(id)) l.paint["text-color"] = col(t.likely, theme === "dark" ? 0.95 : 0.9);
+      else l.paint["text-color"] = /^roads_/.test(id) ? col(t.ink, DATA.roadName[i]) : col(t.ink);
+      l.paint["text-halo-color"] = col(t.paper, DATA.halo);
+      l.paint["text-halo-width"] = DATA.haloWidth;
+    }
+    out.push(l);
+  }
+  return out;
+}
+function protomapsData(theme) {
+  return { version: 8, name: `meshsonar-protomaps-data-${theme}`, ...identity(`meshsonar-protomaps-data-${theme}`), sources: { protomaps: { type: "vector" } }, layers: sanitize(dataFirst(protomapsTinted(theme), theme), { omt: false }) };
 }
 
 /** M3 Topo: the definition's `basemaps[topo].topo` (Protomaps light / dark flavour with the palette overrides laid over it, landcover merged key
@@ -174,13 +253,15 @@ function topoFlavor(theme) {
   const { landcover, ...rest } = topo.overrides[theme];
   return { ...base, ...rest, landcover: { ...(base.landcover ?? {}), ...(landcover ?? {}) } };
 }
+const protomapsTopoLayers = (theme) => pmLayers("protomaps", topoFlavor(theme), { lang: "en" }).filter((l) => l.id !== "pois");
 function protomapsTopo(theme) {
-  const all = pmLayers("protomaps", topoFlavor(theme), { lang: "en" }).filter((l) => l.id !== "pois");
+  const all = protomapsTopoLayers(theme);
   return { version: 8, name: `meshsonar-protomaps-topo-${theme}`, ...identity(`meshsonar-protomaps-topo-${theme}`), sources: { protomaps: { type: "vector" } }, layers: sanitize(all, { omt: false }) };
 }
 /** M3 Satellite labels: the black flavour's label layers only (town and road names), untinted, drawn over the imagery inside our extract. */
+const protomapsLabelLayers = () => pmLayers("protomaps", namedFlavor("black"), { labelsOnly: true, lang: "en" }).filter((l) => !/^pois/.test(l.id));
 function protomapsLabels() {
-  const all = pmLayers("protomaps", namedFlavor("black"), { labelsOnly: true, lang: "en" }).filter((l) => !/^pois/.test(l.id));
+  const all = protomapsLabelLayers();
   return { version: 8, name: "meshsonar-protomaps-labels", ...identity("meshsonar-protomaps-labels"), sources: { protomaps: { type: "vector" } }, layers: sanitize(all, { omt: false }) };
 }
 
@@ -198,6 +279,7 @@ for (const theme of ["light", "dark"]) {
   styles[`protomaps-${theme}`] = protomaps(theme);
   styles[`openfreemap-${theme}`] = await openfreemap(theme);
   styles[`protomaps-topo-${theme}`] = protomapsTopo(theme);
+  styles[`protomaps-data-${theme}`] = protomapsData(theme);
 }
 styles["protomaps-labels"] = protomapsLabels();
 const pkg = require("@protomaps/basemaps/package.json");
@@ -218,3 +300,44 @@ for (const [k, v] of Object.entries(styles)) {
 const out = path.join(app, "lib/core/basemap_styles.g.dart");
 writeFileSync(out, dart);
 console.log(`wrote ${out}`);
+
+// --thumbs <dir>: the picker styles for MapLibre (tool/basemap/make_basemap_thumbs.mjs). Same layers and colours as the app
+// styles above, kept in MapLibre's own expression language with the server's glyphs; no icons, shields or POIs either.
+if (thumbsDir) {
+  const def = JSON.parse(readFileSync(path.join(app, "assets/map/map-definition.json"), "utf8"));
+  const road = def.basemaps.find((b) => b.id === "road").vector;
+  const sat = def.basemaps.find((b) => b.id === "satellite").satellite;
+  const forMapLibre = (layers) =>
+    JSON.parse(JSON.stringify(layers))
+      .filter((l) => !/shield|oneway|poi/.test(l.id))
+      .map((l) => {
+        for (const k of ["icon-image", "icon-size"]) delete l.layout?.[k];
+        return l;
+      })
+      .filter((l) => l.type !== "symbol" || l.layout?.["text-field"] !== undefined);
+  const vector = (layers) => ({ version: 8, glyphs: road.glyphs, sources: { protomaps: { type: "vector", tiles: [road.tiles], maxzoom: road.maxzoom } }, layers: forMapLibre(layers) });
+  const thumbs = {
+    "road-light": vector(protomapsTinted("light")),
+    "road-dark": vector(protomapsTinted("dark")),
+    "data-light": vector(dataFirst(protomapsTinted("light"), "light")),
+    "data-dark": vector(dataFirst(protomapsTinted("dark"), "dark")),
+    "topo-light": vector(protomapsTopoLayers("light")),
+    "topo-dark": vector(protomapsTopoLayers("dark")),
+    satellite: {
+      version: 8,
+      glyphs: road.glyphs,
+      sources: {
+        protomaps: { type: "vector", tiles: [road.tiles], maxzoom: road.maxzoom },
+        ...Object.fromEntries(sat.sources.map((s) => [s.id, { type: "raster", tiles: [s.tiles], tileSize: s.tileSize, minzoom: s.minzoom, maxzoom: s.maxzoom, bounds: s.bounds }])),
+      },
+      layers: [
+        { id: "background", type: "background", paint: { "background-color": "#1b2a1f" } },
+        ...sat.sources.map((s) => ({ id: `satellite-${s.id}`, type: "raster", source: s.id, ...(s.layerMaxZoom ? { maxzoom: s.layerMaxZoom } : {}) })),
+        ...forMapLibre(protomapsLabelLayers()),
+      ],
+    },
+  };
+  mkdirSync(thumbsDir, { recursive: true });
+  for (const [k, v] of Object.entries(thumbs)) writeFileSync(path.join(thumbsDir, `${k}.json`), JSON.stringify(v));
+  console.log(`wrote ${Object.keys(thumbs).length} MapLibre styles to ${thumbsDir}`);
+}

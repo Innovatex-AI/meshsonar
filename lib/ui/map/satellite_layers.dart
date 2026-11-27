@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/basemap.dart' show BasemapLook;
 import '../../core/map_basemaps.dart';
 import '../../core/map_definition.dart';
+import '../../core/map_styles.dart' show ResolvedBasemap;
 import 'basemap_layer.dart';
 import 'tile_source.dart';
 
@@ -22,6 +23,9 @@ List<Widget> satelliteLayers(
   required String userAgentPackageName,
   Stream<void>? reset,
   bool wide = false,
+
+  /// False = the imagery only: the caller draws the names itself above its own layers ([basemapLabelsLayerFor]).
+  bool labels = true,
 }) {
   final sat = def.satellite;
   if (sat == null) return const [];
@@ -42,8 +46,42 @@ List<Widget> satelliteLayers(
         keepBuffer: wide ? 4 : 1,
         panBuffer: wide ? 1 : 0,
       ),
-    if (sat.labels) BasemapLayer(key: const ValueKey('satellite-labels'), dark: true, look: BasemapLook.labels, tiles: tiles, reset: reset),
+    if (labels && sat.labels) BasemapLayer(key: const ValueKey('satellite-labels'), dark: true, look: BasemapLook.labels, tiles: tiles, reset: reset),
   ];
+}
+
+/// The bottom layers of a map for a resolved base map choice (`BaseMapStyle.resolve`, build 77): one vector layer, or Satellite's
+/// imagery (with its names over it unless [resolved] asks for them as a separate pass). Put the coverage layers after these and
+/// [basemapLabelsLayerFor] after the coverage.
+List<Widget> basemapLayersFor(
+  ResolvedBasemap resolved,
+  MapDefinition def, {
+  required MeshTileProvider tiles,
+  required String userAgentPackageName,
+  Stream<void>? reset,
+  bool wide = false,
+}) {
+  final base = resolved.base;
+  if (base == null) {
+    return satelliteLayers(def, tiles: tiles, userAgentPackageName: userAgentPackageName, reset: reset, wide: wide, labels: resolved.labels == null);
+  }
+  return [BasemapLayer(key: ValueKey('basemap-${resolved.choice.id}'), dark: resolved.dark, look: base, tiles: tiles, reset: reset)];
+}
+
+/// The names pass to draw ABOVE the coverage for [resolved]; null when the names are already in the base layer (coverage off)
+/// or Satellite's definition has no names. It draws nothing while the map is on the OpenFreeMap fallback (whose base layer
+/// carries its own names) or outside our extract. Keys: 'satellite-labels' over imagery (as before), else 'basemap-labels'.
+Widget? basemapLabelsLayerFor(ResolvedBasemap resolved, MapDefinition def, {MeshTileProvider? tiles, Stream<void>? reset}) {
+  final look = resolved.labels;
+  if (look == null) return null;
+  if (resolved.isSatellite && def.satellite?.labels != true) return null;
+  return BasemapLayer(
+    key: ValueKey(resolved.isSatellite ? 'satellite-labels' : 'basemap-labels'),
+    dark: resolved.dark,
+    look: look,
+    tiles: tiles,
+    reset: reset,
+  );
 }
 
 /// The credit the map must show while Satellite draws: the usable imagery sources' own lines, plus the OpenStreetMap / Protomaps line

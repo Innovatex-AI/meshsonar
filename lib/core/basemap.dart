@@ -73,31 +73,97 @@ extension BasemapSourceX on BasemapSource {
 /// rendered-tile caches, in memory and on disk, on that identity, so a bump makes every old render unreachable; the disk cache
 /// folder carries it too (ui/map/basemap_cache.dart), and the folders of other versions are deleted once.
 /// History: 1 = builds 57 to 71, where no style had an id and all seven shared "default / none" (tiles of one style were
-/// served for every other style). 2 = build 72, every style has its own id.
-const int basemapRenderVersion = 2;
+/// served for every other style). 2 = build 72, every style has its own id. 3 = build 77, the dark map's names are brighter and
+/// the data-first, base-only and names-only looks arrive (a phone drops every render build 76 cached).
+const int basemapRenderVersion = 3;
 
 /// The identity the renderer caches a style's tiles under: `<id>/v<version>`. Distinct for every style.
 String basemapStyleIdentity(Map<String, dynamic> style) => '${style['id']}/v${(style['metadata'] as Map?)?['version']}';
 
-/// Which of our Protomaps looks a vector layer draws (M3): the Road / Light / Dark map, the Topo palette (the Map Definition's
-/// `basemaps[topo].topo` overrides laid over Protomaps' light / dark flavour, baked by tool/basemap/make_basemap_styles.mjs), or
-/// only the town and road names (drawn over Satellite imagery inside our extract, black flavour).
-enum BasemapLook { road, topo, labels }
+/// Which of our Protomaps looks a vector layer draws.
+///
+/// Whole maps (ground, roads and names in one layer):
+///  - [road]: the Road / Light / Dark map.
+///  - [topo]: the Topo palette (the Map Definition's `basemaps[topo].topo` overrides over Protomaps' light / dark flavour).
+///  - [data]: the data-first road map (build 77), drawn while coverage is on: no building outlines until street zoom, side
+///    streets dimmer than main roads, brighter water, fewer street names, names in full ink on a solid halo.
+/// A map in two passes, so the names can be drawn ABOVE the coverage (build 77, F2):
+///  - [dataBase] / [topoBase]: the same map without its names (no symbol layer at all).
+///  - [dataLabels] / [topoLabels]: only its names (symbol layers only), in the light or the dark ink.
+///  - [labels]: only the town and road names over Satellite imagery (black flavour, one look for both themes).
+/// A names-only look is drawn from OUR tiles only: OpenFreeMap has no names-only style, so on the fallback a base look draws
+/// OpenFreeMap's whole map (names included, under the coverage as before build 77) and a names look draws nothing.
+enum BasemapLook {
+  road,
+  topo,
+  labels,
+  data,
+  dataBase,
+  dataLabels,
+  topoBase,
+  topoLabels;
+
+  /// Only names: no ground, water or road lines. Drawn above other layers; never from OpenFreeMap; no background colour.
+  bool get isLabelsOnly => this == labels || this == dataLabels || this == topoLabels;
+
+  /// A map without its names (its names are the matching [labelsPass]).
+  bool get isBaseOnly => this == dataBase || this == topoBase;
+
+  /// The names-only look that completes this base-only look; null for every other look.
+  BasemapLook? get labelsPass => switch (this) {
+    BasemapLook.dataBase => BasemapLook.dataLabels,
+    BasemapLook.topoBase => BasemapLook.topoLabels,
+    _ => null,
+  };
+}
 
 /// The style JSON (vector_tile_renderer subset, generated from the website's styles) for a source, theme and [look]. OpenFreeMap
-/// has one look (its Positron / Dark): Topo falls back to it, and the labels look has no OpenFreeMap equivalent (never asked).
+/// has one look (its Positron / Dark, names included): every whole-map and base-only look falls back to it, and a names-only
+/// look has no OpenFreeMap equivalent (never asked: ui/map/basemap_layer.dart draws nothing).
 Map<String, dynamic> basemapStyle(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) {
+  if (source != BasemapSource.openFreeMap) {
+    switch (look) {
+      case BasemapLook.dataBase:
+      case BasemapLook.topoBase:
+        return _split(source, dark, look, look == BasemapLook.dataBase ? BasemapLook.data : BasemapLook.topo, names: false);
+      case BasemapLook.dataLabels:
+      case BasemapLook.topoLabels:
+        return _split(source, dark, look, look == BasemapLook.dataLabels ? BasemapLook.data : BasemapLook.topo, names: true);
+      default:
+    }
+  }
   final json = switch ((source, dark, look)) {
     (BasemapSource.openFreeMap, false, _) => openfreemapLightStyleJson,
     (BasemapSource.openFreeMap, true, _) => openfreemapDarkStyleJson,
     (_, _, BasemapLook.labels) => protomapsLabelsStyleJson,
     (_, false, BasemapLook.topo) => protomapsTopoLightStyleJson,
     (_, true, BasemapLook.topo) => protomapsTopoDarkStyleJson,
+    (_, false, BasemapLook.data) => protomapsDataLightStyleJson,
+    (_, true, BasemapLook.data) => protomapsDataDarkStyleJson,
     (_, false, _) => protomapsLightStyleJson,
     (_, true, _) => protomapsDarkStyleJson,
   };
   return _parsed.putIfAbsent(json, () => withBasemapIdentity(jsonDecode(json) as Map<String, dynamic>));
 }
+
+/// One half of the whole map [of]: its names ([names] true: the symbol layers) or everything else. The half has an identity of
+/// its own (`<whole map's id>-labels` / `-base`), so its renders are never mixed with the whole map's in the tile caches.
+Map<String, dynamic> _split(BasemapSource source, bool dark, BasemapLook look, BasemapLook of, {required bool names}) =>
+    _splits.putIfAbsent((dark, look), () {
+      final whole = basemapStyle(source, dark: dark, look: of);
+      final id = '${whole['id']}-${names ? 'labels' : 'base'}';
+      return {
+        ...whole,
+        'id': id,
+        'name': id,
+        'layers': [
+          for (final l in whole['layers'] as List)
+            if (((l as Map)['type'] == 'symbol') == names) l,
+        ],
+      };
+    });
+
+final Map<(bool, BasemapLook), Map<String, dynamic>> _splits = {};
 
 final Map<String, Map<String, dynamic>> _parsed = {};
 

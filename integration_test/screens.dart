@@ -4,16 +4,27 @@
 // Findings and Region overview, Tools), All regions (Regions, Channels, Analytics, Tools), a node / packet /
 // observer page, the Drive map's panels (Drive panel, Layers, legend), the Plan sheet, Chat's three segments, More,
 // More > Radio, More > Help and Settings.
+// Build 77 (redesign rounds 3 to 5, items C-V0, P-V0, D-0): the tour ends with the Plan results (a Link result, a Coverage
+// result, Find sites, Where to drive, Saved plans, the node editor, each with the sheet at Full and scrolled to its own
+// part), the Chat thread screens (thread, composer, message menu, message details, the New sheet, a person's profile),
+// Leaderboard, Your progress, and the Drives list with an uploaded, a partly uploaded and a failed drive plus the delete
+// confirm. They come last because they seed chats and drives the earlier shots should not show.
 // Each step runs in order against the real app; `shot('name')` prints "SCREEN name" and holds still so the script
 // can grab a simulator screenshot. A step with `optional: true` is skipped (not failed) when it can't find its UI,
 // which is how screens that only exist on some checkouts (e.g. a region hub) are covered.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/app/chat_wiring.dart';
+import 'package:meshsonar/core/model.dart' show DrivePing, DriveSession;
+import 'package:meshsonar/radio/simulator.dart' show SimulatedRadioScanner;
 import 'package:meshsonar/ui/app.dart' show AppScope, MoreItem, ShellController;
 import 'package:meshsonar/ui/alerts/alerts_status_strip.dart';
+import 'package:meshsonar/ui/map/layers/map_layer.dart' show LongPressHit;
 import 'package:meshsonar/ui/plan/planner_screen.dart';
+import 'package:meshsonar/ui/sessions_screen.dart' show SessionsScreen;
 import 'package:meshsonar/ui/shell/blur_bar.dart';
 import 'package:meshsonar/ui/shell/mini_drive_bar.dart';
+import 'package:uuid/uuid.dart';
 
 Future<void> pumpFor(WidgetTester t, Duration d) async {
   final end = DateTime.now().add(d);
@@ -279,21 +290,43 @@ Future<void> openTab(WidgetTester t, String label) async {
   }
 }
 
-/// Scrolls the first vertical scrollable (under [within] when given) top to bottom in ~85% viewport steps, shooting each stop.
-Future<void> shootFullScroll(WidgetTester t, String prefix, {Finder? within}) async {
+/// Scrolls the first vertical scrollable (under [within] when given) top to bottom in ~85% viewport steps, shooting each stop
+/// as `<prefix>-1`, `<prefix>-2`, ... Returns how many shots it took.
+///
+/// [skipTop]: the caller has just shot this screen at the top, so the first shot here comes AFTER the first scroll. Without
+/// it `<prefix>-1` was the same picture as the caller's own shot (build 76: `detail` = `detail-scroll-1`, `report` =
+/// `report-scroll-1`): no swipe was swallowed, the tour simply shot before it scrolled. A stop the list did not move to is
+/// not shot twice either.
+Future<int> shootFullScroll(WidgetTester t, String prefix, {Finder? within, bool skipTop = false, int max = 20}) async {
   final scrollables = within == null ? find.byType(Scrollable) : find.descendant(of: within, matching: find.byType(Scrollable));
   final scrollable = t.stateList<ScrollableState>(scrollables).firstWhere(
         (s) => s.axisDirection == AxisDirection.down && s.position.maxScrollExtent > 0,
       );
   final pos = scrollable.position;
-  final step = pos.viewportDimension * 0.85;
-  var i = 1;
-  await shot(t, '$prefix-$i');
-  while (pos.pixels < pos.maxScrollExtent - 1 && i < 20) {
-    pos.jumpTo((pos.pixels + step).clamp(0, pos.maxScrollExtent));
+  var i = 0;
+  if (!skipTop) {
     i++;
     await shot(t, '$prefix-$i');
   }
+  return _shootRest(t, pos, prefix, from: i, max: max);
+}
+
+/// Scrolls [pos] on from where it is, one ~85% viewport step per shot (`<prefix>-<from + 1>` ...), until the end or [max]
+/// shots. A step that did not move the list ends the walk (no duplicate shot). Returns the last shot number.
+Future<int> _shootRest(WidgetTester t, ScrollPosition pos, String prefix, {int from = 0, int max = 20}) async {
+  var i = from;
+  while (pos.pixels < pos.maxScrollExtent - 1 && i < max) {
+    final before = pos.pixels;
+    pos.jumpTo((before + pos.viewportDimension * 0.85).clamp(0, pos.maxScrollExtent));
+    await pumpFor(t, const Duration(milliseconds: 300));
+    if ((pos.pixels - before).abs() < 1) {
+      _stepNote(prefix, 'the list did not move past ${before.toStringAsFixed(0)} of ${pos.maxScrollExtent.toStringAsFixed(0)}: no further scroll shots');
+      break;
+    }
+    i++;
+    await shot(t, '$prefix-$i');
+  }
+  return i;
 }
 
 /// Build 70, item 70-2: the Drive panel slides over a map that never shrinks. Checks the map is the whole screen and shoots
@@ -314,6 +347,107 @@ double _panelTop(WidgetTester t) {
   final p = find.byKey(const Key('drive-panel'));
   return p.evaluate().isEmpty ? double.infinity : t.getTopLeft(p.first).dy;
 }
+
+// ------------------------------------------------------------------ build 77 helpers (Plan results, Chat thread, Drives)
+
+PlannerScreenState _plannerState(WidgetTester t) => t.state<PlannerScreenState>(find.byType(PlannerScreen, skipOffstage: false));
+
+/// How many points the open plan has (0 while no plan is loaded).
+int _planNodeCount(WidgetTester t) => _plannerState(t).controller?.nodes.length ?? 0;
+
+/// Pulls the Plan sheet up to Full (a quick drag up on its handle goes one detent up; at Full it stays). The tour's old
+/// Plan shots were all at half height and scrolled to the top, so the four modes looked the same.
+Future<void> _planSheetFull(WidgetTester t) async {
+  final handle = find.byKey(const Key('planner-sheet-handle'));
+  final sheet = find.byKey(const Key('planner-sheet'));
+  if (handle.evaluate().isEmpty || sheet.evaluate().isEmpty) return;
+  for (var i = 0; i < 3; i++) {
+    final before = t.getSize(sheet.first).height;
+    await t.fling(handle.first, const Offset(0, -220), 1800, warnIfMissed: false);
+    await pumpFor(t, const Duration(milliseconds: 900));
+    if (t.getSize(sheet.first).height <= before + 4) break;
+  }
+}
+
+/// The Plan sheet's own scroll position (the sheet body is one scroll view; rows inside it may scroll sideways).
+ScrollPosition? _planBodyPosition(WidgetTester t) {
+  final body = find.descendant(of: find.byKey(const Key('planner-sheet-body')), matching: find.byType(Scrollable));
+  return t.stateList<ScrollableState>(body).where((s) => s.axisDirection == AxisDirection.down).firstOrNull?.position;
+}
+
+/// Sheet at Full with the widget keyed [key] at the top of the sheet, then the shot [name]. With [rest] it keeps scrolling
+/// to the end of the sheet (`<name>-2`, `<name>-3`, ... at most [rest] more). False when [key] is not on screen.
+Future<bool> _planShot(WidgetTester t, String key, String name, {int rest = 0}) async {
+  final f = find.byKey(Key(key));
+  if (f.evaluate().isEmpty) return false;
+  await _planSheetFull(t);
+  if (f.evaluate().isEmpty) return false;
+  try {
+    await Scrollable.ensureVisible(t.element(f.first), alignment: 0.0);
+  } catch (_) {}
+  await pumpFor(t, const Duration(milliseconds: 500));
+  await shot(t, name);
+  final pos = _planBodyPosition(t);
+  if (rest > 0 && pos != null) await _shootRest(t, pos, name, from: 1, max: 1 + rest);
+  return true;
+}
+
+/// Brings [f] into view inside its scroll view and taps it. False when it is not there within [wait].
+Future<bool> _showAndTap(WidgetTester t, Finder f, {Duration wait = const Duration(seconds: 8)}) async {
+  if (!await waitFor(t, f, timeout: wait)) return false;
+  try {
+    await t.ensureVisible(f.first);
+  } catch (_) {}
+  await pumpFor(t, const Duration(milliseconds: 400));
+  await t.tap(f.first, warnIfMissed: false);
+  await pumpFor(t, const Duration(milliseconds: 800));
+  return true;
+}
+
+/// Plan's ⋯ menu, then one of its rows. The menu button lives in the sheet body, so the sheet is opened first.
+Future<bool> _planMenu(WidgetTester t, String item) async {
+  await _planSheetFull(t);
+  if (!await _showAndTap(t, find.byKey(const Key('plan-menu')))) return false;
+  return _showAndTap(t, find.byKey(Key(item)));
+}
+
+/// Closes the sheet or page that holds the widget keyed [key] (its own navigator, so nothing under it is closed).
+Future<void> _closeRouteOf(WidgetTester t, String key) async {
+  final f = find.byKey(Key(key));
+  if (f.evaluate().isEmpty) return;
+  Navigator.of(t.element(f.first)).pop();
+  await pumpFor(t, const Duration(seconds: 1));
+}
+
+/// The first of [keys] that shows up within [timeout], or 'none'.
+Future<String> _awaitFirstKey(WidgetTester t, List<String> keys, Duration timeout) async {
+  await _until(t, () => _firstKeyOf(t, keys) != 'none', timeout);
+  return _firstKeyOf(t, keys);
+}
+
+/// Presses and holds [f] the way a finger does (1.2 s), then lets go. On iOS a chat bubble answers with the system
+/// context menu, which needs the hold to last through its lift animation; `longPress` lets go too early for it.
+Future<void> _pressAndHold(WidgetTester t, Finder f) async {
+  final g = await t.startGesture(t.getCenter(f.first));
+  await pumpFor(t, const Duration(milliseconds: 1200));
+  await g.up();
+  await pumpFor(t, const Duration(milliseconds: 900));
+}
+
+/// The scroll view the Drives list lives in.
+Finder get _drivesList => find.byType(SessionsScreen);
+
+/// Brings the Drives card of drive [id] into the middle of the list. False when the list has no such card.
+Future<bool> _showDriveCard(WidgetTester t, String id) => scrollToFind(t, find.byKey(ValueKey('session-$id')), _drivesList, wait: const Duration(seconds: 8));
+
+/// Ends a tour step that collected problems instead of stopping at the first (so one miss does not hide the other shots).
+void _failIfAny(String step, List<String> misses) {
+  if (misses.isEmpty) return;
+  _stepFail('$step: ${misses.join('; ')}');
+}
+
+/// Drive ids the Drives step seeded (label -> id).
+final Map<String, String> _seededDrives = {};
 
 class ScreenStep {
   const ScreenStep(this.name, this.run, {this.optional = false});
@@ -606,7 +740,7 @@ final List<ScreenStep> screens = [
     }
     await shot(t, 'report');
     try {
-      await shootFullScroll(t, 'report-scroll', within: find.byKey(const Key('drive-report')));
+      await shootFullScroll(t, 'report-scroll', within: find.byKey(const Key('drive-report')), skipTop: true);
     } catch (_) {}
     // On iOS the report is a full-height sheet with Done, not a pushed page: pageBack() found no back button there and
     // threw, which skipped the step after its first shot.
@@ -628,7 +762,7 @@ final List<ScreenStep> screens = [
     if (!await waitFor(t, find.byKey(const Key('more-radio-screen')), timeout: const Duration(seconds: 5))) _stepFail('radio: More > Radio did not open');
     await shot(t, 'more-radio');
     try {
-      await shootFullScroll(t, 'more-radio-scroll', within: find.byKey(const Key('more-radio-screen')));
+      await shootFullScroll(t, 'more-radio-scroll', within: find.byKey(const Key('more-radio-screen')), skipTop: true);
     } catch (_) {} // nothing to scroll with no radio
     await openTab(t, 'Radio');
     if (!await waitFor(t, find.byKey(const Key('radio-list')), timeout: const Duration(seconds: 5)) &&
@@ -661,7 +795,7 @@ final List<ScreenStep> screens = [
     }
     await shot(t, 'detail');
     try {
-      await shootFullScroll(t, 'detail-scroll', within: find.byKey(const Key('drive-detail')));
+      await shootFullScroll(t, 'detail-scroll', within: find.byKey(const Key('drive-detail')), skipTop: true);
     } catch (_) {} // nothing to scroll on a big screen
     await t.pageBack();
     await pumpFor(t, const Duration(seconds: 1));
@@ -843,7 +977,7 @@ final List<ScreenStep> screens = [
     if (find.byKey(const Key('packet-error')).evaluate().isNotEmpty) _stepFail('packet-page: the packet page shows an error');
     await shot(t, 'packet-page');
     try {
-      await shootFullScroll(t, 'packet-page-scroll', within: find.byKey(const Key('network-packet-screen')));
+      await shootFullScroll(t, 'packet-page-scroll', within: find.byKey(const Key('network-packet-screen')), skipTop: true);
     } catch (_) {}
     await backOne(t);
     if (find.byKey(const Key('network-packet-screen')).evaluate().isNotEmpty) _stepFail('packet-page: Back did not close the packet page');
@@ -914,7 +1048,7 @@ final List<ScreenStep> screens = [
     await pumpFor(t, const Duration(seconds: 3));
     await shot(t, 'node-page');
     try {
-      await shootFullScroll(t, 'node-page-scroll', within: find.byKey(const Key('network-node-screen')));
+      await shootFullScroll(t, 'node-page-scroll', within: find.byKey(const Key('network-node-screen')), skipTop: true);
     } catch (_) {}
     await backOne(t);
     if (find.byKey(const Key('network-node-screen')).evaluate().isNotEmpty) _stepFail('node-page: Back did not close the node page');
@@ -1035,7 +1169,7 @@ final List<ScreenStep> screens = [
     if (!await waitFor(t, list, timeout: const Duration(seconds: 10))) _stepFail('network-tools: the Tools list did not open (blank)');
     await shot(t, 'network-tools');
     try {
-      await shootFullScroll(t, 'network-tools-scroll', within: list);
+      await shootFullScroll(t, 'network-tools-scroll', within: list, skipTop: true);
     } catch (_) {}
     Future<void> openTool(String id, String screenKey) async {
       await popToRoots(t);
@@ -1164,6 +1298,627 @@ final List<ScreenStep> screens = [
     if (find.byKey(const Key('network-all-regions')).evaluate().isNotEmpty) _stepFail('all-regions: "Back to" did not leave All regions');
     if (app.viewingRegion?.code != before) _stepFail('all-regions: the viewed region changed from $before to ${app.viewingRegion?.code}');
     _stepOk('all-regions');
+  }, optional: true),
+  // ------------------------------------------------------------------ build 77: Plan results (round 4, P-V0)
+  // The four mode shots of the `planner` step are the sheet half open and scrolled to the top: identical but for one line.
+  // Here every mode gets real input (two repeaters of the live region, else two dropped points), and each shot has the
+  // sheet at Full with that mode's own controls, then its result, at the top of the sheet. Answers come from the deployed
+  // server, so every honest state is shot (a result, "preparing", "nothing here"); an error view or no answer is a STEPFAIL.
+  // Problems are collected so one mode's miss does not hide the others.
+  ScreenStep('plan-results', (t) async {
+    final misses = <String>[];
+    await popToRoots(t);
+    await openShellTab(t, 'Plan');
+    if (!await waitFor(t, find.byKey(const Key('planner')), timeout: const Duration(seconds: 10))) _stepFail('plan-results: the Plan tab did not open the Planner');
+    if (!await _until(t, () => _plannerState(t).controller != null, const Duration(seconds: 15))) _stepFail('plan-results: the Planner has no plan loaded');
+    // A new plan: earlier steps (j2-contact-link) left a point in the open one, and it gives Saved plans a second entry.
+    if (_planNodeCount(t) > 0) {
+      if (!await _planMenu(t, 'plan-menu-new')) misses.add('no New plan in the Plan menu');
+      await _until(t, () => _planNodeCount(t) == 0, const Duration(seconds: 8));
+    }
+    await t.tap(find.byKey(const Key('planner-mode-link')), warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+    await _planSheetFull(t);
+
+    // Two ends: the nearest repeater of the live region and one a few rows down (two on one roof are too close to judge).
+    if (await _showAndTap(t, find.byKey(const Key('plan-quick-network')), wait: const Duration(seconds: 10))) {
+      if (await waitFor(t, find.byKey(const Key('node-picker')), timeout: const Duration(seconds: 8))) {
+        final rows = _prefixed('node-pick-');
+        if (await waitFor(t, rows, timeout: const Duration(seconds: 40))) {
+          await shot(t, 'plan-node-picker');
+          final n = rows.evaluate().length;
+          await t.tap(rows.at(0), warnIfMissed: false);
+          await pumpFor(t, const Duration(milliseconds: 800));
+          if (n > 1) {
+            await t.tap(rows.at(n > 3 ? 3 : n - 1), warnIfMissed: false);
+            await pumpFor(t, const Duration(milliseconds: 800));
+          }
+        } else {
+          _stepNote('plan-results', 'the node picker listed no repeaters of this region');
+        }
+        await _closeRouteOf(t, 'node-picker');
+      }
+    }
+    if (_planNodeCount(t) < 2) {
+      // No live repeaters to pick: two points about 6 miles apart near the simulated position (Columbus).
+      _stepNote('plan-results', 'fewer than two repeaters picked from the network: two points were dropped on the map instead');
+      for (final (lat, lon) in [(39.9612, -83.0007), (40.0350, -82.9300)]) {
+        if (_planNodeCount(t) >= 2) break;
+        await _plannerState(t).longPressForTest(LongPressHit(lat: lat, lon: lon));
+        await pumpFor(t, const Duration(seconds: 1));
+      }
+    }
+    if (_planNodeCount(t) < 2) _stepFail('plan-results: the plan has ${_planNodeCount(t)} points; two are needed for a Link result');
+
+    // ---- Link: the two ends, then the verdict and what is under it.
+    await t.tap(find.byKey(const Key('planner-mode-link')), warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 2));
+    if (find.byKey(const Key('plan-mode-link')).evaluate().isEmpty) {
+      misses.add('Link mode did not open its controls (plan-mode-link)');
+    } else {
+      await _planSheetFull(t);
+      if (_firstKeyOf(t, ['link-verdict', 'link-error', 'link-loading']) == 'none') await _showAndTap(t, find.byKey(const Key('link-run')), wait: const Duration(seconds: 4));
+      final link = await _awaitFirstKey(t, ['link-verdict', 'link-error'], const Duration(seconds: 75));
+      await _planShot(t, 'plan-mode-link', 'plan-link-controls');
+      if (link == 'link-verdict') {
+        await _planShot(t, 'link-result', 'plan-link-result', rest: 4);
+      } else {
+        await _planShot(t, link == 'none' ? 'link-run' : link, 'plan-link-no-result');
+        misses.add(link == 'none'
+            ? 'Link gave no answer in 75 s (${_firstKeyOf(t, ['link-toofar', 'link-tooclose', 'link-loading'])})'
+            : 'Link showed its error view');
+      }
+    }
+
+    // ---- Coverage: the site and its settings, then the estimate, then the footprint on the map with the sheet down.
+    await t.tap(find.byKey(const Key('planner-mode-coverage')), warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 2));
+    if (find.byKey(const Key('plan-mode-coverage')).evaluate().isEmpty) {
+      misses.add('Coverage mode did not open its controls (plan-mode-coverage)');
+    } else {
+      await _planSheetFull(t);
+      if (find.byKey(const Key('coverage-area')).evaluate().isEmpty) await _showAndTap(t, find.byKey(const Key('coverage-run')), wait: const Duration(seconds: 6));
+      final cov = await _awaitFirstKey(t, ['coverage-area', 'coverage-error'], const Duration(seconds: 120));
+      await _planShot(t, 'plan-mode-coverage', 'plan-coverage-controls');
+      if (cov == 'coverage-area') {
+        await _planShot(t, 'coverage-result', 'plan-coverage-result', rest: 4);
+        // The footprint itself: the sheet down to its header (a tap on the handle collapses an open sheet).
+        final handle = find.byKey(const Key('planner-sheet-handle'));
+        if (handle.evaluate().isNotEmpty) {
+          await t.tap(handle.first, warnIfMissed: false);
+          await pumpFor(t, const Duration(seconds: 2));
+          await shot(t, 'plan-coverage-footprint-map');
+        }
+      } else {
+        await _planShot(t, cov == 'none' ? 'coverage-run' : cov, 'plan-coverage-no-result');
+        misses.add(cov == 'none' ? 'Coverage gave no answer in 120 s' : 'Coverage showed its error view');
+      }
+    }
+
+    // ---- Find sites: the goal and the Find button, then the ranked list (or the honest "preparing" / "nothing here").
+    await t.tap(find.byKey(const Key('planner-mode-findSites')), warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 2));
+    if (!await waitFor(t, find.byKey(const Key('plan-mode-sites')), timeout: const Duration(seconds: 8))) {
+      misses.add('Find sites did not open its controls (plan-mode-sites)');
+    } else {
+      await _planShot(t, 'plan-mode-sites', 'plan-sites-controls');
+      await _showAndTap(t, find.byKey(const Key('sites-run')), wait: const Duration(seconds: 6));
+      final sites = await _awaitFirstKey(t, ['sites-result', 'sites-preparing', 'sites-empty', 'sites-error'], const Duration(seconds: 40));
+      switch (sites) {
+        case 'sites-result':
+          await pumpFor(t, const Duration(seconds: 1));
+          await _planShot(t, 'sites-result', 'plan-sites-result', rest: 3);
+        case 'sites-preparing' || 'sites-empty':
+          _stepNote('plan-results', 'Find sites answered $sites for this view: that state is shot instead of a ranked list');
+          await _planShot(t, sites, 'plan-$sites');
+        case 'sites-error':
+          await _planShot(t, sites, 'plan-sites-error');
+          misses.add('Find sites showed its error view');
+        default:
+          await _planShot(t, 'plan-mode-sites', 'plan-sites-no-answer');
+          misses.add('Find sites gave no answer in 40 s');
+      }
+    }
+
+    // ---- Where to drive: the list of places.
+    await t.tap(find.byKey(const Key('planner-mode-whereToDrive')), warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+    if (!await waitFor(t, find.byKey(const Key('plan-mode-drive')), timeout: const Duration(seconds: 8))) {
+      misses.add('Where to drive did not open its list (plan-mode-drive)');
+    } else {
+      await pumpFor(t, const Duration(seconds: 4)); // the targets come from the region's coverage
+      await _planShot(t, 'plan-mode-drive', 'plan-where-to-drive', rest: 3);
+      if (find.byKey(const Key('drive-next-show-map')).evaluate().isEmpty) _stepNote('plan-results', 'Where to drive has no places here: the shot is its empty state');
+    }
+
+    // ---- Saved plans (Plan menu > Saved plans): this plan and the one the earlier steps left.
+    await t.tap(find.byKey(const Key('planner-mode-link')), warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+    if (await _planMenu(t, 'plan-menu-open') && await waitFor(t, find.byKey(const Key('saved-plans')), timeout: const Duration(seconds: 8))) {
+      await pumpFor(t, const Duration(seconds: 1));
+      await shot(t, 'plan-saved-plans');
+      final more = _prefixed('saved-plan-more-');
+      if (more.evaluate().isNotEmpty) {
+        await t.tap(more.first, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+        if (_prefixed('saved-plan-rename-').evaluate().isNotEmpty) {
+          await shot(t, 'plan-saved-plan-menu');
+          await _closeRouteOf(t, (t.widget(_prefixed('saved-plan-rename-').first).key as ValueKey<String>).value);
+        }
+      }
+      await _closeRouteOf(t, 'saved-plans');
+    } else {
+      misses.add('Saved plans did not open from the Plan menu');
+    }
+
+    // ---- The node editor of the first point (the selected point's Edit).
+    final first = _plannerState(t).controller?.nodes.firstOrNull;
+    if (first == null) {
+      misses.add('no point left in the plan for the node editor');
+    } else {
+      _plannerState(t).selectNodeForTest(first.id);
+      await pumpFor(t, const Duration(seconds: 1));
+      await _planSheetFull(t);
+      await _planShot(t, 'plan-selected-edit', 'plan-selected-point');
+      var opened = await _showAndTap(t, find.byKey(const Key('plan-selected-edit')), wait: const Duration(seconds: 5));
+      if (!opened) opened = await _showAndTap(t, find.byKey(Key('plan-node-edit-${first.id}')), wait: const Duration(seconds: 5));
+      if (opened && await waitFor(t, find.byKey(const Key('node-editor')), timeout: const Duration(seconds: 8))) {
+        await pumpFor(t, const Duration(seconds: 1));
+        await shot(t, 'plan-node-editor');
+        try {
+          await shootFullScroll(t, 'plan-node-editor-scroll', within: find.byKey(const Key('node-editor')), skipTop: true, max: 4);
+        } catch (_) {} // the editor fits the sheet
+        await _closeRouteOf(t, 'node-editor');
+      } else {
+        misses.add('the node editor did not open from the selected point');
+      }
+      _plannerState(t).selectNodeForTest(null);
+      await pumpFor(t, const Duration(milliseconds: 500));
+    }
+    _failIfAny('plan-results', misses);
+    _stepOk('plan-results');
+  }, optional: true),
+  // ------------------------------------------------------------------ build 77: Chat thread screens (round 3, C-V0)
+  // The `tabs` step only shows the three list segments. Here the simulated radio gets a busy Public thread and a direct
+  // message from a person (the pattern of chat_thread_look_test.dart), then: the direct thread, the composer with text in
+  // it, the quick replies, the info strip under a message, the press-and-hold menu, Full details, the person's profile, a
+  // channel thread, and the New sheet with its "To" page. Needs the debug-only simulated radio; skipped without it.
+  ScreenStep('chat-thread', (t) async {
+    final app = AppScope.of(t.element(find.byType(Scaffold).first));
+    final scanner = app.services.simulatorScanner;
+    if (!app.connected || scanner is! SimulatedRadioScanner || scanner.lastTransport == null) throw const _Skip();
+    final radio = scanner.lastTransport!;
+    final misses = <String>[];
+    const person = 'Ann KE8ANN';
+    const question = 'Are you bringing the long antenna tonight?';
+    await popToRoots(t);
+    await openShellTab(t, 'Chat');
+    await pumpFor(t, const Duration(seconds: 2));
+    final ctl = ChatWiring.controller.value;
+    final radioId = ctl?.radioId;
+    if (ctl == null || radioId == null) _stepFail('chat-thread: Chat has no radio (the chat services did not start on the simulated radio)');
+
+    for (final (who, text) in [
+      ('Maya', 'Net check-in at 8, anyone near the bridge?'),
+      ('Maya', 'I can relay from the water tower if needed.'),
+      (person, 'Here. Signal is great from the north side tonight.'),
+      ('Sam W8SAM', 'Copy. I will be mobile on 33 heading east, listening on the hilltop repeater the whole way.'),
+      ('Sam W8SAM', 'ok'),
+      ('Maya', 'Thanks all. Starting the roll call in 5.'),
+    ]) {
+      radio.injectChannelMessage(0, who, text);
+      await pumpFor(t, const Duration(milliseconds: 400));
+    }
+    radio.injectDirectMessage(person, question);
+    await pumpFor(t, const Duration(seconds: 4));
+    final public = ctl.store.channels.list(radioId).where((c) => c.name == 'Public').firstOrNull;
+    if (public != null) {
+      ctl.send(public.convKey, 'On my way, 10 minutes out.');
+      await pumpFor(t, const Duration(seconds: 2));
+      radio.injectChannelMessage(0, 'Maya', 'See you there!');
+      ctl.send(public.convKey, 'Can someone check the hilltop battery?');
+      await pumpFor(t, const Duration(seconds: 3));
+    } else {
+      _stepNote('chat-thread', 'the simulated radio has no Public channel: no channel thread shot');
+    }
+    await waitInAppBannerGone(t);
+
+    // ---- the Chats list with the new conversation, then the direct thread.
+    final chatsSeg = find.byKey(const Key('segment-chats'));
+    if (chatsSeg.evaluate().isNotEmpty) {
+      await t.tap(chatsSeg.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+    }
+    await _until(t, () => ctl.conversationRows().any((r) => r.title == person), const Duration(seconds: 10));
+    final dm = ctl.conversationRows().where((r) => r.title == person).firstOrNull;
+    if (dm == null) _stepFail('chat-thread: the direct message from $person made no conversation');
+    await shot(t, 'chat-chats-with-messages');
+    var row = find.byKey(Key('conv-${dm.key}'));
+    if (row.evaluate().isEmpty) row = find.text(person);
+    if (!await waitFor(t, row, timeout: const Duration(seconds: 6))) _stepFail('chat-thread: no row for $person on the Chats list');
+    await waitInAppBannerGone(t);
+    await t.ensureVisible(row.first);
+    await pumpFor(t, const Duration(milliseconds: 400));
+    await t.tap(row.first, warnIfMissed: false);
+    if (!await waitFor(t, find.byKey(const Key('conv-list')), timeout: const Duration(seconds: 8))) _stepFail('chat-thread: the row of $person did not open the conversation');
+    await pumpFor(t, const Duration(seconds: 1));
+    await shot(t, 'chat-thread-dm');
+
+    // ---- the composer: text typed (the Send button and the counter), sent, then the quick replies.
+    final field = find.byKey(const Key('composer-field'));
+    if (field.evaluate().isEmpty) {
+      misses.add('the direct thread has no composer field');
+    } else {
+      await t.tap(field.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(milliseconds: 600));
+      await t.enterText(field.first, 'Yes, the 5 dBi on the mast. See you at 8.');
+      await pumpFor(t, const Duration(milliseconds: 600));
+      await shot(t, 'chat-composer-typing');
+      final send = find.byKey(const Key('composer-send'));
+      if (send.evaluate().isNotEmpty) {
+        await t.tap(send.first, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+        await shot(t, 'chat-thread-dm-sending');
+        await pumpFor(t, const Duration(seconds: 6));
+        await shot(t, 'chat-thread-dm-sent');
+      } else {
+        misses.add('the composer has no Send button');
+      }
+      final quick = find.byKey(const Key('composer-quick'));
+      if (quick.evaluate().isNotEmpty) {
+        await t.tap(quick.first, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+        if (find.byKey(const Key('quick-strip')).evaluate().isNotEmpty) await shot(t, 'chat-composer-quick-replies');
+        if (find.byKey(const Key('quick-strip')).evaluate().isNotEmpty) await t.tap(quick.first, warnIfMissed: false);
+      }
+      await _dismissKeyboard(t);
+    }
+
+    // ---- a tap on a received message: the info strip under it (route, signal).
+    final bubble = find.textContaining('long antenna tonight');
+    if (!await waitFor(t, bubble, timeout: const Duration(seconds: 5))) {
+      misses.add('the received message is not in the thread');
+    } else {
+      await t.ensureVisible(bubble.first);
+      await pumpFor(t, const Duration(milliseconds: 400));
+      await t.tap(bubble.first, warnIfMissed: false);
+      if (await waitFor(t, find.byKey(const Key('info-strip')), timeout: const Duration(seconds: 4))) {
+        await shot(t, 'chat-message-info-strip');
+        await t.tap(bubble.first, warnIfMissed: false); // a second tap folds it away
+        await pumpFor(t, const Duration(milliseconds: 600));
+      } else {
+        misses.add('a tap on a received message showed no info strip');
+      }
+
+      // ---- press and hold: the menu (the system context menu on iOS, an action sheet elsewhere), then Full details.
+      await _pressAndHold(t, bubble);
+      var details = _prefixed('menu-details-');
+      if (details.evaluate().isEmpty) details = find.byKey(const Key('act-details'));
+      if (details.evaluate().isEmpty) {
+        // Not open yet (a slow lift): one more, longer hold.
+        final g = await t.startGesture(t.getCenter(bubble.first));
+        await pumpFor(t, const Duration(seconds: 2));
+        await g.up();
+        await pumpFor(t, const Duration(seconds: 1));
+        details = _prefixed('menu-details-');
+        if (details.evaluate().isEmpty) details = find.byKey(const Key('act-details'));
+      }
+      if (details.evaluate().isNotEmpty) {
+        await shot(t, 'chat-message-menu');
+        await t.tap(details.first, warnIfMissed: false);
+      } else {
+        misses.add('press and hold on a message opened no menu');
+        // Full details is also on the info strip.
+        await t.tap(bubble.first, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+        final strip = find.byKey(const Key('strip-details'));
+        if (strip.evaluate().isNotEmpty) await t.tap(strip.first, warnIfMissed: false);
+      }
+      if (await waitFor(t, find.byKey(const Key('message-details')), timeout: const Duration(seconds: 8))) {
+        await pumpFor(t, const Duration(seconds: 1));
+        await shot(t, 'chat-message-details');
+        try {
+          await shootFullScroll(t, 'chat-message-details-scroll', within: find.byKey(const Key('message-details')), skipTop: true, max: 3);
+        } catch (_) {} // short enough to fit
+        final done = find.byKey(const Key('details-done'));
+        if (done.evaluate().isNotEmpty) {
+          await t.tap(done.first, warnIfMissed: false);
+          await pumpFor(t, const Duration(seconds: 1));
+        }
+        if (find.byKey(const Key('message-details')).evaluate().isNotEmpty) await _closeRouteOf(t, 'message-details');
+      } else {
+        misses.add('Full details did not open');
+      }
+    }
+
+    // ---- the person's profile (a tap on the thread's title).
+    final title = find.byKey(const Key('conv-title'));
+    if (title.evaluate().isNotEmpty) {
+      await waitInAppBannerGone(t);
+      await t.tap(title.first, warnIfMissed: false);
+    } else if (await _showAndTap(t, find.byKey(const Key('conv-menu-button')), wait: const Duration(seconds: 3))) {
+      await _showAndTap(t, find.byKey(const Key('menu-info')), wait: const Duration(seconds: 3));
+    }
+    if (await waitFor(t, find.byKey(const Key('contact-profile')), timeout: const Duration(seconds: 8))) {
+      await pumpFor(t, const Duration(seconds: 2));
+      await shot(t, 'chat-person-profile');
+      try {
+        await shootFullScroll(t, 'chat-person-profile-scroll', within: find.byKey(const Key('contact-profile')), skipTop: true, max: 4);
+      } catch (_) {} // fits one screen
+      final back = find.byKey(const Key('contact-back'));
+      if (back.evaluate().isNotEmpty) {
+        await t.tap(back.first, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+      }
+      if (find.byKey(const Key('contact-profile')).evaluate().isNotEmpty) await _closeRouteOf(t, 'contact-profile');
+    } else {
+      misses.add('the thread title did not open the profile of $person');
+    }
+    await popToRoots(t);
+    await openShellTab(t, 'Chat');
+
+    // ---- a channel thread: several people, own messages, the day separator.
+    if (public != null) {
+      final seg = find.byKey(const Key('segment-channels'));
+      if (seg.evaluate().isNotEmpty) {
+        await t.tap(seg.first, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+      }
+      var ch = find.byKey(Key('conv-${public.convKey}'));
+      if (ch.evaluate().isEmpty) ch = find.text('Public');
+      if (await waitFor(t, ch, timeout: const Duration(seconds: 6))) {
+        await waitInAppBannerGone(t);
+        await t.ensureVisible(ch.first);
+        await pumpFor(t, const Duration(milliseconds: 400));
+        await t.tap(ch.first, warnIfMissed: false);
+        if (await waitFor(t, find.byKey(const Key('conv-list')), timeout: const Duration(seconds: 8))) {
+          await pumpFor(t, const Duration(seconds: 2));
+          await shot(t, 'chat-thread-channel');
+        } else {
+          misses.add('the Public row did not open its thread');
+        }
+        await popToRoots(t);
+        await openShellTab(t, 'Chat');
+      } else {
+        misses.add('no Public row on the Channels list');
+      }
+    }
+
+    // ---- the New sheet, then its "To" page (New message).
+    if (chatsSeg.evaluate().isNotEmpty) {
+      await t.tap(chatsSeg.first, warnIfMissed: false);
+      await pumpFor(t, const Duration(seconds: 1));
+    }
+    await waitInAppBannerGone(t);
+    final newButton = find.byKey(const Key('chat-new'));
+    if (newButton.evaluate().isEmpty) {
+      misses.add('no New button on the Chat tab');
+    } else {
+      await t.tap(newButton.first, warnIfMissed: false);
+      if (await _awaitFirstKey(t, ['new-message', 'add-public', 'add-hashtag', 'new-to'], const Duration(seconds: 6)) == 'none') {
+        misses.add('the New button opened no sheet');
+      } else {
+        await pumpFor(t, const Duration(seconds: 1));
+        await shot(t, 'chat-new-sheet');
+        final message = find.byKey(const Key('new-message'));
+        if (message.evaluate().isNotEmpty) {
+          await t.tap(message.first, warnIfMissed: false);
+          if (await waitFor(t, find.byKey(const Key('new-to')), timeout: const Duration(seconds: 6))) {
+            await pumpFor(t, const Duration(seconds: 1));
+            await shot(t, 'chat-new-message-to');
+          } else {
+            misses.add('New message did not open the "To" page');
+          }
+        }
+      }
+      await _dismissKeyboard(t);
+      await popToRoots(t);
+    }
+    _failIfAny('chat-thread', misses);
+    _stepOk('chat-thread');
+  }, optional: true),
+  // ------------------------------------------------------------------ build 77: Leaderboard, Your progress (round 5, D-0)
+  ScreenStep('leaderboard', (t) async {
+    await popToRoots(t);
+    await _openMoreRow(t, 'more-leaderboard');
+    if (!await waitFor(t, find.byKey(const Key('leaderboard-screen')), timeout: const Duration(seconds: 8))) _stepFail('leaderboard: More > Leaderboard did not open');
+    await _settled(t, ['leaderboard-loading'], const Duration(seconds: 25));
+    await shot(t, 'leaderboard');
+    _stepNote('leaderboard', 'state: ${_firstKeyOf(t, ['leaderboard-error', 'leaderboard-offline', 'leaderboard-not-listed', 'leaderboard-loading'])} (none = a ranked list with this driver on it)');
+    try {
+      await shootFullScroll(t, 'leaderboard-scroll', within: find.byKey(const Key('leaderboard-screen')), skipTop: true, max: 3);
+    } catch (_) {} // a short list
+    if (find.byKey(const Key('leaderboard-error')).evaluate().isNotEmpty) _stepFail('leaderboard: the list shows its error view');
+    await popToRoots(t);
+    _stepOk('leaderboard');
+  }, optional: true),
+  // Your progress opens from its card above the Drives list (the card is only there once a drive is saved).
+  ScreenStep('progress', (t) async {
+    await popToRoots(t);
+    await openTab(t, 'Drives');
+    final card = find.byKey(const Key('open-progress'));
+    if (!await waitFor(t, card, timeout: const Duration(seconds: 6))) {
+      if (!_droveOk) throw const _Skip(); // no drive on this phone, so no card
+      _stepFail('progress: no Your progress card above the Drives list');
+    }
+    await t.ensureVisible(card.first);
+    await pumpFor(t, const Duration(milliseconds: 400));
+    await t.tap(card.first, warnIfMissed: false);
+    if (await _awaitFirstKey(t, ['progress-screen', 'progress-empty', 'progress-error'], const Duration(seconds: 15)) == 'none') {
+      _stepFail('progress: the card did not open Your progress');
+    }
+    await pumpFor(t, const Duration(seconds: 2));
+    await shot(t, 'progress');
+    try {
+      await shootFullScroll(t, 'progress-scroll', within: find.byKey(const Key('progress-screen')), skipTop: true, max: 8);
+    } catch (_) {} // one screen
+    if (find.byKey(const Key('progress-error')).evaluate().isNotEmpty) _stepFail('progress: Your progress shows its error view');
+    await popToRoots(t);
+    _stepOk('progress');
+  }, optional: true),
+  // ------------------------------------------------------------------ build 77: upload states and the delete confirm (round 5, D-0)
+  // The tour's own drive is a Simulator drive: it is never uploaded, so the list only ever showed "N not synced". Two copies
+  // of it are written to the drive store (same radio, so they are Simulator drives too and can never be sent), with every
+  // ping of one marked uploaded and a third of the other. The failed state is the app's own: one sync that cannot succeed
+  // (a drive id that does not exist, under a stand-in key that is put back at once), so nothing is sent to the server.
+  // Last step of the tour: it leaves three drives and a failed sync behind.
+  ScreenStep('drive-sync-states', (t) async {
+    final app = AppScope.of(t.element(find.byType(Scaffold).first));
+    final misses = <String>[];
+    await popToRoots(t);
+    await app.refreshSessions();
+    final src = app.sessions.where((x) => x.pingCount > 0 && x.session.endedAt != null).firstOrNull;
+    if (src == null) throw const _Skip(); // no drive this run (no simulated radio)
+    if (!src.session.isSimulated) {
+      // Never copy a real drive: a copy with made-up upload marks could reach the community map.
+      _stepNote('drive-sync-states', 'the newest drive is not a Simulator drive: no copies made, only the states this phone already has are shot');
+    } else if (_seededDrives.isEmpty) {
+      final store = app.services.store;
+      final pings = await store.pings(src.session.id);
+      final t0 = pings.first.ts;
+      Future<String> seed(String label, Duration ago, int laps, double uploadedShare) async {
+        final id = const Uuid().v4();
+        final start = src.session.startedAt.subtract(ago);
+        final ids = <String>[];
+        var last = start;
+        await store.startSession(DriveSession.fromJson({...src.session.toJson(), 'id': id, 'label': label, 'started_at': start.toIso8601String(), 'ended_at': null}));
+        for (var lap = 0; lap < laps; lap++) {
+          for (final p in pings) {
+            final pid = const Uuid().v4();
+            last = start.add(p.ts.difference(t0)).add(Duration(minutes: 4 * lap));
+            // A new id, a new place and time; the packet hash and tag belong to the real ping and are not copied.
+            await store.appendPing(
+                id,
+                DrivePing.fromJson({
+                  ...p.toJson(),
+                  'id': pid,
+                  'ts': last.toIso8601String(),
+                  'lat': p.lat + 0.0020 * lap,
+                  'lon': p.lon + 0.0026 * lap,
+                  'pkt_hash': null,
+                  'wire_tag': null,
+                  'tx_epoch_s': null,
+                }));
+            ids.add(pid);
+          }
+        }
+        await store.endSession(id, last.add(const Duration(seconds: 30)));
+        final n = (ids.length * uploadedShare).round().clamp(0, ids.length);
+        if (n > 0) await store.markSynced(id, ids.take(n));
+        return id;
+      }
+
+      _seededDrives['uploaded'] = await seed('Tour: uploaded', const Duration(hours: 3), 2, 1);
+      _seededDrives['partly'] = await seed('Tour: partly uploaded', const Duration(hours: 1), 4, 1 / 3);
+      await app.refreshSessions();
+    }
+    final uploaded = _seededDrives['uploaded'];
+    final partly = _seededDrives['partly'];
+    final waiting = src.session.id;
+
+    await openTab(t, 'Drives');
+    await pumpFor(t, const Duration(seconds: 2));
+    await shot(t, 'drives-upload-states');
+
+    Future<void> cardShot(String? id, String name) async {
+      if (id == null) return;
+      if (!await _showDriveCard(t, id)) {
+        misses.add('no card for the $name drive on the Drives list');
+        return;
+      }
+      await shot(t, 'drive-card-$name');
+    }
+
+    Future<void> detailShot(String? id, String name) async {
+      if (id == null || !await _showDriveCard(t, id)) return;
+      await t.tap(find.byKey(ValueKey('open-$id')).first, warnIfMissed: false);
+      if (!await waitFor(t, find.byKey(const Key('drive-detail')), timeout: const Duration(seconds: 10))) {
+        misses.add('the $name drive did not open its detail');
+        return;
+      }
+      await pumpFor(t, const Duration(seconds: 3));
+      await shot(t, 'drive-detail-$name');
+      // The upload line and its buttons sit under the map.
+      final scroll = find.byKey(const Key('detail-scroll'));
+      final sync = find.byKey(ValueKey('unsynced-$id'));
+      if (sync.evaluate().isNotEmpty) {
+        try {
+          await Scrollable.ensureVisible(t.element(sync.first), alignment: 0.3);
+          await pumpFor(t, const Duration(milliseconds: 500));
+          await shot(t, 'drive-detail-$name-upload-line');
+        } catch (_) {}
+      } else if (scroll.evaluate().isNotEmpty) {
+        try {
+          await shootFullScroll(t, 'drive-detail-$name-scroll', within: find.byKey(const Key('drive-detail')), skipTop: true, max: 1);
+        } catch (_) {}
+      }
+      await backOne(t);
+      if (find.byKey(const Key('drive-detail')).evaluate().isNotEmpty) await _closeRouteOf(t, 'drive-detail');
+    }
+
+    await cardShot(waiting, 'not-uploaded');
+    await cardShot(partly, 'partly-uploaded');
+    await cardShot(uploaded, 'uploaded');
+    await detailShot(partly, 'partly-uploaded');
+    await detailShot(uploaded, 'uploaded');
+
+    // ---- the delete confirm, both wordings: pings that would be lost, and nothing lost. Cancelled each time.
+    Future<void> deleteConfirm(String? id, String name) async {
+      if (id == null || !await _showDriveCard(t, id)) return;
+      final menu = find.byKey(ValueKey('menu-$id'));
+      if (menu.evaluate().isEmpty) {
+        misses.add('the $name drive card has no menu button');
+        return;
+      }
+      await t.tap(menu.first, warnIfMissed: false);
+      final delete = find.byKey(ValueKey('delete-$id'));
+      if (!await waitFor(t, delete, timeout: const Duration(seconds: 5))) {
+        misses.add('the menu of the $name drive has no Delete');
+        await popToRoots(t);
+        await openTab(t, 'Drives');
+        return;
+      }
+      if (name == 'partly-uploaded') await shot(t, 'drive-card-menu');
+      await t.tap(delete.first, warnIfMissed: false);
+      if (await waitFor(t, find.byKey(const Key('confirm-delete')), timeout: const Duration(seconds: 6))) {
+        await shot(t, 'drive-delete-confirm-$name');
+        final cancel = find.text('Cancel');
+        if (cancel.evaluate().isNotEmpty) {
+          await t.tap(cancel.last, warnIfMissed: false);
+          await pumpFor(t, const Duration(seconds: 1));
+        }
+        if (find.byKey(const Key('confirm-delete')).evaluate().isNotEmpty) await _closeRouteOf(t, 'confirm-delete');
+      } else {
+        misses.add('Delete on the $name drive asked nothing');
+      }
+      await app.refreshSessions();
+      if (!app.sessions.any((x) => x.session.id == id)) misses.add('the $name drive is gone after Cancel on the delete confirm');
+    }
+
+    await deleteConfirm(partly ?? waiting, partly == null ? 'not-uploaded' : 'partly-uploaded');
+    await deleteConfirm(uploaded, 'uploaded');
+
+    // ---- a failed sync, shown through the app's test seam: no key is set and nothing is sent to the server.
+    {
+      app.debugShowSyncFailed();
+      await pumpFor(t, const Duration(seconds: 1));
+      if (!app.lastSyncFailed) {
+        misses.add('the test seam did not put the app in its Sync failed state');
+      } else {
+        await popToRoots(t);
+        await openTab(t, 'Drives');
+        final list = t.stateList<ScrollableState>(find.descendant(of: _drivesList, matching: find.byType(Scrollable))).where((s) => s.axisDirection == AxisDirection.down).firstOrNull;
+        list?.position.jumpTo(0);
+        await pumpFor(t, const Duration(seconds: 1));
+        await shot(t, 'drives-sync-failed'); // the red banner over the list (and the toast, while it shows)
+        await pumpFor(t, const Duration(seconds: 5)); // the toast goes
+        await cardShot(partly ?? waiting, 'sync-failed');
+        await detailShot(partly ?? waiting, 'sync-failed');
+      }
+    }
+    await popToRoots(t);
+    _failIfAny('drive-sync-states', misses);
+    _stepOk('drive-sync-states');
   }, optional: true),
 ];
 

@@ -33,6 +33,7 @@ import '../core/driver_account.dart';
 import '../core/driver_summary.dart';
 import '../core/map_links.dart';
 import '../core/repeater_reach.dart';
+import '../core/time_format.dart' show activeTimeZone;
 import '../core/drive_store.dart' show ChunkedExport, TraceStore, closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
@@ -3247,6 +3248,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   String? get lastSyncMessage => _lastSyncMessage;
   bool _lastSyncFailed = false;
   bool get lastSyncFailed => _lastSyncFailed;
+  // Screenshot tour only: show the "Sync failed" state without running a sync (no key, no request).
+  @visibleForTesting
+  void debugShowSyncFailed() => _syncFailed(friendlyError(TimeoutException('upload timed out'), action: 'Sync'), null);
 
   // The server said "slow down" (429 / 503): no automatic upload until this time. A person pressing Sync still can.
   DateTime? _syncBackoffUntil;
@@ -3506,6 +3510,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _settings = const Settings();
       _notice = 'Settings couldn\'t be read, so defaults are in use.';
     }
+    activeTimeZone = _settings.timeZone; // build 77: one app-wide Time zone setting (lib/core/time_format.dart)
     // 0.5.0: the website moved off Lovable to MeshSonar's own server (same API and database), so a saved retired
     // address is rewritten to https://meshsonar.com and the driver key is kept (see lib/core/server_url.dart).
     final migrated = migratedServerUrl(_settings.serverUrl);
@@ -3633,6 +3638,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     final vaultStore = services.secretStore;
     final dropVaultHost = keyBefore != null && s.driverKey == null && radioProofCapable && vaultStore != null ? Uri.tryParse(_settings.serverUrl)?.host : null;
     _settings = s;
+    activeTimeZone = s.timeZone;
     if (dropVaultHost != null && dropVaultHost.isNotEmpty) unawaited(DriverKeyVault(vaultStore!).delete(dropVaultHost));
     if (_loaded) _applyObserverState(); // sharing switched: the heartbeat and the observer engine follow at once
     if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased

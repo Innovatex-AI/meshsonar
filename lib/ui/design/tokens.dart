@@ -79,8 +79,11 @@ abstract final class Layout {
   static const double sheetMaxWidth = 560;
 }
 
-/// Semantic colours for one theme. Names, not hexes: the hexes live in theme.dart palettes (plus the three chosen here,
-/// [bubbleOut], [bubbleOutText] and [warning], which are checked by test/ui/design/tokens_contrast_test.dart).
+/// Semantic colours for one theme. Names, not hexes: the hexes live in theme.dart palettes and its [ColourLanguage]
+/// (plus the two chosen here, [bubbleOut] and [bubbleOutText]); checked by test/ui/design/tokens_contrast_test.dart.
+///
+/// Build 77 colour language: selected = [accent] family (teal); amber = [warning] only; repeaters = [repeater]
+/// (neutral); friends = [friend]. [beacon] is the old repeater amber and is not for new code.
 class AppColors {
   final Brightness brightness;
   final Color bg, surface, surfaceHigh, outline, textPrimary, textMuted;
@@ -91,10 +94,19 @@ class AppColors {
   final Color bubbleOut, bubbleOutText;
   final Color beacon;
 
+  /// Repeaters: neutral slate (not amber). [repeaterTint] is the soft fill behind a repeater icon.
+  final Color repeater, repeaterTint;
+
+  /// Friend pins and friend rows: magenta, distinct from your own position ([accent]).
+  final Color friend;
+
+  /// The fill and text of a selected control (chip, segment, tonal button): the teal container.
+  final Color selected, onSelected;
+
   /// Destructive actions and Failed only.
   final Color danger;
 
-  /// Near a limit, default password, stale path.
+  /// Near a limit, default password, stale path. The only amber in the app.
   final Color warning;
 
   /// Success checks (the strong-signal green of the active palette).
@@ -113,6 +125,11 @@ class AppColors {
     required this.bubbleOut,
     required this.bubbleOutText,
     required this.beacon,
+    required this.repeater,
+    required this.repeaterTint,
+    required this.friend,
+    required this.selected,
+    required this.onSelected,
     required this.danger,
     required this.warning,
     required this.ok,
@@ -120,13 +137,12 @@ class AppColors {
 
   static const Color _bubbleLight = Color(0xFF00685E);
   static const Color _bubbleDark = Color(0xFF0A5C54);
-  static const Color _warningLight = Color(0xFFA14B00);
-  static const Color _warningDark = Color(0xFFFFA14A);
 
   factory AppColors.fromTheme(ThemeData t) {
     final cs = t.colorScheme;
     final mc = t.extension<MeshSonarColors>();
     final dark = t.brightness == Brightness.dark;
+    final lang = mc?.language ?? ColourLanguage.of(t.brightness);
     return AppColors(
       brightness: t.brightness,
       bg: cs.surfaceDim,
@@ -140,8 +156,13 @@ class AppColors {
       bubbleOut: dark ? _bubbleDark : _bubbleLight,
       bubbleOutText: Colors.white,
       beacon: mc?.beacon ?? cs.secondary,
+      repeater: lang.repeater,
+      repeaterTint: lang.repeaterTint,
+      friend: lang.friend,
+      selected: cs.secondaryContainer,
+      onSelected: cs.onSecondaryContainer,
       danger: cs.error,
-      warning: dark ? _warningDark : _warningLight,
+      warning: lang.warning,
       ok: mc?.levelStrong ?? const Color(0xFF2E9E5B),
     );
   }

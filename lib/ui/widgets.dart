@@ -3,24 +3,31 @@ import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
 import '../core/model.dart';
+import '../core/time_format.dart' as tf;
 import 'theme.dart';
 
 String two(int n) => n.toString().padLeft(2, '0');
 
-/// Local time, HH:MM:SS.
+// The two functions below are the pre-build-77 shapes, kept so current callers (some slice the text) keep working.
+// They follow Settings > Map & display > Time zone through lib/core/time_format.dart. New code calls time_format.dart
+// directly (timeOfDay, dateTime, ...).
+
+/// Time of day as HH:MM:SS in the chosen zone (the phone's by default); UTC mode adds " UTC".
 String formatTime(DateTime t) {
-  final l = t.toLocal();
-  return '${two(l.hour)}:${two(l.minute)}:${two(l.second)}';
+  final l = tf.wallClock(t);
+  return '${two(l.hour)}:${two(l.minute)}:${two(l.second)}${_utcSuffix()}';
 }
 
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/// e.g. "Fri 16 Oct 2026, 14:05".
+/// e.g. "Fri 16 Oct 2026, 14:05" in the chosen zone (the phone's by default); UTC mode adds " UTC".
 String formatDateTime(DateTime t) {
-  final l = t.toLocal();
+  final l = tf.wallClock(t);
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  return '${days[l.weekday - 1]} ${l.day} ${_months[l.month - 1]} ${l.year}, ${two(l.hour)}:${two(l.minute)}';
+  return '${days[l.weekday - 1]} ${l.day} ${_months[l.month - 1]} ${l.year}, ${two(l.hour)}:${two(l.minute)}${_utcSuffix()}';
 }
+
+String _utcSuffix() => tf.activeTimeZone == tf.TimeZonePreference.utc ? ' UTC' : '';
 
 String formatSnr(double? snr) => snr == null ? 'SNR —' : 'SNR ${snr.toStringAsFixed(1)} dB';
 
