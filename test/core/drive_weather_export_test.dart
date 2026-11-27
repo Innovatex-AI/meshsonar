@@ -60,11 +60,11 @@ void main() {
   test('PDF: weather section with hourly table and the licence line; none without weather', () async {
     ByteData font(String n) => ByteData.sublistView(File('assets/fonts/$n').readAsBytesSync());
     final fonts = ReportFonts(regular: font('Barlow-Regular.ttf'), bold: font('Barlow-SemiBold.ttf'));
-    final doc = driveReportPdf(_report(), title: 'Loop', units: Units.metric, weather: snaps, wall: (t) => t.subtract(const Duration(hours: 4)), zone: 'EDT');
+    final doc = driveReportPdf(_report(), title: 'Loop', units: Units.metric, weather: snaps);
     final text = pdfText(await renderReportPdf(doc, fonts: fonts, compress: false));
     expect(text, contains('Weather'));
     expect(text, contains('Hourly values'));
-    expect(text, contains('Hour (EDT)'));
+    expect(text, contains('Hour (UTC)'));
     expect(text, contains('Weather data by Open-Meteo.com (CC BY 4.0)'));
     expect(text, contains('not measured at your car'));
     final none = pdfText(await renderReportPdf(driveReportPdf(_report(), title: 'Loop', units: Units.metric), fonts: fonts, compress: false));

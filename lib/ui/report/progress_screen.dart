@@ -1,5 +1,5 @@
 // "Your progress": every drive stored on this phone rolled up (lib/core/personal_progress.dart): totals, ISO weeks
-// (Monday start, phone local time, zone named in the captions), distance / heard % / new grid cells / new repeaters
+// (Monday start, in the zone the app shows times in: Settings > Map & display > Time zone, named in the captions), distance / heard % / new grid cells / new repeaters
 // per week, personal records (tap one to open that drive's report) and "Your radio" (noise floor per drive and by hour
 // of day, TX power per drive), each chart with a Table view and its numbers in the semantics label.
 // Scope is said plainly at the top: drives stored on this phone. When the upload server offers `driver-summary` and the
@@ -9,9 +9,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
-import '../../core/drive_stats.dart' show formatDuration;
+import '../../core/drive_report.dart' show txPowerText;
+import '../../core/drive_stats.dart' show formatDuration, signalWords;
 import '../../core/personal_progress.dart';
 import '../../core/rf_thresholds.dart';
+import '../../core/time_format.dart' as tf;
 import '../../core/units.dart';
 import '../app.dart';
 import '../charts/bar_chart.dart';
@@ -28,15 +30,19 @@ void openProgress(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ProgressScreen()));
 
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/// A week's Monday, already a wall-clock date (personal_progress.dart): read its fields as they are.
 String _day(DateTime d) => '${_months[d.month - 1]} ${d.day}';
+
+/// An instant's day in the zone the app shows: "Nov 10".
+String _dayOf(DateTime t) => tf.dateOnly(t, year: false);
 String _db(double v) => v.toStringAsFixed(1);
 
 /// Weeks drawn in a chart (the table has every week).
 const int chartWeeks = 26;
 
-/// "ISO weeks start on Monday, your phone's local time (EDT)."
-String weeksCaption(DateTime now) =>
-    'Weeks start on Monday (${now.toLocal().timeZoneName}).';
+/// "Weeks start on Monday (EDT)." in the zone the app shows times in.
+String weeksCaption(DateTime now) => 'Weeks start on Monday (${tf.zoneLabel(at: now)}).';
 
 /// Distance as a plain number in the person's long-distance unit (km or mi), for bar heights.
 double _longUnits(double metres, Units u) => metres / u.metresPerLongUnit;
@@ -214,14 +220,14 @@ class _ProgressBody extends StatelessWidget {
       ('heard', 'Heard', p.heardPercent == null ? '—' : '${p.heardPercent}%'),
       ('cells', 'Cells mapped', groupInt(p.totalCells)),
       ('repeaters', 'Repeaters heard', groupInt(p.totalRepeaters)),
-      if (p.bestSnr != null) ('snr', 'Best SNR', '${_db(p.bestSnr!)} dB'),
+      if (p.bestSnr != null) ('snr', 'Best signal', signalWords(p.bestSnr)),
     ];
     return ListView(
       key: const Key('progress-list'),
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
       children: [
         Text(
-          '${p.drives.length} drive${p.drives.length == 1 ? '' : 's'} on this phone since ${formatDateTime(first)}.',
+          '${p.drives.length} drive${p.drives.length == 1 ? '' : 's'} on this phone since ${tf.dateTime(first, weekday: true)}.',
           key: const Key('progress-scope'),
           style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
         ),
@@ -322,7 +328,7 @@ class _WeekCharts extends StatelessWidget {
           labels: labels,
           labelEvery: every,
           yLabel: '%',
-          series: [BarSeries(name: 'Heard %', values: [for (final w in shown) w.heardPercent?.toDouble()], color: m.snrStrong)],
+          series: [BarSeries(name: 'Heard %', values: [for (final w in shown) w.heardPercent?.toDouble()], color: m.heardAt(1))],
         ),
       ),
       const SizedBox(height: Gap.l),
@@ -356,7 +362,7 @@ class _WeekCharts extends StatelessWidget {
           labels: labels,
           labelEvery: every,
           yLabel: 'repeaters',
-          series: [BarSeries(name: 'New repeaters', values: [for (final w in shown) w.newRepeaters.toDouble()], color: m.beacon)],
+          series: [BarSeries(name: 'New repeaters', values: [for (final w in shown) w.newRepeaters.toDouble()], color: m.repeater)],
         ),
       ),
     ]);
@@ -390,7 +396,7 @@ class _Records extends StatelessWidget {
       'best-heard': 'Best heard %',
       'most-new-cells': 'Most new cells',
       'most-repeaters': 'Most repeaters on one drive',
-      'best-snr': 'Best SNR',
+      'best-snr': 'Best signal',
     };
     return Column(key: const Key('progress-records'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Best drives', style: t.textTheme.titleMedium),
@@ -402,7 +408,7 @@ class _Records extends StatelessWidget {
           key: Key('progress-record-${r.id}'),
           contentPadding: EdgeInsets.zero,
           title: Text(names[r.id] ?? r.id),
-          subtitle: Text(driveLabel(s, r.drive.session.id, r.drive.session.label) ?? formatDateTime(r.drive.session.startedAt)),
+          subtitle: Text(driveLabel(s, r.drive.session.id, r.drive.session.label) ?? tf.dateTime(r.drive.session.startedAt, weekday: true)),
           trailing: Text(value(r), style: t.textTheme.titleSmall),
           onTap: r.drive.stats.pings == 0 ? null : () => openDriveReport(context, r.drive.session.id),
         ),
@@ -423,14 +429,18 @@ class _Radio extends StatelessWidget {
     final noise = progress.drivesWithNoise;
     final tx = progress.drivesWithTxPower;
     final hours = progress.noiseByHour;
-    String name(ProgressDrive d) => driveLabel(s, d.session.id, d.session.label) ?? formatDateTime(d.session.startedAt);
-    final zone = now.toLocal().timeZoneName;
+    String name(ProgressDrive d) => driveLabel(s, d.session.id, d.session.label) ?? tf.dateTime(d.session.startedAt, weekday: true);
+    final zone = tf.zoneLabel(at: now);
+    final m = MeshSonarColors.of(context);
+    // The noise floor is neutral, and the warning colour only where it is high (Round 5 D-14).
+    final noiseColor = t.colorScheme.onSurfaceVariant;
+    Color noiseAt(double dbm) => dbm > noiseFloorInterferenceDbm ? m.warning : noiseColor;
     final children = <Widget>[
       Text('Your radio', style: t.textTheme.titleMedium),
       const SizedBox(height: Gap.s),
     ];
     if (noise.isEmpty && tx.isEmpty) {
-      children.add(Text('Your radio has not reported a noise floor or TX power on any drive on this phone.',
+      children.add(Text('Your radio has not reported a noise floor or transmit power on any drive on this phone.',
           key: const Key('progress-radio-none'), style: t.textTheme.bodyMedium));
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
     }
@@ -451,14 +461,14 @@ class _Radio extends StatelessWidget {
         ]),
         chart: TimeLineChart(
           series: [
-            ChartSeries(name: 'Noise floor', points: [for (final d in noise) (d.session.startedAt, d.noiseMedianDbm!)], color: t.colorScheme.tertiary),
+            ChartSeries(name: 'Noise floor', points: [for (final d in noise) (d.session.startedAt, d.noiseMedianDbm!)], color: noiseColor),
           ],
           yLabel: 'dBm',
           refLine: noiseFloorInterferenceDbm,
           refLabel: '${noiseFloorInterferenceDbm.round()} dBm',
           includeLo: meds.reduce((a, b) => a < b ? a : b),
-          dotColor: (_) => t.colorScheme.tertiary,
-          xFormat: (d) => _day(d.toLocal()),
+          dotColor: noiseAt,
+          xFormat: _dayOf,
         ),
       ));
       if (hours.isNotEmpty) {
@@ -470,21 +480,21 @@ class _Radio extends StatelessWidget {
           ..add(ChartFrame(
             id: 'progress-noise-hour',
             title: 'Noise floor by hour of day (mean dBm)',
-            summary: 'Noisiest ${peak.hour.toString().padLeft(2, '0')}:00, ${_db(peak.meanDbm)} dBm; quietest '
-                '${calm.hour.toString().padLeft(2, '0')}:00, ${_db(calm.meanDbm)} dBm. ${hours.length} of 24 hours have readings.',
-            caption: 'Every reading on every drive, by the hour of your phone\'s local time ($zone). Bars start at '
+            summary: 'Noisiest ${tf.hourOfDayLabel(peak.hour)}, ${_db(peak.meanDbm)} dBm; quietest '
+                '${tf.hourOfDayLabel(calm.hour)}, ${_db(calm.meanDbm)} dBm. ${hours.length} of 24 hours have readings.',
+            caption: 'Every reading on every drive, by the hour of the day ($zone). Bars start at '
                 '${noiseBaseDbm.round()} dBm; taller is noisier. No bar = no readings in that hour.',
             table: ChartTable(head: const ['Hour', 'Mean (dBm)', 'Readings'], rows: [
-              for (final h in hours) ['${h.hour.toString().padLeft(2, '0')}:00', _db(h.meanDbm), '${h.n}'],
+              for (final h in hours) [tf.hourOfDayLabel(h.hour), _db(h.meanDbm), '${h.n}'],
             ]),
             chart: BarChart(
-              labels: [for (var h = 0; h < 24; h++) '$h'],
+              labels: [for (var h = 0; h < 24; h++) tf.hourOfDayLabel(h)],
               labelEvery: 6,
               base: noiseBaseDbm,
               refLine: noiseFloorInterferenceDbm,
               yLabel: 'dBm',
-              series: [BarSeries(name: 'Noise', values: [for (var h = 0; h < 24; h++) byHour[h]?.meanDbm], color: t.colorScheme.tertiary)],
-              colorOf: (i, v) => v > noiseFloorInterferenceDbm ? t.colorScheme.error : null,
+              series: [BarSeries(name: 'Noise', values: [for (var h = 0; h < 24; h++) byHour[h]?.meanDbm], color: noiseColor)],
+              colorOf: (i, v) => noiseAt(v),
             ),
           ));
       }
@@ -494,24 +504,24 @@ class _Radio extends StatelessWidget {
     }
     children.add(const SizedBox(height: Gap.l));
     if (tx.isEmpty) {
-      children.add(Text('No drive on this phone recorded the TX power.', key: const Key('progress-tx-none'), style: t.textTheme.bodyMedium));
+      children.add(Text('No drive on this phone recorded the transmit power.', key: const Key('progress-tx-none'), style: t.textTheme.bodyMedium));
     } else {
       final levels = {for (final d in tx) d.txDbm!};
       if (levels.length == 1) {
-        children.add(Text('TX power ${_db(levels.single)} dBm on all ${tx.length} drive${tx.length == 1 ? '' : 's'} that recorded it.',
+        children.add(Text('Transmit power: ${txPowerText(levels.single)} on all ${tx.length} drive${tx.length == 1 ? '' : 's'} that recorded it.',
             key: const Key('progress-tx-constant'), style: t.textTheme.bodyMedium));
       } else {
         children.add(ChartFrame(
           id: 'progress-txpower',
-          title: 'TX power per drive (dBm)',
+          title: 'Transmit power per drive (dBm)',
           summary: '${tx.length} drives, from ${_db(levels.reduce((a, b) => a < b ? a : b))} to ${_db(levels.reduce((a, b) => a > b ? a : b))} dBm.',
           caption: 'The power most of each drive\'s pings were sent at. One point per drive, at its start.',
-          table: ChartTable(head: const ['Drive', 'TX power (dBm)'], rows: [for (final d in tx) [name(d), _db(d.txDbm!)]]),
+          table: ChartTable(head: const ['Drive', 'Transmit power (dBm)'], rows: [for (final d in tx) [name(d), _db(d.txDbm!)]]),
           chart: TimeLineChart(
             series: [ChartSeries(name: 'TX power', points: [for (final d in tx) (d.session.startedAt, d.txDbm!)], color: t.colorScheme.primary)],
             yLabel: 'dBm',
             dotColor: (_) => t.colorScheme.primary,
-            xFormat: (d) => _day(d.toLocal()),
+            xFormat: _dayOf,
           ),
         ));
       }
@@ -530,8 +540,8 @@ class ProgressCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final c = t.colorScheme;
-    final monday = isoMonday(now.toLocal());
-    final week = [for (final x in sessions) if (!isoMonday(x.session.startedAt.toLocal()).isBefore(monday)) x];
+    final monday = isoMonday(tf.wallClock(now));
+    final week = [for (final x in sessions) if (!isoMonday(tf.wallClock(x.session.startedAt)).isBefore(monday)) x];
     final tx = week.fold<int>(0, (a, x) => a + x.txCount);
     final heard = week.fold<int>(0, (a, x) => a + x.heardCount);
     final pings = week.fold<int>(0, (a, x) => a + x.pingCount);

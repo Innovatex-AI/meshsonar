@@ -52,7 +52,7 @@ void main() {
     await show(tester, h, const YourDrivesSection(repeaterKey: key, lat: 40.101, lon: -82.931));
     expect(find.text('From drives stored on this phone.'), findsOneWidget);
     expect(_text(tester, 'your-drives-heard'), '3 times on 2 of 3 drives (2 direct)');
-    expect(_text(tester, 'your-drives-best'), '7.5 dB (Morning)');
+    expect(_text(tester, 'your-drives-best'), 'Strong (7.5 dB) (Morning)');
     expect(_text(tester, 'your-drives-cells'), '3');
     expect(_text(tester, 'your-drives-farthest'), '3.0 km from the repeater');
     expect(find.byKey(const Key('your-drives-map')), findsOneWidget);

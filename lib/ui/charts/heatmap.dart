@@ -3,6 +3,8 @@
 // Semantics label with the busiest cell (analysis_panel.dart _Heatmap).
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' show hourOfDayLabel;
+
 /// 7 rows (Sun..Sat) x 24 columns; cell opacity scales with packets relative to the busiest cell.
 class HeatmapPainter extends CustomPainter {
   final List<List<int>> grid;
@@ -26,7 +28,8 @@ class HeatmapPainter extends CustomPainter {
     }
 
     for (var h = 0; h < 24; h += 6) {
-      text('$h', Offset(left + h * cw, 0));
+      // The hour as the phone shows hours ("6 AM" or "06:00"); the caller names the zone in its caption.
+      text(hourOfDayLabel(h), Offset(left + h * cw, 0));
     }
     for (var d = 0; d < 7; d++) {
       text(days[d], Offset(8, top + d * ch + (ch - 11) / 2));

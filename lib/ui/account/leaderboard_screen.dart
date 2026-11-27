@@ -4,9 +4,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/region_stats_api.dart';
+import '../../core/time_format.dart' as tf;
 import '../app.dart';
 import '../region/stats_panel.dart' show LeaderboardView, regionStatsApiFactory;
-import '../widgets.dart' show formatDateTime;
+import '../settings_screen.dart' show SettingsScreen;
 
 Future<void> openLeaderboard(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LeaderboardScreen()));
@@ -146,7 +147,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   if (b.offlineAsOf != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: Gap.s),
-                      child: Text('Saved copy from ${formatDateTime(b.offlineAsOf!)}. Pull down to update.',
+                      child: Text('Saved copy from ${tf.dateTime(b.offlineAsOf!, weekday: true)}. Pull down to update.',
                           key: const Key('leaderboard-offline'), style: t.textTheme.bodySmall),
                     ),
                   LeaderboardView(b, highlight: mine.isEmpty ? null : mine),
@@ -156,12 +157,40 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       child: Text('You are not on this list. Drivers appear after they opt in and drive.',
                           key: const Key('leaderboard-not-listed'), textAlign: TextAlign.center, style: t.textTheme.bodySmall),
                     ),
+                  // Round 5 D-9: the way in, where the list says how to get on it.
+                  if (!listed) const _JoinLeaderboard(),
                 ]);
               },
             ),
           ]),
         ),
       ),
+    );
+  }
+}
+
+/// "Join the leaderboard": opens Settings at the leaderboard switch (Account > How you appear), with one line on what it
+/// needs and what it shows.
+class _JoinLeaderboard extends StatelessWidget {
+  const _JoinLeaderboard();
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: Gap.m),
+      child: Column(children: [
+        FilledButton.tonalIcon(
+          key: const Key('leaderboard-join'),
+          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: () => Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen(initialSection: 'profile-leaderboard'))),
+          icon: const Icon(Icons.emoji_events_outlined),
+          label: const Text('Join the leaderboard'),
+        ),
+        const SizedBox(height: Gap.xs),
+        Text('It needs an approved driver key, and it shows your callsign and your distance.',
+            key: const Key('leaderboard-join-note'), textAlign: TextAlign.center, style: t.textTheme.bodySmall),
+      ]),
     );
   }
 }

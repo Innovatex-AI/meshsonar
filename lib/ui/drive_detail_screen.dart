@@ -1,25 +1,35 @@
-// One saved drive: map of the whole route, stats, repeaters heard, and every ping with its echoes.
+// One saved drive, its home (Round 5 D-10): the verdict, the map of the whole route, the upload state, Share, four
+// tiles (Pings, Heard, Distance, Duration), repeaters heard, the latest pings (each opens the ping; "All N pings" opens
+// the Ping log) and a row to the report, which holds the analysis. The menu is the drive card's (D-7).
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
 import '../core/api.dart';
 import '../core/model.dart';
+import '../core/time_format.dart' as tf;
 import 'app.dart';
 import 'drive/drive_timing_card.dart';
 import 'drive_detail_map.dart';
 import 'drive_stats.dart';
 import 'onboarding/ui_prefs.dart';
-import 'report/drive_report_screen.dart';
+import 'ping_detail_sheet.dart' show showPingDetail;
 import 'ping_log_screen.dart';
-import 'report_problem_screen.dart';
+import 'repeater_detail_sheet.dart' show showRepeaterDetail;
+import 'report/drive_report_screen.dart';
+import 'report/drive_share.dart' show showDriveShareSheet;
 import 'sessions_screen.dart';
 import 'widgets.dart';
-import 'design/app_surfaces.dart';
 import 'design/app_symbols.dart';
 
 void openDriveDetail(BuildContext context, String sessionId) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DriveDetailScreen(sessionId: sessionId)));
 }
+
+/// A repeater's short id as every drive screen prints it: upper case ("F5"), like the report and the map.
+String repeaterIdText(String id) => id.toUpperCase();
+
+/// A repeater's name, or its short id in upper case.
+String repeaterNameOrId(AppState s, String id) => s.repeaterName(id) ?? repeaterIdText(id);
 
 class DriveDetailScreen extends StatefulWidget {
   final String sessionId;
@@ -31,8 +41,9 @@ class DriveDetailScreen extends StatefulWidget {
 class _DriveDetailScreenState extends State<DriveDetailScreen> {
   Future<List<DrivePing>>? _pings;
   int _loadedCount = -1;
-  bool _showAll = false;
-  static const _pageSize = 60;
+
+  /// Pings listed on this screen, newest first; "All N pings" opens the Ping log with every one and its filters.
+  static const pingsShown = 20;
 
   void _ensureLoaded(AppState s, SessionSummary? x) {
     final n = x?.pingCount ?? 0;
@@ -70,7 +81,8 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
         return Scaffold(
           key: const Key('drive-detail'),
           appBar: AppBar(
-            title: Text(label ?? 'Drive', maxLines: 1, overflow: TextOverflow.ellipsis),
+            // The name, or the short date: said once (the header below carries the verdict, not the name again).
+            title: Text(label ?? tf.shortDateTime(ses.startedAt), key: const Key('detail-title'), maxLines: 1, overflow: TextOverflow.ellipsis),
             actions: [
               TextButton.icon(
                 key: const Key('detail-report'),
@@ -78,29 +90,13 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
                 icon: const Icon(Icons.insights),
                 label: const Text('Report'),
               ),
-              // Build 76: Rename and Delete moved into the one menu (four app-bar buttons squeezed the title to "Dri…" on a
-              // 375 pt phone, and a bin sat one slip away from the pencil).
               IconButton(
                 key: const Key('detail-more'),
                 tooltip: 'More',
                 icon: const AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24),
                 onPressed: () async {
                   final nav = Navigator.of(context);
-                  final v = await showAppActionSheet<String>(
-                    context,
-                    actions: [
-                      const AppAction('Rename', 'rename', key: Key('detail-rename')),
-                      const AppAction('Report a problem with this drive', 'report', key: Key('detail-more-report')),
-                      if (!active) const AppAction('Delete drive', 'delete', destructive: true, key: Key('detail-delete')),
-                    ],
-                  );
-                  if (!context.mounted) return;
-                  if (v == 'report') openReportProblem(context, driveId: ses.id);
-                  if (v == 'rename') await renameDrive(context, summary);
-                  if (v == 'delete') {
-                    if (!context.mounted) return;
-                    if (await runDriveAction(context, 'delete', summary)) nav.maybePop();
-                  }
+                  if (await showDriveMenu(context, summary, active: active, onDetail: true)) nav.maybePop();
                 },
               ),
             ],
@@ -118,7 +114,8 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
               final pings = List.of(snap.data!)..sort((a, b) => a.ts.compareTo(b.ts));
               final st = DriveStats.of(ses, pings);
               final newestFirst = pings.reversed.toList();
-              final shown = _showAll ? newestFirst : newestFirst.take(_pageSize).toList();
+              final shown = newestFirst.take(pingsShown).toList();
+              void openRepeater(String id) => showRepeaterDetail(context, id: id, lookup: s.lookup, pings: pings);
               return SafeArea(
                 top: false,
                 child: CustomScrollView(
@@ -142,6 +139,7 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
                       ),
                     ),
                     SliverToBoxAdapter(child: _Header(summary: summary, label: label, stats: st)),
+                    SliverToBoxAdapter(child: _UploadLine(summary: summary)),
                     SliverToBoxAdapter(child: _Actions(summary: summary)),
                     SliverToBoxAdapter(child: _StatsGrid(stats: st)),
                     SliverToBoxAdapter(child: DriveTimingCard(state: s, sessionId: ses.id)),
@@ -155,16 +153,38 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
                       ),
                     SliverList.builder(
                       itemCount: shown.length,
-                      itemBuilder: (context, i) => _PingRow(ping: shown[i]),
+                      itemBuilder: (context, i) => _PingRow(
+                        ping: shown[i],
+                        onTap: () => showPingDetail(context, ping: shown[i], lookup: s.lookup, onRepeaterTap: openRepeater),
+                      ),
                     ),
-                    if (!_showAll && newestFirst.length > _pageSize)
+                    if (pings.isNotEmpty)
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: OutlinedButton(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                          child: OutlinedButton.icon(
                             key: const Key('show-all-pings'),
-                            onPressed: () => setState(() => _showAll = true),
-                            child: Text('Show all ${newestFirst.length} pings'),
+                            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                            onPressed: () => openPingLog(context, sessionId: ses.id),
+                            icon: const Icon(Icons.list_alt),
+                            label: Text('All ${pings.length} ping${pings.length == 1 ? '' : 's'}'),
+                          ),
+                        ),
+                      ),
+                    if (summary.pingCount > 0)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
+                          child: Card(
+                            margin: EdgeInsets.zero,
+                            child: ListTile(
+                              key: const Key('detail-report-row'),
+                              leading: const Icon(Icons.insights),
+                              title: const Text('Signal, charts and new cells'),
+                              subtitle: const Text('The drive report'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => openDriveReport(context, ses.id),
+                            ),
                           ),
                         ),
                       ),
@@ -180,6 +200,9 @@ class _DriveDetailScreenState extends State<DriveDetailScreen> {
   }
 }
 
+/// "External antenna" / "Internal antenna": one spelling on the detail screen and the report.
+String? antennaText(String? type) => type == null ? null : '${type == 'external' ? 'External' : 'Internal'} antenna';
+
 class _Header extends StatelessWidget {
   final SessionSummary summary;
   final String? label;
@@ -191,20 +214,72 @@ class _Header extends StatelessWidget {
     final t = Theme.of(context);
     final ses = summary.session;
     final lines = <String>[
-      if (label != null) formatDateTime(ses.startedAt),
+      // The app bar has the name or the short date; a named drive's date and time go here, once.
+      if (label != null) tf.dateTime(ses.startedAt, weekday: true),
       if (ses.channel != null) ses.channel!,
       if (ses.companion.name != null) ses.companion.name!,
-      if (ses.antenna.type != null) '${ses.antenna.type == 'external' ? 'External' : 'Internal'} antenna',
+      ?antennaText(ses.antenna.type),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-      // The name gets the full width (build 76: the sync badge beside it broke the date over two lines).
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label ?? formatDateTime(ses.startedAt), maxLines: 2, overflow: TextOverflow.ellipsis, style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        Text(DriveVerdict.ofStats(stats).line,
+            key: const Key('detail-verdict'), style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 2),
         if (lines.isNotEmpty) Text(lines.join(' · '), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-        const SizedBox(height: 6),
-        SyncBadge(summary: summary),
+      ]),
+    );
+  }
+}
+
+/// The upload state, shown once (Round 5 D-4): "12 of 40 uploaded" with Upload; "Uploaded" as a quiet line when done;
+/// without an approved key, what that means and Check key (D-3).
+class _UploadLine extends StatelessWidget {
+  final SessionSummary summary;
+  const _UploadLine({required this.summary});
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = Theme.of(context);
+    final id = summary.session.id;
+    final kind = uploadBadgeKind(s, summary);
+    final Widget? action = switch (kind) {
+      UploadBadgeKind.waiting || UploadBadgeKind.failed => TextButton.icon(
+          key: const Key('detail-sync'),
+          style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
+          onPressed: () => s.syncSession(id),
+          icon: const Icon(Icons.cloud_upload_outlined),
+          label: Text(summary.unsyncedCount > 0 ? 'Upload ${summary.unsyncedCount}' : 'Upload name'),
+        ),
+      UploadBadgeKind.phoneOnly => TextButton.icon(
+          key: const Key('detail-check-key'),
+          style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
+          onPressed: () => openDriverKeySettings(context),
+          icon: const Icon(Icons.key_outlined),
+          label: const Text('Check key'),
+        ),
+      UploadBadgeKind.uploading => const Padding(
+          padding: EdgeInsets.all(12),
+          child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      _ => null,
+    };
+    final n = summary.unsyncedCount;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 8, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Align(alignment: Alignment.centerLeft, child: UploadBadge(summary: summary))),
+          ?action,
+        ]),
+        if (kind == UploadBadgeKind.phoneOnly)
+          Text(
+            n > 0
+                ? '$n ping${n == 1 ? '' : 's'} saved on this phone. Uploads start when your driver key is approved.'
+                : 'The new name is saved on this phone. Uploads start when your driver key is approved.',
+            key: const Key('detail-phone-only'),
+            style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+          ),
       ]),
     );
   }
@@ -215,57 +290,16 @@ class _Actions extends StatelessWidget {
   const _Actions({required this.summary});
   @override
   Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final id = summary.session.id;
-    final syncing = s.isSyncing(id) || s.isSyncing('*');
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-      child: Row(children: [
-        Expanded(
-          child: FilledButton.icon(
-            key: const Key('detail-sync'),
-            style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 52),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                textStyle: const TextStyle(fontSize: 16)),
-            onPressed: (syncing || !summary.hasSomethingToSync) ? null : () => s.syncSession(id),
-            icon: syncing
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(summary.hasSomethingToSync ? Icons.cloud_upload : Icons.cloud_done),
-            label: Text(summary.unsyncedCount > 0
-                ? 'Sync ${summary.unsyncedCount}'
-                : summary.sessionResendPending
-                    ? 'Sync name'
-                    : 'Synced'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            key: const Key('detail-export'),
-            style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 52),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                textStyle: const TextStyle(fontSize: 16)),
-            onPressed: () => s.exportAndShare(id),
-            icon: const Icon(Icons.ios_share),
-            label: const Text('Export'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            key: const Key('detail-ping-log'),
-            style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 52),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                textStyle: const TextStyle(fontSize: 16)),
-            onPressed: () => openPingLog(context, sessionId: id),
-            icon: const Icon(Icons.list_alt),
-            label: const Text('Ping log'),
-          ),
-        ),
-      ]),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: OutlinedButton.icon(
+        // One Share sheet (Round 5 D-6): Report (PDF), Summary (text), Spreadsheet (CSV), Drive file (for re-upload).
+        key: const Key('detail-export'),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), textStyle: const TextStyle(fontSize: 16)),
+        onPressed: () => showDriveShareSheet(context, summary.session.id),
+        icon: const Icon(Icons.ios_share),
+        label: const Text('Share'),
+      ),
     );
   }
 }
@@ -277,16 +311,12 @@ class _StatsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final st = stats;
-    String snr(double? v) => v == null ? '—' : '${v.toStringAsFixed(1)} dB';
+    // Four tiles (Round 5 D-10). Signal, hops and the charts are the report's job.
     final tiles = <(String, String, String)>[
       ('Pings', '${st.pings}', 'stat-pings'),
       ('Heard', st.heardPercent == null ? '—' : '${st.heardPercent}%', 'stat-heard-pct'),
       ('Distance', AppScope.unitsOf(context).distance(st.distanceM), 'stat-distance'),
       ('Duration', formatDuration(st.duration), 'stat-duration'),
-      ('Best SNR', snr(st.bestSnr), 'stat-best-snr'),
-      ('Median SNR', snr(st.medianSnr), 'stat-median-snr'),
-      ('Repeaters', '${st.repeaters.length}', 'stat-repeaters'),
-      ('Multi-hop', '${st.multiHopEchoes}', 'stat-multihop'),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -377,20 +407,20 @@ class _Repeaters extends StatelessWidget {
               key: ValueKey('repeater-${r.repeater}'),
               dense: false,
               leading: CircleAvatar(
-                backgroundColor: m.beacon.withValues(alpha: 0.16),
-                child: Icon(Icons.cell_tower, color: m.beacon, size: 20),
+                backgroundColor: m.repeaterTint,
+                child: Icon(Icons.cell_tower, color: m.repeater, size: 20),
               ),
-              title: Text(s.repeaterName(r.repeater) ?? r.repeater,
+              title: Text(repeaterNameOrId(s, r.repeater),
                   style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text([
-                  if (s.repeaterName(r.repeater) != null) r.repeater,
-                  if (r.bestSnr != null) 'best ${formatSnr(r.bestSnr)}',
+                  if (s.repeaterName(r.repeater) != null) repeaterIdText(r.repeater),
+                  if (r.bestSnr != null) 'best ${signalWords(r.bestSnr)}',
                 ].join(' · ')),
                 const SizedBox(height: 4),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(3),
-                  child: LinearProgressIndicator(value: r.pings / max, minHeight: 5, color: m.beacon),
+                  child: LinearProgressIndicator(value: r.pings / max, minHeight: 5, color: m.repeater, backgroundColor: m.repeaterTint),
                 ),
               ]),
               trailing: Text('${r.pings}×',
@@ -402,83 +432,57 @@ class _Repeaters extends StatelessWidget {
   }
 }
 
+/// One line per ping (Round 5 D-12): dot, time, "1 repeater · Strong" (or "Heard nothing"), chevron. Tap opens the ping.
 class _PingRow extends StatelessWidget {
   final DrivePing ping;
-  const _PingRow({required this.ping});
+  final VoidCallback onTap;
+  const _PingRow({required this.ping, required this.onTap});
   @override
   Widget build(BuildContext context) {
-    final s = AppScope.of(context);
     final t = Theme.of(context);
     final nothing = ping.heardNothing;
     final rx = ping.kind == PingKind.rx;
     final snr = bestSnr(ping);
+    final n = repeatersHeard(ping).length;
     final title = rx
         ? 'Heard a packet'
         : nothing
             ? 'Heard nothing'
-            : '${repeatersHeard(ping).length} repeater${repeatersHeard(ping).length == 1 ? '' : 's'} · ${formatSnr(snr)}';
+            : '$n repeater${n == 1 ? '' : 's'}${snr == null ? '' : ' · ${signalWord(snr)}'}';
     return Padding(
-      key: ValueKey('detail-ping-${ping.id}'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      child: Container(
-        decoration: BoxDecoration(
-          color: t.colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              width: 10,
-              height: 10,
-              margin: const EdgeInsets.only(right: 10),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: MeshSonarColors.of(context).forPing(heard: !nothing, snr: snr),
-              ),
-            ),
-            Text(formatTime(ping.ts),
-                style: t.textTheme.labelLarge?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-            const SizedBox(width: 12),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
-          ]),
-          for (final e in ping.echoes)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Material(
+        color: t.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('detail-ping-${ping.id}'),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
               child: Row(children: [
-                Icon(Icons.cell_tower, size: 15, color: MeshSonarColors.of(context).beacon),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(children: [
-                      TextSpan(text: s.repeaterLabel(e.repeater), style: const TextStyle(fontWeight: FontWeight.w600)),
-                      if (s.repeaterName(e.repeater) != null)
-                        TextSpan(text: '  ${e.repeater}', style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
-                    ]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Container(
+                  width: 10,
+                  height: 10,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: MeshSonarColors.of(context).forPing(heard: !nothing, snr: snr),
                   ),
                 ),
-                Text(
-                  [formatSnr(e.snrDb), if (e.hops != null) '${e.hops} hop${e.hops == 1 ? '' : 's'}'].join(' · '),
-                  style: t.textTheme.bodySmall,
-                ),
-              ]),
-            ),
-          if (ping.neighbor != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 4),
-              child: Row(children: [
-                Icon(Icons.swap_horiz, size: 16, color: t.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 6),
+                Text(tf.timeOfDay(ping.ts, seconds: true),
+                    style: t.textTheme.labelLarge?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text('Neighbor ${s.repeaterLabel(ping.neighbor!.repeater)}',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
-                Text(formatSnr(ping.neighbor!.localSnrDb), style: t.textTheme.bodySmall),
+                Icon(Icons.chevron_right, size: 20, color: t.colorScheme.onSurfaceVariant),
               ]),
             ),
-        ]),
+          ),
+        ),
       ),
     );
   }

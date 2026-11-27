@@ -31,7 +31,9 @@ void main() {
     await openReport(tester, h, 'rf');
     await tester.tap(find.byKey(const Key('report-export')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('PDF shows where you drove (grid cells)'), findsOneWidget);
+    // Round 5 D-6: the one Share sheet; its note names what holds the exact track.
+    expect(find.textContaining('The report shows where you drove (grid cells)'), findsOneWidget);
+    expect(find.text('Drive file (for re-upload)'), findsOneWidget);
     await tester.tap(find.byKey(const Key('report-export-pdf')));
     await tester.pump();
     await settleIo(tester, () => h.shared.isNotEmpty);
@@ -54,6 +56,7 @@ void main() {
     expect(find.byKey(const Key('report-export-pdf')), findsNothing);
     expect(find.byKey(const Key('report-export-csv')), findsNothing);
     expect(find.byKey(const Key('report-export-text')), findsOneWidget);
+    expect(find.byKey(const Key('share-drive-file')), findsOneWidget);
   });
 
   testWidgets('region export sheet: PDF bytes with the region file name', (tester) async {

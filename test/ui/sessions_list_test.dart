@@ -62,7 +62,7 @@ void main() {
     expect(find.text('Heard 0%'), findsNothing);
   });
 
-  testWidgets('drive card shows duration, distance, heard strip and sync badge; Sync all', (tester) async {
+  testWidgets('drive card shows the verdict, duration, distance, heard strip and upload state; Upload all', (tester) async {
     useTallScreen(tester);
     final h = Harness()..approveKey();
     h.store.seed(
@@ -88,19 +88,26 @@ void main() {
     expect(find.text('42 min'), findsOneWidget);
     expect(find.text('1.1 km'), findsOneWidget);
     expect(find.byKey(const ValueKey('strip-d1')), findsOneWidget);
-    expect(find.text('2 not synced'), findsOneWidget);
-    expect(find.text('All synced'), findsOneWidget);
+    // Round 5 D-1: one line saying how the drive went (decision 7: 50% heard is Patchy).
+    expect(find.text('Patchy: heard on 1 of 2 pings, mostly good'), findsOneWidget);
+    expect(find.text('Nothing answered'), findsOneWidget);
+    // D-4: plain words, no pill; decision 9: "Upload", never "Sync".
+    expect(find.text('Not uploaded yet'), findsOneWidget);
+    expect(find.text('Uploaded'), findsOneWidget);
     expect(find.text('2 pings waiting to upload'), findsOneWidget);
+    expect(find.text('Upload all'), findsOneWidget);
+    expect(find.textContaining('Sync'), findsNothing);
+    expect(find.textContaining('synced'), findsNothing);
 
     await tester.tap(find.byKey(const Key('sync-all')));
     await tester.pumpAndSettle();
     expect(h.sync.syncAllCalls, 1);
-    expect(find.text('All synced'), findsNWidgets(2));
+    expect(find.text('Uploaded'), findsNWidgets(2));
     expect(find.byKey(const Key('sync-all')), findsNothing);
     await tester.pump(const Duration(seconds: 10));
   });
 
-  testWidgets('sync failure shows a Sync failed badge', (tester) async {
+  testWidgets('upload failure shows an Upload failed note', (tester) async {
     useTallScreen(tester);
     final h = Harness()..approveKey();
     h.sync.failWith = 'network error';
@@ -111,6 +118,80 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sync-d1')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('sync-failed-d1')), findsOneWidget);
+    expect(find.text('· Upload failed'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+  });
+
+  testWidgets('partly uploaded reads "1 of 3 uploaded", not the same as never uploaded', (tester) async {
+    useTallScreen(tester);
+    final h = Harness()..approveKey();
+    h.store.seed(DriveSession(id: 'd1', startedAt: DateTime.utc(2026, 10, 15, 14), endedAt: DateTime.utc(2026, 10, 15, 14, 5)),
+        [at('a', 40, -82.9, 0, const []), at('b', 40.001, -82.9, 30, const []), at('c', 40.002, -82.9, 60, const [])],
+        syncedFirst: 1);
+    await h.pumpApp(tester);
+    await openDrivesTab(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 3 uploaded'), findsOneWidget);
+    expect(find.byKey(const ValueKey('sync-d1')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+  });
+
+  testWidgets('without an approved key: saved on this phone, Check key, no Upload button that only shows a toast', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    h.store.seed(DriveSession(id: 'd1', startedAt: DateTime.utc(2026, 10, 15, 14)), [at('p', 40, -82, 0, const []), at('q', 40, -82, 30, const [])]);
+    await h.pumpApp(tester);
+    await openDrivesTab(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('2 pings saved on this phone. Uploads start when your driver key is approved.'), findsOneWidget);
+    expect(find.byKey(const Key('check-key')), findsOneWidget);
+    expect(find.byKey(const Key('sync-all')), findsNothing);
+    expect(find.byKey(const ValueKey('sync-d1')), findsNothing);
+    expect(find.text('On this phone only'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+  });
+
+  testWidgets('Report on the card opens the report; the menu has Share and Diagnostic files', (tester) async {
+    useTallScreen(tester);
+    final h = Harness()..approveKey();
+    h.store.seed(DriveSession(id: 'd1', startedAt: DateTime.utc(2026, 10, 15, 14), endedAt: DateTime.utc(2026, 10, 15, 14, 5)),
+        [at('p', 40, -82, 0, const [Echo(repeater: 'aa', snrDb: 6)])]);
+    await h.pumpApp(tester);
+    await openDrivesTab(tester);
+    await tester.pumpAndSettle();
+    // Round 5 D-5: Share moved off the card into the menu.
+    expect(find.byKey(const ValueKey('export-d1')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('card-report-d1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drive-report')), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // D-7: the one menu.
+    await tester.tap(find.byKey(const ValueKey('menu-d1')));
+    await tester.pumpAndSettle();
+    for (final k in ['menu-report-d1', 'menu-share-d1', 'rename-d1', 'menu-problem-d1', 'menu-diagnostics-d1', 'delete-d1']) {
+      expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
+    }
+    await tester.tap(find.byKey(const ValueKey('menu-diagnostics-d1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('menu-trace-d1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('menu-map-health-d1')), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    // D-6: one Share sheet with four rows; the drive file is the old Export.
+    await tester.tap(find.byKey(const ValueKey('menu-d1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('menu-share-d1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Report (PDF)'), findsOneWidget);
+    expect(find.text('Summary (text)'), findsOneWidget);
+    expect(find.text('Spreadsheet (CSV)'), findsOneWidget);
+    expect(find.text('Drive file (for re-upload)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('share-drive-file')));
+    await tester.pumpAndSettle();
+    expect(h.shared.single.path, endsWith('.json'));
     await tester.pump(const Duration(seconds: 10));
   });
 

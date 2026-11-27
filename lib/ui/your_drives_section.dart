@@ -10,12 +10,13 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/heard.dart';
 import '../core/repeater_history.dart';
+import '../core/time_format.dart' as tf;
 import 'app.dart';
 import 'map/coverage_map.dart' show CoverageMap;
 import 'onboarding/ui_prefs.dart' show driveLabel;
 import 'report/drive_report_screen.dart' show openDriveReport;
 import 'report/local_drives.dart';
-import 'widgets.dart';
+import '../core/drive_stats.dart' show signalWords;
 import 'map/node_symbol.dart';
 
 /// Drives listed under the facts before "and N more".
@@ -117,14 +118,14 @@ class _YourDrivesSectionState extends State<YourDrivesSection> {
           key: const Key('your-drives-none'),
           style: t.textTheme.bodyMedium);
     }
-    String name(RepeaterDriveHit d) => driveLabel(s, d.session.id, d.session.label) ?? formatDateTime(d.session.startedAt);
+    String name(RepeaterDriveHit d) => driveLabel(s, d.session.id, d.session.label) ?? tf.dateTime(d.session.startedAt, weekday: true);
     final bestDrive = h.bestSnr == null ? null : h.drives.firstWhere((d) => d.bestSnr == h.bestSnr, orElse: () => h.drives.first);
     final facts = <(String, String, String)>[
       ('heard', 'Heard', '${h.hearings} time${h.hearings == 1 ? '' : 's'} on ${h.drives.length} of ${h.drivesSearched} drives'
           '${h.direct > 0 ? ' (${h.direct} direct)' : ''}'),
-      ('best', 'Best SNR', h.bestSnr == null ? 'not measured' : '${h.bestSnr!.toStringAsFixed(1)} dB${bestDrive == null ? '' : ' (${name(bestDrive)})'}'),
-      ('last', 'Last heard', formatDateTime(h.lastAt!)),
-      ('first', 'First heard', formatDateTime(h.firstAt!)),
+      ('best', 'Best signal', h.bestSnr == null ? 'not measured' : '${signalWords(h.bestSnr)}${bestDrive == null ? '' : ' (${name(bestDrive)})'}'),
+      ('last', 'Last heard', tf.dateTime(h.lastAt!, weekday: true)),
+      ('first', 'First heard', tf.dateTime(h.firstAt!, weekday: true)),
       if (h.farthestM != null) ('farthest', 'Farthest', '${u.distance(h.farthestM!)} from the repeater'),
       ('cells', 'Grid cells', '${h.cells.length}'),
     ];
@@ -159,8 +160,8 @@ class _YourDrivesSectionState extends State<YourDrivesSection> {
           contentPadding: EdgeInsets.zero,
           title: Text(name(d)),
           subtitle: Text('${d.hearings} time${d.hearings == 1 ? '' : 's'} in ${d.cells.length} cell${d.cells.length == 1 ? '' : 's'}'
-              ', last ${formatTime(d.lastAt).substring(0, 5)}'),
-          trailing: Text(d.bestSnr == null ? 'SNR —' : 'best ${d.bestSnr!.toStringAsFixed(1)} dB'),
+              ', last ${tf.timeOfDay(d.lastAt)}'),
+          trailing: Text(d.bestSnr == null ? 'Signal —' : 'best ${signalWords(d.bestSnr)}'),
           onTap: () => openDriveReport(context, d.session.id),
         ),
       if (h.drives.length > yourDrivesListed)

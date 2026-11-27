@@ -28,7 +28,7 @@ Future<void> openSettings(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'rejected pings show as "N rejected", not "not synced", and do not enable Sync',
+    'rejected pings show as "N rejected", not as waiting, and do not enable Upload',
     (tester) async {
       useTallScreen(tester);
       final h = Harness()..approveKey();
@@ -44,10 +44,10 @@ void main() {
 
       expect(find.byKey(const ValueKey('rejected-d1')), findsOneWidget);
       expect(find.text('· 2 rejected'), findsOneWidget);
-      expect(find.textContaining('not synced'), findsNothing);
+      expect(find.textContaining('not uploaded'), findsNothing);
       expect(
         tester.widget<Text>(find.byKey(const ValueKey('unsynced-d1'))).data,
-        'Synced',
+        'Uploaded',
       );
       // Build 76: with nothing waiting there is no Sync at all (it used to sit greyed out), on the card or in its menu.
       expect(find.byKey(const ValueKey('sync-d1')), findsNothing);
@@ -65,34 +65,35 @@ void main() {
       h.store.pingsBySession['d1']!.add(silentPing('p5'));
       await h.state.refreshSessions();
       await tester.pumpAndSettle();
+      // Round 5 D-4: how much is up, out of what can go up (rejected pings never do).
       expect(
         tester.widget<Text>(find.byKey(const ValueKey('unsynced-d1'))).data,
-        '1 not synced',
+        '3 of 4 uploaded',
       );
       expect(find.text('· 2 rejected'), findsOneWidget);
-      // Build 76: a labelled "Sync" button (it was a bare icon).
+      // A labelled "Upload" button (decision 9: "Upload", not "Sync").
       expect(
         tester
             .widget<ButtonStyleButton>(find.byKey(const ValueKey('sync-d1')))
             .onPressed,
         isNotNull,
       );
-      expect(find.descendant(of: find.byKey(const ValueKey('sync-d1')), matching: find.text('Sync')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('sync-d1')), matching: find.text('Upload')), findsOneWidget);
 
       // The detail screen agrees.
       await tester.tap(find.byKey(const ValueKey('open-d1')));
       await tester.pumpAndSettle();
-      expect(find.text('Sync 1'), findsOneWidget);
+      expect(find.text('Upload 1'), findsOneWidget);
       await tester.tap(find.byKey(const Key('detail-sync')));
       await tester.pumpAndSettle();
-      expect(find.text('Synced'), findsWidgets);
+      expect(find.text('Uploaded'), findsWidgets);
       expect(find.text('· 2 rejected'), findsOneWidget);
       await tester.pump(const Duration(seconds: 10));
     },
   );
 
   testWidgets(
-    'rename saves into the drive and the next Sync uploads the name',
+    'rename saves into the drive and the next upload sends the name',
     (tester) async {
       useTallScreen(tester);
       final h = Harness()..approveKey();
@@ -101,7 +102,7 @@ void main() {
       await openDrives(tester);
       expect(
         tester.widget<Text>(find.byKey(const ValueKey('unsynced-d1'))).data,
-        'All synced',
+        'Uploaded',
       );
       // Build 76: with nothing waiting there is no Sync at all (it used to sit greyed out), on the card or in its menu.
       expect(find.byKey(const ValueKey('sync-d1')), findsNothing);
@@ -118,7 +119,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('rename-d1')));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('sent to the server on the next sync'),
+        find.textContaining('sent to the server on the next upload'),
         findsOneWidget,
       );
       await tester.enterText(
@@ -132,7 +133,7 @@ void main() {
       expect(find.text('Route 3 north'), findsOneWidget);
       expect(
         tester.widget<Text>(find.byKey(const ValueKey('unsynced-d1'))).data,
-        'Name not synced',
+        'Name not uploaded yet',
       );
       expect(find.text('1 drive name waiting to upload'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('sync-d1')));
@@ -140,7 +141,7 @@ void main() {
       expect(h.sync.syncedSessions, ['d1']);
       expect(
         tester.widget<Text>(find.byKey(const ValueKey('unsynced-d1'))).data,
-        'All synced',
+        'Uploaded',
       );
       await tester.pump(const Duration(seconds: 10));
     },

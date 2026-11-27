@@ -11,7 +11,9 @@ import '../app/app_state.dart';
 import '../core/api.dart';
 import '../core/heard.dart';
 import '../core/model.dart';
+import '../core/time_format.dart' as tf;
 import 'app.dart';
+import 'onboarding/ui_prefs.dart' show driveLabel;
 import 'ping_detail_sheet.dart';
 import 'repeater_detail_sheet.dart';
 import 'repeater_widgets.dart';
@@ -73,7 +75,7 @@ class _PingLogScreenState extends State<PingLogScreen> {
       for (final e in s.sessions) {
         if (e.session.id == widget.sessionId) x = e;
       }
-      subtitle = x == null ? 'Saved drive' : (x.session.label ?? formatDateTime(x.session.startedAt));
+      subtitle = x == null ? 'Saved drive' : (driveLabel(s, x.session.id, x.session.label) ?? tf.dateTime(x.session.startedAt, weekday: true));
     }
     return Scaffold(
       key: const Key('ping-log'),
@@ -257,7 +259,7 @@ class PingLogRow extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text(formatTime(ping.ts),
+                Text(tf.timeOfDay(ping.ts, seconds: true),
                     style: t.textTheme.labelLarge?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                 const SizedBox(width: Gap.m),
                 Expanded(
@@ -300,7 +302,7 @@ class _RepChip extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 190),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: mc.beacon.withValues(alpha: 0.12),
+        color: mc.repeaterTint,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [

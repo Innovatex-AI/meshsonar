@@ -15,10 +15,21 @@ import '../charts/bar_chart.dart';
 import '../charts/chart_frame.dart';
 import '../charts/time_line_chart.dart';
 import '../settings/data_sharing.dart' show contextDestinationLine;
-import '../widgets.dart';
+import '../../core/time_format.dart' as tf;
+import 'drive_report_sections.dart' show timesCaption;
 
-const _localTime = 'Times are your phone\'s local time.';
-String _hm(DateTime t) => formatTime(t).substring(0, 5);
+String _hm(DateTime t) => tf.timeOfDay(t, showZone: false);
+
+/// "iPhone, iOS 27.2" for the hardware identifier "iPhone19,2" and "ios" "27.2": the kind of phone and the system, in
+/// words (the identifier is a model code a person cannot read).
+String phoneWords(DeviceDetails d) {
+  final m = d.model;
+  final kind = m == null
+      ? null
+      : RegExp(r'^(iPhone|iPad|iPod)').firstMatch(m)?.group(1) ?? m;
+  final os = switch (d.os?.toLowerCase()) { 'ios' => 'iOS', 'ipados' => 'iPadOS', 'android' => 'Android', 'macos' => 'macOS', final o => o };
+  return [kind, if (os != null) '$os ${d.osVersion ?? ''}'.trim()].whereType<String>().join(', ');
+}
 const _minLine = 3;
 
 /// Loads [sessionId]'s context; null when the drive store keeps none.
@@ -138,7 +149,7 @@ class _ContextBody extends StatelessWidget {
         yLabel: u.pressureUnit,
         color: pal[0],
         caption: 'Measured inside the car by the phone (cabin pressure, close to outside pressure); not a weather '
-            'station. $_localTime',
+            'station. ${timesCaption()}',
       ));
     }
     if (r.altitudeM.isNotEmpty) {
@@ -151,7 +162,7 @@ class _ContextBody extends StatelessWidget {
         yLabel: u.heightUnit,
         color: pal[2],
         caption: '${r.medianAltitudeAccuracyM == null ? '' : 'Median vertical accuracy ${u.shortLength(r.medianAltitudeAccuracyM!)}. '}'
-            'One value per ping. $_localTime',
+            'One value per ping. ${timesCaption()}',
       ));
     }
     if (r.phoneBatteryPct.isNotEmpty) {
@@ -166,7 +177,7 @@ class _ContextBody extends StatelessWidget {
         caption: [
           if (r.phoneBatteryStates.isNotEmpty) 'Seen: ${r.phoneBatteryStates.map((s) => s.name).join(', ')}.',
           if (r.lowPowerSeen) 'Low Power Mode was on.',
-          _localTime,
+          timesCaption(),
         ].join(' '),
       ));
     }
@@ -179,7 +190,7 @@ class _ContextBody extends StatelessWidget {
         text: (mv) => '${(mv / 1000).toStringAsFixed(2)} V',
         yLabel: 'V',
         color: pal[1],
-        caption: 'From the radio\'s own battery reading, once a minute. $_localTime',
+        caption: 'From the radio\'s own battery reading, once a minute. ${timesCaption()}',
       ));
     }
     if (r.radioTempC.isNotEmpty) {
@@ -191,7 +202,7 @@ class _ContextBody extends StatelessWidget {
         text: (c) => u.temperature(c),
         yLabel: u.temperatureUnit,
         color: pal[4],
-        caption: 'The radio\'s processor temperature from its own telemetry, not air temperature. $_localTime',
+        caption: 'The radio\'s processor temperature from its own telemetry, not air temperature. ${timesCaption()}',
       ));
     }
     if (r.tempBands.isNotEmpty) {
@@ -206,7 +217,8 @@ class _ContextBody extends StatelessWidget {
         id: 'ctx-temp-bands',
         title: 'Noise floor and SNR by radio temperature',
         summary: '$summary.',
-        caption: 'Mean per ${bandWidthC.round()}-degree band (°C) of the radio chip temperature; bars show the mean noise '
+        caption: 'Mean per ${(u.temperatureValue(bandWidthC) - u.temperatureValue(0)).round()}-degree band '
+            '(${u.temperatureUnit}) of the radio chip temperature; bars show the mean noise '
             'floor above -130 dBm. SNR is the best reply per ping. Few pings in a band = a weak signal.',
         startWithTable: r.tempBands.length < 2,
         table: ChartTable(head: const ['Radio temperature', 'Pings', 'Noise floor (dBm)', 'Best SNR (dB)'], rows: [
@@ -224,14 +236,12 @@ class _ContextBody extends StatelessWidget {
     final tiles = <(String, String, String)>[
       if (r.lastUptimeS != null) ('Radio uptime', formatDuration(Duration(seconds: r.lastUptimeS!)), 'ctx-uptime'),
       if (r.airtimePct != null) ('Radio airtime (TX + RX)', '${r.airtimePct!.toStringAsFixed(1)}%', 'ctx-airtime'),
-      if (r.packetsSent != null) ('Radio sent / heard', '${r.packetsSent} / ${r.packetsReceived}', 'ctx-packets'),
+      if (r.packetsSent != null) ('Radio packets', '${r.packetsSent} sent, ${r.packetsReceived} heard', 'ctx-packets'),
       if (r.storageTotalKb != null) ('Radio storage used', '${r.storageUsedKb} of ${r.storageTotalKb} KB', 'ctx-storage'),
       if (r.errFlags != null)
         ('Radio error flags', r.errFlags == 0 ? 'none seen' : describeErrFlags(r.errFlags!).join('; '), 'ctx-err-flags'),
       if (r.device != null)
-        ('Phone', [r.device!.model, if (r.device!.os != null) '${r.device!.os} ${r.device!.osVersion ?? ''}'.trim()]
-            .whereType<String>()
-            .join(', '), 'ctx-device'),
+        ('Phone', phoneWords(r.device!), 'ctx-device'),
       if (r.companion != null)
         ('Radio', [
           r.companion!.model,
@@ -285,7 +295,7 @@ class _ContextBody extends StatelessWidget {
       summary: summary,
       caption: caption,
       startWithTable: points.length < _minLine,
-      table: ChartTable(head: ['Time', yLabel], rows: [for (final p in points) [formatTime(p.$1), text(p.$2)]]),
+      table: ChartTable(head: ['Time', yLabel], rows: [for (final p in points) [tf.timeOfDay(p.$1, seconds: true, showZone: false), text(p.$2)]]),
       chart: TimeLineChart(
         series: [ChartSeries(name: title, points: [for (final p in points) (p.$1, value(p.$2))], color: color)],
         yLabel: yLabel,

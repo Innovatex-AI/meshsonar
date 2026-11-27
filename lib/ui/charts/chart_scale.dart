@@ -4,14 +4,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// Round tick values covering [lo]..[hi] (about [count] of them), e.g. (-97, -71) -> [-100, -90, -80, -70].
-List<double> niceTicks(double lo, double hi, {int count = 4}) {
+/// [minStep]: the smallest step allowed; dB and dBm axes pass 1 so a narrow range reads -114, -113 rather than
+/// -113.3, -113.5 (Round 5 D-15).
+List<double> niceTicks(double lo, double hi, {int count = 4, double minStep = 0}) {
   if (!lo.isFinite || !hi.isFinite) return const [];
   if (hi < lo) (lo, hi) = (hi, lo);
   if (hi - lo < 1e-9) return [lo];
   final raw = (hi - lo) / math.max(1, count);
   final mag = math.pow(10, (math.log(raw) / math.ln10).floor()).toDouble();
   final norm = raw / mag;
-  final step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+  var step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+  if (step < minStep) step = minStep;
   final start = (lo / step).floor();
   final end = (hi / step - 1e-9).ceil();
   final out = <double>[];
@@ -21,8 +24,18 @@ List<double> niceTicks(double lo, double hi, {int count = 4}) {
   return out;
 }
 
-/// Tick label: whole numbers without decimals, otherwise one decimal.
-String tickLabel(double v) => v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+/// The step [niceTicks] gives for an axis whose label is [yLabel]: whole numbers for dB and dBm.
+double minTickStepFor(String? yLabel) => yLabel != null && yLabel.contains('dB') ? 1 : 0;
+
+/// Tick label: whole numbers without decimals, otherwise as many decimals as the value needs (0.25, not 0.3).
+String tickLabel(double v) {
+  if (v == v.roundToDouble()) return v.round().toString();
+  for (var d = 1; d <= 3; d++) {
+    final s = v.toStringAsFixed(d);
+    if ((double.parse(s) - v).abs() < 1e-9) return s;
+  }
+  return v.toStringAsFixed(3);
+}
 
 void drawDashedH(Canvas canvas, double x0, double x1, double y, Paint p, {double dash = 4, double gap = 4}) {
   for (var x = x0; x < x1; x += dash + gap) {
