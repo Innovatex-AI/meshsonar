@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/analyze_api.dart';
 import 'package:meshsonar/core/analyze_model.dart';
+import 'package:meshsonar/core/time_format.dart';
 import 'package:meshsonar/ui/region/analyze_panel.dart';
 
 Object fx(String n) => jsonDecode(File('test/fixtures/analyze/$n.json').readAsStringSync()) as Object;
@@ -74,6 +75,13 @@ Map<String, dynamic> withStatus(String file, Map<String, Object?> status, {Objec
 }
 
 void main() {
+  // A fixed "phone" five hours behind UTC (EST), so the times shown do not depend on the machine running the test.
+  setUp(() => debugLocalClock = (utc) {
+        final w = utc.subtract(const Duration(hours: 5));
+        return (wall: DateTime(w.year, w.month, w.day, w.hour, w.minute, w.second), abbr: 'EST');
+      });
+  tearDown(() => debugLocalClock = null);
+
   group('ready: the screen numbers are the endpoint numbers', () {
     testWidgets('findings, health, traffic and gate', (t) async {
       final calls = <String, int>{};
@@ -114,7 +122,7 @@ void main() {
       expect(find.textContaining('812 of 1,000'), findsWidgets);
       expect(statText(t, 'Hop codes known'), '812 of 1,000');
       expect(statText(t, 'Match rate'), '81%');
-      // "Updated" in the region zone (America/New_York in November = EST, not UTC)
+      // "Updated" in the phone's time (build 77: Findings follows Settings > Time zone; the test phone is EST)
       expect(find.text('Updated Nov 10, 2026, 10:50 PM EST'), findsNWidgets(4));
     });
 
@@ -144,9 +152,16 @@ void main() {
       expect(find.text('No findings for this region.'), findsOneWidget);
     });
 
-    testWidgets('no time zone says UTC (not the phone zone)', (t) async {
-      await pump(t, api({}), tz: null);
+    testWidgets('times follow the Time zone setting, not the region zone: UTC when set to UTC', (t) async {
+      activeTimeZone = TimeZonePreference.utc;
+      addTearDown(() => activeTimeZone = TimeZonePreference.phone);
+      await pump(t, api({}));
       expect(find.text('Updated Nov 11, 2026, 3:50 AM UTC'), findsWidgets);
+    });
+
+    testWidgets('a region with no time zone still shows the phone\'s time', (t) async {
+      await pump(t, api({}), tz: null);
+      expect(find.text('Updated Nov 10, 2026, 10:50 PM EST'), findsWidgets);
     });
   });
 
