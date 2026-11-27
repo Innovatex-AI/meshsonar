@@ -80,7 +80,7 @@ void main() {
       fail = false;
       await tester.tap(find.byKey(const Key('export-retry')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Offline - as of 2h ago'), findsOneWidget);
+      expect(find.textContaining('Offline - as of 2 h ago'), findsOneWidget);
     });
   });
 }

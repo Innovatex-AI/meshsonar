@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/region_overview_api.dart';
+import '../../core/time_format.dart' show relativeTime;
 import '../theme.dart';
 import '../widgets.dart';
 
@@ -10,31 +11,10 @@ import '../widgets.dart';
 RegionOverviewApi Function(String baseUrl) regionApiFactory = (b) =>
     RegionOverviewApi(b);
 
-String agoText(DateTime? t, {DateTime? now}) {
-  if (t == null) return 'never';
-  final d = (now ?? DateTime.now()).toUtc().difference(t.toUtc());
-  if (d.inSeconds < 90) return 'just now';
-  if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-  if (d.inHours < 48) return '${d.inHours} h ago';
-  return '${d.inDays} d ago';
-}
-
-/// A time as HH:MM:SS UTC (packet times are shown in UTC, like the website).
-String clockUtc(DateTime? t) {
-  if (t == null) return 'unknown';
-  final u = t.toUtc();
-  String p(int n) => n.toString().padLeft(2, '0');
-  return '${p(u.hour)}:${p(u.minute)}:${p(u.second)} UTC';
-}
-
-const _monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/// A date and time in UTC, "Nov 8 14:03:09 UTC".
-String dayUtc(DateTime? t) {
-  if (t == null) return 'unknown';
-  final u = t.toUtc();
-  return '${_monthsShort[u.month - 1]} ${u.day} ${clockUtc(u)}';
-}
+/// "5 min ago", "never" for no time: the app's one wording for an age (lib/core/time_format.dart relativeTime). Kept
+/// for the screens that still call it by this name. The UTC clock helpers that were here (clockUtc, dayUtc) are gone
+/// since build 77: every time of day follows Settings > Map & display > Time zone (Round 2 N-U8).
+String agoText(DateTime? t, {DateTime? now}) => relativeTime(t, now: now, ifNull: 'never');
 
 String groupInt(int n) {
   final s = n.abs().toString();

@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'region_dataset_fetch.dart';
 import 'region_overview_api.dart' show RegionDataStatus;
 import 'rf_thresholds.dart';
+import 'time_format.dart' show utcHourLabel;
 
 class RfPoint {
   final DateTime at; // UTC, bucket start
@@ -105,7 +106,7 @@ class RegionRf {
     String when = '';
     if (hours.isNotEmpty) {
       final top = hours.reduce((a, b) => b.meanDbm! > a.meanDbm! ? b : a);
-      when = ' Across observers it is highest at ${hourText?.call(top.hour) ?? '${top.hour.toString().padLeft(2, '0')}:00 UTC'}.';
+      when = ' Across observers it is highest at ${hourText?.call(top.hour) ?? utcHourLabel(top.hour)}.';
     }
     final ref = noiseFloorInterferenceDbm.round();
     if (loud > 0) {

@@ -322,6 +322,8 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('trace-obs-1')));
     expect(find.text('MS Westside'), findsOneWidget);
     expect(find.textContaining('outside source'), findsOneWidget);
+    // Round 2 N-U8: the time follows the app's setting, and "UTC UTC" is gone.
+    expect(find.textContaining('UTC UTC'), findsNothing);
     expect(tester.getSize(find.byKey(const Key('trace-obs-0'))).height, greaterThanOrEqualTo(44));
     expect(tester.takeException(), isNull);
     await tapKey(tester, 'trace-back-to-list');

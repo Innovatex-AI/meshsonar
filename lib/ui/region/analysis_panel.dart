@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../core/region_analysis_api.dart';
 import '../charts/heatmap.dart';
 import '../theme.dart';
+import '../../core/time_format.dart' show hourOfDayLabel, zoneLabel;
 import 'region_common.dart';
 
 class AnalysisPanel extends StatefulWidget {
@@ -308,11 +309,11 @@ class _Heatmap extends StatelessWidget {
         ),
       ),
       const SizedBox(height: Gap.s),
-      Text('Last 7 days, your phone\'s local time. Busiest: ${days[pd]} ${_hour(ph)} ($peak packets).',
+      Text('Last 7 days, times in ${zoneLabel()}. Busiest: ${days[pd]} ${_hour(ph)} ($peak packets).',
           style: t.textTheme.bodySmall),
     ]);
   }
 
-  static String _hour(int h) => '${h % 12 == 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}';
+  static String _hour(int h) => hourOfDayLabel(h);
 }
 
