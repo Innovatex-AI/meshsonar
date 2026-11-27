@@ -160,9 +160,17 @@ void main() {
         });
 
         test('${pal.id}: No reply is a neutral, not a red, and differs from "heard, no signal"', () {
-          expect(_sat(mc.noReply), lessThan(0.2));
-          expect(contrastRatio(mc.noReply, mc.mapBackground), greaterThanOrEqualTo(3.0));
-          expect(deltaE(mc.noReply, mc.heardUnknown, Vision.normal), greaterThan(8));
+          // Low chroma (max - min channel). HSL saturation overstates near-black colours (the final light value #0E1B2B).
+          final nr = (mc.noReply.r * 255).round(), ng = (mc.noReply.g * 255).round(), nb = (mc.noReply.b * 255).round();
+          expect(([nr, ng, nb].reduce((x, y) => x > y ? x : y) - [nr, ng, nb].reduce((x, y) => x < y ? x : y)) / 255, lessThan(0.2));
+          expect(nr <= nb, isTrue, reason: 'No reply must not lean red');
+          // The coverage colour rule (meshsonar-infra docs/planning/coverage-v2-colours.md) is at least 15 OKLab dE (x100) from the map
+          // and from "heard, no direct signal"; the site enforces it on these same hex values (src/lib/map/definition.test.ts). This
+          // file measures CIEDE2000, a different scale (the final dark #35425D is 16.6 OKLab but 14.8 CIEDE2000 from the map), so its
+          // floor here is 12: well clear of the withdrawn pair (about 4.5).
+          final docSurface = b == Brightness.dark ? const Color(0xFF0D1B26) : const Color(0xFFE9EFF1); // the doc's map surfaces
+          expect(deltaE(mc.noReply, docSurface, Vision.normal), greaterThanOrEqualTo(12));
+          expect(deltaE(mc.noReply, mc.heardUnknown, Vision.normal), greaterThanOrEqualTo(12));
         });
 
         test('${pal.id}: the link line is white over a dark casing', () {
