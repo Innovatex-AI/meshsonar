@@ -236,7 +236,7 @@ class SignalBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final n = barsFor(rssi);
-    final on = n >= 3 ? c.primary : (n == 2 ? MeshSonarColors.of(context).beacon : c.error);
+    final on = n >= 3 ? c.primary : (n == 2 ? MeshSonarColors.of(context).warning : c.error);
     return Semantics(
       label: rssi == null ? 'Signal unknown' : 'Signal $n of 4',
       child: SizedBox(

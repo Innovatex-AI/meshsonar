@@ -552,9 +552,9 @@ ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.st
     // Build 77 (S4 / N-V3): the secondary container is what Material paints behind every SELECTED control (segments,
     // filter and choice chips), tonal buttons and the status strip. It used to be a blend of the amber, so selection
     // read as a warning. It is now the teal container; amber is only `MeshSonarColors.warning`.
-    // `secondary` itself keeps the old amber until its last call sites have moved (it is not a selection colour).
-    secondary: p.beacon,
-    onSecondary: p.onBeacon,
+    // `secondary` is the accent too (build 77 lead, after every call site moved): no Material widget paints amber by default.
+    secondary: p.accent,
+    onSecondary: p.onAccent,
     secondaryContainer: p.accentContainer,
     onSecondaryContainer: p.onAccentContainer,
     tertiary: mc.snrWeak,
