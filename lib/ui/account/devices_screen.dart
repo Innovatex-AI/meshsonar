@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../app/app_state.dart';
 import '../../app/messages.dart';
 import '../../core/api.dart';
@@ -19,13 +20,8 @@ import 'person_devices_screen.dart';
 
 const Duration keyRevealFor = Duration(seconds: 30);
 
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/// "30 Oct 2026", in the phone's time zone.
-String _day(DateTime t) {
-  final l = t.toLocal();
-  return '${l.day} ${_months[l.month - 1]} ${l.year}';
-}
+/// "Oct 30, 2026", in the app's time (lib/core/time_format.dart).
+String _day(DateTime t) => tf.dateOnly(t);
 
 /// One line for a key row: what it is doing now first, then the dates, then how to recognise it.
 String keyLine(DriverKeyStatus status, {DateTime? createdAt, DateTime? lastSeenAt, String? keyHint}) => [

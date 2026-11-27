@@ -87,7 +87,7 @@ class ObserverJoinScreen extends StatelessWidget {
       // Every state in words as well as by the number's colour: Done, Next or Waiting (VoiceOver reads it with the title).
       final (word, colour) = switch (st) {
         ObserverStepState.done => ('Done', t.colorScheme.primary),
-        ObserverStepState.next => ('Next', t.colorScheme.secondary),
+        ObserverStepState.next => ('Next', t.colorScheme.primary),
         ObserverStepState.waiting => ('Waiting', t.colorScheme.onSurfaceVariant),
       };
       return Card(

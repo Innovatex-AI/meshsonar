@@ -17,25 +17,18 @@ import '../app/app_state.dart' show RadioKind;
 import 'app.dart';
 import 'connect_screen.dart' show ConnectScreen;
 import 'design/app_surfaces.dart';
+import '../core/time_format.dart' as tf;
 import 'design/app_symbols.dart';
 import 'settings/settings_kit.dart' show editSettingText;
 import 'widgets.dart';
 
-/// "Last connected 5 min ago", "… yesterday", "… 12 days ago", "… on 3 Mar 2026"; "Last connection time unknown" when there
-/// is no time (only possible for a damaged or hand-edited file: migrated radios take the old file's time).
+/// "Last connected 5 min ago", "… 30 h ago", "… 12 d ago" (the app's one wording, lib/core/time_format.dart), "… on Mar 3,
+/// 2026" after 60 days; "Last connection time unknown" when there is no time (only possible for a damaged or hand-edited
+/// file: migrated radios take the old file's time).
 String lastConnectedText(DateTime? at, DateTime now) {
   if (at == null) return 'Last connection time unknown';
-  final d = now.difference(at);
-  if (d.inSeconds < 90) return 'Last connected just now';
-  if (d.inMinutes < 60) return 'Last connected ${d.inMinutes} min ago';
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(at.year, at.month, at.day);
-  final days = today.difference(day).inDays;
-  if (days <= 0) return 'Last connected ${d.inHours} h ago';
-  if (days == 1) return 'Last connected yesterday';
-  if (days < 60) return 'Last connected $days days ago';
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return 'Last connected on ${at.day} ${months[at.month - 1]} ${at.year}';
+  if (now.difference(at).inDays < 60) return 'Last connected ${tf.relativeTime(at, now: now)}';
+  return 'Last connected on ${tf.dateOnly(at)}';
 }
 
 enum _RadioAction { nickname, star, followRecent, forget }

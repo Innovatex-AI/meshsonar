@@ -9,7 +9,7 @@ class Brand {
   static const Color deep = Color(0xFF062A2C); // icon / launch background
   static const Color teal = Color(0xFF0E4D4F);
   static const Color glow = Color(0xFF3EE0CF); // sonar arcs (theme accent, dark)
-  static const Color ping = Color(0xFFFFB547); // repeaters / beacon (theme beacon, dark)
+  static const Color ping = Color(0xFFFFB547); // the ping, the Bluetooth glyph and the key (brand art; not repeaters)
 }
 
 /// Concentric sonar arcs sweeping out from a ping, with repeaters lighting up. Animates gently.
@@ -98,13 +98,14 @@ class SonarPainter extends CustomPainter {
         ..color = Brand.glow.withValues(alpha: (1 - t).clamp(0, 1) * 0.9)
         ..strokeWidth = size.width * 0.02,
     );
-    // Repeaters: light up when the wave passes them
+    // Repeaters: light up when the wave passes them, in the accent teal (build 77: amber is for warnings, and repeaters
+    // are no longer amber anywhere in the app)
     final reps = [const Offset(-0.78, -0.62), const Offset(0.0, -1.0), const Offset(0.78, -0.62)];
     for (final o in reps) {
       final p = c + Offset(o.dx * r, o.dy * r);
       final d = (p - c).distance / r;
       final lit = t > d - 0.15 && t < d + 0.35;
-      _tower(canvas, p, size.width * 0.07, lit ? Brand.ping : Colors.white.withValues(alpha: 0.55));
+      _tower(canvas, p, size.width * 0.07, lit ? Brand.glow : Colors.white.withValues(alpha: 0.55));
     }
     // The ping (the car)
     canvas.drawCircle(c, size.width * 0.06, Paint()..color = Brand.ping);

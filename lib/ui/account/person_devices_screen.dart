@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../app/messages.dart';
 import '../../core/person_identity.dart';
 import '../app.dart';
@@ -212,7 +213,7 @@ class _DeviceTile extends StatelessWidget {
               ],
             ),
             if (detail.isNotEmpty) Text(detail, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-            Text(d.lastSeenAt == null ? 'Not used yet' : 'Last used ${formatDateTime(d.lastSeenAt!)}',
+            Text(d.lastSeenAt == null ? 'Not used yet' : 'Last used ${tf.dateTime(d.lastSeenAt!)}',
                 key: Key('device-used-${d.id}'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             const SizedBox(height: Gap.xs),
             Wrap(
@@ -262,7 +263,7 @@ class _NoticeTile extends StatelessWidget {
               n.words,
               style: n.read && !n.isOpenRequest ? t.textTheme.bodyMedium : t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
-            if (n.createdAt != null) Text(formatDateTime(n.createdAt!), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+            if (n.createdAt != null) Text(tf.dateTime(n.createdAt!), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             if (n.isOpenRequest || !n.read) const SizedBox(height: Gap.xs),
             // Wrap, not Row: two buttons side by side do not fit at 375 pt with large text.
             Wrap(
