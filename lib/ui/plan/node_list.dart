@@ -3,10 +3,13 @@
 // person's own radios first, then repeaters and rooms from the network near the map, nearest first). Built only from the
 // design kit: showAppSheet + AppSheetScaffold, settings_kit SliderTile/InfoTile, state_views, AppSymbols, AppHaptics.
 //
-// Keys: 'plan-node-list', 'plan-list-node-<id>', 'plan-node-edit-<id>'; editor 'node-editor', 'node-name', 'node-status',
+// Build 77 (round 4): a planned place is a "spot", a real one a "repeater"; the list offers "Add a spot" (the planner's
+// crosshair, P-U3) next to "Add from the network"; Navigate for a spot is in its editor (the selected spot is one line).
+//
+// Keys: 'plan-node-list', 'plan-list-node-<id>', 'plan-node-edit-<id>', 'plan-node-add-spot', 'plan-node-add'; editor 'node-editor', 'node-name', 'node-status',
 // 'node-role', 'node-mine', 'node-height', 'node-tx', 'node-gain', 'node-cable', 'node-mount', 'node-move', 'node-delete';
-// picker 'node-picker', 'node-picker-search', 'node-pick-<key>', 'node-picker-empty'. Drive hand-off (J4): 'plan-node-drive'
-// holding drive_next_card.dart's 'drive-target-navigate' / 'drive-target-show-map'.
+// picker 'node-picker', 'node-picker-search', 'node-pick-<key>', 'node-picker-empty', 'node-picker-spot'. Drive hand-off
+// (J4): 'plan-node-drive' in the editor, holding drive_next_card.dart's 'drive-target-navigate' / 'drive-target-show-map'.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -30,9 +33,9 @@ import '../map/main_map_focus.dart' show MapFocusTarget;
 import '../settings/settings_kit.dart' show InfoTile, SliderTile;
 import '../shell/drive_next_card.dart' show DriveTargetActions, focusTargetsFromPlanNodes, navigateToPoint;
 import '../nodes/node_ref.dart' show nameHidesPosition;
-import 'plan_modes.dart' show PlanLine, PlanListenable, symbolData;
+import 'plan_modes.dart' show PlanListenable, symbolData;
 
-/// The words for a node's status (vocabulary table: "Node", "Estimate", "Measured").
+/// The words for a spot's status (vocabulary table: "Estimate", "Measured"; round 4: "spot" for a planned place).
 String nodeStatusWords(PlanNodeStatus s) => switch (s) {
       PlanNodeStatus.planned => 'Planned',
       PlanNodeStatus.installed => 'Installed',
@@ -92,9 +95,9 @@ class PlanNodeDriveActions extends StatelessWidget {
         ? DriveTargetActions(name: n.name, lat: n.lat, lon: n.lon, targets: focusTargetsFromPlanNodes([n]))
         : Align(
             alignment: AlignmentDirectional.centerStart,
-            child: FilledButton.tonalIcon(
+            child: OutlinedButton.icon(
               key: const Key('drive-target-navigate'),
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
               icon: const Icon(Icons.navigation_outlined, size: 18),
               label: const Text('Navigate'),
               onPressed: () => navigateToPoint(context, n.lat, n.lon, label: n.name),
@@ -111,8 +114,13 @@ class NodeList extends StatelessWidget {
   final String? selectedId;
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onEdit;
+
+  /// "Add from the network" (the picker).
   final VoidCallback onAdd;
-  const NodeList({super.key, required this.controller, required this.selectedId, required this.onSelect, required this.onEdit, required this.onAdd});
+
+  /// "Add a spot": the planner's crosshair with Set here / Cancel.
+  final VoidCallback onAddSpot;
+  const NodeList({super.key, required this.controller, required this.selectedId, required this.onSelect, required this.onEdit, required this.onAdd, required this.onAddSpot});
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +132,17 @@ class NodeList extends StatelessWidget {
           header: true,
           child: Text('In this plan (${nodes.length} of ${Plan.maxNodes})', style: t.textTheme.titleSmall),
         ),
+      ]),
+      // Round 4 P-U3: a button path to a new spot (press and hold the map still works). An empty plan shows the
+      // planner's first-run card instead of this list (P-V2).
+      Wrap(spacing: Gap.s, runSpacing: 0, children: [
+        TextButton.icon(
+          key: const Key('plan-node-add-spot'),
+          style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+          onPressed: controller.plan.isFull ? null : onAddSpot,
+          icon: const AppSymbolIcon(AppSymbols.pin, size: 18),
+          label: const Text('Add a spot'),
+        ),
         TextButton.icon(
           key: const Key('plan-node-add'),
           style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
@@ -132,12 +151,6 @@ class NodeList extends StatelessWidget {
           label: const Text('Add from the network'),
         ),
       ]),
-      if (nodes.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-          child: PlanLine(AppSymbols.pin, 'Nothing yet. Press and hold the map to add a spot.',
-              key: const Key('plan-node-list-empty'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-        ),
       for (final n in nodes)
         ListTile(
           key: Key('plan-list-node-${n.id}'),
@@ -218,13 +231,13 @@ class _NodeEditorState extends State<_NodeEditor> {
       builder: (context, _) {
         final n = widget.controller.plan.node(widget.id);
         if (n == null) {
-          return AppEmptyView(key: const Key('node-editor'), symbol: AppSymbols.trash, title: 'This node is no longer in the plan', actionLabel: 'Close', onAction: () => Navigator.of(context).pop());
+          return AppEmptyView(key: const Key('node-editor'), symbol: AppSymbols.trash, title: 'This is no longer in the plan', actionLabel: 'Close', onAction: () => Navigator.of(context).pop());
         }
         final t = Theme.of(context);
         return AppSheetScaffold(
           key: const Key('node-editor'),
           controller: widget.scroll,
-          title: 'Edit node',
+          title: n.status == PlanNodeStatus.existing ? 'Edit repeater' : 'Edit spot',
           primaryAction: FilledButton.icon(
             key: const Key('node-move'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
@@ -236,6 +249,8 @@ class _NodeEditorState extends State<_NodeEditor> {
             label: const Text('Move on the map'),
           ),
           children: [
+            // Navigate and Show on the Drive map (J4) live here since the selected spot became one line (round 4 P-V1).
+            if (nodeCanBeDrivenTo(n)) ...[PlanNodeDriveActions(node: n), const SizedBox(height: Gap.m)],
             TextField(
               key: const Key('node-name'),
               controller: _name,
@@ -263,13 +278,13 @@ class _NodeEditorState extends State<_NodeEditor> {
               key: const Key('node-mine'),
               contentPadding: EdgeInsets.zero,
               secondary: AppSymbolIcon(AppSymbols.person),
-              title: const Text('This node is mine'),
+              title: const Text('This is mine'),
               subtitle: const Text('Its position is rounded to about 1 km when you share the plan.'),
               value: n.mine,
               onChanged: n.existingKey != null ? null : (v) => _edit((x) => x.copyWith(mine: v)),
             ),
             if (n.existingKey != null)
-              Text('A network node is yours when you have claimed it (Settings > Account > Claimed radios).', style: t.textTheme.bodySmall),
+              Text('A repeater on the network is yours when you have claimed it (Settings > Account > Claimed radios).', style: t.textTheme.bodySmall),
             const SizedBox(height: Gap.s),
             Semantics(header: true, child: Text('Mount', style: t.textTheme.titleSmall)),
             const SizedBox(height: Gap.xs),
@@ -289,7 +304,7 @@ class _NodeEditorState extends State<_NodeEditor> {
               sliderKey: const Key('node-height-slider'),
               icon: symbolData(context, AppSymbols.arrowUpCircleFill),
               title: 'Antenna height',
-              caption: n.heightM == null ? 'From the mount and what the node is. Move the slider to set your own.' : 'Above the ground at the node.',
+              caption: n.heightM == null ? 'From the mount and what it is. Move the slider to set your own.' : 'Above the ground.',
               stops: _heightStops,
               value: n.antennaM.round(),
               label: (v) => units.height(v.toDouble()),
@@ -396,19 +411,23 @@ List<PickableNode> pickableNodes({
 }
 
 /// Opens the existing-node picker over the plan. [near] is the map's centre; [onAdded] gets each added node.
-Future<void> showNodePicker(BuildContext context, PlanController controller, {PlanPoint? near, required ValueChanged<PlanNode> onAdded}) =>
-    showAppSheet<void>(
-      context,
-      detents: formSheetDetents(context),
-      builder: (ctx, scroll) => _NodePicker(controller: controller, near: near, scroll: scroll, onAdded: onAdded),
-    );
+/// The picker of repeaters from the network. [onSpot] adds "Put a spot on the map instead" (it closes the picker first).
+Future<void> showNodePicker(BuildContext context, PlanController controller, {PlanPoint? near, required ValueChanged<PlanNode> onAdded, VoidCallback? onSpot}) async {
+  final spot = await showAppSheet<bool>(
+    context,
+    detents: formSheetDetents(context),
+    builder: (ctx, scroll) => _NodePicker(controller: controller, near: near, scroll: scroll, onAdded: onAdded, spot: onSpot != null),
+  );
+  if (spot == true && context.mounted) onSpot?.call();
+}
 
 class _NodePicker extends StatefulWidget {
   final PlanController controller;
   final PlanPoint? near;
   final ScrollController scroll;
   final ValueChanged<PlanNode> onAdded;
-  const _NodePicker({required this.controller, required this.near, required this.scroll, required this.onAdded});
+  final bool spot;
+  const _NodePicker({required this.controller, required this.near, required this.scroll, required this.onAdded, this.spot = false});
   @override
   State<_NodePicker> createState() => _NodePickerState();
 }
@@ -488,6 +507,17 @@ class _NodePickerState extends State<_NodePicker> {
         ),
         const SizedBox(height: Gap.s),
         Text('Your radios first, then the nearest repeaters.', style: t.textTheme.bodySmall),
+        if (widget.spot)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('node-picker-spot'),
+              style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const AppSymbolIcon(AppSymbols.pin, size: 18),
+              label: const Text('Put a spot on the map instead'),
+            ),
+          ),
         if (loading) ConstrainedBox(constraints: const BoxConstraints(minHeight: 160), child: AppLoadingView(label: 'Loading the network\'s repeaters…')),
         if (failed)
           ConstrainedBox(
@@ -501,7 +531,7 @@ class _NodePickerState extends State<_NodePicker> {
               key: const Key('node-picker-empty'),
               symbol: AppSymbols.antenna,
               title: q.isEmpty ? 'No repeaters near here' : 'Nothing matches "$_q"',
-              message: q.isEmpty ? 'Move the map closer to a mesh, or press and hold the map to add a spot.' : 'Try part of the name or the start of the key.',
+              message: q.isEmpty ? 'Move the map closer to a mesh, or put a spot on the map.' : 'Try part of the name or the start of the key.',
               // The one button that fixes an empty search.
               actionLabel: q.isEmpty ? null : 'Show all repeaters',
               onAction: q.isEmpty

@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
-import 'package:meshsonar/ui/shell/drive_next_card.dart';
 
 import 'fakes.dart';
 import 'shell_test.dart' show phone, drain;
@@ -20,9 +19,6 @@ Future<void> openWhereToDrive(WidgetTester tester) async {
 }
 
 void main() {
-  setUp(() => DriveNextCard.testMap = (c, me, t) => SizedBox(key: const Key('fake-map'), height: 10, child: Text('${t.length} targets')));
-  tearDown(() => DriveNextCard.testMap = null);
-
   testWidgets('lists silent areas with distance and direction; Navigate opens Apple Maps', (tester) async {
     phone(tester);
     final h = Harness();
@@ -35,8 +31,14 @@ void main() {
     await h.pumpApp(tester);
     await openWhereToDrive(tester);
     expect(find.byKey(const Key('plan-drive-next')), findsOneWidget);
-    expect(find.text('Where to drive next'), findsOneWidget);
-    expect(find.byKey(const Key('fake-map')), findsOneWidget);
+    // Build 77 (round 4 P-V3, P-U1): the list sits under the question; no title of its own, no small map, no plan around it.
+    expect(find.text('Where should I drive next?'), findsOneWidget);
+    expect(find.text('Where to drive next'), findsNothing);
+    expect(find.byKey(const Key('plan-drive-next-map')), findsNothing);
+    expect(find.byType(Card), findsNothing);
+    for (final gone in const ['plan-menu', 'plan-radio-summary', 'plan-node-list', 'plan-selected', 'plan-first-run']) {
+      expect(find.byKey(Key(gone)), findsNothing, reason: '$gone: Where to drive stands on its own');
+    }
     expect(find.textContaining('No reply ('), findsOneWidget);
     expect(find.textContaining('Dot: driven'), findsOneWidget, reason: 'build 76: one short line explains dots and rings');
     expect(find.textContaining('Grey means'), findsNothing);

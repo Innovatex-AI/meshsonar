@@ -118,7 +118,7 @@ void main() {
       expect(c['b']!.cls, PlanNodeClass.critical);
       expect(c['b']!.reason, 'The only link between parts of this plan');
       expect(c['a']!.cls, PlanNodeClass.marginal);
-      expect(c['a']!.reason, 'Reaches only 1 node');
+      expect(c['a']!.reason, 'Reaches only 1 other');
     });
 
     test('E8 critical nodes, E5 peers: critical / backbone / redundant / marginal', () {
@@ -134,10 +134,10 @@ void main() {
       expect(c['a']!.cls, PlanNodeClass.critical);
       expect(c['a']!.reason, 'Strands 5 repeaters if it goes down');
       expect(c['b']!.cls, PlanNodeClass.backbone);
-      expect(c['b']!.reason, 'Links to 3 nodes');
+      expect(c['b']!.reason, 'Links to 3 others');
       expect(c['c']!.cls, PlanNodeClass.redundant);
       expect(c['d']!.cls, PlanNodeClass.marginal);
-      expect(c['d']!.reason, 'Reaches no other node');
+      expect(c['d']!.reason, 'Reaches no other spot or repeater');
       expect(PlanNodeClass.values.map((x) => x.label), ['Critical', 'Backbone', 'Redundant', 'Marginal']);
     });
 

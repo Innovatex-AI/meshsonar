@@ -75,3 +75,5 @@ redistributed.
 | `camera` | `camera` | Chat: composer photo button, Take Photo |
 | `photo` | `photo` | Chat: photo placeholders, Choose from Library, View photo |
 | `arrowClockwise` | `arrow.clockwise` | Repeater settings: read one setting again |
+| `undo` | `arrow.uturn.backward` | Plan menu: Undo |
+| `redo` | `arrow.uturn.forward` | Plan menu: Redo |

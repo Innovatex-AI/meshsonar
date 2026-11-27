@@ -514,7 +514,7 @@ class FindSitesWizard extends StatelessWidget {
           ...resultNotes(context, r),
           sitesPrimaryButton(
             key: Key('wizard-verify-$name'),
-            label: l.checks.busy ? 'Verifying ${l.checks.step} of ${l.checks.of}…' : 'Verify top ${math.min(kVerifyTop, l.sites.length)} with the full model',
+            label: l.checks.busy ? 'Double-checking ${l.checks.step} of ${l.checks.of}…' : 'Double-check the top ${math.min(kVerifyTop, l.sites.length)}',
             symbol: AppSymbols.antenna,
             busy: l.checks.busy,
             onPressed: () => unawaited(m.verify(context, l)),
