@@ -300,8 +300,7 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
   delivered; channels never say Delivered), tap a bubble for how it travelled (route, SNR, RSSI, time on air), long-press for the info card and Copy / Open link /
   Route on map / Full details / Try Again / Delete (see "Message info" below), Retry all, jump-to-latest capsule. Title is one target to the profile or Channel info with Direct / Via N
   repeaters / Searching / No route yet; ellipsis menu Search, Route, Mute, Info. Composer: pill, byte ring, quick-reply chips (More > Chat),
-  @mention strip, "Trimmed to fit", offline hint, Cmd-Return. After three messages in a row fail over a saved route the "This route may be broken"
-  card offers Find a route now and Reset route.
+  @mention strip, "Trimmed to fit", offline hint with Connect, Cmd-Return. (The "This route may be broken" card is removed in build 77.)
 - **Message info (chat + radio round CR4).** Long-press any message, sent or received: the bubble lifts with an **info card** under it:
   the route as a chain (You › Ridge › Hill › Maya, or the sender › hops › you), hops, SNR and RSSI, time on air, for a sent channel
   message "Heard by N repeaters" and "Relayed by Ridge, Hill +1", for a received one "Arrived by N routes", and the times (sent,
@@ -338,10 +337,9 @@ Chat UI: the `chatRedesign` switch in More > Developer and the old Contacts | Ch
 - **Contact profile.** One inset-grouped screen: avatar, "Person · Via 2 repeaters", "Heard 2 min ago", Share and Edit in the nav bar, tiles per kind
   (Person: Message, Ping, Route, Stats. Repeater: Dashboard, Ping, Route. Room: Open room, Ping, Route. Sensor: Telemetry, Ping, Route), cards for
   Route, Last delivery, Public key, Location, Notes, Mute and Share. Edit sheet holds name, notes, favourite, keep-on-radio, Block, Remove.
-- **Route and Ping.** Route screen: diagram, **Automatic / Keep this route / Always search** (`path_mode`), Find a route now (path discovery),
-  Test this route, Reset route, Advanced (hash size, recent deliveries, route history, Trace and Discover pre-filled). "Choose repeaters yourself"
-  and the outbox rewrite of a forgotten path are built but hidden behind `AppFlags.routeWriteVerified` (off) until the set-path radio write is
-  proven on a real radio. Ping: a person by route discovery, a repeater, room or sensor by a trace with signal per hop; "Not heard" is its own
+- **Route and Ping.** Route screen: diagram, Find a route now (path discovery), Test this route, Reset route (asks first), Advanced (hash size,
+  recent deliveries, route history, Trace and Discover pre-filled). Build 77: the route modes (Automatic / Keep this route / Always search) and
+  "Choose repeaters yourself" are removed; the radio alone decides direct or flood, as in the official MeshCore app. Ping: a person by route discovery, a repeater, room or sensor by a trace with signal per hop; "Not heard" is its own
   state; long-press Ping for Direct only and 2 or 3 byte IDs; results are kept in the contact's ping history.
 - **Stats.** The Stats tile (person) and Telemetry tile (sensor) open a sheet fed through the remote request queue; says what the other radio
   withheld; sensors get a refresh switch and sparklines.
@@ -1041,13 +1039,13 @@ login that arrives with room support.
 
 **Direct messages.** Written in the shared conversation screen; its title says how the next message travels (Direct, Via N repeaters,
 Searching, No route yet). A new contact is reached by flood; the radio learns the
-route from the reply and later messages go direct. Delivery under each message: Waiting, Sending, Waiting for confirmation (with
-the try count once it retries), Delivered in 2.4 s, Probably delivered (they replied), Not delivered. Tries: 3 by flood, 5 along
-a saved route (the last one floods and the saved route is cleared); a flood try waits at least 12 s and the last try at least
-30 s before Not delivered. A confirmation that arrives late always turns the message Delivered, even after Not delivered or a
-Retry. When no confirmation came but the contact wrote back after it went out, it shows Probably delivered (they replied), is
-not sent again, and Retry all skips it. A message that gets no acknowledgement says why ("No acknowledgement after 3 tries ... The repeater path to them may have
-changed") and offers Retry. Long-press a message > Details shows each try, the route, hops, signal, and the explanation.
+route from the reply and later messages go direct. Delivery under each message: Waiting, Sending, Waiting for confirmation (try n of m, with Cancel), Delivered in 2.4 s, Not delivered.
+Build 77, the official MeshCore flow: up to 4 tries along the route the radio has, then one route reset, then up to 4 to everyone
+nearby (Settings > Messages > Message delivery: direct 1-4, flood 0-4, fallback on/off); with no route every try goes to everyone
+nearby. Each try waits the radio's own estimate x 1.2. The try number goes to the radio untouched, so every try is a new packet.
+A confirmation for any try turns the message Delivered, even after Not delivered. Try again is a new message. "They need to add
+you as a contact" shows until a contact has ever confirmed. A full radio contact list says so; nothing is removed from the radio.
+A message that gets no confirmation says what was tried and offers Try again; its details have the message log (exportable). Long-press a message > Details shows each try, the route, hops, signal, and the explanation.
 
 ## Saved radios
 

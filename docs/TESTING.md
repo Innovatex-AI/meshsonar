@@ -96,6 +96,23 @@ Benchmarks over a real body: `tool/bench_regions.dart`, `tool/bench_regions_new.
 | `integration_test/app_flow_test.dart` | Real app on a device or simulator: first run → simulator drive → full-screen map → log → stop/report card → drives → detail → settings, printing `SCREEN <name>` for screenshots. |
 | `test/fixtures/cmat_server.ts` | bun server wrapping CMAT's `makeDriveHandlers` + `memoryDriveStore`, with one test repeater, `/__test/state` for assertions, and `PORT n` on stdout. |
 
+### Build 77 additions (whole-app redesign, delivery rebuilt to the official MeshCore flow)
+
+| File | Covers |
+|---|---|
+| `test/radio/lossy_radio.dart` | A scripted radio that loses frames, answers late, confirms late, confirms an earlier try, drops byte-identical packets, reports table full and "not a contact": tests fail the way a real mesh does. |
+| `test/chat/delivery_lossy_test.dart` | The official flow item for item on the lossy radio: 4 direct, one reset path, 4 flood; no-route contact floods with no reset; try numbers 0..7 untouched with one timestamp (prints the bytes of tries 1-8); 160/158-byte limit; late and earlier-try confirmations; duplicates; table full; not a contact; no sync loop after a send; contact writes only on add/edit. |
+| `test/radio/reply_matching_test.dart` | Each reply matched to its command by code; a late or stray frame discarded; start order DEVICE_QUERY → APP_START → clock; confirmed Bluetooth writes; the link half of the message log. |
+| `test/chat/route_removed_test.dart` | Route modes, pins, eviction and the route-broken logic are gone; Reset route, ping and path history kept. |
+| `test/core/time_format_test.dart` | The one time formatter: phone time / UTC setting, 12/24 h, relative times, always-UTC labels for server totals, logs and exports. |
+| `test/core/drive_verdict_test.dart` | The drive verdict (Good 80 %+, Patchy 40-79 %, Poor, Nothing answered, Listen-only). |
+| `test/core/basemap_choices_test.dart`, `test/ui/map/basemap_layers_for_test.dart` | Road / Light / Dark / Topo / Satellite choices, old saved values, thumbnails, resolve() to the data-first base and the names-above pass. |
+| `test/ui/theme_tokens_b77_test.dart` | One meaning per colour: teal selected, amber only for warnings, neutral repeaters, neutral No reply, white link line, magenta friends, teal percent-heard scale, packet colours off the signal hues. |
+| `test/ui/map/b77_map_core_test.dart`, `b77_legend_layers_test.dart`, `b77_map_extras_test.dart`, `test/ui/network/live_b77_test.dart` | Map system: fixed credit pill, names above coverage, ping dots in one pass, image cache kept, one chip style, Legend and Layers in plain words, compass, stale/estimated repeaters, Reduce Motion, status pill, small maps, tips, Show whole drive; Live repeaters through the Drive painter, latest packets, Speed in replay, one-copy replay. |
+| `test/ui/network/who_heard_test.dart`, `colour_language_test.dart`, `time_setting_test.dart`, `analytics/native_analytics_test.dart` | Network: who-heard grouping with full routes, Private channel, colours, times, native Overview, My Repeaters and Status. |
+| `test/ui/chat/round3_chat_test.dart`, `test/ui/meshtrack/round3_meshtrack_test.dart`, `test/alerts/alert_coordinator_round3_test.dart` | Chat: previews, position updates collapsed, first unread, Unread filter, Connect, people button, route hops, "add you" note, try n of m, Cancel, Share my position. |
+| `test/ui/settings/messages_section_test.dart`, `round5_more_settings_test.dart`, `time_zone_tile_test.dart`, `test/ui/connect_screen_r5_test.dart` | Settings > Messages and Message delivery, Message log, round 5 renames and moves, Time zone row, Bluetooth-off and wrong-PIN advice. |
+
 ## Running subsets
 
 ```sh
