@@ -200,6 +200,18 @@ void main() {
     });
   });
 
+  testWidgets('a map request carrying an observation (W2-C\'s "Replay on map") plays only that copy', (tester) async {
+    final (c, _) = _controller(FakeSse(), const []);
+    await _pump(tester, c, request: NetworkRequest.mapPacket('c4b06ee8fc39b187', region: 'cmh', observation: 'o1'));
+    await tester.runAsync(settle);
+    await tester.pump();
+    expect(c.focusObservationId, 'o1');
+    expect(c.focusAnimating, isTrue);
+    c.clearFocus();
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+  });
+
   group('F1: the repeaters on Live are the Drive painter', () {
     testWidgets('tappable, idle ones dimmed to 62 % and clustered; the ones in use are full-strength badges', (tester) async {
       final (c, _) = _controller(FakeSse(), const []);

@@ -209,7 +209,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     unawaited(_c.loadLatest());
     LiveMapFocus.notifier.addListener(_takeFocus);
     final r = widget.request;
-    if (r?.packetHash != null) unawaited(_loadFocus(r!.packetHash!, r.mapTime, observationId: LiveReplayRequests.take(r.packetHash!)));
+    if (r?.packetHash != null) unawaited(_loadFocus(r!.packetHash!, r.mapTime, observationId: r.observationId ?? LiveReplayRequests.take(r.packetHash!)));
   }
 
   @override
@@ -218,7 +218,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     // "Replay on map" again for the packet already open (the same map, a new request).
     final r = widget.request;
     if (!identical(r, old.request) && r?.packetHash != null) {
-      final obs = LiveReplayRequests.take(r!.packetHash!);
+      final obs = r!.observationId ?? LiveReplayRequests.take(r.packetHash!);
       if (obs != null) unawaited(_loadFocus(r.packetHash!, r.mapTime, observationId: obs));
     }
   }
