@@ -219,7 +219,7 @@ class HowItWorksScreen extends StatelessWidget {
                 style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                 onPressed: onReplayTour,
                 icon: const Icon(Icons.explore_outlined),
-                label: const Text('Replay the tour of the tabs'),
+                label: const Text('Show the intro again'),
               ),
             ),
         ],

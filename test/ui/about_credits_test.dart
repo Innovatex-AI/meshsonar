@@ -116,4 +116,18 @@ void main() {
     expect(tester.getSize(find.byKey(const Key('show-licenses'))).height, greaterThanOrEqualTo(44));
     dismissAppToast();
   });
+
+  testWidgets('build 77 (round 5 S12): About has the terms of service beside the privacy policy', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.state.init();
+    await tester.pumpWidget(AppScope(state: h.state, child: const MaterialApp(home: AboutScreen())));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('about-terms')), findsOneWidget);
+    expect(tester.getTopLeft(find.byKey(const Key('about-terms'))).dy,
+        greaterThan(tester.getTopLeft(find.byKey(const Key('about-privacy-policy'))).dy));
+    await tester.tap(find.byKey(const Key('about-terms')));
+    await tester.pump();
+    expect(h.openedUrls.map((u) => u.path), contains('/terms'));
+  });
 }

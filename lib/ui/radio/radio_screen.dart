@@ -71,7 +71,7 @@ class _RadioScreenState extends State<RadioScreen> {
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioSetupScreen())),
                 icon: const Icon(Icons.edit_outlined),
-                label: const Text('Change name, position or frequency'),
+                label: const Text('Change radio settings'),
               ),
               const SizedBox(height: Gap.s),
               OutlinedButton.icon(
