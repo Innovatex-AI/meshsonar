@@ -104,7 +104,7 @@ void main() {
     await tester.pump();
     await sendPhoto(tester);
     expect(fieldText(tester), text, reason: 'nothing trimmed, nothing inserted');
-    expect(find.textContaining('Shorten your message by 1 character'), findsOneWidget);
+    expect(find.textContaining('Shorten your message by 1 byte'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('composer-field')), 'a' * 123);
     await tester.pump();
     expect(fieldText(tester), '${'a' * 123} $photoUrlA');
@@ -128,7 +128,7 @@ void main() {
     await sendPhoto(tester);
     final over = utf8.encode('${fieldText(tester)} $photoUrlA').length - max;
     expect(over, 20);
-    expect(find.textContaining('Shorten your message by 20 characters'), findsOneWidget);
+    expect(find.textContaining('Shorten your message by 20 bytes'), findsOneWidget);
     await tester.tap(find.byKey(const Key('composer-photo-remove')));
     await tester.pump();
     expect(find.byKey(const Key('composer-photo-strip')), findsNothing);

@@ -13,6 +13,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'etag_client.dart';
+import 'time_format.dart' show wallClock;
 
 /// Server-reported data state: ready | partial | pending | unavailable | stale | not_found.
 class RegionStatus {
@@ -74,9 +75,10 @@ class RegionActivity {
     return RegionActivity(RegionStatus.parse(m['status']), rows);
   }
 
-  /// 7 (Sunday=0 .. Saturday=6) x 24 grid of packet counts in [zone] hours. [toZone] defaults to the phone's local time.
+  /// 7 (Sunday=0 .. Saturday=6) x 24 grid of packet counts in [toZone] hours. [toZone] defaults to the zone the app
+  /// shows (Settings > Map & display > Time zone, lib/core/time_format.dart).
   List<List<int>> heatmap({DateTime Function(DateTime utc)? toZone}) {
-    final z = toZone ?? (DateTime t) => t.toLocal();
+    final z = toZone ?? (DateTime t) => wallClock(t);
     final g = List.generate(7, (_) => List.filled(24, 0));
     for (final r in rows) {
       final t = z(r.at);

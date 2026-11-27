@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'api.dart';
 import 'storage_usage.dart';
+import 'time_format.dart' show relativeTime;
 
 class CacheFetch {
   final bool notModified;
@@ -154,19 +155,10 @@ class RegionCache implements StorageSized {
   }
 }
 
-/// "Offline - as of 2h ago" / "As of 5m ago". Pure so it is testable and the UI just prints it.
+/// "Offline - as of 2 h ago" / "Updated 5 min ago", in the app's one wording for an age (lib/core/time_format.dart,
+/// Round 2 N-U8). Pure so it is testable and the UI just prints it.
 String asOfLabel(DateTime fetchedAt, DateTime now, {required bool offline}) {
-  final d = now.difference(fetchedAt);
-  String ago;
-  if (d.inMinutes < 1) {
-    ago = 'just now';
-  } else if (d.inMinutes < 60) {
-    ago = '${d.inMinutes}m ago';
-  } else if (d.inHours < 48) {
-    ago = '${d.inHours}h ago';
-  } else {
-    ago = '${d.inDays}d ago';
-  }
+  final ago = relativeTime(fetchedAt, now: now);
   final stamp = ago == 'just now' ? ago : 'as of $ago';
   return offline ? 'Offline - $stamp' : 'Updated $ago';
 }

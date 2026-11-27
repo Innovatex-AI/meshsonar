@@ -11,6 +11,13 @@
 // and an ellipsis menu (Search, Route, Mute, Info); grouped bubbles with the time under the last bubble of a run; five
 // delivery states as glyph + word; tap a bubble for the info strip; long-press for the context menu; a jump-to-latest capsule;
 // a "Retry all" banner for two or more failed; and the composer.
+//
+// Build 77 (round 3): the status line counts "try n of m" from the delivery engine's own progress and has a Cancel while a
+// message is still being tried; a thread with someone who has never confirmed a message says "They need to add you as a
+// contact before they can receive this" (rule 16); a full radio contact list is said, with a way to manage it (D1); a
+// thread with unread messages opens AT the first unread with the true count (C-U4); a MeshTrack group's thread has a
+// people button to its group (C-U7); friends' position updates in a channel that is not a group are one line and an
+// offer, never a bubble each (C-U2).
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -26,6 +33,11 @@ import '../../chat/events.dart';
 import '../../chat/message_info.dart';
 import '../../chat/models.dart';
 import '../../chat/models.dart' as models show Route;
+import '../../alerts/alert_coordinator.dart' show alertPreviewText, isPositionUpdate;
+import '../../core/meshtrack/meshtrack_service.dart' show MeshTrackService, MtStrayShare;
+import '../contacts/radio_list_sheet.dart' show showRadioListSheet;
+import '../meshtrack/group_sheet.dart' show showGroupSheet;
+import '../meshtrack/meshtrack_binding.dart' show MeshTrackUi, MtGroupOpResult;
 import '../app.dart' show AppScope;
 import '../contacts/dm_route_text.dart';
 import '../contacts/message_details.dart' as details;
@@ -41,13 +53,11 @@ import 'channel_detail_screen.dart';
 import 'channel_flows.dart';
 import 'chat_list_actions.dart';
 import 'chat_navigation.dart';
-import '../design/app_widgets.dart' show TipCard;
+import '../design/app_widgets.dart' show TipCard, appTipStore;
 import 'composer.dart';
 import '../../core/photo_api.dart' show anyPhotoIdOf;
 import 'photo_widgets.dart';
 import '../../app/photo_controller.dart';
-import 'route_broken_card.dart';
-import '../../chat/route_health.dart';
 import 'message_bubble.dart';
 import 'message_format.dart';
 import 'message_menu.dart';
@@ -143,6 +153,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Object? _error;
   String? _unreadFromId;
   int _unreadCount = 0;
+  GlobalKey? _unreadKey;
+
+  /// Runs of friends' position updates stored as chat by an older build (C-U2): the newest of a run draws ONE line with
+  /// the count, the rest of the run draws nothing.
+  Map<String, int> _positionRunHead = const {};
+  Set<String> _positionRunHidden = const {};
+  MeshTrackService? _mt;
   int _newAway = 0;
   StreamSubscription<ChatEvent>? _sub;
   final ScrollController _scroll = ScrollController();
@@ -159,7 +176,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
   int? _deliveryTickAt;
   GlobalKey? _anchorKey;
   List<String> _failedIds = const [];
-  bool _routeBroken = false;
   // Hop names (CR4): the radio's repeaters and rooms, then the network roster. Rebuilt when either changes.
   List<RosterNode> _roster = const [];
   HopResolver? _resolverCache;
@@ -194,27 +210,74 @@ class _ConversationScreenState extends State<ConversationScreen> {
       final unread = c.service.conversation(widget.convKey)?.unread ?? 0;
       final anchor = widget.anchorMessageId;
       final around = anchor == null ? null : c.service.pageAround(widget.convKey, anchor);
+      var toUnread = false;
       if (around != null) {
         _setWindow(around.page, hasNewer: around.hasNewer);
         _highlight(anchor!);
       } else {
-        _reload(initial: true);
-      }
-      if (unread > 0 && around == null) {
-        // The oldest unread message among those loaded: the marker goes above it.
-        final incomingUnread = _msgs.where((m) => !m.isOutgoing && !m.read).toList();
-        if (incomingUnread.isNotEmpty) {
-          _unreadFromId = incomingUnread.last.id; // list is newest first, so last = oldest
-          _unreadCount = incomingUnread.length;
+        // C-U4: with unread messages the thread opens AT the first unread, with the true count. (Build 76 opened at the
+        // bottom and counted only the unread among the 40 loaded, so 63 unread read "40 new messages".)
+        final first = unread > 0 ? _findFirstUnread(unread) : null;
+        final win = first == null ? null : c.service.pageAround(widget.convKey, first.id, before: _unreadContext, after: _pageSize);
+        if (first != null && win != null) {
+          _setWindow(win.page, hasNewer: win.hasNewer);
+          _unreadFromId = first.id;
+          _unreadCount = first.count;
+          _unreadKey = GlobalKey();
+          toUnread = true;
+        } else {
+          _reload(initial: true);
         }
       }
       c.setActiveConversation(widget.convKey);
       c.service.markRead(widget.convKey);
       if (around != null) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToAnchor(0));
+      if (toUnread) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToUnread(0));
     } catch (e) {
       _error = e;
       _loading = false;
     }
+  }
+
+  /// Read messages shown above the "new messages" line, for context.
+  static const int _unreadContext = 8;
+
+  /// The oldest unread incoming message of this conversation and how many unread there are, found by walking back from
+  /// the newest message ([unread] is the conversation's own count, so the walk stops as soon as all are seen). Null when
+  /// none is found (the conversation was only marked unread by hand).
+  ({String id, int count})? _findFirstUnread(int unread) {
+    String? oldest;
+    var seen = 0;
+    MessageCursor? cursor;
+    for (var pages = 0; pages < 60; pages++) {
+      final page = c.service.page(widget.convKey, before: cursor, limit: 200);
+      for (final m in page.messages) {
+        if (!m.isOutgoing && !m.read) {
+          oldest = m.id;
+          seen++;
+        }
+      }
+      cursor = page.next;
+      if (seen >= unread || cursor == null) break;
+    }
+    return oldest == null ? null : (id: oldest, count: seen);
+  }
+
+  /// Lands on the "new messages" line: it sits near the top of the screen with the unread messages under it.
+  void _scrollToUnread(int attempt) {
+    if (!mounted) return;
+    final ctx = _unreadKey?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx, alignment: 0.9, duration: Duration.zero);
+      return;
+    }
+    if (attempt > 8 || !_scroll.hasClients) return;
+    final id = _unreadFromId;
+    final idx = id == null ? -1 : _slots.indexWhere((s) => s.message.id == id);
+    if (idx < 0) return;
+    // The row is not built yet (the list is lazy): jump near it, then look again next frame.
+    _scroll.jumpTo((idx * 84.0).clamp(0.0, _scroll.position.maxScrollExtent));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToUnread(attempt + 1));
   }
 
   void _setWindow(MessagePage page, {bool hasNewer = false}) {
@@ -239,12 +302,32 @@ class _ConversationScreenState extends State<ConversationScreen> {
   void _regroup() {
     _slots = groupMessages(_msgs, showSenders: _kind != ConvKind.dm);
     _failedIds = [for (final m in c.store.messages.byState(const [MessageState.failed]) .where((m) => m.convKey == widget.convKey)) m.id];
-    _refreshRouteHealth();
+    _groupPositionRuns();
   }
 
-  void _refreshRouteHealth() {
-    final contact = _kind == ConvKind.dm ? _contact : null;
-    _routeBroken = contact != null && routeLooksBroken(c.store, contact);
+  /// C-U2: consecutive position updates from one friend become one line. (Since build 77 such updates are not stored as
+  /// chat at all; this folds the ones an older build stored.)
+  void _groupPositionRuns() {
+    if (_kind != ConvKind.channel) return;
+    final head = <String, int>{};
+    final hidden = <String>{};
+    var i = 0;
+    while (i < _msgs.length) {
+      final m = _msgs[i];
+      if (m.isOutgoing || !isPositionUpdate(m.text)) {
+        i++;
+        continue;
+      }
+      var n = 1;
+      while (i + n < _msgs.length && !_msgs[i + n].isOutgoing && _msgs[i + n].senderName == m.senderName && isPositionUpdate(_msgs[i + n].text)) {
+        hidden.add(_msgs[i + n].id);
+        n++;
+      }
+      head[m.id] = n;
+      i += n;
+    }
+    _positionRunHead = head;
+    _positionRunHidden = hidden;
   }
 
   /// Contacts changed (a repeater named, moved, added): hop names are worked out again.
@@ -258,6 +341,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
       _roster = roster;
       _resolverCache = null;
     }
+    // MeshTrack (when it is in this build): the people button of a group's thread and the one line for friends' position
+    // updates follow the service.
+    final mt = MeshTrackUi.of(context)?.service;
+    if (!identical(mt, _mt)) {
+      _mt?.removeListener(_onMeshTrack);
+      _mt = mt;
+      mt?.addListener(_onMeshTrack);
+    }
+  }
+
+  void _onMeshTrack() {
+    if (mounted) setState(() {});
   }
 
   /// A hop of how [m] travelled has a known position (the menu then offers Path on map).
@@ -298,10 +393,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     switch (e.kind) {
       case ChatEventKind.contactsChanged:
       case ChatEventKind.channelsChanged:
-        setState(() {
-          _refreshRepeaters();
-          _refreshRouteHealth();
-        });
+        setState(_refreshRepeaters);
       case ChatEventKind.messageUpdated:
         if (e.convKey == widget.convKey && e.messageId != null) _onUpdated(e.messageId!);
       case ChatEventKind.messageAdded:
@@ -332,7 +424,6 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (old.state != fresh.state && fresh.isOutgoing) {
       final say = switch (fresh.state) {
         MessageState.acked => 'Delivered',
-        MessageState.likelyDelivered => 'Probably delivered, they replied',
         MessageState.failed => 'Not delivered',
         _ => null,
       };
@@ -357,7 +448,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     });
     if (!m.isOutgoing && !_showJump) {
       AppHaptics.soft();
-      SemanticsService.sendAnnouncement(View.of(context), '${m.senderName ?? 'New message'}: ${m.text}', Directionality.of(context));
+      SemanticsService.sendAnnouncement(View.of(context), '${m.senderName ?? 'New message'}: ${alertPreviewText(m.text)}', Directionality.of(context));
     }
   }
 
@@ -425,6 +516,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _flash?.cancel();
     _deliveryTick?.cancel();
     c.removeListener(_onController);
+    _mt?.removeListener(_onMeshTrack);
     _photosBound?.removeListener(_onPhotos);
     if (c.activeConversation == widget.convKey) c.setActiveConversation(null);
     _scroll.dispose();
@@ -579,11 +671,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
       case MessageMenuId.resend:
         _resend(m.id);
       case MessageMenuId.cancel:
-        c.service.cancel(m.id);
+        _cancel(m.id);
       case MessageMenuId.delete:
         deleteMessageWithUndo(context, c.service, m.id);
       case MessageMenuId.details:
-        await details.showMessageDetails(context, chat: c.service, messageId: m.id);
+        await _details(m.id);
       case MessageMenuId.pathMap:
         await _openPathMap(m);
       case MessageMenuId.viewPhoto:
@@ -626,9 +718,41 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final r = await MessageMenu.showSheet(context, m,
         hasMap: _hasMap(m, messageInfo(m, resolver: _resolver, contact: _kind == ConvKind.dm ? _contact : null)),
         canResend: canResend,
+        canCancel: _canCancel(m),
         photos: p != null,
         isOwnPhoto: (u) => p?.isOwn(anyPhotoIdOf(u) ?? '') ?? false);
     if (r != null && mounted) await _perform(id, r);
+  }
+
+  /// A message that is still being tried can be stopped: waiting to go, or (a direct message) sent and waiting for its
+  /// confirmation with tries left. The engine says which ([ChatService.deliveryProgress]).
+  bool _canCancel(ChatMessage m) {
+    if (!m.isOutgoing) return false;
+    if (m.isPending) return true;
+    return m.convKind != ConvKind.channel && m.state == MessageState.sent && c.service.deliveryProgress(m.id).active;
+  }
+
+  void _cancel(String id) {
+    AppHaptics.light();
+    if (c.service.cancel(id)) showAppToast(context, 'Stopped. It is not sent again.');
+  }
+
+  /// D1: the radio's own contact list, where the person chooses what to remove.
+  void _manageRadioContacts() => unawaited(showRadioListSheet(context, _nav.contacts));
+
+  /// C-U7: a MeshTrack group's thread opens its group (send my position, where are you) in one tap.
+  void _openGroup(int channelId) => unawaited(showGroupSheet(context, channelId: channelId));
+
+  Future<void> _useForMeshTrack(int channelId) async {
+    final ops = MeshTrackUi.read(context)?.ops;
+    if (ops == null) return;
+    final MtGroupOpResult r = await ops.useExistingChannel(channelId);
+    if (!mounted) return;
+    if (r.ok) {
+      showAppToast(context, 'This channel is now a MeshTrack group.', kind: AppToastKind.success);
+    } else {
+      showAppToast(context, r.message ?? 'Could not use this channel for MeshTrack. Try again.', kind: AppToastKind.error);
+    }
   }
 
   Future<void> _failedTap(String id) async {
@@ -639,11 +763,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
         AppHaptics.light();
         c.service.retryFailed(id);
       case FailedChoice.details:
-        await details.showMessageDetails(context, chat: c.service, messageId: id);
+        await _details(id);
       case FailedChoice.delete:
         deleteMessageWithUndo(context, c.service, id);
     }
   }
+
+  /// Full details of one message. A named repeater of its route opens that repeater (C-U8): its profile here when it is
+  /// on the radio.
+  Future<void> _details(String id) =>
+      details.showMessageDetails(context,
+          chat: c.service, messageId: id, onOpenContact: (contact) => _nav.openProfile(context, contact), onManageRadioContacts: _manageRadioContacts);
 
   void _toggleInfo(String id) {
     AppHaptics.selection();
@@ -820,6 +950,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         ...widget.actions,
+        if (ch?.id != null && (_mt?.state.group(ch!.id!) != null))
+          CupertinoButton(
+            key: const Key('conv-mt-group'),
+            padding: EdgeInsets.zero,
+            minimumSize: Size.square(Hit.of(context)),
+            onPressed: () => _openGroup(ch!.id!),
+            child: Semantics(label: 'MeshTrack group', child: const AppSymbolIcon(AppSymbols.person2Fill, size: 22)),
+          ),
         CupertinoButton(
           key: const Key('conv-menu-button'),
           padding: EdgeInsets.zero,
@@ -855,6 +993,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               Text(m.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body.copyWith(color: colors.textPrimary)),
               const SizedBox(height: 2),
               Text('${m.isOutgoing ? 'You' : (m.senderName ?? 'Unknown')}, ${dayLabel(context, m.tsLocalMs, now: c.now())} ${timeLabel(context, m.tsLocalMs)}',
+                  key: Key('conv-result-time-${m.id}'),
                   style: AppType.footnote.copyWith(color: colors.textMuted)),
             ]),
           ),
@@ -883,9 +1022,22 @@ class _ConversationScreenState extends State<ConversationScreen> {
             title: 'See how a message travelled',
             message: 'Tap a message to see its route, signal and time.',
           ),
-        Expanded(child: _list(context)),
-        if (_routeBroken && _contact != null)
-          RouteBrokenCard(contact: _contact!, manager: c.service.contacts, onChanged: () => mounted ? setState(_refreshRouteHealth) : null),
+        // The notes sit under the messages and take at most 40% of the room left above the composer (at the largest text
+        // sizes they scroll), so they never push the composer off the screen.
+        Expanded(
+          child: switch (_notes(context, colors, ch)) {
+            final notes when notes.isNotEmpty => LayoutBuilder(
+                builder: (context, box) => Column(children: [
+                  Expanded(child: _list(context)),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: box.maxHeight * 0.4),
+                    child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: notes)),
+                  ),
+                ]),
+              ),
+            _ => _list(context),
+          },
+        ),
         if (_failedIds.length >= 2)
           Container(
             key: const Key('retry-all-banner'),
@@ -913,9 +1065,65 @@ class _ConversationScreenState extends State<ConversationScreen> {
           onSent: _jumpToLatest,
           onChannelInfoWhenOffRadio: offRadio ? _openInfo : null,
           photos: _photos,
+          peerName: _kind == ConvKind.dm ? (_contact?.displayName ?? _title) : null,
         ),
       ],
     );
+  }
+
+  /// The notes between the messages and the composer, each only when it applies.
+  List<Widget> _notes(BuildContext context, AppColors colors, Channel? ch) {
+    final out = <Widget>[];
+    // C-U2: friends' position updates in a channel that is not a MeshTrack group here: one line, and the offer once.
+    final id = ch?.id;
+    final stray = id == null ? const <MtStrayShare>[] : (_mt?.strayShares(id) ?? const <MtStrayShare>[]);
+    if (stray.isNotEmpty) {
+      out.add(_ThreadNote(
+        key: const Key('stray-positions'),
+        symbol: AppSymbols.location,
+        text: strayPositionsLine(stray),
+      ));
+      final tip = 'mt-offer-$id';
+      if (!appTipStore.seen(tip)) {
+        final canBeGroup = ch!.kind == ChannelKind.private && ch.slot != null;
+        out.add(_ThreadNote(
+          key: const Key('stray-offer'),
+          symbol: AppSymbols.person2Fill,
+          text: canBeGroup
+              ? 'Friends are sharing positions here. Use this channel for MeshTrack to see them on the map.'
+              : 'Friends are sharing positions here. MeshTrack shows friends on the map in a private channel.',
+          actionKey: const Key('stray-offer-use'),
+          actionLabel: canBeGroup ? 'Use for MeshTrack' : null,
+          onAction: canBeGroup
+              ? () {
+                  appTipStore.markSeen(tip);
+                  unawaited(_useForMeshTrack(id!));
+                }
+              : null,
+          onDismiss: () => setState(() => appTipStore.markSeen(tip)),
+        ));
+      }
+    }
+    if (_kind == ConvKind.dm) {
+      // D1: the radio refused a contact because its list is full. Nothing is removed to make room; the person chooses.
+      if (c.radioContactListFull) {
+        out.add(_ThreadNote(
+          key: const Key('radio-list-full'),
+          symbol: AppSymbols.exclamationTriangle,
+          warning: true,
+          text: '$radioContactListFullText. A message to someone who is not on it cannot be sent until you remove a contact from the radio.',
+          actionKey: const Key('radio-list-manage'),
+          actionLabel: 'Manage radio contacts',
+          onAction: _manageRadioContacts,
+        ));
+      }
+      // Rule 16: they have never confirmed a message from us. Their radio can only read and confirm our messages once
+      // it has us as a contact. Gone for good after the first confirmation.
+      if (c.needsToAddYou(widget.convKey)) {
+        out.add(const _ThreadNote(key: Key('needs-add-you'), symbol: AppSymbols.personBadgePlus, text: '$needsToAddYouText.'));
+      }
+    }
+    return out;
   }
 
   Widget _list(BuildContext context) {
@@ -967,14 +1175,26 @@ class _ConversationScreenState extends State<ConversationScreen> {
             }
             final slot = _slots[i];
             final m = slot.message;
+            if (_positionRunHidden.contains(m.id)) return SizedBox.shrink(key: ValueKey(m.id));
+            final run = _positionRunHead[m.id];
+            if (run != null) return _PositionRunLine(key: ValueKey(m.id), name: m.senderName, updates: run);
             DeliveryUi? d;
+            var cancellable = false;
             if (m.isOutgoing) {
-              final maxAttempts = (m.state == MessageState.sent || m.state == MessageState.retrying) && m.convKind != ConvKind.channel ? c.store.outbox.get(m.id)?.maxAttempts : null;
+              // "Try n of m" is read from the delivery engine (the plan the message started with: direct tries, then the
+              // flood tries), never worked out here.
+              final trying = m.convKind != ConvKind.channel && (m.state == MessageState.sent || m.state == MessageState.retrying || m.state == MessageState.sending);
+              final progress = trying ? c.service.deliveryProgress(m.id) : null;
+              final maxAttempts = progress?.tryCount;
+              cancellable = m.isPending || (progress?.active ?? false);
               d = deliveryUi(m,
                   radioConnected: c.radioConnected,
                   maxAttempts: maxAttempts,
                   nowMs: now.millisecondsSinceEpoch,
-                  viaText: m.state == MessageState.acked && m.convKind != ConvKind.channel ? (m.route == models.Route.flood ? 'searched' : dmRouteText(contact).toLowerCase()) : null);
+                      // How it went is what the radio reported for the try that got through (rule 11).
+                  viaText: m.state == MessageState.acked && m.convKind != ConvKind.channel
+                      ? (m.route == models.Route.flood ? 'by flood' : (contact != null && contact.hasPath ? dmRouteText(contact).toLowerCase() : null))
+                      : null);
             }
             final expanded = _expandedId == m.id;
             final info = messageInfo(m, resolver: _resolver, peer: peerName, contact: contact);
@@ -989,6 +1209,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
               wide: wide,
               expanded: expanded,
               info: expanded ? info : null,
+              stamp: expanded ? '${m.isOutgoing ? 'Sent' : 'Received'} ${messageStamp(m.tsLocalMs, now: now)}' : null,
+              onCancel: cancellable ? _cancel : null,
               hasMap: _hasMap(m, info),
               infoCard: () => _infoCard(m, info, peerName),
               onResend: _resend,
@@ -1000,7 +1222,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               onFailedTap: _failedTap,
               onMenu: _perform,
               onLongPress: _longPressSheet,
-              onDetails: (id) => details.showMessageDetails(context, chat: c.service, messageId: id),
+              onDetails: _details,
               photos: _photos,
               onPhoto: _openPhoto,
             );
@@ -1013,7 +1235,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               key: ValueKey('wrap-${m.id}'),
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (marked) _UnreadMarker(count: _unreadCount),
+                if (marked) _UnreadMarker(key: _unreadKey, count: _unreadCount),
                 if (anchored) KeyedSubtree(key: _anchorKey, child: shown) else shown,
               ],
             );
@@ -1170,7 +1392,7 @@ class _Empty extends StatelessWidget {
 
 class _UnreadMarker extends StatelessWidget {
   final int count;
-  const _UnreadMarker({required this.count});
+  const _UnreadMarker({super.key, required this.count});
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
@@ -1199,6 +1421,86 @@ class _UnreadMarker extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+
+/// "Jo shared their position · 6 updates" / "Jo and Sam shared their positions · 9 updates" for friends heard in a
+/// channel that is not a MeshTrack group on this phone (C-U2).
+String strayPositionsLine(List<MtStrayShare> shares) {
+  if (shares.isEmpty) return '';
+  final total = shares.fold<int>(0, (n, s) => n + s.updates);
+  final names = [for (final s in shares) s.name];
+  final who = switch (names.length) {
+    1 => names.first,
+    2 => '${names[0]} and ${names[1]}',
+    _ => '${names[0]}, ${names[1]} and ${names.length - 2} ${names.length - 2 == 1 ? 'other' : 'others'}',
+  };
+  final what = names.length == 1 ? 'shared their position' : 'shared their positions';
+  return total == 1 ? '$who $what' : '$who $what · $total updates';
+}
+
+/// One centred line for a run of position updates that an older build stored as chat (C-U2).
+class _PositionRunLine extends StatelessWidget {
+  final String? name;
+  final int updates;
+  const _PositionRunLine({super.key, required this.name, required this.updates});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final who = name ?? 'Someone';
+    final text = updates == 1 ? '$who shared their position' : '$who shared their position · $updates updates';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.xs),
+      child: Center(
+        child: Text(text, key: const Key('position-run'), textAlign: TextAlign.center, style: AppType.footnote.copyWith(color: c.textMuted)),
+      ),
+    );
+  }
+}
+
+/// A one-line note between the messages and the composer, with at most one button and an optional dismiss.
+class _ThreadNote extends StatelessWidget {
+  final AppSymbol symbol;
+  final String text;
+  final bool warning;
+  final Key? actionKey;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final VoidCallback? onDismiss;
+  const _ThreadNote({super.key, required this.symbol, required this.text, this.warning = false, this.actionKey, this.actionLabel, this.onAction, this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    return Container(
+      width: double.infinity,
+      color: c.surfaceHigh,
+      padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.s, Gap.xs, Gap.s),
+      constraints: BoxConstraints(minHeight: Hit.of(context)),
+      child: Row(children: [
+        ExcludeSemantics(child: AppSymbolIcon(symbol, size: 18, color: warning ? c.warning : c.textMuted)),
+        const SizedBox(width: Gap.s),
+        Expanded(child: Text(text, style: AppType.footnote.copyWith(color: c.textPrimary))),
+        if (actionLabel != null)
+          CupertinoButton(
+            key: actionKey,
+            padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+            minimumSize: Size.square(Hit.of(context)),
+            onPressed: onAction,
+            child: Text(actionLabel!, style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w600)),
+          ),
+        if (onDismiss != null)
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.square(Hit.of(context)),
+            onPressed: onDismiss,
+            child: Semantics(label: 'Dismiss', child: AppSymbolIcon(AppSymbols.xmark, size: 16, color: c.textMuted)),
+          ),
+        if (actionLabel == null && onDismiss == null) const SizedBox(width: Gap.s),
+      ]),
     );
   }
 }

@@ -4,6 +4,7 @@
 import '../map/map_preview.dart';
 import 'dart:async';
 
+import '../../core/time_format.dart' show relativeDuration, timeOfDay;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -392,21 +393,18 @@ String fmtAir(double ms) {
   return '${(ms / 60000).toStringAsFixed(1)} min';
 }
 
-/// "just now", "12 s ago", "4 min ago", "2 h ago".
+/// "just now", "12 s ago", then the app's one wording ("4 min ago", "2 h ago", "3 d ago"). The radio tools keep the
+/// seconds under a minute and a half: a live reading that old is worth counting.
 String fmtAgo(Duration d) {
   final s = d.inSeconds;
   if (s < 5) return 'just now';
   if (s < 90) return '$s s ago';
-  if (s < 5400) return '${(s / 60).round()} min ago';
-  return '${(s / 3600).round()} h ago';
+  return relativeDuration(d);
 }
 
-/// Local clock time, "14:05:09".
-String fmtClock(DateTime t) {
-  final l = t.toLocal();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${two(l.hour)}:${two(l.minute)}:${two(l.second)}';
-}
+/// The clock time with seconds, in the zone the app shows ("2:05:09 PM", "14:05:09" on a 24-hour phone, with "UTC"
+/// under the UTC setting): Round 2 N-U8.
+String fmtClock(DateTime t) => timeOfDay(t, seconds: true);
 
 // ---------------------------------------------------------------- map
 
@@ -496,7 +494,7 @@ class ToolMap extends StatelessWidget {
                     point: p.point,
                     width: 40,
                     height: 40,
-                    child: p.child ?? (p.icon == Icons.cell_tower && p.color == null ? const Center(child: NodeSymbol(role: 'repeater')) : Icon(p.icon, color: p.color ?? m.beacon, size: 28)),
+                    child: p.child ?? (p.icon == Icons.cell_tower && p.color == null ? const Center(child: NodeSymbol(role: 'repeater')) : Icon(p.icon, color: p.color ?? m.repeater, size: 28)),
                   ),
               ]),
             ],
@@ -533,7 +531,7 @@ class ToolMap extends StatelessWidget {
           overlays: [
             MarkerLayer(markers: [
               for (final p in pathPins)
-                Marker(point: p.point, width: 40, height: 40, child: p.child ?? Icon(p.icon, color: p.color ?? m.beacon, size: 28)),
+                Marker(point: p.point, width: 40, height: 40, child: p.child ?? Icon(p.icon, color: p.color ?? m.repeater, size: 28)),
             ]),
           ],
         ),

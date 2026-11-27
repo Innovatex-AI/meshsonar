@@ -203,7 +203,7 @@ void main() {
     await h2.state.launchSettled.timeout(const Duration(seconds: 20));
     expect(h2.state.repeaterName('da'), 'Roster-DA');
     expect(h2.state.repeaterName('ab'), 'Global-AB');
-    expect(h2.state.repeaterSync!.rosterLabel('cmh'), 'Offline - as of 1h ago');
+    expect(h2.state.repeaterSync!.rosterLabel('cmh'), 'Offline - as of 1 h ago');
     await h2.state.repeaterSync!.writesDone;
   });
 }

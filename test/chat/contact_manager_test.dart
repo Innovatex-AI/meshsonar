@@ -72,7 +72,6 @@ void main() {
       await Future<void>.delayed(Duration.zero); // the favourite edit reaches the radio (read, then write)
       cm.rename(keyN(1), 'Mum');
       cm.setNotes(keyN(1), 'blue car');
-      cm.setForceFlood(keyN(1), true); // removed in build 77: does nothing
       port.radioAdd(radioContact(1, name: 'New name', path: true));
       await cm.syncNow();
       final c = store.contacts.get(radioA, keyN(1))!;
@@ -82,7 +81,6 @@ void main() {
       expect(c.customName, 'Mum');
       expect(c.displayName, 'Mum');
       expect(c.notes, 'blue car');
-      expect(c.forceFlood, isFalse, reason: 'route modes are gone: the radio alone decides direct or flood');
     });
 
     test('a new contact with the radio-side favourite flag arrives as a favourite', () async {
@@ -218,8 +216,6 @@ void main() {
         port.radioAdd(radioContact(i));
       }
       await attachAndSync();
-      var notices = 0;
-      final sub = cm.notices.listen((_) => notices++);
       final r = await cm.addByKey(keyN(9), name: 'Newcomer');
       expect(r.ok, isTrue);
       expect(r.onRadio, isFalse);
@@ -234,8 +230,6 @@ void main() {
       expect(cm.radioListFull, isFalse);
       await cm.syncNow();
       expect(port.table.containsKey(keyN(9)), isTrue);
-      expect(notices, 0);
-      await sub.cancel();
     });
   });
 

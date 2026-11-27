@@ -12,7 +12,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app.dart';
+import '../chat/chat_list_extras.dart';
 import '../chat/conversation_screen.dart' show ConversationPaneScope;
+import '../design/app_surfaces.dart' show showAppToast;
 import '../design/app_haptics.dart';
 import '../design/app_symbols.dart';
 import '../design/app_widgets.dart';
@@ -181,6 +183,77 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
     );
   }
 
+  /// C-U5: "Mark all read" says what it did and can be undone ("12 marked read · Undo").
+  void _markAllRead(BuildContext context, ChatTabProvider p) {
+    AppHaptics.light();
+    final n = p.unreadMessages;
+    final extras = p is ChatListExtras ? p as ChatListExtras : null;
+    if (extras == null) {
+      p.markAllRead();
+      return;
+    }
+    final undo = extras.markAllReadWithUndo();
+    if (undo == null) return;
+    showAppToast(context, '$n marked read', actionLabel: 'Undo', onAction: undo);
+  }
+
+  /// C-U5: the "Unread 4" chip beside search. Shown while something is unread (or while the filter is on).
+  Widget _searchRow(BuildContext context, ChatTabProvider p, ChatShellSegment seg) {
+    final field = CupertinoSearchTextField(
+      key: const Key('chat-search-field'),
+      controller: _search,
+      focusNode: _searchFocus,
+      placeholder: switch (seg) {
+        ChatShellSegment.channels => 'Search channels',
+        _ => 'Search chats and messages',
+      },
+      onChanged: (_) => setState(() {}),
+      onSuffixTap: () => setState(_search.clear),
+    );
+    final extras = p is ChatListExtras ? p as ChatListExtras : null;
+    if (seg != ChatShellSegment.chats || extras == null) return field;
+    return ValueListenableBuilder<bool>(
+      valueListenable: extras.unreadOnly,
+      builder: (context, on, _) {
+        final n = p.unreadMessages;
+        if (n == 0 && !on) return field;
+        final c = AppColors.of(context);
+        return Row(children: [
+          Expanded(child: field),
+          const SizedBox(width: Gap.s),
+          // The chip keeps to about one and a third of its size at the largest text sizes (like the segment labels), so
+          // the search field beside it keeps its room.
+          MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.35,
+            child: Semantics(
+            button: true,
+            selected: on,
+            label: on ? 'Showing unread chats only. Show all' : 'Show unread chats only, $n unread',
+            excludeSemantics: true,
+            onTap: () => _toggleUnread(extras),
+            child: CupertinoButton(
+              key: const Key('chat-unread-filter'),
+              padding: const EdgeInsets.symmetric(horizontal: Gap.m),
+              minimumSize: const Size(Hit.min, Hit.min),
+              color: on ? c.selected : c.textMuted.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(Hit.min / 2),
+              onPressed: () => _toggleUnread(extras),
+              child: Text(n > 0 ? 'Unread $n' : 'Unread',
+                  style: TextStyle(color: on ? c.onSelected : c.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
+            ),
+          ),
+          ),
+        ]);
+      },
+    );
+  }
+
+  void _toggleUnread(ChatListExtras extras) {
+    AppHaptics.selection();
+    extras.unreadOnly.value = !extras.unreadOnly.value;
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
   Future<void> _new(BuildContext context, ChatTabProvider p) => p.newChat(context, showContacts: () => _select(ChatShellSegment.contacts));
 
   Widget _scrollView(BuildContext context, ChatTabProvider p, {String? selectedKey}) {
@@ -208,19 +281,23 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
           backgroundColor: translucent ? c.bg.withValues(alpha: Blur.backgroundOpacity) : c.bg,
           enableBackgroundFilterBlur: translucent,
           border: Border(bottom: BorderSide(color: c.outline.withValues(alpha: 0.35), width: 0.5)),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          // Bar buttons keep their size at every text size, as iOS bar buttons do (iOS shows them large in the Large Content
+          // Viewer instead): "Mark all read" and "New" then fit beside the large title on every width, the iPad sidebar too.
+          trailing: MediaQuery.withNoTextScaling(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+            // C-U5: a labelled action, not a bare check-circle that read as a status light.
             if (seg == ChatShellSegment.chats && p.unreadMessages > 0)
               Semantics(
-                label: 'Mark all as read',
+                label: 'Mark all read',
                 button: true,
                 excludeSemantics: true,
-                onTap: p.markAllRead,
+                onTap: () => _markAllRead(context, p),
                 child: CupertinoButton(
                   key: const Key('chat-mark-all-read'),
-                  padding: EdgeInsets.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.s),
                   minimumSize: const Size(Hit.min, Hit.min),
-                  onPressed: p.markAllRead,
-                  child: AppSymbolIcon(AppSymbols.checkmarkBubble, size: 22, color: c.accent),
+                  onPressed: () => _markAllRead(context, p),
+                  child: Text('Mark all read', style: TextStyle(color: c.accent, fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
               ),
             if (seg == ChatShellSegment.contacts && p.addContactAction(context) != null)
@@ -261,28 +338,19 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
               ),
             ),
           ]),
+          ),
         ),
         if (seg != ChatShellSegment.contacts) CupertinoSliverRefreshControl(onRefresh: p.refresh),
         SliverPersistentHeader(
           pinned: true,
-          delegate: _SegmentHeader(selected: seg, onChanged: _select, translucent: translucent),
+          delegate: _SegmentHeader(selected: seg, onChanged: _select, translucent: translucent, colors: c),
         ),
         SliverToBoxAdapter(child: _StatusBanner(onConnect: () => openConnect(context))),
         if (seg != ChatShellSegment.contacts)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s),
-              child: CupertinoSearchTextField(
-                key: const Key('chat-search-field'),
-                controller: _search,
-                focusNode: _searchFocus,
-                placeholder: switch (seg) {
-                  ChatShellSegment.channels => 'Search channels',
-                  _ => 'Search chats and messages',
-                },
-                onChanged: (_) => setState(() {}),
-                onSuffixTap: () => setState(_search.clear),
-              ),
+              child: _searchRow(context, p, seg),
             ),
           ),
         // Two one-time tips, one at a time: the swipe tip first (only once there is a conversation to swipe), then where the radio's lists are.
@@ -292,7 +360,7 @@ class RedesignedChatTabState extends State<RedesignedChatTab> {
               tipId: 'chat-swipe-tip',
               symbol: AppSymbols.message,
               title: 'Swipe a chat for quick actions',
-              message: 'Pin, mute and delete are also under its … menu.',
+              message: 'Swipe a chat to pin, mute or delete, or press and hold it.',
               onDismissed: () => setState(() {}),
             ),
           )
@@ -321,7 +389,10 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
   final ChatShellSegment selected;
   final ValueChanged<ChatShellSegment> onChanged;
   final bool translucent;
-  const _SegmentHeader({required this.selected, required this.onChanged, required this.translucent});
+
+  /// The theme's colours: a light / dark switch redraws the header (the selected segment is teal in both).
+  final AppColors colors;
+  const _SegmentHeader({required this.selected, required this.onChanged, required this.translucent, required this.colors});
 
   static const double extent = 60;
   @override
@@ -348,13 +419,14 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
           child: CupertinoSlidingSegmentedControl<ChatShellSegment>(
             key: const Key('chat-segments'),
             groupValue: selected,
-            thumbColor: c.surfaceHigh,
+            // C-V1: the selected segment is the app's teal selected style (it was a grey nearly the colour of its track).
+            thumbColor: c.selected,
             backgroundColor: c.textMuted.withValues(alpha: 0.16),
             padding: const EdgeInsets.all(2),
-            children: const {
-              ChatShellSegment.chats: _SegmentLabel('Chats', key: Key('segment-chats')),
-              ChatShellSegment.contacts: _SegmentLabel('Contacts', key: Key('segment-contacts')),
-              ChatShellSegment.channels: _SegmentLabel('Channels', key: Key('segment-channels')),
+            children: {
+              ChatShellSegment.chats: _SegmentLabel('Chats', selected: selected == ChatShellSegment.chats, key: const Key('segment-chats')),
+              ChatShellSegment.contacts: _SegmentLabel('Contacts', selected: selected == ChatShellSegment.contacts, key: const Key('segment-contacts')),
+              ChatShellSegment.channels: _SegmentLabel('Channels', selected: selected == ChatShellSegment.channels, key: const Key('segment-channels')),
             },
             onValueChanged: (v) {
               if (v != null) onChanged(v);
@@ -370,7 +442,7 @@ class _SegmentHeader extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(_SegmentHeader old) => old.selected != selected || old.translucent != translucent;
+  bool shouldRebuild(_SegmentHeader old) => old.selected != selected || old.translucent != translucent || !identical(old.colors, colors);
 }
 
 /// One banner for every offline wording (audit 2.2): shown only when the radio is not connected.
@@ -399,7 +471,8 @@ class _StatusBanner extends StatelessWidget {
 /// One segment label: at least 44 pt tall so the segment is a full-size target (the label stays 13 pt).
 class _SegmentLabel extends StatelessWidget {
   final String label;
-  const _SegmentLabel(this.label, {super.key});
+  final bool selected;
+  const _SegmentLabel(this.label, {this.selected = false, super.key});
   @override
   // Three segments on a 320-375 pt phone leave about 100 pt each: one line, shrunk to fit rather than wrapped.
   Widget build(BuildContext context) => ConstrainedBox(
@@ -407,7 +480,13 @@ class _SegmentLabel extends StatelessWidget {
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, maxLines: 1, softWrap: false)),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: selected ? TextStyle(color: AppColors.of(context).onSelected, fontWeight: FontWeight.w600) : null),
+            ),
           ),
         ),
       );

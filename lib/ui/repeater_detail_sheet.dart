@@ -6,6 +6,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../core/time_format.dart' show shortDateTime;
+
 import '../core/heard.dart';
 import '../core/model.dart';
 import 'app.dart' show AppScope;
@@ -15,7 +17,6 @@ import 'nodes/node_ref.dart';
 import 'network/nodes/node_routes.dart' show openNetworkNode;
 import 'repeater_widgets.dart';
 import 'theme.dart';
-import 'widgets.dart';
 import 'repeater_reach_section.dart';
 import 'your_drives_section.dart';
 import 'design/app_surfaces.dart';
@@ -108,7 +109,7 @@ class RepeaterDetailSheet extends StatelessWidget {
       // Not measured = left out (build 76; they were rows of dashes).
       if (last?.snrDb != null) ('Last SNR', formatSnrShort(last!.snrDb!)),
       if (best != null) ('Best SNR', formatSnrShort(best)),
-      if (last != null) ('Last heard', '${formatTime(last.ts)}${last.hops == null ? '' : ' · ${hopsLabel(last.hops)}'}'),
+      if (last != null) ('Last heard', '${shortDateTime(last.ts)}${last.hops == null ? '' : ' · ${hopsLabel(last.hops)}'}'),
       if (m.source != RepeaterSource.none) ('Listed by', m.source == RepeaterSource.cmat ? 'MeshSonar' : 'map.meshcore.io'),
     ];
 
@@ -121,8 +122,8 @@ class RepeaterDetailSheet extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: mc.beacon.withValues(alpha: 0.16)),
-            child: Icon(Icons.cell_tower, color: mc.beacon),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: mc.repeaterTint),
+            child: Icon(Icons.cell_tower, color: mc.repeater),
           ),
           const SizedBox(width: Gap.m),
           Expanded(

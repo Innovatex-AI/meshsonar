@@ -30,7 +30,6 @@ import 'contact_widgets.dart';
 import 'contacts_controller.dart';
 import 'contacts_grouping.dart';
 import 'contacts_settings_sheet.dart';
-import 'path_manager_screen.dart' show offerUseRoute;
 import 'profile_tiles.dart';
 import 'radio_caps_of.dart';
 import 'qr_scan_screen.dart';
@@ -58,22 +57,12 @@ class ContactsView extends StatefulWidget {
 
 class _ContactsViewState extends State<ContactsView> {
   final _search = TextEditingController();
-  StreamSubscription<ContactNotice>? _notices;
 
   ContactsController get _c => widget.controller;
   ContactManager get _m => _c.manager;
 
   @override
-  void initState() {
-    super.initState();
-    _notices = _m.notices.listen((n) {
-      if (mounted) showAppToast(context, n.message, duration: const Duration(seconds: 6));
-    });
-  }
-
-  @override
   void dispose() {
-    unawaited(_notices?.cancel());
     _search.dispose();
     super.dispose();
   }
@@ -102,7 +91,7 @@ class _ContactsViewState extends State<ContactsView> {
       showAppToast(context, tile.reason ?? 'Not available right now.');
       return;
     }
-    await showPingSheet(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
+    await showPingSheet(context, contact: c, manager: _m);
   }
 
   Future<void> _remove(Contact c) => removeContactFlow(context, _c, c);
@@ -205,8 +194,11 @@ class _ContactsViewState extends State<ContactsView> {
       card = _Card(
         key: const Key('banner-full'),
         symbol: AppSymbols.exclamationTriangle,
-        text: 'Your radio\'s contact list is full${s.radioCount != null && s.capacity != null ? ' (${s.radioCount} of ${s.capacity})' : ''}. Free up space to add anyone new.',
-        actions: [_CardButton(const Key('banner-free'), 'Free up space', () => showRadioListSheet(context, _c))],
+        // Decision D1 (build 77): the app never takes a contact off the radio to make room. It says the list is full and
+        // opens the radio's own list, where the person chooses what goes.
+        text: '$radioContactListFullText${s.radioCount != null && s.capacity != null ? ' (${s.radioCount} of ${s.capacity})' : ''}. '
+            'Nobody new can be added, and a message to someone who is not on it cannot be sent, until you remove a contact from the radio.',
+        actions: [_CardButton(const Key('banner-free'), 'Manage radio contacts', () => showRadioListSheet(context, _c))],
       );
     } else if (_m.shouldOfferAskFirst) {
       card = _Card(
@@ -362,10 +354,14 @@ class _ContactTile extends StatelessWidget {
     final col = AppColors.of(context);
     final c = row.contact;
     final route = routeCaption(c);
-    final heard = heardShort(c, nowMs);
-    final bars = heardBars(c, nowMs);
+    // C-V2 (build 77): how recently they were heard is said in words ("5 min ago", "Not heard yet"); the signal-bars glyph
+    // that stood for it is gone. D5: no "Person ·" on a list that is all people.
+    final heard = heardWords(c, nowMs);
     final unread = row.unread;
-    final label = '${c.displayName}, ${contactTypeLabel(c.type)}, $route, ${heard == null ? 'not heard yet' : 'heard $heard ago'}${unread > 0 ? ', $unread unread' : ''}';
+    // At the largest text sizes the words go under the route instead of beside it, so the row never runs off the screen.
+    final stacked = MediaQuery.textScalerOf(context).scale(17) > 17 * 1.5;
+    final heardText = Text(heard, key: Key('contact-heard-${c.publicKey.substring(0, 8)}'), maxLines: stacked ? 2 : 1, style: AppType.footnote.copyWith(color: col.textMuted));
+    final label = '${c.displayName}, $route, ${heard == notHeardYet ? 'not heard yet' : 'heard $heard'}${unread > 0 ? ', $unread unread' : ''}';
     return Semantics(
       button: true,
       container: true,
@@ -386,13 +382,13 @@ class _ContactTile extends StatelessWidget {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(c.displayName, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.headline.copyWith(color: col.textPrimary)),
-                Text('${contactTypeLabel(c.type)} · $route', maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.subhead.copyWith(color: col.textMuted)),
+                Text(route, key: Key('contact-route-${c.publicKey.substring(0, 8)}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.subhead.copyWith(color: col.textMuted)),
+                if (stacked) heardText,
               ]),
             ),
             const SizedBox(width: Gap.s),
             Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-              HeardBars(bars: bars),
-              if (heard != null) Text(heard, maxLines: 1, style: AppType.footnote.copyWith(color: col.textMuted)),
+              if (!stacked) heardText,
               if (unread > 0)
                 Container(
                   margin: const EdgeInsets.only(top: 2),
@@ -412,32 +408,6 @@ class _ContactTile extends StatelessWidget {
               ),
           ]),
         ),
-      ),
-    );
-  }
-}
-
-/// Three small bars: how fresh the last sign of life is (see [heardBars]). Never the only cue: the text beside it says how long.
-class HeardBars extends StatelessWidget {
-  final int bars;
-  const HeardBars({super.key, required this.bars});
-
-  @override
-  Widget build(BuildContext context) {
-    final col = AppColors.of(context);
-    return ExcludeSemantics(
-      child: SizedBox(
-        key: ValueKey('heard-bars-$bars'),
-        height: 14,
-        child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-          for (var i = 0; i < 3; i++)
-            Container(
-              width: 4,
-              height: 5.0 + i * 4.5,
-              margin: EdgeInsets.only(left: i == 0 ? 0 : 2),
-              decoration: BoxDecoration(color: i < bars ? col.accent : col.textMuted.withValues(alpha: 0.28), borderRadius: BorderRadius.circular(1.5)),
-            ),
-        ]),
       ),
     );
   }

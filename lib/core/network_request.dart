@@ -111,6 +111,7 @@ final _slug = RegExp(r'^[a-z0-9][a-z0-9-]{0,31}$');
 final _tab = RegExp(r'^[a-z][a-z0-9-]{0,31}$');
 final _channel = RegExp(r'^(public|tag:[^\s/]{1,64}|enc:[0-9a-f]{2})$');
 final _observer = RegExp(r'^[A-Za-z0-9_.:-]{1,160}$');
+final _observation = RegExp(r'^[A-Za-z0-9_.:@+-]{1,200}$');
 final _toolArg = RegExp(r'^[A-Za-z0-9_.:,>-]{1,512}$');
 
 /// Immutable: every field is final and equality is by value.
@@ -153,6 +154,10 @@ class NetworkRequest {
   /// Live map: the time to show (`/map?panel=live&t=<RFC 3339>&packet=<hash>`, the packet detail's `links.replay`).
   final DateTime? mapTime;
 
+  /// Live map: draw only this one reception of [packetHash] and play it from the sender through each hop to its
+  /// observer (`&observation=<id>`, the packet page's "Replay on map"). Null draws every path of the packet.
+  final String? observationId;
+
   const NetworkRequest({
     required this.section,
     this.region,
@@ -169,6 +174,7 @@ class NetworkRequest {
     this.pulse = false,
     this.packetFilter,
     this.mapTime,
+    this.observationId,
   });
 
   const NetworkRequest.section(NetworkSection section, {String? region, String? window}) : this(section: section, region: region, window: window);
@@ -192,8 +198,9 @@ class NetworkRequest {
   const NetworkRequest.toolOf(String tool, {String? arg, String? region}) : this(section: NetworkSection.tools, tool: tool, toolArg: arg, region: region);
 
   /// The live map drawing one packet's path (Network > Live), at [at] (the packet detail's "Show on map").
-  NetworkRequest.mapPacket(String hash, {String? region, DateTime? at})
-      : this(section: NetworkSection.live, packetHash: hash.toLowerCase(), mapTime: at?.toUtc(), region: region);
+  /// With [observation], only that one reception is drawn and replayed ("Replay on map").
+  NetworkRequest.mapPacket(String hash, {String? region, DateTime? at, String? observation})
+      : this(section: NetworkSection.live, packetHash: hash.toLowerCase(), mapTime: at?.toUtc(), region: region, observationId: observation);
 
   NetworkRequest _copy({String? Function()? region, PacketFilter? Function()? packetFilter}) => NetworkRequest(
       section: section,
@@ -210,7 +217,8 @@ class NetworkRequest {
       toolArg: toolArg,
       pulse: pulse,
       packetFilter: packetFilter == null ? this.packetFilter : packetFilter(),
-      mapTime: mapTime);
+      mapTime: mapTime,
+      observationId: observationId);
 
   /// The request in a copy with another region (deep links that name none take the viewed one).
   NetworkRequest withRegion(String? r) => _copy(region: () => r);
@@ -289,7 +297,7 @@ class NetworkRequest {
     }
 
     NetworkRequest make(NetworkSection s,
-            {String? node, String? hash, String? observer, String? channel, String? tab, String? tool, String? arg, bool pulse = false, DateTime? mapTime}) =>
+            {String? node, String? hash, String? observer, String? channel, String? tab, String? tool, String? arg, bool pulse = false, DateTime? mapTime, String? observation}) =>
         NetworkRequest(
           section: s,
           region: region,
@@ -305,6 +313,7 @@ class NetworkRequest {
           toolArg: arg,
           pulse: pulse,
           mapTime: mapTime,
+          observationId: observation,
         );
 
     // The region home `/` (and the old `/now`, `/home`) opens Live: the app has no Home section since build 72.
@@ -391,7 +400,9 @@ class NetworkRequest {
         // `/live` is the site's Live view; `/map?panel=live&packet=&t=` is the same map drawing one packet (links.replay).
         if (id != null) return null;
         final mt = DateTime.tryParse(q['t'] ?? q['at'] ?? '')?.toUtc();
-        return make(NetworkSection.live, hash: filter('packet', _packetHash), mapTime: mt);
+        final ph = filter('packet', _packetHash);
+        // One reception only makes sense with its packet.
+        return make(NetworkSection.live, hash: ph, mapTime: mt, observation: ph == null ? null : filter('observation', _observation, lower: false));
       default:
         return null;
     }
@@ -442,6 +453,7 @@ class NetworkRequest {
       q['panel'] = 'live';
       if (mapTime != null) q['t'] = mapTime!.toUtc().toIso8601String();
       if (packetHash != null) q['packet'] = packetHash!;
+      if (packetHash != null && observationId != null) q['observation'] = observationId!;
     }
     if (window != null) {
       q['window'] = window!;
@@ -482,10 +494,11 @@ class NetworkRequest {
       other.toolArg == toolArg &&
       other.pulse == pulse &&
       other.packetFilter == packetFilter &&
-      other.mapTime == mapTime;
+      other.mapTime == mapTime &&
+      other.observationId == observationId;
 
   @override
-  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, analyticsTab, tool, toolArg, pulse, packetFilter, mapTime);
+  int get hashCode => Object.hash(section, region, nodeKey, packetHash, observerId, channelId, window, since, until, analyticsTab, tool, toolArg, pulse, packetFilter, mapTime, observationId);
 
   @override
   String toString() => 'NetworkRequest(${section.name}${region == null ? '' : ' $region'})';

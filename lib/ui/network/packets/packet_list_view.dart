@@ -24,13 +24,14 @@ import '../../../core/v1/my_radio_packets.dart';
 import '../../../core/v1/network_api.dart' show NetworkReadSource;
 import '../../../core/v1/packets_api.dart';
 import '../../../radio/tools/rx_log.dart';
-import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, clockUtc;
+import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty;
 import '../../theme.dart';
 import 'decode_packet_screen.dart';
 import 'packet_context.dart';
 import 'packet_detail_screen.dart';
 import 'packet_filter_sheet.dart';
 import 'packet_ui.dart';
+import 'who_heard.dart';
 
 /// The window chips, in order (the contract's list windows without 3h). 30d and 90d need a narrowing filter (contract 3.3).
 final List<String> packetWindowChips = [for (final w in packetWindows.keys) if (w != '3h') w];
@@ -231,7 +232,7 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
     _nodeTrusted = p.nodeListTrusted;
     final st = p.status;
     _noFeedReason = _rows.isEmpty && isNoPacketFeed(st) ? st!.reason : null;
-    _statusNote = _noFeedReason == null && st != null && st.state.name != 'ready' ? (plainServerText(st.reason) ?? 'The data is ${st.state.name}.') : null;
+    _statusNote = _noFeedReason == null && st != null && st.state.name != 'ready' ? (plainServerText(st.reason) ?? stillCountingText) : null;
   }
 
   Future<void> _loadMore() async {
@@ -591,6 +592,7 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
             now: now,
             expanded: _expanded[r.hash],
             onTap: () => _openRow(r.hash),
+            onReplay: (o) => replayCopyOnLiveMap(context, hash: r.hash, observationId: o.id, regionSlug: widget.regionSlug, at: o.at ?? r.firstSeen),
             onExpand: () => setState(() {
               if (_expanded.containsKey(r.hash)) {
                 _expanded.remove(r.hash);
@@ -636,10 +638,14 @@ class _PacketListViewState extends State<PacketListView> with WidgetsBindingObse
         }
         final p = items[i];
         final d = p.detail;
-        final title = d == null ? 'Not a valid packet' : (d.origin?.name != null ? '${packetTypeLabel(d.typeName)}: ${d.origin!.name}' : (d.channel != null ? '${packetTypeLabel(d.typeName)} on ${d.channel!.label}' : packetTypeLabel(d.typeName)));
+        final title = d == null ? 'Not a valid packet' : (d.origin?.name != null ? '${packetTypeLabel(d.typeName)}: ${d.origin!.name}' : (d.channel != null
+                    ? (d.channel!.isPrivate && packetTypeLabel(d.typeName).startsWith('Channel ')
+                        ? 'Private channel ${packetTypeLabel(d.typeName).substring(8)}'
+                        : '${packetTypeLabel(d.typeName)} on ${d.channel!.label}')
+                    : packetTypeLabel(d.typeName)));
         final sub = d == null
             ? (p.problem ?? '')
-            : [packetRouteLabel(d.route), d.hops == 0 ? 'heard direct' : '${d.hops} hop${d.hops == 1 ? '' : 's'}', '${d.size} bytes', d.hash.substring(0, 8)].join(' · ');
+            : dotJoin([packetRouteLabel(d.route), d.hops == 0 ? 'heard direct' : '${d.hops} hop${d.hops == 1 ? '' : 's'}', '${d.size} bytes', d.hash.substring(0, 8)]);
         return ListTile(
           key: ValueKey('myradio-row-${p.entry.seq}'),
           contentPadding: EdgeInsets.zero,
@@ -665,7 +671,10 @@ class _PacketRowTile extends StatelessWidget {
   final DateTime now;
   final Future<List<PacketObservation>>? expanded;
   final VoidCallback onTap, onExpand;
-  const _PacketRowTile({super.key, required this.row, required this.now, required this.expanded, required this.onTap, required this.onExpand});
+
+  /// "Replay on map" on one copy in the inline "Heard by".
+  final void Function(PacketObservation copy)? onReplay;
+  const _PacketRowTile({super.key, required this.row, required this.now, required this.expanded, required this.onTap, required this.onExpand, this.onReplay});
 
   @override
   Widget build(BuildContext context) {
@@ -673,12 +682,12 @@ class _PacketRowTile extends StatelessWidget {
     final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
     final obs = row.observerCount;
     // What happened first, in plain words; the route kind (Flood / Direct) last.
-    final sub = [
+    final sub = dotJoin([
       row.hops == 0 ? 'heard direct' : '${row.hops} hop${row.hops == 1 ? '' : 's'}',
       'heard by $obs observer${obs == 1 ? '' : 's'}',
-      if (row.observationCount != null && row.observationCount! > obs) '${row.observationCount} times',
+      if (row.observationCount != null && row.observationCount! > obs) timesText(row.observationCount!),
       packetRouteLabel(row.route),
-    ].join(' · ');
+    ]);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       InkWell(
         onTap: onTap,
@@ -720,17 +729,16 @@ class _PacketRowTile extends StatelessWidget {
             return Padding(
               key: ValueKey('packet-row-obs-${row.hash}'),
               padding: const EdgeInsets.fromLTRB(Gap.xl, 0, Gap.l, Gap.s),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                if (list.isEmpty) Text('No record of who heard this packet.', style: muted) else Text('Heard by', style: t.textTheme.labelMedium),
-                for (final o in list)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text(
-                      '${o.observer.name} · ${snrText(o.snr)} · ${clockUtc(o.at)}${o.path.isEmpty ? '' : ' · ${o.path.join(' > ')}'}',
-                      style: t.textTheme.bodySmall,
-                    ),
-                  ),
-              ]),
+              // The same grouping as the packet page: one row per observer, its copies one tap away.
+              child: WhoHeard(
+                hash: row.hash,
+                observations: list,
+                origin: row.origin,
+                observationCount: row.observationCount,
+                observerCount: row.observerCount > 0 ? row.observerCount : null,
+                compact: true,
+                onReplay: onReplay,
+              ),
             );
           },
         ),

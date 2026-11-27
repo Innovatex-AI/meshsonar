@@ -72,7 +72,7 @@ void main() {
     expect(r.body, '{"a":1}');
     expect(r.headers['x-meshsonar-cache'], 'offline');
     expect(c.offlineSince, t);
-    expect(asOfLabel(c.offlineSince!, now, offline: true), 'Offline - as of 3h ago');
+    expect(asOfLabel(c.offlineSince!, now, offline: true), 'Offline - as of 3 h ago');
     down = false;
     await c.get(url);
     expect(c.offlineSince, isNull, reason: 'a live answer clears the offline state');

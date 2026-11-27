@@ -191,14 +191,18 @@ void main() {
     expect(find.byKey(const Key('retry-all-banner')), findsNothing);
   });
 
-  testWidgets('tap a bubble: info strip with route and signal, stays (no timer) until tapped again', (tester) async {
+  testWidgets('tap a bubble: info strip with route, signal in plain words and the time, stays (no timer) until tapped again', (tester) async {
     setSize(tester);
     await pump(tester);
     expect(find.byKey(const Key('info-strip')), findsNothing);
     await tester.tap(find.text('good morning everyone'));
     await tester.pump();
     expect(find.byKey(const Key('info-strip')), findsOneWidget);
-    expect(find.textContaining('SNR 5.5 dB'), findsOneWidget);
+    // D6 / C-V4: bars and "Strong signal"; the dB figures are in Full details only.
+    expect(find.textContaining('SNR'), findsNothing);
+    expect(find.textContaining('dBm'), findsNothing);
+    expect(find.textContaining('Strong signal'), findsOneWidget);
+    expect(find.textContaining('Received '), findsOneWidget, reason: 'the strip promised a time; it shows one');
     expect(find.textContaining('Via 2 repeaters'), findsOneWidget);
     await tester.pump(const Duration(seconds: 30));
     expect(find.byKey(const Key('info-strip')), findsOneWidget, reason: 'no timer closes it');
@@ -238,6 +242,7 @@ void main() {
       kit.clockMs += 1000;
       kit.incoming(ch, 'Ann', i == 3 ? 'needle in the haystack' : 'filler $i', ts: kit.clockMs ~/ 1000);
     }
+    kit.service.markRead(ch.convKey); // read: the thread opens at the newest (unread would open at the first unread)
     await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ch.convKey)));
     await tester.pump();
     expect(find.text('needle in the haystack'), findsNothing, reason: 'older than the first page');

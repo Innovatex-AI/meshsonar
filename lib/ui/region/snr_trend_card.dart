@@ -3,14 +3,15 @@
 // without a reading are gaps (never interpolated, never zero). Chart / Table switch with the numbers in the semantics label.
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' show utcDayLabel;
 import '../../core/repeater_detail_api.dart';
 import '../../core/snr_trend.dart';
 import '../charts/chart_frame.dart';
 import '../charts/time_line_chart.dart';
 import '../theme.dart';
 
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-String _day(DateTime t) => '${_months[t.month - 1]} ${t.day}';
+/// A server UTC day, without the "(UTC)" the captions and the table heading already say.
+String _day(DateTime t) => utcDayLabel(t, label: false);
 String _db(double v) => '${v.toStringAsFixed(1)} dB';
 
 class SnrTrendCard extends StatelessWidget {

@@ -186,7 +186,7 @@ void main() {
           });
         }
         // The old Insights pages are the site's Analytics tabs now, shown inside the app.
-        for (final id in ['findings', 'region-overview']) {
+        for (final id in ['findings', 'region-overview', 'my-repeaters']) {
           await step('region-analytics-$id', () async {
             await openNetworkSection(t, 'analytics');
             await t.tap(find.byKey(Key('analytics-tab-$id')).first);
@@ -197,7 +197,7 @@ void main() {
             await pumpFor(t, const Duration(seconds: 1));
           });
         }
-        for (final id in ['overview', 'rf-signal', 'topology', 'hash-stats', 'route-patterns', 'nodes', 'rf-health']) {
+        for (final id in ['rf-signal', 'topology', 'hash-stats', 'route-patterns', 'nodes', 'rf-health']) {
           await step('region-analytics-$id', () async {
             await openNetworkSection(t, 'analytics');
             final row = find.byKey(Key('analytics-tab-$id'));

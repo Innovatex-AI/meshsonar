@@ -183,6 +183,13 @@ class MessageBubble extends StatefulWidget {
   /// Resend a channel message no repeater relayed (shown when [delivery] says it can be resent, CR2).
   final void Function(String id)? onResend;
 
+  /// Set while the message is still being tried and can be stopped (build 77): the status line then has a Cancel button
+  /// and the menu "Cancel sending". Null = it cannot be cancelled.
+  final void Function(String id)? onCancel;
+
+  /// "Sent 6:14 PM" / "Received Nov 10, 6:14 PM" for the info strip (the strip promised a time and showed none).
+  final String? stamp;
+
   /// Photo messages: with a controller, MeshSonar photo links draw as thumbnails (null = plain links, as in previews).
   final PhotoController? photos;
 
@@ -212,6 +219,8 @@ class MessageBubble extends StatefulWidget {
     this.infoCard,
     this.hasMap = false,
     this.onResend,
+    this.onCancel,
+    this.stamp,
     this.photos,
     this.onPhoto,
   });
@@ -238,6 +247,8 @@ class MessageBubble extends StatefulWidget {
         infoCard = null,
         hasMap = false,
         onResend = null,
+        onCancel = null,
+        stamp = null,
         photos = null,
         onPhoto = null;
 
@@ -250,7 +261,7 @@ class MessageBubble extends StatefulWidget {
       m.id, m.state.name, m.attempt, m.repeatsHeard, hasMap, m.ackMs, m.failReason?.name, m.text.length, m.snr, m.rssi, m.pathLen, m.route?.name, //
       slot.joinsOlder, slot.joinsNewer, slot.separatorAbove, slot.showSender, //
       delivery?.word, delivery?.detail, showStatus, radioConnected, avatars, wide, expanded, info?.sentence, highlighted, separatorText, selfName,
-      photos != null, photos?.autoLoad, //
+      photos != null, photos?.autoLoad, onCancel != null, stamp, //
     ].join('|');
   }
 
@@ -408,7 +419,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       child: body,
     );
     final menuEntries = MessageMenu.entries(m,
-        hasMap: w.hasMap, canResend: (w.delivery?.canResend ?? false) && w.onResend != null, photos: w.photos != null, isOwnPhoto: (u) => w.photos?.isOwn(anyPhotoIdOf(u) ?? '') ?? false);
+        hasMap: w.hasMap, canResend: (w.delivery?.canResend ?? false) && w.onResend != null, canCancel: w.onCancel != null || m.isPending, photos: w.photos != null, isOwnPhoto: (u) => w.photos?.isOwn(anyPhotoIdOf(u) ?? '') ?? false);
     final Widget withMenu = (MessageMenu.apple(context) && MessageMenu.useContextMenu)
         ? CupertinoContextMenu.builder(
             enableHapticFeedback: true,
@@ -462,14 +473,14 @@ class _MessageBubbleState extends State<MessageBubble> {
       if (coord != null) const CustomSemanticsAction(label: 'Open in Planner'): () => openCoordinateInPlanner(context, coord),
       if (coord != null) const CustomSemanticsAction(label: 'Open on map'): () => openCoordinateOnMap(context, coord),
       if (failed) const CustomSemanticsAction(label: 'Try Again'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.retry, 'Try Again', AppSymbols.arrowUpCircleFill)),
-      if (m.isPending) const CustomSemanticsAction(label: 'Cancel sending'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.cancel, 'Cancel sending', AppSymbols.xmarkCircleFill)),
-      if (!m.isPending) const CustomSemanticsAction(label: 'Delete'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.delete, 'Delete', AppSymbols.trash, destructive: true)),
+      if (m.isPending || w.onCancel != null) const CustomSemanticsAction(label: 'Cancel sending'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.cancel, 'Cancel sending', AppSymbols.xmarkCircleFill)),
+      if (!m.isPending && w.onCancel == null) const CustomSemanticsAction(label: 'Delete'): () => w.onMenu?.call(m.id, const MessageMenuEntry(MessageMenuId.delete, 'Delete', AppSymbols.trash, destructive: true)),
     };
 
     final bubbleSemantics = Semantics(
       container: true,
       label: _spoken(time),
-      value: w.expanded ? w.info?.sentence : null,
+      value: w.expanded && w.info != null ? stripSentence(w.info!, w.stamp) : null,
       hint: w.expanded ? 'Double tap to close the details line' : 'Double tap for how it travelled',
       onTap: () => failed ? w.onFailedTap?.call(m.id) : w.onTap?.call(m.id),
       customSemanticsActions: actions,
@@ -561,6 +572,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           if (w.expanded && w.info != null) _InfoStrip(
               info: w.info!,
               mine: mine,
+              stamp: w.stamp,
               onDetails: w.onDetails == null ? null : () => w.onDetails!(m.id),
               onCopy: w.onMenu == null || m.text.isEmpty ? null : () => w.onMenu!(m.id, const MessageMenuEntry(MessageMenuId.copy, 'Copy', AppSymbols.docOnDoc)),
             ),
@@ -576,7 +588,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (mine && d != null && widget.showStatus) {
       final color = failed
           ? c.danger
-          : ((d.stage == DeliveryStage.delivered || d.stage == DeliveryStage.likely) ? c.accent : (d.canResend ? c.warning : c.textMuted));
+          : (d.stage == DeliveryStage.delivered ? c.accent : (d.canResend ? c.warning : c.textMuted));
       final status = ExcludeSemantics(
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -592,6 +604,21 @@ class _MessageBubbleState extends State<MessageBubble> {
         ),
       );
       final resend = widget.onResend;
+      final cancel = widget.onCancel;
+      // Still being tried: one tap stops it (the official app has the same Cancel on a message that is retrying).
+      if (cancel != null && d.pending) {
+        return Row(mainAxisSize: MainAxisSize.min, children: [
+          Flexible(child: status),
+          const SizedBox(width: Gap.s),
+          CupertinoButton(
+            key: Key('cancel-${m.id}'),
+            padding: const EdgeInsets.symmetric(horizontal: Gap.xs),
+            minimumSize: Size(Hit.min, Hit.of(context)),
+            onPressed: () => cancel(m.id),
+            child: Semantics(label: 'Cancel sending', child: Text('Cancel', style: AppType.footnote.copyWith(color: c.accent, fontWeight: FontWeight.w600))),
+          ),
+        ]);
+      }
       if (!d.canResend || resend == null) return status;
       // Nobody relayed it: one tap sends it again (official app: resend when no repeats were heard; here it is offered by itself).
       return Row(mainAxisSize: MainAxisSize.min, children: [
@@ -625,6 +652,16 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 }
+
+/// What the info strip says, as one sentence for VoiceOver: the route, the signal in plain words, the time.
+String stripSentence(MessageInfo info, String? stamp) => [
+      info.chips.isEmpty ? info.routeWord : '${info.routeWord}, ${info.chips.join(' › ')}',
+      if (info.signalWord != null) signalPhrase(info.signalWord!),
+      ?stamp,
+    ].join('. ');
+
+/// "Good signal", "Weak signal": the signal in plain words (decision D6).
+String signalPhrase(String word) => '$word signal';
 
 /// The 3-bar signal glyph: shape plus a word elsewhere, never colour alone.
 class SignalBars extends StatelessWidget {
@@ -694,13 +731,16 @@ class _Separator extends StatelessWidget {
   }
 }
 
-/// The line that opens under a tapped bubble: route chips, then SNR / RSSI with a word and bars. Stays until tapped again.
+/// The line that opens under a tapped bubble: route chips, then the signal in plain words with bars ("Good signal";
+/// decision D6: the dB figures are in Full details, not here), then when it was sent or received. Stays until tapped
+/// again.
 class _InfoStrip extends StatelessWidget {
   final MessageInfo info;
   final bool mine;
+  final String? stamp;
   final VoidCallback? onDetails;
   final VoidCallback? onCopy;
-  const _InfoStrip({required this.info, required this.mine, this.onDetails, this.onCopy});
+  const _InfoStrip({required this.info, required this.mine, this.stamp, this.onDetails, this.onCopy});
 
   @override
   Widget build(BuildContext context) {
@@ -729,12 +769,17 @@ class _InfoStrip extends StatelessWidget {
                 ],
               ],
             ),
-            if (info.signalText != null || info.signalWord != null)
+            if (info.signalWord != null || stamp != null)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  if (info.signalBars != null) ...[SignalBars(bars: info.signalBars!, color: info.signalBars == 0 ? c.warning : c.ok), const SizedBox(width: 6)],
-                  Flexible(child: Text([?info.signalText, ?info.signalWord].join(' · '), style: muted)),
+                  if (info.signalWord != null && info.signalBars != null) ...[
+                    SignalBars(bars: info.signalBars!, color: info.signalBars == 0 ? c.warning : c.ok),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text([if (info.signalWord != null) signalPhrase(info.signalWord!), ?stamp].join(' · '), key: const Key('strip-signal'), style: muted),
+                  ),
                 ]),
               ),
             // Copy sits beside Details, so copying a message no longer needs a long-press.

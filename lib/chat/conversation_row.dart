@@ -15,7 +15,7 @@ enum RowKind { person, repeater, sensor, room, publicChannel, hashtagChannel, pr
 
 /// The delivery state of the last message when it is the person's own (glyphs: plan 4.2 table). Channels never reach
 /// [delivered] (they have no receipts).
-enum RowDelivery { none, queued, sent, heard, delivered, likely, failed }
+enum RowDelivery { none, queued, sent, heard, delivered, failed }
 
 /// The last message of a conversation, as far as the list cares.
 class LastMessageInfo {

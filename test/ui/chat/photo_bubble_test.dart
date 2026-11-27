@@ -53,6 +53,7 @@ void main() {
       addOwnPhotoId(kit.store, id);
     }
     final photos = fakePhotos(kit.store, transport: transport, source: source);
+    kit.service.markRead(ch.convKey); // read: the thread opens at the newest message (unread opens at the first unread, C-U4)
     await tester.pumpWidget(darkIphone(ConversationScreen(controller: kit.controller, convKey: ch.convKey, photos: photos)));
     await tester.pump();
     await tester.pump();

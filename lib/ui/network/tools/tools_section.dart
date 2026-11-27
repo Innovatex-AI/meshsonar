@@ -1,10 +1,13 @@
 // Network > Tools (build 71, stream D; build 76: a "Find a tool" field, plain descriptions, the radio group second and
 // saying whether a radio is connected). One list, three groups:
-// - Network tools, native on `/v1`: Path Inspector, Trace Viewer, Prefix Tool, Decode a packet.
-// - Site pages shown inside the app ([SitePageView]): Scope Audit, Compare observers, Region definition, Status, and the
-//   site tools with no native twin (Airtime and load, Point-to-point link, Coverage painter).
-// - Radio tools (lib/ui/tools): Trace path, Discover, Adverts, Rx log, Noise floor, Telemetry. They live here once; each
-//   says so itself when no radio is connected. A radio trace's result opens in the native Trace Viewer.
+// - Network tools, native on `/v1`: Path Inspector, Trace Viewer, Prefix Tool, Decode a packet, Status (native since
+//   build 77, Round 2 W9).
+// - Site pages shown inside the app ([SitePageView]): Scope Audit, Compare observers, Region definition. Build 77
+//   (Round 2 W6) removed the rows of the three site tools locked to site admins (Airtime and load, Point-to-point link,
+//   Coverage painter): every person saw a "Sign in with email" page there.
+// - Radio tools (lib/ui/tools): Send a trace (named "Trace path" until build 77, so it is not mixed up with Trace
+//   Viewer), Discover, Adverts, Rx log, Noise floor, Telemetry. They live here once; each says so itself when no
+//   radio is connected. A radio trace's result opens in the native Trace Viewer.
 // `initialTool` (from a `/tools/<id>` link) shows that tool in place inside the section with `initialArg`, under a back
 // arrow to the list; an unknown id shows the list. A row tapped in the list opens the tool as its own page.
 import 'package:flutter/material.dart';
@@ -25,6 +28,7 @@ import '../analytics/site_page_view.dart';
 import '../packets/decode_packet_screen.dart';
 import 'path_inspector_screen.dart';
 import 'prefix_tool_screen.dart';
+import 'status_screen.dart';
 import 'trace_viewer_screen.dart';
 
 enum ToolGroup { network, site, radio }
@@ -42,15 +46,11 @@ const List<ToolEntry> toolEntries = [
   ToolEntry('trace', 'Trace Viewer', 'How far a trace got and the signal at each repeater', ToolGroup.network, aliases: ['trace-viewer']),
   ToolEntry('prefix', 'Prefix Tool', 'Find an unused ID for a new repeater', ToolGroup.network, aliases: ['prefix-tool']),
   ToolEntry('decode', 'Decode a packet', 'Paste a packet and read what is in it', ToolGroup.network),
+  ToolEntry('status', 'Status', 'Is the network data arriving and up to date', ToolGroup.network),
   ToolEntry('scope-audit', 'Scope Audit', 'Which repeaters pass on which regions', ToolGroup.site),
   ToolEntry('compare', 'Compare observers', 'What two observers both hear, and what only one does', ToolGroup.site, aliases: ['observers-compare']),
   ToolEntry('definition', 'Region definition', 'Which regions cover a spot on the map', ToolGroup.site, aliases: ['region', 'region-def']),
-  ToolEntry('status', 'Status', 'Is the network data arriving and up to date', ToolGroup.site),
-  // Site tools with no native twin here: the link parser passes `/tools/<name>` through with these ids.
-  ToolEntry('airtime', 'Airtime and load', 'How long a packet is on air and how busy the channel is', ToolGroup.site),
-  ToolEntry('link', 'Point-to-point link', 'Will two places hear each other', ToolGroup.site),
-  ToolEntry('painter', 'Coverage painter', 'Estimated coverage from a spot you pick', ToolGroup.site),
-  ToolEntry('radio-trace', 'Trace path', 'Send a test packet along repeaters you choose', ToolGroup.radio, aliases: ['trace-path']),
+  ToolEntry('radio-trace', 'Send a trace', 'Send a test packet along repeaters you choose', ToolGroup.radio, aliases: ['trace-path', 'send-trace']),
   ToolEntry('discover', 'Discover', 'Find repeaters in direct range of your radio', ToolGroup.radio),
   ToolEntry('adverts', 'Adverts', 'Announce your radio and see who else announced', ToolGroup.radio),
   ToolEntry('rx-log', 'Rx log', 'Every packet your radio hears, live', ToolGroup.radio, aliases: ['rxlog', 'rx_log']),
@@ -89,7 +89,6 @@ String sitePathOfTool(String id, String? arg) {
     'scope-audit' => '/scope-audit',
     'compare' => '/observers/compare',
     'definition' => '/tools/region',
-    'airtime' || 'link' || 'painter' => '/tools/$id',
     _ => '/status',
   };
   if (a.isEmpty) return base;
@@ -107,8 +106,8 @@ class ToolsSection extends StatefulWidget {
 
   /// A tool to open straight away, as the link parser (lib/core/network_request.dart) names it: `path` (argument: the
   /// `?hops=` list), `trace` (the hash of `/tools/trace/<hash>`), `prefix` (`?prefix=`), `decode`, `scope-audit`,
-  /// `compare`, `definition`, `status`, a site tool passed through (`airtime`, `link`, `painter`), or a radio tool (`radio-trace`, `discover`, `adverts`, `rx-log`, `noise`, `telemetry`); null or an
-  /// unknown id shows the list.
+  /// `compare`, `definition`, `status`, or a radio tool (`radio-trace`, `discover`, `adverts`, `rx-log`, `noise`,
+  /// `telemetry`); null or an unknown id (the removed `airtime`, `link`, `painter` among them) shows the list.
   final String? initialTool;
 
   /// The tool's argument from a link (a packet or trace hash, a prefix, a hop list).
@@ -182,6 +181,7 @@ class _ToolsSectionState extends State<ToolsSection> {
                   ),
                 ),
               ]),
+        'status' => StatusScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, onClose: onClose),
         'radio-trace' => const TraceScreen(),
         'discover' => const DiscoverScreen(),
         'adverts' => const AdvertsScreen(),
@@ -267,7 +267,6 @@ class _ToolsSectionState extends State<ToolsSection> {
               hintText: 'Find a tool',
               prefixIcon: const Icon(Icons.search),
               isDense: true,
-              border: const OutlineInputBorder(),
               suffixIcon: query.isEmpty
                   ? null
                   : IconButton(

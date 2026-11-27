@@ -1,9 +1,11 @@
 // SitePageView and AnalyticsSection with a fake page engine (dark theme, 375 pt wide): loading, the error page and Retry,
 // links (native, another site, a dropped embed), the page router's address changes without a loop, Back inside the page
-// first, "Open in browser" without embed, the 17-tab list and initialTab.
+// first, "Open in browser" without embed, the app's theme and time setting on every page (build 77, Round 2 W2), the
+// Analytics list (native Findings, Overview and My Repeaters; the site pages) and initialTab.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/time_format.dart' show TimeZonePreference, activeTimeZone;
 import 'package:meshsonar/ui/network/analytics/analytics_section.dart';
 import 'package:meshsonar/ui/network/analytics/in_place_header.dart';
 import 'package:meshsonar/ui/network/analytics/site_links.dart';
@@ -90,7 +92,7 @@ void main() {
       native.add(u);
       return true;
     }));
-    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1');
+    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1&theme=dark&tz=local');
     expect(find.byKey(const Key('site-page-loading')), findsOneWidget);
     expect(find.text('RF / Signal'), findsOneWidget);
     // Build 76: a first load says what is loading (it was a blank page with a thin bar).
@@ -120,7 +122,7 @@ void main() {
     expect(opened.length, 1);
     // another region host is fine; embed is added by loading it again
     expect(await engine.events.onNavigate(Uri.parse('https://day.meshsonar.com/scope-audit'), true), isFalse);
-    expect(engine.loads.last.toString(), 'https://day.meshsonar.com/scope-audit?embed=1');
+    expect(engine.loads.last.toString(), 'https://day.meshsonar.com/scope-audit?embed=1&theme=dark&tz=local');
     expect(await engine.events.onNavigate(engine.loads.last, true), isTrue);
     // a redirect that strips embed again is let through, not retried for ever
     expect(await engine.events.onNavigate(Uri.parse('https://day.meshsonar.com/scope-audit'), true), isTrue);
@@ -142,7 +144,7 @@ void main() {
     await tester.pump();
     expect(native.length, 1);
     expect(engine.backs, 1);
-    expect(engine.history.last, '$base/analytics/nodes?embed=1');
+    expect(engine.history.last, '$base/analytics/nodes?embed=1&theme=dark&tz=local');
     // the same address reported again right away is ignored
     engine.history.add('$base/nodes/$node?embed=1');
     engine.events.onUrlChange('$base/nodes/$node?embed=1');
@@ -162,7 +164,7 @@ void main() {
     engine.events.onUrlChange('$base/packets/c4b06ee8fc39b187');
     await tester.pump();
     expect(engine.backs, 0);
-    expect(engine.loads.last.toString(), '$base/status?embed=1');
+    expect(engine.loads.last.toString(), '$base/status?embed=1&theme=dark&tz=local');
     await settleTimers(tester);
   });
 
@@ -234,35 +236,94 @@ void main() {
     expect(opened.single.toString(), '$base/status');
   });
 
-  testWidgets('Analytics lists the 17 tabs in the site order, 44 pt rows, nothing overflowing', (tester) async {
+  testWidgets('Analytics lists the site tabs in the site order, 44 pt rows, nothing overflowing', (tester) async {
     await pump(tester, const Scaffold(body: AnalyticsSection(baseUrl: base, regionSlug: 'cmh')));
-    expect(analyticsTabs.length, 17);
-    expect(analyticsTabs.first.slug, 'overview');
-    expect(analyticsTabs[1].label, 'RF / Signal');
-    expect(analyticsTabs.last.slug, 'prefix-tool');
-    // Build 76: the list is shown under plain headings; every page is still there, once.
-    final grouped = [analyticsStartSlug, for (final g in analyticsGroups) ...g.$2];
+    // Build 77 (Round 2 W6, N-U10): no website Prefix Tool (the app's own tool), no website My Repeaters (native),
+    // and the website Overview only where there is no native one (this list has no native rows, like All regions).
+    expect(analyticsTabs.length, 14);
+    expect(analyticsTabs.first.label, 'RF / Signal');
+    expect([for (final t in analyticsTabs) t.slug], isNot(anyOf(contains('prefix-tool'), contains('my-repeaters'), contains('overview'))));
+    expect(analyticsTabOf('nodes')!.label, 'Node counts');
+    expect(analyticsTabOf('channels')!.label, 'Channel activity');
+    // The list is shown under plain headings; every site page is there, once.
+    final grouped = [for (final g in analyticsGroups) ...g.$2.where((s) => analyticsTabOf(s) != null)];
     expect(grouped.toSet().length, grouped.length, reason: 'no page twice');
     expect(grouped.toSet(), {for (final t in analyticsTabs) t.slug}, reason: 'no page lost');
     expect(find.text('START HERE').evaluate().isNotEmpty || find.text('Start here').evaluate().isNotEmpty, isTrue);
     for (final t in analyticsTabs) {
       expect(find.byKey(Key('analytics-tab-${t.slug}')), findsOneWidget, reason: t.slug);
     }
+    expect(find.byKey(const Key('analytics-tab-my-repeaters')), findsNothing, reason: 'native, and not given here');
     expect(tester.getSize(find.byKey(const Key('analytics-tab-overview'))).height, greaterThanOrEqualTo(44));
-    await tester.ensureVisible(find.byKey(const Key('analytics-tab-prefix-tool')));
+    await tester.ensureVisible(find.byKey(const Key('analytics-tab-hash-issues')));
     await tester.pump();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.byKey(const Key('analytics-tab-prefix-tool')));
+    await tester.ensureVisible(find.byKey(const Key('analytics-tab-overview')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('analytics-tab-overview')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(engine.loads.single.toString(), '$base/analytics/prefix-tool?embed=1');
+    expect(engine.loads.single.toString(), '$base/analytics/overview?embed=1&theme=dark&tz=local');
+    await settleTimers(tester);
+  });
+
+  testWidgets('a region: Findings and the native Overview start the list, My Repeaters is native, no website Overview', (tester) async {
+    final native = [
+      for (final (slug, label) in [('findings', 'Findings'), ('region-overview', 'Overview'), ('my-repeaters', 'My Repeaters')])
+        AnalyticsNativeRow(slug: slug, label: label, about: label, builder: (_) => Text('panel $slug', key: Key('panel-$slug'))),
+    ];
+    var made = 0;
+    siteWebEngineFactory = (e, _) {
+      made++;
+      return engine = FakeEngine(e);
+    };
+    await pump(tester, Scaffold(body: AnalyticsSection(baseUrl: base, regionSlug: 'cmh', nativeRows: native)));
+    expect(find.byKey(const Key('analytics-tab-overview')), findsNothing);
+    final f = tester.getTopLeft(find.byKey(const Key('analytics-tab-findings'))).dy;
+    final o = tester.getTopLeft(find.byKey(const Key('analytics-tab-region-overview'))).dy;
+    expect(f, lessThan(o));
+    expect(o, lessThan(tester.getTopLeft(find.byKey(const Key('analytics-tab-rf-signal'))).dy), reason: 'above the site pages');
+    // My Repeaters sits with the repeaters, after Node counts.
+    await tester.ensureVisible(find.byKey(const Key('analytics-tab-my-repeaters')));
+    expect(tester.getTopLeft(find.byKey(const Key('analytics-tab-my-repeaters'))).dy, greaterThan(tester.getTopLeft(find.byKey(const Key('analytics-tab-nodes'))).dy));
+    await tester.tap(find.byKey(const Key('analytics-tab-my-repeaters')));
+    await tester.pump();
+    expect(find.byKey(const Key('panel-my-repeaters')), findsOneWidget);
+    expect(made, 0, reason: 'no web page');
+    await settleTimers(tester);
+
+    // The site's /analytics/overview link opens the native Overview.
+    await pump(tester, Scaffold(body: AnalyticsSection(baseUrl: base, regionSlug: 'cmh', nativeRows: native, initialTab: 'overview')));
+    expect(find.byKey(const Key('panel-region-overview')), findsOneWidget);
+    await settleTimers(tester);
+  });
+
+  testWidgets('the page gets the app look: theme=light in a light app, tz=utc with the UTC setting, and loads again when it changes', (tester) async {
+    tester.view.physicalSize = const Size(375, 760);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    addTearDown(() => activeTimeZone = TimeZonePreference.phone);
+    activeTimeZone = TimeZonePreference.utc;
+    Widget app(Brightness b) => MaterialApp(theme: meshSonarTheme(b), home: const SitePageView(baseUrl: base, path: '/analytics/rf-signal', title: 'RF / Signal'));
+    await tester.pumpWidget(app(Brightness.light));
+    await tester.pump();
+    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1&theme=light&tz=utc');
+    final first = engine;
+    // The phone switches to dark: a new web view, same page, the new look.
+    await tester.pumpWidget(app(Brightness.dark));
+    await tester.pump(const Duration(milliseconds: 400)); // past the theme animation
+    await tester.pump();
+    expect(identical(engine, first), isFalse);
+    expect(engine.loads.last.toString(), '$base/analytics/rf-signal?embed=1&theme=dark&tz=utc');
+    // "Open in browser" drops all three keys.
+    expect(withoutEmbed(engine.loads.last).toString(), '$base/analytics/rf-signal');
     await settleTimers(tester);
   });
 
   testWidgets('initialTab opens that tab; an unknown one shows the list', (tester) async {
     await pump(tester, const Scaffold(body: AnalyticsSection(baseUrl: base, regionSlug: 'cmh', initialTab: 'rf-signal')));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1');
+    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1&theme=dark&tz=local');
     expect(find.text('RF / Signal'), findsWidgets);
     await settleTimers(tester);
 
@@ -287,13 +348,13 @@ void main() {
     await tester.pump();
     expect(nav.currentState!.canPop(), isFalse, reason: 'nothing was pushed over the section');
     expect(find.byType(AnalyticsSection), findsOneWidget);
-    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1');
+    expect(engine.loads.single.toString(), '$base/analytics/rf-signal?embed=1&theme=dark&tz=local');
     expect(tester.getSize(find.byType(InPlaceHeader)).height, greaterThanOrEqualTo(48));
     final first = engine;
     await tester.pumpWidget(app('topology'));
     await tester.pump();
     expect(identical(engine, first), isFalse, reason: 'a new link is a new page');
-    expect(engine.loads.single.toString(), '$base/analytics/topology?embed=1');
+    expect(engine.loads.single.toString(), '$base/analytics/topology?embed=1&theme=dark&tz=local');
     expect(find.text('Topology'), findsOneWidget);
     // inside the page: the arrow steps back in the page first
     engine.finish();
@@ -339,7 +400,7 @@ void main() {
     await tester.pumpWidget(app(true));
     await tester.pump();
     expect(made, 2);
-    expect(engine.loads.single.toString(), '$base/status?embed=1&x=1');
+    expect(engine.loads.single.toString(), '$base/status?x=1&embed=1&theme=dark&tz=local');
     expect(find.byKey(const Key('fake-web')), findsOneWidget);
     await settleTimers(tester);
   });
