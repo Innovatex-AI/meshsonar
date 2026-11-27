@@ -627,10 +627,6 @@ class Outbox {
     return m.id;
   }
 
-  /// REMOVED in build 77 (decision D2): a reply from the contact no longer marks anything "Probably delivered". Kept as a
-  /// no-op for callers written against build 76; always returns an empty list.
-  List<String> onReply(String radioId, String convKey, int atMs) => const [];
-
   /// The person pressed retry on a failed message. Official behaviour: a NEW send. The message gets a new sender timestamp
   /// and its tries start again from try number 0 with today's [DeliverySettings]. (Build 76 restarted at try 0 with the OLD
   /// timestamp, so every retry was a packet the mesh had already seen and dropped.) The tries of the earlier send stay in

@@ -1,6 +1,7 @@
 // Pure grouping for the Contacts segment (plan 4.5): people only, Favourites first, then A-Z letter groups. No widgets here
 // so the order is easy to test.
 import '../../chat/models.dart';
+import '../../core/time_format.dart' as tf;
 import 'contacts_controller.dart';
 
 /// One sticky letter section ("A", "B", ... and "#" for names that do not start with a letter, last).
@@ -47,26 +48,14 @@ ContactGroups groupContacts(Iterable<ContactRow> rows) {
   return ContactGroups(favs, [for (final k in keys) LetterGroup(k, map[k]!)]);
 }
 
-/// 0 to 3 bars for how fresh the last sign of life from [c] is. A contact has no stored signal strength (the radio does not
-/// keep one per contact), so the glyph says "heard lately", not dBm.
-int heardBars(Contact c, int nowMs) {
-  final ms = c.lastHeardMs ?? (c.lastAdvertTs == null ? null : c.lastAdvertTs! * 1000);
-  if (ms == null || ms <= 0) return 0;
-  final age = nowMs - ms;
-  if (age < 30 * 60 * 1000) return 3;
-  if (age < 12 * 3600 * 1000) return 2;
-  return 1;
-}
+/// What a row says for a contact never heard.
+const String notHeardYet = 'Not heard yet';
 
-/// "2 min", "4 h", "3 d", "now"; null when never heard. Short form for the trailing column.
-String? heardShort(Contact c, int nowMs) {
+/// When [c] was last heard, in words, for the trailing column of a row: "just now", "5 min ago", "4 h ago", "3 d ago", or
+/// "Not heard yet". One wording with the rest of the app (lib/core/time_format.dart `relativeTime`). A contact has no
+/// stored signal strength (the radio does not keep one per contact), so this is about time, never dBm.
+String heardWords(Contact c, int nowMs) {
   final ms = c.lastHeardMs ?? (c.lastAdvertTs == null ? null : c.lastAdvertTs! * 1000);
-  if (ms == null || ms <= 0) return null;
-  final d = nowMs - ms;
-  if (d < 90 * 1000) return 'now';
-  final min = d ~/ 60000;
-  if (min < 60) return '$min min';
-  final h = d ~/ 3600000;
-  if (h < 24) return '$h h';
-  return '${d ~/ 86400000} d';
+  if (ms == null || ms <= 0) return notHeardYet;
+  return tf.relativeTime(DateTime.fromMillisecondsSinceEpoch(ms), now: DateTime.fromMillisecondsSinceEpoch(nowMs));
 }

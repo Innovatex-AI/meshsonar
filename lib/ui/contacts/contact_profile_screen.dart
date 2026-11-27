@@ -395,7 +395,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
         await _route(c);
 
       case ProfileTileId.ping:
-        await showPingSheet(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
+        await showPingSheet(context, contact: c, manager: _m);
       case ProfileTileId.stats:
         await showUserStatsSheet(context, contact: c);
       case ProfileTileId.telemetry:
@@ -412,7 +412,7 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
   }
 
   Future<void> _pingOptions(Contact c) =>
-      showPingOptions(context, contact: c, manager: _m, onUseRoute: (r) => offerUseRoute(context, _m, c, r));
+      showPingOptions(context, contact: c, manager: _m);
 
   Future<void> _route(Contact c) => PathManagerScreen.open(context, manager: _m, publicKey: c.publicKey, changes: _c);
 

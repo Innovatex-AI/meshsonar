@@ -4,9 +4,7 @@
 // never reaches Delivered (it caps at Heard). Every state has a glyph AND a word on the conversation screen.
 import 'models.dart';
 
-/// [likely] is never produced since build 77 (decision D2: "Probably delivered (they replied)" removed). The value stays
-/// only so a screen written against build 76 compiles; delete it with that screen's branch.
-enum DeliveryStage { queued, sent, heard, delivered, likely, failed }
+enum DeliveryStage { queued, sent, heard, delivered, failed }
 
 /// Which symbol draws the stage (the UI maps these to AppSymbols; kept here so the table is testable without Flutter).
 enum DeliveryGlyph { clock, checkmark, antenna, checkmarkCircleFill, exclamationCircleFill }

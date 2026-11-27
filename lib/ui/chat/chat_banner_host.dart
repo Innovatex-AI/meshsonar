@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import '../../alerts/alert_coordinator.dart' show alertPreviewText, isPositionUpdate;
 import '../../alerts/alerts_runtime.dart' show AlertsHost;
 import '../../app/chat_controller.dart';
 import '../../app/chat_wiring.dart';
@@ -54,6 +55,8 @@ class _ChatBannerHostState extends State<ChatBannerHost> {
     // One banner per message: when the alerts layer is running it owns the in-app banner (it honours the Notifications
     // settings: off, muted, quiet hours, privacy). This one is the fallback for a build without it.
     if (widget.controllerListenable == null && AlertsHost.runtime.value != null) return;
+    // A friend's position update never raises a banner (round 5 A2).
+    if (isPositionUpdate(m.text)) return;
     _timer?.cancel();
     setState(() => _shown = m);
     _timer = Timer(widget.visibleFor, () {
@@ -98,7 +101,7 @@ class _ChatBannerHostState extends State<ChatBannerHost> {
                   child: Semantics(
                   liveRegion: true,
                   container: true,
-                  label: 'New message from ${_title(m)}: ${m.text}',
+                  label: 'New message from ${_title(m)}: ${alertPreviewText(m.text)}',
                   child: Material(
                     key: const Key('chat-banner'),
                     elevation: 6,
@@ -122,7 +125,8 @@ class _ChatBannerHostState extends State<ChatBannerHost> {
                               Expanded(
                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                                   Text(_title(m), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onInverseSurface, fontWeight: FontWeight.w700)),
-                                  Text(m.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onInverseSurface)),
+                                  // The preview, never the raw text (round 5 A1): "Photo", "Shared their position".
+                                  Text(alertPreviewText(m.text), key: const Key('chat-banner-body'), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onInverseSurface)),
                                 ]),
                               ),
                             ]),
