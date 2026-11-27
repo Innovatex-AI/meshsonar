@@ -195,7 +195,7 @@ void main() {
           if (!moved(pos.pixels)) pos.jumpTo(math.min(pos.pixels + 200, pos.maxScrollExtent));
           await pumpFor(t, const Duration(milliseconds: 700));
           collect();
-          final net = find.byKey(const Key('layers-group-network'));
+          final net = find.byKey(const Key('layers-group-repeaters'));
           if (!shotNetwork && net.evaluate().isNotEmpty && t.getTopLeft(net).dy < sheetTop + 160) {
             await mdframe(t, 'md-03b-layers-network');
             shotNetwork = true;

@@ -885,7 +885,7 @@ final List<ScreenStep> screens = [
     await popToRoots(t);
     await openShellTab(t, 'More');
     if (find.byKey(const Key('more-list')).hitTestable().evaluate().isEmpty) await openShellTab(t, 'More');
-    const rows = ['more-drives', 'more-radio', 'more-settings', 'more-chat', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-help', 'more-about'];
+    const rows = ['more-drives', 'more-radio', 'more-settings', 'more-leaderboard', 'more-observerJoin', 'more-help', 'more-about']; // build 77: seven rows
     final list = find.byKey(const Key('more-list'));
     for (final k in rows) {
       if (!await scrollToFind(t, find.byKey(Key(k)), list, wait: const Duration(seconds: 4))) {

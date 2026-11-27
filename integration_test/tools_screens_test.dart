@@ -12,6 +12,24 @@ import 'screens.dart';
 /// Network > Tools.) [rowKey] keeps the old `more-<name>` names this flow was written with.
 const Map<String, String> _radioMenuTools = {'more-trace': 'tools-trace', 'more-discover': 'tools-discover', 'more-rxLog': 'tools-rxlog', 'more-adverts': 'tools-adverts'};
 
+/// Build 77 (round 5 M3): Noise floor and Telemetry live in More > Radio > My radio's settings > All device settings.
+Future<void> openDeviceTool(WidgetTester t, String toolKey) async {
+  await openMoreSubRow(t, 'more-radio', 'more-radioSettings');
+  await pumpFor(t, const Duration(seconds: 1));
+  final all = find.byKey(const Key('radio-device-settings'));
+  if (await waitFor(t, all, timeout: const Duration(seconds: 4))) {
+    await t.ensureVisible(all);
+    await t.tap(all);
+    await pumpFor(t, const Duration(seconds: 1));
+  }
+  final row = find.byKey(Key(toolKey));
+  if (await waitFor(t, row, timeout: const Duration(seconds: 4))) {
+    await t.ensureVisible(row);
+    await t.tap(row);
+    await pumpFor(t, const Duration(seconds: 1));
+  }
+}
+
 Future<void> openTool(WidgetTester t, String rowKey) async {
   await popToRoots(t);
   final menu = _radioMenuTools[rowKey];
@@ -114,11 +132,11 @@ void main() {
     }
     await shot(t, 'tool-discover');
     await back(t);
-    await openTool(t, 'more-noiseFloor');
+    await openDeviceTool(t, 'tool-noise'); // build 77 (round 5 M3): Noise floor left More > Radio
     await pumpFor(t, const Duration(seconds: 40));
     await shot(t, 'tool-noise');
     await back(t);
-    await openTool(t, 'more-telemetry');
+    await openDeviceTool(t, 'tool-telemetry');
     await shot(t, 'tool-telemetry');
     await back(t);
     await openTool(t, 'more-radioSetup');

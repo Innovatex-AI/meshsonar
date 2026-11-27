@@ -140,6 +140,11 @@ void main() {
         await pumpFor(t, const Duration(seconds: 1));
       }
     }
+    // Build 77 (round 5 O1): the intro ends on "What MeshSonar collects"; Keep sharing closes it.
+    if (await waitFor(t, find.byKey(const Key('telemetry-keep')), timeout: const Duration(seconds: 6))) {
+      await t.tap(find.byKey(const Key('telemetry-keep')));
+      await pumpFor(t, const Duration(seconds: 1));
+    }
     expect(await waitFor(t, find.byWidgetPredicate((w) => w.key == const Key('shell-tabs') || w.key == const Key('shell-rail'))), isTrue,
         reason: 'home shell');
 
@@ -416,7 +421,7 @@ void main() {
       if (!await waitFor(t, find.byKey(const Key('layers-sheet')))) _fail('no Layers sheet');
       final friends = find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.text('Friends'));
       if (!await scrollToFind(t, friends, find.byKey(const Key('layers-sheet')))) _fail('no Friends layer in the Layers sheet');
-      final net = find.byKey(const Key('layers-group-network'));
+      final net = find.byKey(const Key('layers-group-people'));
       if (net.evaluate().isNotEmpty) {
         await Scrollable.ensureVisible(t.element(net.first), alignment: 0.05);
         await pumpFor(t, const Duration(milliseconds: 500));

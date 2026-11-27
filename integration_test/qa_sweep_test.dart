@@ -227,9 +227,10 @@ void main() {
       // Build 71: nine rows on More; the rest are one level down, under Radio or Help ('parent/row'), or a Settings section
       // ('settings:<MoreItem name>', opened the way the app's own links open it).
       const rows = [
-        'more-drives', 'more-devices', 'more-leaderboard', 'more-observerJoin', 'more-radio', 'more-chat', 'more-settings', 'more-help', 'more-about',
+        // Build 77 (round 5): Chat settings moved into Settings > Messages, Devices and keys into Settings > Account (seven rows).
+        'more-drives', 'more-leaderboard', 'more-observerJoin', 'more-radio', 'more-settings', 'more-help', 'more-about',
         'more-help/more-myReports', 'more-help/more-method', 'more-help/more-howItWorks',
-        'more-radio/more-radioSettings', 'more-radio/more-noiseFloor', 'more-radio/more-telemetry', 'more-radio/more-radioSetup',
+        'more-radio/more-radioSettings', 'more-radio/more-radioSetup',
         'settings:notifications', 'settings:wardriving', 'settings:myRadios', 'settings:privacy', 'settings:observer',
       ];
       for (final key in rows) {
