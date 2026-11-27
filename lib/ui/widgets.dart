@@ -312,7 +312,7 @@ class PingTile extends StatelessWidget {
         style: t.textTheme.titleMedium,
       ),
       subtitle: Text(
-        nothing ? formatTime(ping.ts) : '${formatTime(ping.ts)} · ${names.join(', ')}',
+        nothing ? tf.timeOfDay(ping.ts, seconds: true) : '${tf.timeOfDay(ping.ts, seconds: true)} · ${names.join(', ')}',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),

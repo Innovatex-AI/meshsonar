@@ -3,7 +3,6 @@
 // reason, Delete only for own uploads); the long-press menu's photo entries; the More > Chat switch; and two goldens.
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/photo_controller.dart';

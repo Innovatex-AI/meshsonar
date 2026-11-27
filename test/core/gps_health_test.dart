@@ -91,7 +91,7 @@ void main() {
       expect(sum.lateMaxS, 1);
       expect(sum.lowAccuracyPings, 1);
       expect(sum.skipped, {'no_fix': 2, 'distance': 1});
-      expect(sum.line, 'Sent 4 of 4 expected. typical gap 15 s, worst 16 s');
+      expect(sum.line, 'Sent 4 of 4 expected. Typical gap 15 s, worst 16 s');
       expect(sum.skippedLine, 'Held back: 2x waiting for GPS, 1x waiting to move');
     });
 
