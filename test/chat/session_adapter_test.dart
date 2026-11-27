@@ -204,6 +204,7 @@ void main() {
     s.nextSend = const r.SendResult.queued(55);
     await expectLater(a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 0, forceFlood: false), throwsA(isA<RadioNoAnswer>()));
     // Try numbers above 3 reach the session untouched.
+    s.nextSend = const r.SendResult.accepted(1000, expectedAck: 77, estTimeoutMs: 4200, flood: true);
     s.sentContacts.clear();
     await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 7, forceFlood: false);
     expect(s.sentContacts.single, (bobKey, 'x', 7, 55));

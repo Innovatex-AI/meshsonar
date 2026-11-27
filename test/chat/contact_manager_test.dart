@@ -69,6 +69,7 @@ void main() {
       port.radioAdd(radioContact(1, name: 'Old name'));
       await attachAndSync();
       cm.setFavourite(keyN(1), true);
+      await Future<void>.delayed(Duration.zero); // the favourite edit reaches the radio (read, then write)
       cm.rename(keyN(1), 'Mum');
       cm.setNotes(keyN(1), 'blue car');
       cm.setForceFlood(keyN(1), true); // removed in build 77: does nothing

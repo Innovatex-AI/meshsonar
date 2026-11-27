@@ -170,7 +170,7 @@ void main() {
       final m = rig.send(bob, 'hi');
       await until(() => rig.tries(m.id).isNotEmpty && rig.tries(m.id).first.outcome == TryOutcome.waiting);
       final wait = rig.store.outbox.get(m.id)!.dueAtMs - rig.tries(m.id).first.sentAtMs;
-      expect(wait, 300);
+      expect(wait, inInclusiveRange(300, 340), reason: '250 ms x 1.2, counted from the radio\'s answer');
       rig.chat.cancel(m.id);
     });
 
