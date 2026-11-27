@@ -159,9 +159,9 @@ class Outbox {
   }
 
   /// Registers a freshly stored outgoing message for sending. [forceFlood]: the person chose flood for this one message
-  /// (long-press Send), done the official way: one reset path before the first try, then the normal send. [hasPath] is
-  /// ignored since build 77 (the phone's copy of a route decides nothing); it stays for callers written against build 76.
-  void enqueue(ChatMessage m, {bool hasPath = false, bool forceFlood = false, int round = 0}) {
+  /// (long-press Send), done the official way: one reset path before the first try, then the normal send. The phone's copy
+  /// of a route decides nothing (build 77).
+  void enqueue(ChatMessage m, {bool forceFlood = false, int round = 0}) {
     final now = nowMs();
     if (m.convKind == ConvKind.channel) {
       store.outbox.enqueue(OutboxEntry(messageId: m.id, dueAtMs: now, maxAttempts: 1, createdMs: now));
@@ -369,7 +369,7 @@ class Outbox {
     _say('try $attemptNo of ${e.maxAttempts} (try number $wire, ts ${m.tsSender}, ${bytes}b)${predicted == null ? '' : ' expects ack=${MessageLog.code(predicted)}'}', id: m.id);
 
     try {
-      final r = await sink.sendDirect(radioId: m.radioId, contactPublicKey: contactKey, text: m.text, timestamp: m.tsSender, attempt: wire, forceFlood: false);
+      final r = await sink.sendDirect(radioId: m.radioId, contactPublicKey: contactKey, text: m.text, timestamp: m.tsSender, attempt: wire);
       final route = r.flood ? Route.flood : Route.direct;
       final ack2 = (r.expectedAck != 0 && r.expectedAck != predicted) ? r.expectedAck : null;
       final wait = policy.ackWaitMs(r.estTimeoutMs, rnd);
@@ -630,8 +630,8 @@ class Outbox {
   /// The person pressed retry on a failed message. Official behaviour: a NEW send. The message gets a new sender timestamp
   /// and its tries start again from try number 0 with today's [DeliverySettings]. (Build 76 restarted at try 0 with the OLD
   /// timestamp, so every retry was a packet the mesh had already seen and dropped.) The tries of the earlier send stay in
-  /// the log, and a late confirmation for one of them still marks the message delivered. [hasPath] is ignored.
-  bool retryFailed(String messageId, {bool hasPath = false, bool forceFlood = false}) {
+  /// the log, and a late confirmation for one of them still marks the message delivered.
+  bool retryFailed(String messageId, {bool forceFlood = false}) {
     final m = store.messages.get(messageId);
     if (m == null || m.state != MessageState.failed) return false;
     final now = nowMs();

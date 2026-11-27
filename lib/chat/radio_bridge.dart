@@ -202,11 +202,10 @@ abstract interface class OutboundMessageSink {
   /// [RadioTargetMissing] = the radio says "not a contact", [RadioBusy] = no free packet, [RadioNoAnswer] = the reply was
   /// lost, [RadioRejected] = too long or refused.
   ///
-  /// [forceFlood] is IGNORED since build 77 (the app never decides direct or flood; a flood chosen by the person is one
-  /// [DeliveryRadioControl.resetPath] before the first try). The parameter stays only because test doubles outside
-  /// lib/chat implement this interface; pass false.
+  /// The app never decides direct or flood (build 77); a flood chosen by the person is one [DeliveryRadioControl.resetPath]
+  /// before the first try.
   Future<SendReceipt> sendDirect(
-      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood});
+      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt});
 
   /// CMD_SEND_CHANNEL_TXT_MSG. Channel messages have no ack: success is just "accepted". [text] is the body; the firmware
   /// prepends "name: ". Returns the timestamp that went into the packet (a session may stamp its own; chat adopts it so

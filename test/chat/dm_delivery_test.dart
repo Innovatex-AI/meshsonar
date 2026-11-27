@@ -27,11 +27,10 @@ class HoldingSink extends FakeSink {
     required String text,
     required int timestamp,
     required int attempt,
-    required bool forceFlood,
   }) async {
     final h = hold;
     if (h != null) await h.future;
-    return super.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt, forceFlood: forceFlood);
+    return super.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt);
   }
 }
 

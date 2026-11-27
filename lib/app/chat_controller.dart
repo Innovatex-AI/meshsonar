@@ -43,10 +43,10 @@ class SwitchableSink implements OutboundMessageSink, DeliveryRadioControl {
 
   @override
   Future<SendReceipt> sendDirect(
-      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) {
+      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt}) {
     final a = adapter;
     if (a == null) throw const RadioNotConnected();
-    return a.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt, forceFlood: forceFlood);
+    return a.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt);
   }
 
   @override

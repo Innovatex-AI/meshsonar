@@ -199,7 +199,7 @@ class RadioSessionChatAdapter implements OutboundMessageSink, DeliveryRadioContr
   /// answer is passed on as what it is.
   @override
   Future<SendReceipt> sendDirect(
-      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) async {
+      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt}) async {
     final res = await session.sendContactMessage(contactPublicKey, text, attempt: attempt, timestamp: timestamp);
     if (res.status == r.SendStatus.failed) _throw(res);
     // `queued` = the radio did not answer the command in time: its reply was lost or late, and it may have sent the packet.

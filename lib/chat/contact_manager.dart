@@ -98,12 +98,6 @@ class ContactSyncState {
 
 const Object _keep = Object();
 
-/// One-off things worth telling the user about (a snackbar, not a state).
-class ContactNotice {
-  final String message;
-  const ContactNotice(this.message);
-}
-
 /// Result of adding a contact from a link, key or scan. Never an exception for user input.
 class AddContactResult {
   final Contact? contact;
@@ -142,19 +136,15 @@ class ContactManager {
   /// every automatic sync, never before one the user asked for.
   final bool Function()? shouldDefer;
 
-  /// Unused since build 77 (the app no longer fills the radio's table on its own). Kept for callers that pass it.
-  final int reserveSlots;
-
   ContactRadioPort? _port;
   String? _lastRadioId;
   ContactSyncState _state = const ContactSyncState();
   final _states = StreamController<ContactSyncState>.broadcast();
-  final _notices = StreamController<ContactNotice>.broadcast();
   Future<void>? _running;
   final Map<String, int> _refreshedMs = {};
   bool _disposed = false;
 
-  ContactManager({required this.store, int Function()? nowMs, void Function()? onChanged, this.shouldDefer, this.reserveSlots = 5})
+  ContactManager({required this.store, int Function()? nowMs, void Function()? onChanged, this.shouldDefer})
       : nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
         onChanged = onChanged ?? (() {}) {
     _lastRadioId = store.db.setting(_kLastRadio);
@@ -171,10 +161,6 @@ class ContactManager {
 
   ContactSyncState get state => _state;
   Stream<ContactSyncState> get states => _states.stream;
-
-  /// Never emits since build 77: its one notice was "X was taken off the radio to make room", and that no longer happens
-  /// (decision D1). Kept so the Contacts screen written against build 76 compiles; delete with its listener.
-  Stream<ContactNotice> get notices => _notices.stream;
 
   /// The radio refused a contact because its list is full and nothing has made room since (decision D1). The words to
   /// show are [radioContactListFullText]; the place to send the person is the radio list (Contacts > Radio list).
@@ -202,7 +188,6 @@ class ContactManager {
   void dispose() {
     _disposed = true;
     unawaited(_states.close());
-    unawaited(_notices.close());
   }
 
   // ------------------------------------------------------------------ attach / detach (one per radio session)
@@ -779,10 +764,6 @@ class ContactManager {
     _changed();
   }
 
-  /// REMOVED in build 77 with the route modes ("Always search" is not in the official flow). Does nothing; kept so
-  /// callers written against build 76 compile.
-  void setForceFlood(String publicKey, bool v) {}
-
   // ------------------------------------------------------------------ route, share, remove
 
   /// Manual "Reset route" (kept: the official app has it): CMD_RESET_PATH, so the radio forgets its route, the next
@@ -815,30 +796,6 @@ class ContactManager {
     store.pathHistory.add(PathHistoryEntry(contactKey: key, tsMs: nowMs(), kind: 'reset'));
     _changed();
   }
-
-  // ------------------------------------------------------------------ build 76 route features, removed in build 77
-  // Route modes (Automatic / Keep this route / Always search), the pinned route and the set-path radio write are not in
-  // the official flow and are gone (round 3 "Removed"). These members stay ONLY so screens written against build 76
-  // compile until they are edited; none of them changes anything or writes to the radio. Delete them with those screens.
-
-  /// Undo of a route reset. Cannot be done any more: the app never writes a route to the radio, and the phone's copy is
-  /// only a mirror. Reads the radio's copy again so the screen shows the truth. (Build 76 put the phone's copy back.)
-  Future<void> restorePath(Contact before) => refreshOne(before.publicKey);
-
-  /// Always false: the set-path radio write is removed.
-  bool Function() routeWriteEnabled = () => false;
-
-  /// Does nothing and returns false: there are no route modes.
-  bool setRouteMode(String publicKey, PathMode mode) => false;
-
-  /// Does nothing and returns false: no route can be pinned.
-  bool keepCurrentRoute(String publicKey) => false;
-
-  /// Writes nothing; returns the reason in plain words.
-  Future<String?> setRoute(String publicKey, PathRoute route) async => 'Choosing repeaters yourself is not available. The radio learns the route.';
-
-  /// Writes nothing and returns false.
-  Future<bool> restorePinnedPath(Contact c) async => false;
 
   /// A finished ping or discovery: remembered on the contact and in the history list.
   void recordPing(String publicKey, {required String kind, required bool ok, int? rttMs, int? hops, List<double> snr = const [], String? out, String? back, String? failReason}) {
