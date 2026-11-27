@@ -3247,6 +3247,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   String? get lastSyncMessage => _lastSyncMessage;
   bool _lastSyncFailed = false;
   bool get lastSyncFailed => _lastSyncFailed;
+  // Screenshot tour only: show the "Sync failed" state without running a sync (no key, no request).
+  @visibleForTesting
+  void debugShowSyncFailed() => _syncFailed(friendlyError(TimeoutException('upload timed out'), action: 'Sync'), null);
 
   // The server said "slow down" (429 / 503): no automatic upload until this time. A person pressing Sync still can.
   DateTime? _syncBackoffUntil;

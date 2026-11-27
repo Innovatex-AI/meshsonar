@@ -61,5 +61,6 @@ void main() {
     }
     // ignore: avoid_print
     print('VERIFY_DONE');
-  }, timeout: const Timeout(Duration(minutes: 40))); // build 71: the tour also walks the eight Network sections against the live site
+  }, timeout: const Timeout(Duration(minutes: 60))); // build 71: the tour also walks the eight Network sections against the live site;
+  // build 77: plus the Plan results (server answers of up to two minutes each), the Chat thread screens and the Drives upload states
 }
