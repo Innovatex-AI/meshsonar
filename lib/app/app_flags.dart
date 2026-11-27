@@ -7,10 +7,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 abstract final class AppFlags {
-  /// The set-path radio write (Chat WP7): ADD_UPDATE_CONTACT with a chosen route ("Choose repeaters yourself" > Save) and the
-  /// outbox rewrite of a path the radio forgot in Keep this route. Hidden until Andy's real-radio test passes (spikes S3/S13,
-  /// HANDOFF checklist). Everything else about routes (display, mode, discovery, trace, ping, reset) is live.
-  static const bool routeWriteVerified = false;
 
   /// MeshTrack (friends on the map over a private channel; meshsonar-infra docs/planning/meshtrack-plan-2026-11-16.md section
   /// 11). ON in build 67 TestFlight; a build made with `--dart-define=MESHSONAR_MESHTRACK=false` hides the chip, the Friends
