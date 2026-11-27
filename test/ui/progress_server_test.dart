@@ -273,7 +273,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(_text(tester, 'progress-server-scope'), isNotEmpty);
     expect(find.byKey(const Key('progress-server-offline')), findsOneWidget);
-    expect(find.textContaining('Offline - as of 2h ago'), findsOneWidget);
+    expect(find.textContaining('Offline - as of 2 h ago'), findsOneWidget);
     mode = 'pause';
     h.clockNow = h.clockNow.add(const Duration(hours: 1));
     Navigator.of(tester.element(find.byKey(const Key('progress-screen')))).pop();
