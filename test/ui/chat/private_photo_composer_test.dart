@@ -90,7 +90,7 @@ void main() {
     await tester.pump();
     await sendPhoto(tester);
     expect(fieldText(tester), 'a' * 105, reason: 'nothing trimmed, nothing inserted');
-        expect(find.textContaining('Shorten your message by 1 character'), findsOneWidget);
+        expect(find.textContaining('Shorten your message by 1 byte'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('composer-field')), 'a' * 104);
     await tester.pump();
     expect(fieldText(tester), startsWith('${'a' * 104} https://meshsonar.com/e/k3Xq9TzA#'));

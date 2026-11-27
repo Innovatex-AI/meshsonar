@@ -1022,8 +1022,22 @@ class _ConversationScreenState extends State<ConversationScreen> {
             title: 'See how a message travelled',
             message: 'Tap a message to see its route, signal and time.',
           ),
-        Expanded(child: _list(context)),
-        ..._notes(context, colors, ch),
+        // The notes sit under the messages and take at most 40% of the room left above the composer (at the largest text
+        // sizes they scroll), so they never push the composer off the screen.
+        Expanded(
+          child: switch (_notes(context, colors, ch)) {
+            final notes when notes.isNotEmpty => LayoutBuilder(
+                builder: (context, box) => Column(children: [
+                  Expanded(child: _list(context)),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: box.maxHeight * 0.4),
+                    child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: notes)),
+                  ),
+                ]),
+              ),
+            _ => _list(context),
+          },
+        ),
         if (_failedIds.length >= 2)
           Container(
             key: const Key('retry-all-banner'),

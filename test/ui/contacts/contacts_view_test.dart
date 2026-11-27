@@ -190,7 +190,7 @@ void main() {
       expect(tile(2), findsOneWidget);
     });
 
-    testWidgetsT('(j) a notice from the manager appears as a toast', (tester) async {
+    testWidgetsT('(j) a full radio: "Your radio\'s contact list is full" with a button to the radio\'s list; nobody is removed (D1)', (tester) async {
       final rig = ContactsRig();
       addTearDown(rig.dispose);
       setScreen(tester);
@@ -203,10 +203,22 @@ void main() {
       rig.store.contacts.upsert(radioContact(9));
       await tester.pumpWidget(hostApp(ContactsView(controller: rig.controller)));
       await tester.pump();
-      await tester.runAsync(() => rig.chat.contacts.ensureOnRadio(keyN(9)));
+      await tester.runAsync(() async {
+        try {
+          await rig.chat.contacts.ensureOnRadio(keyN(9));
+        } on ContactTableFull {
+          // The radio refused: its list is full.
+        }
+      });
       await tester.pump();
       await tester.pump();
-      expect(find.textContaining('still in your contacts'), findsOneWidget);
+      expect(find.byKey(const Key('banner-full')), findsOneWidget);
+      expect(find.textContaining("Your radio's contact list is full"), findsOneWidget);
+      expect(find.textContaining('still in your contacts'), findsNothing, reason: 'build 76 took someone off the radio and said so');
+      expect(rig.port.removes, isEmpty);
+      await tester.tap(find.byKey(const Key('banner-free')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('radio-list-sheet')), findsOneWidget);
     });
   });
 
@@ -219,7 +231,10 @@ void main() {
       expect(tile(7), findsNothing, reason: 'room');
       expect(find.byType(ChoiceChip), findsNothing);
       expect(tester.getTopLeft(tile(4)).dy, lessThan(tester.getTopLeft(tile(1)).dy));
-      expect(find.text('Person · No route yet'), findsWidgets);
+      // D5 / C-V2: the route alone (no "Person ·" on a list of people), and how recently heard in words, not bars.
+      expect(find.text('No route yet'), findsWidgets);
+      expect(find.textContaining('Person ·'), findsNothing);
+      expect(find.byKey(Key('contact-heard-${keyN(1).substring(0, 8)}')), findsOneWidget);
       expect(find.text('Search 7 contacts'), findsOneWidget);
     });
 
@@ -376,8 +391,8 @@ void main() {
     testWidgetsT('VoiceOver: a tile reads name, type, route, heard; rows expose Message/Favourite/Ping/Remove actions', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpView(tester, contacts: 4);
-      expect(find.bySemanticsLabel(RegExp(r'^Node 1, Person, No route yet, ')), findsOneWidget);
-      final data = tester.getSemantics(find.bySemanticsLabel(RegExp(r'^Node 1, Person')));
+      expect(find.bySemanticsLabel(RegExp(r'^Node 1, No route yet, heard ')), findsOneWidget);
+      final data = tester.getSemantics(find.bySemanticsLabel(RegExp(r'^Node 1, No route yet')));
       expect(data.getSemanticsData().customSemanticsActionIds, isNotEmpty);
       handle.dispose();
     });

@@ -52,7 +52,7 @@ void main() {
   List<String> rowPills(WidgetTester tester) => [for (final w in tester.widgetList<Text>(find.descendant(of: find.byKey(const Key('unread-pill')), matching: find.byType(Text)))) w.data!];
 
   testWidgets('tab badge, Mark-all control, app-icon badge and the row pills agree (muted and system excluded)', (tester) async {
-    setSize(tester);
+    setSize(tester, h: 1000); // every row on screen under the tips and the Unread chip
     kit.bob();
     final ohio = await kit.channel(1, 'Ohio', kind: ChannelKind.hashtag);
     final family = await kit.channel(2, 'Family');
@@ -83,12 +83,26 @@ void main() {
     expect(counted.length, 3);
     expect(pills.map(int.parse).reduce((a, b) => a + b) - 2, expected, reason: 'row pills minus the muted row equal the badge');
 
-    // Clearing: Mark all as read clears the tab badge, the control and every non-muted pill together.
+    // C-U5: the Unread chip says the same number and shows only the unread chats.
+    expect(find.text('Unread $expected'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('chat-unread-filter')));
+    await tester.pump();
+    expect(rowPills(tester).toList()..sort(), ['2', '2', '3'], reason: 'every row left has something unread');
+
+    // Clearing: Mark all read (a labelled action) clears the tab badge, the control and every non-muted pill together,
+    // says how many, and Undo puts the chats back as unread.
+    expect(find.text('Mark all read'), findsOneWidget);
     await tester.tap(find.byKey(const Key('chat-mark-all-read')));
     await tester.pump(const Duration(milliseconds: 100));
     expect(kit.controller.unreadMessages, 0);
     expect(tabBadge(tester), isNull);
     expect(find.byKey(const Key('chat-mark-all-read')), findsNothing);
+    expect(find.text('$expected marked read'), findsOneWidget);
+    expect(find.byKey(const Key('chats-no-unread')), findsOneWidget, reason: 'the filter is still on: nothing unread');
+    await tester.tap(find.text('Undo'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(kit.controller.unreadMessages, greaterThan(0));
+    expect(find.byKey(const Key('chat-mark-all-read')), findsOneWidget);
   });
 
   testWidgets('every badge caps the same way: 99+', (tester) async {

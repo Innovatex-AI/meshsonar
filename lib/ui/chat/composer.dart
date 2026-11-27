@@ -505,6 +505,10 @@ class _ComposerState extends State<Composer> {
     final mentionHits = mention == null ? const <String>[] : [for (final n in widget.mentionNames) if (n.toLowerCase().startsWith(mention.toLowerCase())) n].take(8).toList();
 
     // The strip slot: mention names while typing "@", else the quick replies when switched on. One line, 44 pt chips.
+    // D4: "Share my position" is a round button beside the field; at the largest text sizes, where the row has no room for
+    // another button, it is the first chip of the quick replies instead.
+    final canShare = !offAir && _canSharePosition(context);
+    final roomy = MediaQuery.textScalerOf(context).scale(17) <= 17 * 1.5;
     Widget? strip;
     if (mention != null && mentionHits.isNotEmpty) {
       strip = _Strip(key: const Key('mention-strip'), children: [
@@ -512,6 +516,7 @@ class _ComposerState extends State<Composer> {
       ]);
     } else if (_chips) {
       strip = _Strip(key: const Key('quick-strip'), children: [
+        if (canShare && !roomy) _Chip(key: const Key('quick-position'), label: 'Share my position', onTap: _sharePosition),
         for (final r in _replies) _Chip(key: Key('quick-$r'), label: r, onTap: () => _insert(r)),
         _Chip(key: const Key('quick-edit'), label: 'Edit', muted: true, onTap: _editReplies),
       ]);
@@ -526,8 +531,12 @@ class _ComposerState extends State<Composer> {
         ? 'This channel is not on your radio.'
         : (trying
             ? 'Reconnecting to your radio…'
-            : (!c.hasRadioIdentity ? 'Connect your radio once to start chatting.' : (!c.radioConnected ? 'Radio not connected. Sends when it connects.' : null)));
-    final sharePosition = !offAir && _canSharePosition(context);
+            : (!c.hasRadioIdentity
+                ? 'Connect your radio once to start chatting.'
+                // At the largest text sizes the short wording keeps the composer from filling the screen (as the Chat tab's
+                // banner does); the Connect button beside it says the rest.
+                : (!c.radioConnected ? (roomy ? 'Radio not connected. Sends when it connects.' : 'Radio not connected.') : null)));
+    final sharePosition = canShare && roomy;
 
     final bar = Container(
       decoration: BoxDecoration(

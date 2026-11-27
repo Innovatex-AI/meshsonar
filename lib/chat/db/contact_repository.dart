@@ -35,9 +35,10 @@ class ContactRepository {
         confirmedMs: r['confirmed_ms'] as int?,
       );
 
-  /// Inserts or replaces by (radioId, publicKey). The build 76 route-mode columns (force_flood, path_mode, pinned_path,
-  /// pinned_hash_size) stay in the table for old backups and are always written as "none" (route modes are gone in build 77). `confirmed_ms` is not written here on purpose: a copy read from the radio
-  /// does not know it, and it must survive every merge ([markConfirmed] is its only writer).
+  /// Inserts or replaces by (radioId, publicKey). `confirmed_ms` is not written here on purpose: a copy read from the radio
+  /// does not know it, and it must survive every merge ([markConfirmed] is its only writer). The build 76 route-mode
+  /// columns (force_flood, path_mode, pinned_path, pinned_hash_size) stay in the table for old backups and are always
+  /// written as "none": route modes are gone in build 77.
   void upsert(Contact c) {
     db.raw.execute('''
 INSERT INTO contacts(radio_id, pubkey, type, name, custom_name, lat, lon, last_advert_ts, lastmod, out_path, out_path_len, favourite, blocked, notes, source,

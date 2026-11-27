@@ -358,6 +358,9 @@ class _ContactTile extends StatelessWidget {
     // that stood for it is gone. D5: no "Person ·" on a list that is all people.
     final heard = heardWords(c, nowMs);
     final unread = row.unread;
+    // At the largest text sizes the words go under the route instead of beside it, so the row never runs off the screen.
+    final stacked = MediaQuery.textScalerOf(context).scale(17) > 17 * 1.5;
+    final heardText = Text(heard, key: Key('contact-heard-${c.publicKey.substring(0, 8)}'), maxLines: stacked ? 2 : 1, style: AppType.footnote.copyWith(color: col.textMuted));
     final label = '${c.displayName}, $route, ${heard == notHeardYet ? 'not heard yet' : 'heard $heard'}${unread > 0 ? ', $unread unread' : ''}';
     return Semantics(
       button: true,
@@ -380,11 +383,12 @@ class _ContactTile extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(c.displayName, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.headline.copyWith(color: col.textPrimary)),
                 Text(route, key: Key('contact-route-${c.publicKey.substring(0, 8)}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.subhead.copyWith(color: col.textMuted)),
+                if (stacked) heardText,
               ]),
             ),
             const SizedBox(width: Gap.s),
             Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(heard, key: Key('contact-heard-${c.publicKey.substring(0, 8)}'), maxLines: 1, style: AppType.footnote.copyWith(color: col.textMuted)),
+              if (!stacked) heardText,
               if (unread > 0)
                 Container(
                   margin: const EdgeInsets.only(top: 2),

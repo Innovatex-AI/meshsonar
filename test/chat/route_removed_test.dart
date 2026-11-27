@@ -1,14 +1,14 @@
 // Build 77 (redesign round 3, "Removed" list and decision D3): route modes (Automatic / Keep this route / Always search),
 // the pinned route with its radio write, and the "This route may be broken" logic are not in the official MeshCore flow
-// and are gone. This file replaces route_modes_test.dart: it pins that the leftovers do nothing, and keeps the coverage of
-// what still exists (manual Reset route, ping and route history).
+// and are gone (their code too, deleted by W2-D). This file replaces route_modes_test.dart: it pins that what build 76
+// left in the database changes nothing, and keeps the coverage of what still exists (manual Reset route, ping and route
+// history).
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/db/migrations.dart';
 import 'package:meshsonar/chat/db/misc_repositories.dart';
 import 'package:meshsonar/chat/models.dart';
-import 'package:meshsonar/chat/route_health.dart';
 import 'package:meshsonar/chat/secret_store.dart';
 import 'package:meshsonar/chat/store.dart';
 import 'package:meshsonar/radio/path_tools.dart';
@@ -28,19 +28,13 @@ void main() {
 
   Contact bobNow() => h.store.contacts.get(radioA, bobKey)!;
 
-  test('route modes do nothing: the mode stays Automatic, nothing is written to the radio', () async {
+  test('a contact saved again writes no route mode: the legacy columns read none', () async {
     final bob = h.bob(path: true);
     port.radioAdd(bob);
-    final m = h.service.contacts;
-    expect(m.setRouteMode(bobKey, PathMode.flood), isFalse);
-    expect(m.keepCurrentRoute(bobKey), isFalse);
-    m.setForceFlood(bobKey, true);
-    expect(bobNow().pathMode, PathMode.auto);
-    expect(bobNow().forceFlood, isFalse);
-    expect(bobNow().pinnedPath, isNull);
-    expect(await m.setRoute(bobKey, PathRoute.fromHex(const ['a1', 'b2'])), isNotNull, reason: 'refused in plain words');
-    expect(await m.restorePinnedPath(bobNow()), isFalse);
-    expect(m.routeWriteEnabled(), isFalse);
+    h.store.db.raw.execute("UPDATE contacts SET path_mode = 'fixed', force_flood = 1, pinned_path = 'a1,b2', pinned_hash_size = 1");
+    h.store.contacts.upsert(bobNow());
+    final r = h.store.db.raw.select('SELECT path_mode, force_flood, pinned_path, pinned_hash_size FROM contacts WHERE pubkey = ?', [bobKey]).first;
+    expect([r['path_mode'], r['force_flood'], r['pinned_path'], r['pinned_hash_size']], ['auto', 0, null, null]);
     expect(port.uploads, isEmpty, reason: 'no route is ever written to the radio');
   });
 
@@ -71,9 +65,8 @@ void main() {
     final store = ChatStore.open(db, InMemorySecretStore());
     expect(store.db.schemaVersion, 6);
     final bob = store.contacts.get(radioA, bobKey)!;
-    expect(bob.pathMode, PathMode.auto);
-    expect(bob.pinnedPath, isNull);
-    expect(store.contacts.get(radioA, carolKey)!.forceFlood, isFalse);
+    final cols = store.db.raw.select('SELECT path_mode, force_flood, pinned_path FROM contacts ORDER BY name').map((r) => [r['path_mode'], r['force_flood'], r['pinned_path']]).toList();
+    expect(cols, [['auto', 0, null], ['auto', 0, null]]);
     expect(store.messages.get('m1')!.state, MessageState.failed);
     expect(store.messages.get('m1')!.failReason, FailReason.noAck);
     // Rule 16 is backfilled: Bob confirmed a message once, Carol never did.
@@ -85,20 +78,6 @@ void main() {
     migrateDatabase(store.db.raw, chatMigrations);
     expect(store.contacts.get(radioA, bobKey)!.confirmedMs, 5000);
     store.close();
-  });
-
-  test('"This route may be broken" never shows (decision D3)', () async {
-    final bob = h.bob(path: true);
-    for (var n = 0; n < 4; n++) {
-      h.service.send(radioId: radioA, convKey: h.bobConv, text: 'm$n');
-      for (var i = 0; i < 24; i++) {
-        await h.service.pump();
-        h.clock.advance(6000);
-      }
-      h.sink.hasRoute = true;
-    }
-    expect(h.store.messages.page(h.bobConv).messages.every((m) => m.state == MessageState.failed), isTrue);
-    expect(routeLooksBroken(h.store, bob), isFalse);
   });
 
   group('kept: manual Reset route, ping and route history', () {
@@ -113,11 +92,11 @@ void main() {
       expect(port.uploads, isEmpty, reason: 'RESET_PATH, not a rewrite of the contact');
     });
 
-    test('undo of a reset cannot put a route back (the app never writes one): the radio\'s copy is read again', () async {
+    test('after a reset the radio\'s copy is what the phone shows (no route is ever put back by the app)', () async {
       final bob = h.bob(path: true);
       port.radioAdd(bob);
       await h.service.contacts.resetPath(bobKey);
-      await h.service.contacts.restorePath(bob);
+      await h.service.contacts.refreshOne(bobKey);
       expect(port.uploads, isEmpty);
       expect(bobNow().hasPath, isFalse, reason: 'the phone shows what the radio holds');
     });

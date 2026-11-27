@@ -64,6 +64,6 @@ bool openPathInspector(BuildContext context, List<HopNode> nodes) {
   final shell = shellControllerFor(context);
   if (shell == null || nodes.isEmpty) return false;
   Navigator.maybeOf(context, rootNavigator: true)?.popUntil((r) => r.isFirst);
-  shell.openNetwork(NetworkRequest.toolOf('path', arg: [for (final n in nodes) n.hash].join(' ')));
+  shell.openNetwork(NetworkRequest.toolOf('path', arg: [for (final n in nodes) n.hash].join(',')));
   return true;
 }
