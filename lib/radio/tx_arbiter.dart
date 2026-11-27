@@ -207,7 +207,10 @@ class TxArbiter implements PingGate, TrackTxGate {
   final DateTime Function() _clock;
   TxPolicy policy;
 
-  /// Radio queue probe: the radio's outbound queue length, or null when it could not be read. Set by the session.
+  /// Radio queue probe: the radio's outbound queue length, or null when it could not be read. NOT set by the session since
+  /// build 77 (redesign round 3, "Removed: the stats probe"): asking the radio GET_STATS before a ping put an extra reply
+  /// through its 4-frame Bluetooth queue next to a delivery confirmation. The gap after a user send still holds pings back.
+  /// The hook stays for a caller that has the number without asking the radio.
   Future<int?> Function()? queueProbe;
 
   /// LoRa settings, for estimates; null = unknown (a conservative estimate is used).
