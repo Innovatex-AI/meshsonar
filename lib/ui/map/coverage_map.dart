@@ -1709,6 +1709,17 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   /// The Recenter button: follow is on again and the position goes to the middle of the visible area. The zoom stays.
+  /// Frames every ping of the drive again (the past drive's "Show whole drive"); follow stays off.
+  void _showWholeDrive() {
+    if (!_ready || widget.pings.length < 2) return;
+    setState(() => _follow = false);
+    _controller.fitCamera(CameraFit.coordinates(
+      coordinates: [for (final p in widget.pings) LatLng(p.lat, p.lon)],
+      padding: const EdgeInsets.all(40) + widget.overlayPadding,
+      maxZoom: 15.5,
+    ));
+  }
+
   void _recenter() {
     setState(() => _follow = true);
     final target = _livePosition ?? (_latest == null ? null : LatLng(_latest!.lat, _latest!.lon));
@@ -1928,6 +1939,12 @@ class _CoverageMapState extends State<CoverageMap> {
     };
   }
 
+  /// Tests: the camera now.
+  @visibleForTesting
+  LatLng get debugCenter => _controller.camera.center;
+  @visibleForTesting
+  bool get debugFollowing => _follow;
+
   /// Tests: the overlay boxes names and clusters keep out of.
   @visibleForTesting
   List<Rect> debugOverlayRects() => _overlayRects();
@@ -2075,7 +2092,8 @@ class _CoverageMapState extends State<CoverageMap> {
                 _zoomNow = camera.zoom;
                 if (before != hexResolution || captionsBefore != _captions) setState(() {});
               }
-              if (widget.rotatable) _rotationN.value = camera.rotation;
+              // Every rotation is tracked (Round 1 F9): heading-up turns the map at any panel position, not only a gesture.
+              _rotationN.value = camera.rotation;
               if (hasGesture) {
                 // The person panned, zoomed, pinched or rotated: follow is off and code never moves this camera again
                 // until Recenter (no auto-resume, Andy Nov 10 2026).
@@ -2490,19 +2508,29 @@ class _CoverageMapState extends State<CoverageMap> {
   Widget? _controls(BuildContext context, LatLng? pos, DrivePing? latest) {
     if (widget.onLayers != null) {
       final havePos = pos != null || latest != null;
-      final mode = !_follow ? RecenterMode.notFollowing : (_prefs.headingUp ? RecenterMode.followingHeadingUp : RecenterMode.followingNorthUp);
+      // A past drive's map (framed on its pings, no live position): the button shows the whole drive again (Round 5 D-13).
+      final whole = widget.fitToPings && !widget.follow && widget.puck == null && pos == null && widget.pings.length >= 2;
+      final mode = whole
+          ? RecenterMode.showWhole
+          : (!_follow ? RecenterMode.notFollowing : (_prefs.headingUp ? RecenterMode.followingHeadingUp : RecenterMode.followingNorthUp));
       return ValueListenableBuilder<double>(
         key: _buttonsKey,
         valueListenable: _rotationN,
         builder: (context, rot, _) => MapControlColumn(
           onLayers: widget.onLayers!,
-          compassVisible: widget.rotatable && rot.abs() >= 0.5,
+          // The compass shows whenever the map is rotated, in any panel position (Round 1 F9); a tap is north up.
+          compassVisible: rot.abs() >= 0.5,
           compassRotation: rot,
-          onCompass: _northUp,
+          onCompass: () {
+            if (_prefs.headingUp) _prefs.headingUp = false;
+            _northUp();
+          },
           recenterVisible: havePos,
           recenterMode: mode,
           onRecenter: () {
             switch (mode) {
+              case RecenterMode.showWhole:
+                _showWholeDrive();
               case RecenterMode.notFollowing:
                 _prefs.headingUp = false;
                 _recenter();

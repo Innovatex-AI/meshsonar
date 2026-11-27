@@ -173,7 +173,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
             ],
             _section(context, 'repeaters', Icons.cell_tower_rounded, 'Repeaters', _repeaters(context, mc)),
             _section(context, 'links', Icons.timeline_rounded, 'Link lines', _links(context, mc)),
-            _section(context, 'observers', Icons.change_history_rounded, 'Observers', _observers(context, mc)),
+            _section(context, 'observers', Icons.sensors_rounded, 'Observers', _observers(context, mc)),
             _section(context, 'owned', Icons.verified_outlined, 'Owned by you', _owned(context)),
             _section(context, 'why', Icons.help_outline_rounded, 'Why', _why(context)),
           ],
@@ -424,18 +424,20 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
     final t = Theme.of(context);
     final states = repeaterFreshnessKey(context, hours: true);
     const details = ['Advertised in the last 24 hours. Region repeaters: active or new.', 'Advertised in the last 7 days. Region repeaters: quiet.', 'Older than 7 days, or never advertised. Region repeaters: stale.'];
-    const titles = ['Solid badge: fresh', 'Tinted badge with a ring: recent', 'Hollow dashed badge: older'];
+    // Build 77 (Round 1 N2): the symbol is a neutral disc with a mast; the RING says how recently it was heard, never its signal.
+    const titles = ['Solid ring: heard in 24 hours', 'Dashed ring: heard this week', 'No ring, faded: older'];
     return [
-      _note(context, 'A repeater is a tower badge with a white ring. Its colour is how recently it advertised, not its signal: blue and amber here are not the signal colours.', key: const Key('legend-repeater-note')),
+      _note(context, 'A repeater is a round badge with a mast. The ring around it says how recently it was heard, not how strong it is. '
+          '"Colour nodes by" in Layers can tint the ring by status, role or hash size. A number in a circle is several repeaters close together: zoom in to see each one.', key: const Key('legend-repeater-note')),
       for (var i = 0; i < states.length; i++)
         LegendRow(id: 'repeater-${const ['fresh', 'recent', 'older'][i]}', swatch: states[i].swatch, title: titles[i], detail: details[i]),
       LegendRow(
         id: 'repeater-heard',
         swatch: ExcludeSemantics(child: Icon(Icons.check_circle, size: 22, color: mc.snrStrong)),
-        title: 'Green tick: heard this drive',
+        title: 'Tick: heard this drive',
         detail: 'A repeater your pings reached, with its name when known.',
       ),
-      Text('A square badge is a room server.', style: t.textTheme.bodySmall),
+      Text('A rounded square is a room server. A dotted outline is a repeater whose place is estimated from its neighbours.', style: t.textTheme.bodySmall),
     ];
   }
 
@@ -450,7 +452,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
           child: CustomPaint(painter: LinkSamplePainter(mc.linkLine, mc.linkLineCasing, mc.linkLineDashed)),
         ),
       ),
-      title: mc.linkLineDashed ? 'Dashed line: who heard what' : 'Orange line: who heard what',
+      title: mc.linkLineDashed ? 'Dashed line: who heard what' : 'Line: who heard what',
       detail: 'Tap a repeater or a cell to draw a line to each place it was heard from or heard. The label is the best '
           'signal (SNR) on that link. Line colour is never a signal strength.',
     ),
@@ -496,7 +498,7 @@ class _MapLegendSheetState extends State<MapLegendSheet> {
   List<Widget> _why(BuildContext context) => [
     _Why('What is a hexagon?', 'The map is cut into small hexagonal cells of equal shape. Each cell collects every ping that landed in it, '
         'so you can compare places fairly. Zoom in and the cells get smaller.', 'hexagon'),
-    _Why('What does No reply mean?', 'No reply (dark red in the standard colours) means someone pinged there and no repeater answered, which is useful because '
+    _Why('What does No reply mean?', 'No reply (a dark slate, not a signal colour) means someone pinged there and no repeater answered, which is useful because '
         'it marks a gap. It is different from no hexagon at all, which means nobody has tried.', 'grey'),
     _Why('What is SNR?', 'Signal-to-noise ratio, in dB: how far the signal stood above the radio noise. Above 0 dB is clear, '
         'and a LoRa radio can still decode a little below 0. Higher is better.', 'snr'),

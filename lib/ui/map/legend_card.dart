@@ -7,14 +7,17 @@
 //
 // Keys: 'legend-card', 'legend-card-toggle', 'legend-card-body', 'legend-layer-<defId>', 'legend-palette-<paletteId>'.
 import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/colour_palette.dart';
 import '../../core/coverage_v2.dart' show CoverageMeta;
 import '../../core/map_definition.dart';
+import '../../core/map_definition_v2.dart';
 import '../app.dart' show AppScope;
 import '../design/anchored_sheet.dart' show MapPanelHostController;
-import '../design/app_symbols.dart';
+import '../design/tokens.dart' show AppColors;
 import '../design/map_panel.dart' show MapPanel;
 import '../theme.dart';
 import 'active_map_definition.dart';
@@ -26,6 +29,7 @@ import 'layers/plan_layer.dart' show planLegendKey;
 import 'layers/repeater_sprites.dart' show RepeaterSymbolStyle;
 import 'legend_sheet.dart' show showMapLegend;
 import 'map_layers.dart' show PingColorMode;
+import 'parts/map_chips.dart' show MapChip;
 import 'sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 
 /// Standard | Colour-blind safe, from the definition's `palettes` (names and order). Writes Settings > Colour palette.
@@ -214,7 +218,10 @@ class _LegendCardState extends State<LegendCard> {
     final t = Theme.of(context);
     final mc = MeshSonarColors.of(context);
     final bands = CoverageBandColors.of(mc.palette, t.brightness, definition: def);
+    final ld = def.legendDef;
     bool isOn(MapLayerDef l) {
+      // Plan: the plan's own (magenta) markers are always explained there (Round 4 section 3).
+      if (widget.page == MapLegendPage.plan && l.id == 'plan') return true;
       if (l.panelOnly) return l.id == 'drive' && widget.drivePanel && widget.on.contains('hexes');
       return widget.on.any((a) => definitionLayerId(a) == l.id);
     }
@@ -223,7 +230,7 @@ class _LegendCardState extends State<LegendCard> {
       for (final l in def.layerDefs.reversed)
         if (isOn(l) && !(widget.local && l.hidesWithTime) && l.legend.isNotEmpty) l,
     ];
-    final anyCoverage = visible.any((l) => l.group == 'coverage');
+    final anyCoverage = visible.any((l) => l.group == 'coverage' || layerSectionOf(l) == 'coverage');
     final small = t.textTheme.bodySmall;
     final dim = small?.copyWith(color: t.colorScheme.onSurfaceVariant);
     final labels = def.bandLabels;
@@ -231,44 +238,91 @@ class _LegendCardState extends State<LegendCard> {
 
     // In the panel the rows are a size up and further apart (build 76): there is room, and it is read at arm's length.
     final rowText = widget.asPanel ? t.textTheme.bodyMedium : small;
-    Widget row(Widget key, String text) => Padding(
-      padding: EdgeInsets.symmetric(vertical: widget.asPanel ? 5 : 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [SizedBox(width: 24, child: Center(child: key)), const SizedBox(width: Gap.s), Expanded(child: Text(text, style: rowText))],
-      ),
+    Widget row(Widget key, String text, {String? detail, Key? rowKey}) => LegendRow(key: rowKey, symbol: key, label: text, detail: detail, style: rowText, dense: !widget.asPanel);
+
+    // The chip (Round 1 F4): the one map chip style, 36 pt drawn and 44 pt to tap, with a chevron so it looks tappable. The
+    // wording is the same on every map: "Weak → strong" (Round 4 section 3, Round 5 D-17).
+    final chipLabel = anyCoverage ? 'Weak → strong' : 'Legend';
+    final head = MapChip(
+      tapKey: const Key('legend-card-toggle'),
+      semanticsLabel: anyCoverage ? 'Legend: weak to strong signal' : 'Legend',
+      expanded: widget.onOpen == null ? _open : null,
+      onTap: widget.onOpen ?? () => setState(() => _open = !_open),
+      leading: anyCoverage
+          ? Row(mainAxisSize: MainAxisSize.min, children: [
+              for (final b in const [1, 2, 3, 4, 5]) Padding(padding: const EdgeInsets.only(right: 2), child: CoverageBandSwatch(band: b, colors: bands, size: 11)),
+            ])
+          : null,
+      label: Text(chipLabel),
     );
 
-    final head = Semantics(
-      button: true,
-      expanded: widget.onOpen == null ? _open : null,
-      label: anyCoverage ? 'Legend: weak to strong signal' : 'Legend',
-      child: InkWell(
-        key: const Key('legend-card-toggle'),
-        borderRadius: BorderRadius.circular(12),
-        onTap: widget.onOpen ?? () => setState(() => _open = !_open),
-        child: ExcludeSemantics(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: widget.compact ? 12 : Gap.s, vertical: widget.compact ? 10 : 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (anyCoverage) ...[
-                  for (final b in const [1, 2, 3, 4, 5])
-                    Padding(padding: const EdgeInsets.only(right: 2), child: CoverageBandSwatch(band: b, colors: bands, size: 11)),
-                  const SizedBox(width: 6),
-                ],
-                Text(anyCoverage ? (widget.compact ? 'Weak → strong' : 'Weak → strong signal') : 'Legend', style: t.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
-                if (!widget.compact) ...[
-                  const SizedBox(width: 4),
-                  AppSymbolIcon(_open && widget.onOpen == null ? AppSymbols.chevronDown : AppSymbols.chevronUp, size: 12, color: t.colorScheme.onSurfaceVariant),
-                ],
-              ],
-            ),
-          ),
+    // Panel order (Round 1 N2): coverage first, then my drive, repeaters, people, appearance; extras that are not layers
+    // (your position, a cluster, the selected ring, ...) in their section; on Live the packet colours and route lines.
+    final sectionNames = {for (final sec in def.layerSections) sec.id: sec.name};
+    String sectionName(String id) => sectionNames[id] ?? switch (id) {
+      'coverage' => 'Signal coverage',
+      'drive' => 'My drive',
+      'repeaters' => 'Repeaters',
+      'people' => 'People and listeners',
+      'appearance' => 'Appearance',
+      _ => id,
+    };
+    bool extraShows(LegendExtraDef e) {
+      final onPage = switch (e.on) {
+        'drive' => widget.page == MapLegendPage.drive,
+        'live' => widget.page == MapLegendPage.live,
+        _ => true,
+      };
+      if (!onPage) return false;
+      return switch (e.section) {
+        'repeaters' => visible.any((l) => layerSectionOf(l) == 'repeaters'),
+        'people' => widget.on.contains('friends') || e.id == 'friend' && widget.page == MapLegendPage.drive,
+        _ => true,
+      };
+    }
+
+    Widget layerBlock(MapLayerDef l) => Padding(
+      key: Key('legend-layer-${l.id}'),
+      padding: const EdgeInsets.only(top: Gap.xs),
+      child: Semantics(
+        container: true,
+        label: l.name,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l.name, style: (widget.asPanel ? t.textTheme.titleSmall : t.textTheme.labelMedium)?.copyWith(fontWeight: FontWeight.w600)),
+            for (final e in l.legend)
+              if (e.kind == 'bands') ...[
+                if (e.note != null) Text('${e.note}:', style: dim),
+                for (var b = e.from ?? 5; (e.from ?? 5) >= (e.to ?? 1) ? b >= (e.to ?? 1) : b <= (e.to ?? 1); b += (e.from ?? 5) >= (e.to ?? 1) ? -1 : 1)
+                  row(CoverageBandSwatch(band: b, colors: bands, size: 14), [label(b), ?widget.meta?.rangeText(b)].join('  ')),
+              ] else
+                row(legendEntryKey(context, e, def), e.label ?? '', detail: e.detail),
+          ],
         ),
       ),
     );
+
+    final sections = <Widget>[];
+    for (final id in ld.order) {
+      final layers = [for (final l in visible) if (layerSectionOf(l) == id) l];
+      final extras = [for (final e in ld.extras) if (e.section == id && extraShows(e)) e];
+      if (layers.isEmpty && extras.isEmpty) continue;
+      sections.add(Padding(
+        key: Key('legend-section-$id'),
+        padding: const EdgeInsets.only(top: Gap.m),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(sectionName(id), style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          for (final l in layers) layerBlock(l),
+          for (final e in extras) row(legendExtraKey(context, e.symbol), e.label, detail: e.detail, rowKey: Key('legend-extra-${e.id}')),
+        ]),
+      ));
+    }
+    // A layer in a section the order does not name still shows (a newer definition), last.
+    for (final l in visible) {
+      if (!ld.order.contains(layerSectionOf(l))) sections.add(layerBlock(l));
+    }
+    if (widget.page == MapLegendPage.live) sections.add(_liveSection(context, def, ld, row));
 
     final body = !(_open && widget.onOpen == null) && !widget.asPanel
         ? null
@@ -280,30 +334,10 @@ class _LegendCardState extends State<LegendCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final l in visible)
-                    Padding(
-                      key: Key('legend-layer-${l.id}'),
-                      padding: const EdgeInsets.only(top: Gap.s),
-                      child: Semantics(
-                        container: true,
-                        label: l.name,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(l.name, style: (widget.asPanel ? t.textTheme.titleSmall : t.textTheme.labelMedium)?.copyWith(fontWeight: FontWeight.w600)),
-                            for (final e in l.legend)
-                              if (e.kind == 'bands') ...[
-                                if (e.note != null) Text('${e.note}:', style: dim),
-                                for (var b = e.from ?? 5; (e.from ?? 5) >= (e.to ?? 1) ? b >= (e.to ?? 1) : b <= (e.to ?? 1); b += (e.from ?? 5) >= (e.to ?? 1) ? -1 : 1)
-                                  row(CoverageBandSwatch(band: b, colors: bands, size: 14), [label(b), ?widget.meta?.rangeText(b)].join('  ')),
-                              ] else
-                                row(legendEntryKey(context, e, def), e.label ?? ''),
-                          ],
-                        ),
-                      ),
-                    ),
+                  ...sections,
                   if (widget.local && def.filter('time').note != null) Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(def.filter('time').note!, style: dim)),
-                  if (visible.isEmpty) Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text('No layer is switched on. Open Layers to pick some.', style: dim)),
+                  if (visible.isEmpty && widget.page != MapLegendPage.live)
+                    Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text('No layer is switched on. Open Layers to pick some.', style: dim)),
                   Padding(padding: const EdgeInsets.only(top: Gap.m, bottom: 4), child: Text('Colours', style: t.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600))),
                   const PaletteSwitch(),
                 ],
@@ -312,6 +346,7 @@ class _LegendCardState extends State<LegendCard> {
           );
 
     if (widget.asPanel) return body!;
+    if (body == null) return KeyedSubtree(key: const Key('legend-card'), child: head);
     return Material(
       key: const Key('legend-card'),
       color: t.colorScheme.surface.withValues(alpha: 0.94),
@@ -320,12 +355,161 @@ class _LegendCardState extends State<LegendCard> {
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: AnimatedSize(
-        duration: const Duration(milliseconds: 160),
+        duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 160),
         alignment: Alignment.bottomLeft,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [head, ?body]),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [head, body]),
       ),
     );
   }
+
+  /// Live (Round 1 N2): the packet-type colours and the route line styles, in the same panel as the repeaters.
+  Widget _liveSection(BuildContext context, MapDefinition def, LegendDef ld, Widget Function(Widget, String, {String? detail, Key? rowKey}) row) {
+    final t = Theme.of(context);
+    final types = def.packetTypes;
+    final dark = t.brightness == Brightness.dark;
+    final lang = ColourLanguage.of(t.brightness);
+    const builtInNames = {4: 'Advert', 5: 'Group text', 2: 'Direct message', 3: 'Ack', 1: 'Response', 9: 'Trace', 8: 'Path', 0: 'Request'};
+    const order = [4, 5, 2, 3, 1, 9, 8, 0];
+    Color colourOf(int type, int slot) {
+      if (types != null) {
+        final c = types.of(type);
+        return Color(dark ? c.dark : c.light);
+      }
+      return lang.packetTypes[slot];
+    }
+
+    Widget line(String style, Color c) => ExcludeSemantics(child: CustomPaint(size: const Size(20, 4), painter: _LineKeyPainter(style, c)));
+    final ink = t.colorScheme.onSurface;
+    return Padding(
+      key: const Key('legend-section-live'),
+      padding: const EdgeInsets.only(top: Gap.m),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(ld.liveTitle, style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+        Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(ld.packetTypesTitle, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
+        for (final (slot, type) in order.indexed)
+          row(
+            ExcludeSemantics(child: Container(width: 12, height: 12, decoration: BoxDecoration(color: colourOf(type, slot), shape: BoxShape.circle))),
+            types?.names[type] ?? builtInNames[type]!,
+            rowKey: Key('legend-packet-$type'),
+          ),
+        row(ExcludeSemantics(child: Container(width: 12, height: 12, decoration: BoxDecoration(color: lang.packetOther, shape: BoxShape.circle))), 'Other'),
+        Padding(padding: const EdgeInsets.only(top: Gap.s), child: Text(ld.lineStylesTitle, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600))),
+        for (final st in ld.lineStyles)
+          row(line(st.line, st.id == 'unplaced' ? lang.packetOther : ink), st.label, detail: st.detail, rowKey: Key('legend-line-${st.id}')),
+      ]),
+    );
+  }
+}
+
+/// One legend row: the symbol as the map draws it and a short label; a row with a [detail] opens it on a tap (Round 1 N2:
+/// labels of two to four words, detail on tap).
+class LegendRow extends StatefulWidget {
+  final Widget symbol;
+  final String label;
+  final String? detail;
+  final TextStyle? style;
+  final bool dense;
+  const LegendRow({super.key, required this.symbol, required this.label, this.detail, this.style, this.dense = false});
+
+  @override
+  State<LegendRow> createState() => _LegendRowState();
+}
+
+class _LegendRowState extends State<LegendRow> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final has = widget.detail != null && widget.detail!.trim().isNotEmpty;
+    final line = Padding(
+      padding: EdgeInsets.symmetric(vertical: widget.dense ? 2 : 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(width: 24, child: Center(child: widget.symbol)),
+          const SizedBox(width: Gap.s),
+          Expanded(child: Text(widget.label, style: widget.style)),
+          if (has) Icon(_open ? Icons.expand_less_rounded : Icons.info_outline_rounded, size: 16, color: t.colorScheme.onSurfaceVariant),
+        ],
+      ),
+    );
+    if (!has) return line;
+    return Semantics(
+      button: true,
+      expanded: _open,
+      hint: _open ? null : 'Shows what it means',
+      child: InkWell(
+        onTap: () => setState(() => _open = !_open),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: widget.dense ? 0 : 44),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            line,
+            if (_open)
+              Padding(
+                padding: const EdgeInsets.only(left: 32, bottom: 6),
+                child: Text(widget.detail!, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _LineKeyPainter extends CustomPainter {
+  final String style;
+  final Color color;
+  _LineKeyPainter(this.style, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = style == 'solid' ? 2.5 : 2
+      ..strokeCap = StrokeCap.round;
+    final y = size.height / 2;
+    if (style == 'solid') {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+      return;
+    }
+    final (on, off) = style == 'dashed' ? (5.0, 3.0) : (1.5, 3.0);
+    for (var x = 0.0; x < size.width; x += on + off) {
+      canvas.drawLine(Offset(x, y), Offset(math.min(size.width, x + on), y), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LineKeyPainter o) => o.style != style || o.color != color;
+}
+
+/// The symbol of a legend extra (an entry that is not a layer), drawn the way the map draws it.
+Widget legendExtraKey(BuildContext context, String symbol) {
+  final t = Theme.of(context);
+  final mc = MeshSonarColors.of(context);
+  final c = AppColors.fromTheme(t);
+  Widget circle(double d, Color fill, {Color? ring, Widget? child}) => Container(
+    width: d,
+    height: d,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(color: fill, shape: BoxShape.circle, border: ring == null ? null : Border.all(color: ring, width: 2)),
+    child: child,
+  );
+  return ExcludeSemantics(
+    child: switch (symbol) {
+      'position' => circle(14, t.colorScheme.primary, ring: t.colorScheme.surface),
+      'heardtick' => Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
+        const RepeaterRingKey(state: 'fresh', size: 18),
+        Positioned(right: -3, bottom: -3, child: circle(9, c.ok, child: Icon(Icons.check_rounded, size: 7, color: t.colorScheme.surface))),
+      ]),
+      'cluster' => circle(18, t.colorScheme.surfaceContainerHighest, ring: t.colorScheme.outline, child: Text('3', style: t.textTheme.labelSmall?.copyWith(fontSize: 9, fontWeight: FontWeight.w700))),
+      'selected' => circle(18, Colors.transparent, ring: t.colorScheme.onSurface, child: const RepeaterRingKey(state: 'fresh', size: 12)),
+      'room' => const NodeSymbol(role: 'room', size: 18, scaled: false),
+      'friend' => circle(14, mc.friend, ring: t.colorScheme.surface),
+      'meet' => Icon(Icons.flag_rounded, size: 16, color: mc.friend),
+      _ => circle(10, t.colorScheme.onSurfaceVariant),
+    },
+  );
 }
 
 /// The transient panel id of the legend on a map.
