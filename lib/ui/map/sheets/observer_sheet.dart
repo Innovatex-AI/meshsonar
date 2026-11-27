@@ -4,6 +4,7 @@
 // Data: the viewed region's `region-observers` rows (only observers whose owner made the position public carry
 // lat/lon; the server rounds them per `location_public`). Design: stream-1-maps.md 4.6. Ends with the node actions
 // (Plan from here, Add to plan, Link to…, only with a published position: ui/nodes/node_actions.dart).
+import '../../../core/time_format.dart' as tf;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -11,7 +12,7 @@ import '../../../core/heard.dart' show haversineM;
 import '../../../core/region_overview_api.dart' show RegionObserver;
 import '../../../core/units.dart' show Units;
 import '../../app.dart' show AppScope;
-import '../../region/region_common.dart' show agoText, groupInt;
+import '../../region/region_common.dart' show groupInt;
 import '../../theme.dart';
 import '../../design/app_surfaces.dart';
 import '../../nodes/node_actions.dart' show NodeActionBar;
@@ -112,7 +113,7 @@ class ObserverSheet extends StatelessWidget {
             // Actions right under the name (build 76).
             NodeActionBar(node: nodeRefOfObserver(o)),
             const SizedBox(height: Gap.s),
-            stat('Last seen', agoText(o.lastSeen, now: ctx.clock()), key: const Key('observer-sheet-seen')),
+            stat('Last seen', tf.relativeTime(o.lastSeen, now: ctx.clock(), ifNull: 'Not reported'), key: const Key('observer-sheet-seen')),
             if (o.noiseFloorDbm != null) stat('Noise floor', '${o.noiseFloorDbm!.round()} dBm', key: const Key('observer-sheet-noise')),
             if (o.packetsPerHour != null) stat('Packets per hour', groupInt(o.packetsPerHour!)),
             if (o.nodesHeard24h != null) stat('Nodes heard (24 h)', groupInt(o.nodesHeard24h!)),

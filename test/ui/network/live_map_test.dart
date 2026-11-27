@@ -248,8 +248,8 @@ void main() {
 
   test('packet type palette matches the website', () {
     expect(packetTypeColorFor(4, Brightness.dark), const Color(0xFF3987E5));
-    expect(packetTypeColorFor(5, Brightness.dark), const Color(0xFFD95926));
-    expect(packetTypeColorFor(9, Brightness.light), const Color(0xFF008300));
+    expect(packetTypeColorFor(5, Brightness.dark), const Color(0xFF5CC8F0), reason: 'build 77: off the signal hues (was orange)');
+    expect(packetTypeColorFor(9, Brightness.light), const Color(0xFF2B3A47), reason: 'build 77: TRACE is no longer the "good" green');
     expect(packetTypeColorFor(11, Brightness.dark), const Color(0xFF8A929B));
   });
 
@@ -537,7 +537,9 @@ void main() {
       final c = await pump(tester, fake);
       final chip = tester.widget<ChoiceChip>(find.byKey(Key('live-window-${c.window}')));
       expect(chip.selected, isTrue);
-      expect(chip.selectedColor, meshSonarTheme(Brightness.dark).colorScheme.primaryContainer);
+      // Build 77: the chip takes the app's chip theme (teal on every tab), no per-chip override.
+      expect(chip.selectedColor, isNull);
+      expect(Theme.of(tester.element(find.byKey(Key('live-window-${c.window}')))).chipTheme.selectedColor, meshSonarTheme(Brightness.dark).colorScheme.primaryContainer);
       await tester.pumpWidget(const SizedBox());
       c.dispose();
     });

@@ -1,22 +1,18 @@
-// The packet type palette (AZ-3.3), the same colours as the website's (meshcore-insights
-// src/components/region/ui/chart-palette.ts PACKET_TYPE_COLOR over src/styles/region-ui.css --rc-pkt-*, PALETTE_HEX):
-// ADVERT cat-1, GRP_TXT cat-2, TXT_MSG cat-3, ACK cat-4, RESPONSE cat-5, TRACE cat-6, PATH cat-7, REQ cat-8, anything
-// else "Other". Light and dark values copied exactly, so a packet is the same colour on the site and in the app.
+// The packet type palette (AZ-3.3): one colour per type, the same on the site and in the app. Slot order ADVERT, GRP_TXT,
+// TXT_MSG, ACK, RESPONSE, TRACE, PATH, REQ, anything else "Other".
 import 'package:flutter/material.dart';
 
 import '../../../core/map_definition_v2.dart';
 import '../../map/active_map_definition.dart';
+import '../../theme.dart' show ColourLanguage;
 
-const List<Color> _catLight = [
-  Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100), //
-  Color(0xFFE87BA4), Color(0xFF008300), Color(0xFF6250D6), Color(0xFFE34948),
-];
-const List<Color> _catDark = [
-  Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500), //
-  Color(0xFFD55181), Color(0xFF008300), Color(0xFF9085E9), Color(0xFFE66767),
-];
-const Color _otherLight = Color(0xFF6F7780);
-const Color _otherDark = Color(0xFF8A929B);
+// Build 77 (Round 1 N4): the colours moved off the signal hues (no red, orange, amber, yellow or green next to coverage). The
+// built-in list is the app's colour language (ui/theme.dart ColourLanguage.packetTypes), which the Map Definition's
+// `packetTypes` carries from schemaMinor 10 (test/core/map_definition_v2_test.dart pins the two equal).
+Color _builtIn(int? slot, Brightness b) {
+  final l = ColourLanguage.of(b);
+  return slot == null || slot >= l.packetTypes.length ? l.packetOther : l.packetTypes[slot];
+}
 
 /// The palette slot (0-based) of a packet type number; null = "Other".
 int? packetTypeSlot(int type) => switch (type) {
@@ -42,10 +38,7 @@ Color packetTypeColorFor(int type, Brightness brightness) {
     final c = def.of(type);
     return Color(brightness == Brightness.dark ? c.dark : c.light);
   }
-  final slot = packetTypeSlot(type);
-  final dark = brightness == Brightness.dark;
-  if (slot == null) return dark ? _otherDark : _otherLight;
-  return (dark ? _catDark : _catLight)[slot];
+  return _builtIn(packetTypeSlot(type), brightness);
 }
 
 Color packetTypeColor(BuildContext context, int type) => packetTypeColorFor(type, Theme.of(context).brightness);
@@ -54,4 +47,4 @@ Color packetTypeColor(BuildContext context, int type) => packetTypeColorFor(type
 const List<int> livePacketTypes = [4, 5, 2, 3, 1, 9, 8, 0, 6, 7, 10, 11];
 
 /// The ghost-hop colour (unresolved hops): the palette's "Other" grey.
-Color ghostColor(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? _otherDark : _otherLight;
+Color ghostColor(BuildContext context) => ColourLanguage.of(Theme.of(context).brightness).packetOther;

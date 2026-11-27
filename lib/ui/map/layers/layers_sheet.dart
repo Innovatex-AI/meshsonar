@@ -1,8 +1,10 @@
 // The ONE Layers sheet (build 74, MAP slice 4): any map opens it with a [MapLayersModel] (layers_model.dart: the Drive map's
-// DriveMapModel, the Plan map's PageLayersModel). Order: Basemap, Coverage, Network, Activity, Mine, Context, Labels, Filters
-// (with a count when set; the Drive map's), Size and colour, Palette, Reset. A layer or an Activity row the map cannot draw shows
-// disabled with a one-line reason, never hidden. Basemap offers Road, Dark, Topo, Satellite when the definition has
-// `variables.basemap` (Chart and Light are one Road), else build 73's list.
+// DriveMapModel, the Plan map's PageLayersModel). Build 77 (Round 1 N1) order, in plain words: Map style (real thumbnails),
+// Signal coverage (Measured first, Redundancy under Advanced), My drive, Repeaters (one switch with This region / Everywhere,
+// then names, estimated positions, lines and link quality), People and listeners, Appearance (sizes, colour by, palette, region
+// outline), Filters (the Drive map's, with a count), More (credits, guide, Reset), and last ONE "Not on this map" line that
+// opens to the layers this map cannot draw, each with its reason (never hidden). Section names and hints come from the
+// definition's `sections` (schemaMinor 10) when it has them. A layer's hint stays visible on or off.
 //
 // The website's Layers panel (plan unified-map-system §2.4-2.5, phase M2), generated from the Map
 // Definition (registry.dart [sheetRows]): Basemap, then the definition's groups (Coverage, Network, Context) with its layers,
@@ -19,10 +21,10 @@
 // 'layers-group-palette', 'layers-group-labels', 'layers-group-activity', 'layers-group-mine'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
 // 'layer-color-snr', 'layer-color-result', 'layers-palette-<paletteId>', 'layers-filter', 'layers-credits', 'layers-legend',
 // 'layers-reset', 'network-legend'.
+import '../../../core/time_format.dart' as tf;
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 
-import '../../../core/map_definition.dart' show MapGroupDef;
 import '../../../core/map_styles.dart';
 import '../../../core/network_coverage.dart' show CoverageLevel;
 import '../../design/anchored_sheet.dart';
@@ -30,7 +32,6 @@ import '../../design/map_panel.dart';
 import '../../design/app_surfaces.dart';
 import '../../design/app_symbols.dart';
 import '../../design/app_widgets.dart' show AppSwitchTile;
-import '../../design/map_tokens.dart';
 import '../../design/tokens.dart' show Hit;
 import '../../drive/drive_map_model.dart';
 import '../../../core/coverage_query.dart' show CoverageSince, CoverageSource;
@@ -79,7 +80,8 @@ Key layerSwitchKey(String id) => Key(switch (id) {
     kFriendsLayerId => 'Friends sharing their position in your MeshTrack groups, and the meet-up point.',
     _ => null,
   };
-  return (title: layerLabel(spec.id, def), description: l == null ? own : (on ? null : l.hint));
+  // Build 77 (Round 1 N1): the hint stays visible with the layer on, so the person keeps the explanation of what they see.
+  return (title: layerLabel(spec.id, def), description: l == null ? own : l.hint);
 }
 
 /// Opens the layers for [model]. On a map with a transient panel slot ([host], the Drive map's) they are the non-modal
@@ -149,29 +151,40 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
 
   // ------------------------------------------------------------------ the main page
 
-  /// Node Names live in the Labels section (not under Repeaters): present while the definition has the Repeaters layer.
-  bool get _hasNames => [for (final (_, rows) in sheetRows()) for (final r in rows) r.id].contains(kLabelsLayerId);
+  /// Every switch row the definition offers this app (flattened), and the rows it lists that the app cannot draw.
+  List<SheetRow> _allRows() => [for (final (_, rows) in sheetRows()) ...rows];
 
-  /// The definition's groups in the one order of the panel, each with its switch rows (Names leaves for Labels) and the rows
-  /// the app cannot draw (shown disabled).
-  List<(MapGroupDef, List<SheetRow>, List<InactiveRow>)> _groups() {
-    const order = ['coverage', 'network', 'activity', 'mine', 'context'];
-    final off = inactiveRows();
-    final out = [
-      for (final (g, rows) in sheetRows())
-        (g, [for (final r in rows) if (r.id != kLabelsLayerId) r], [for (final r in off) if (r.groupId == g.id) r]),
-    ];
-    int rank(String id) => order.contains(id) ? order.indexOf(id) : order.length;
-    return [...out]..sort((a, b) => rank(a.$1.id).compareTo(rank(b.$1.id)));
-  }
-
+  /// The Layers sheet in plain words (build 77, Round 1 N1): Map style / Signal coverage (Measured first) / My drive / Repeaters
+  /// (one switch, "This region / Everywhere") / People and listeners / Appearance / Filters, then More. Hints stay visible with
+  /// the layer on or off, and what this map cannot draw is one "Not on this map" line at the bottom. No function is removed.
   List<Widget> _mainPage(BuildContext context) {
     final st = model.layerState;
-    // The Filters section is the Drive map's (pings, cells, the growth timeline): a map without them does not get the section.
     final m = model;
     final drive = m is DriveMapModel ? m : null;
     final q = model.coverageQuery;
     final filterCount = model.filter.activeCount + (q.since != CoverageSince.all ? 1 : 0) + (q.source != CoverageSource.all ? 1 : 0) + (q.until != null ? 1 : 0);
+    final def = ActiveMapDefinition.current;
+    final sec = {for (final x in def.layerSections) x.id: x};
+    String title(String id, String fallback) => sec[id]?.name ?? fallback;
+    String? hint(String id, String? fallback) => sec[id]?.hint ?? fallback;
+
+    final rows = _allRows();
+    final ids = {for (final r in rows) r.id};
+    bool cannotDraw(String id) => model.statusOf(id).availability == LayerAvailability.unsupported;
+    final notHere = <String>[for (final r in rows) if (cannotDraw(r.id) && r.parent == null) r.id];
+    final inactive = inactiveRows();
+    List<Widget> rowsOf(List<String> order, {Set<String> sub = const {}}) => [
+      for (final id in order)
+        if (ids.contains(id) && !notHere.contains(id)) ..._layer(context, layerSpec(id)!, st, sub: sub.contains(id)),
+    ];
+    Widget section(String id, String fallback, {String? hintFallback}) => _SectionLabel(title(id, fallback), key: Key('layers-group-$id'), hint: hint(id, hintFallback));
+
+    final coverage = rowsOf(['measured', 'predicted', kHeardCellsLayerId]);
+    final backup = rowsOf(['redundancy']);
+    final mine = rowsOf(['hexes', 'pings', 'heard', kPlanLayerId], sub: {'pings'});
+    final repeaterRows = _repeaterRows(context, st, ids, notHere, drive);
+    final people = rowsOf([kFriendsLayerId, 'observers', 'phones']);
+    final appearance = rowsOf(['borders']);
     return [
       if (!widget.inPanel) _Header(title: 'Layers', trailing: _TextAction(key: const Key('layers-done'), label: 'Done', onTap: widget.onDone)),
       Flexible(
@@ -180,31 +193,26 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
           shrinkWrap: true,
           padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + Gap.m),
           children: [
-            const _SectionLabel('Basemap', key: Key('layers-group-base')),
+            _SectionLabel(title('style', 'Map style'), key: const Key('layers-group-base')),
             _BaseMapPicker(model: model),
-            // The definition's groups in the one order of the website's panel (Coverage, Network, Activity, Mine, Context),
-            // top of the map first inside a group. Rows the app cannot draw show disabled with their reason, never hidden.
-            for (final (g, rows, off) in _groups())
-              if (rows.isNotEmpty || off.isNotEmpty) ...[
-                _SectionLabel(g.name, key: Key('layers-group-${g.id}')),
-                for (final row in rows) ..._layer(context, layerSpec(row.id)!, st, sub: row.parent != null),
-                for (final r in off) _InactiveRow(row: r),
-              ],
-            if (_hasNames) ...[
-              const _SectionLabel('Labels', key: Key('layers-group-labels')),
-              ..._layer(context, layerSpec(kLabelsLayerId)!, st),
-              // The Drive map shows fewer names while a drive runs (build 76); this brings every name back.
-              if (drive != null)
-                AppSwitchTile(
-                  title: 'All names while driving',
-                  subtitle: 'Off: fewer names during a drive, so the road stays readable.',
-                  switchKey: const Key('layer-all-names-driving'),
-                  value: drive.allNamesWhileDriving,
-                  onChanged: repeatersOn(st) && st.isOn(kLabelsLayerId) ? (v) => drive.allNamesWhileDriving = v : null,
-                ),
+            if (coverage.isNotEmpty || backup.isNotEmpty) ...[
+              section('coverage', 'Signal coverage', hintFallback: 'Where a radio can reach a repeater.'),
+              ...coverage,
+              if (backup.isNotEmpty) ...[const _SubLabel('Advanced', key: Key('layers-coverage-advanced')), ...backup],
             ],
+            if (mine.isNotEmpty) ...[section('drive', 'My drive', hintFallback: 'What you measured yourself.'), ...mine],
+            if (repeaterRows.isNotEmpty) ...[section('repeaters', 'Repeaters', hintFallback: 'The radios that pass messages on.'), ...repeaterRows],
+            if (people.isNotEmpty) ...[section('people', 'People and listeners', hintFallback: 'Listening stations, phones and your friends.'), ...people],
+            section('appearance', 'Appearance', hintFallback: 'Sizes, colours and outlines.'),
+            ...appearance,
+            const MapSizeControls(),
+            const ColourByControl(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
+              child: Align(alignment: Alignment.centerLeft, child: PaletteSwitch(keyPrefix: 'layers-palette')),
+            ),
             if (drive != null) ...[
-              _SectionLabel(filterCount == 0 ? 'Filters' : 'Filters · $filterCount', key: const Key('layers-group-filters')),
+              _SectionLabel(filterCount == 0 ? title('filters', 'Filters') : '${title('filters', 'Filters')} · $filterCount', key: const Key('layers-group-filters'), hint: hint('filters', 'Show only part of the data.')),
               Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l), child: CoverageOptionsBody(model: drive)),
               _NavRow(
                 key: const Key('layers-filter'),
@@ -213,11 +221,6 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
                 onTap: () => showMapFilterSheet(context, drive),
               ),
             ],
-            const _SectionLabel('Size and colour', key: Key('layers-group-size')),
-            const MapSizeControls(),
-            const ColourByControl(),
-            const _SectionLabel('Palette', key: Key('layers-group-palette')),
-            const Padding(padding: EdgeInsets.symmetric(horizontal: Gap.l), child: Align(alignment: Alignment.centerLeft, child: PaletteSwitch(keyPrefix: 'layers-palette'))),
             const _SectionLabel('More'),
             _NavRow(
               key: const Key('layers-credits'),
@@ -237,10 +240,57 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
             ),
             // What Reset leaves alone is said where it matters, in its confirmation (build 76; it was a footnote here).
             _NavRow(key: const Key('layers-reset'), title: 'Reset layers', destructive: true, chevron: false, onTap: () => _confirmReset(context)),
+            // What this map cannot draw: one line at the bottom, open for the reasons (never hidden).
+            if (notHere.isNotEmpty || inactive.isNotEmpty)
+              _NotOnThisMap(
+                count: notHere.length + inactive.length,
+                children: [
+                  for (final id in notHere) ..._layer(context, layerSpec(id)!, st),
+                  for (final r in inactive) _InactiveRow(row: r),
+                ],
+              ),
           ],
         ),
       ),
     ];
+  }
+
+  /// Repeaters: one switch (This region / Everywhere), then its options: names (and all names while driving), estimated
+  /// positions, lines when tapped, link quality.
+  List<Widget> _repeaterRows(BuildContext context, MapLayerState st, Set<String> ids, List<String> notHere, DriveMapModel? drive) {
+    bool has(String id) => ids.contains(id) && !notHere.contains(id);
+    final out = <Widget>[];
+    final region = has(kRosterLayerId), everywhere = has(kNetworkLayerId);
+    if (region) {
+      // ONE switch: on draws this region's repeaters (and every MeshCore repeater with Everywhere); off hides them all.
+      out.addAll(_layer(context, layerSpec(kRosterLayerId)!, st, value: repeatersOn(st), onSet: (v) {
+        model.setLayer(kRosterLayerId, v);
+        if (!v && st.isOn(kNetworkLayerId)) model.setLayer(kNetworkLayerId, false);
+      }));
+      if (everywhere) out.add(_RepeaterScope(model: model));
+    } else if (everywhere) {
+      out.addAll(_layer(context, layerSpec(kNetworkLayerId)!, st));
+    }
+    if (has(kLabelsLayerId)) {
+      out.addAll(_layer(context, layerSpec(kLabelsLayerId)!, st, sub: true));
+      // The Drive map shows fewer names while a drive runs (build 76); this brings every name back.
+      if (drive != null) {
+        out.add(Padding(
+          padding: const EdgeInsets.only(left: Gap.l),
+          child: AppSwitchTile(
+            title: 'All names while driving',
+            subtitle: 'Every repeater name, also during a drive. Off keeps the road readable.',
+            switchKey: const Key('layer-all-names-driving'),
+            value: drive.allNamesWhileDriving,
+            onChanged: repeatersOn(st) && st.isOn(kLabelsLayerId) ? (v) => drive.allNamesWhileDriving = v : null,
+          ),
+        ));
+      }
+    }
+    for (final id in const ['estimated', 'links', 'snrlinks']) {
+      if (has(id)) out.addAll(_layer(context, layerSpec(id)!, st, sub: region || everywhere));
+    }
+    return out;
   }
 
   Future<void> _confirmReset(BuildContext context) async {
@@ -254,9 +304,9 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
     if (ok == true) model.resetLayers();
   }
 
-  List<Widget> _layer(BuildContext context, MapLayerSpec spec, MapLayerState st, {bool sub = false}) {
+  List<Widget> _layer(BuildContext context, MapLayerSpec spec, MapLayerState st, {bool sub = false, bool? value, ValueChanged<bool>? onSet}) {
     final t = Theme.of(context);
-    final on = st.isOn(spec.id);
+    final on = value ?? st.isOn(spec.id);
     final p = layerPresentation(context, spec, regionName: model.state.viewingRegion?.name, hasPosition: model.position != null, on: on);
     final statusId = spec.id;
     final status = model.statusOf(statusId);
@@ -273,7 +323,7 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
       // A default-on layer the server does not offer shows off and disabled (it cannot draw anything). Otherwise
       // unsupported/empty layers cannot be switched on, and a layer that is on can always be switched off.
       value: on && !unsupported,
-      onChanged: parentOff || unsupported ? null : ((on || status.enabled) ? (v) => model.setLayer(spec.id, v) : null),
+      onChanged: parentOff || unsupported ? null : ((on || status.enabled) ? (onSet ?? (v) => model.setLayer(spec.id, v)) : null),
     );
     return [
       if (sub) Padding(padding: const EdgeInsets.only(left: Gap.l), child: tile) else tile,
@@ -310,6 +360,118 @@ class _MapLayersSheetState extends State<MapLayersSheet> {
 }
 
 // ====================================================================================================== pieces
+
+/// "This region / Everywhere" under the Repeaters switch (Round 1 N1): Everywhere also draws every MeshCore repeater (the
+/// `network` layer, about 4 MB the first time). Keys: 'layers-repeater-scope', 'layers-scope-region', 'layers-scope-everywhere'.
+class _RepeaterScope extends StatelessWidget {
+  final MapLayersModel model;
+  const _RepeaterScope({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final st = model.layerState;
+    final on = st.isOn(kRosterLayerId) || st.isOn(kNetworkLayerId);
+    final status = model.statusOf(kNetworkLayerId);
+    final canEverywhere = st.isOn(kNetworkLayerId) || status.enabled;
+    final hint = ActiveMapDefinition.current.layerDef('network')?.hint;
+    final t = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.l * 2, 0, Gap.l, Gap.s),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [IgnorePointer(
+        ignoring: !on,
+        child: Opacity(
+          opacity: on ? 1 : 0.4,
+          child: Semantics(
+            label: 'Which repeaters',
+            child: CupertinoSlidingSegmentedControl<bool>(
+              key: const Key('layers-repeater-scope'),
+              groupValue: st.isOn(kNetworkLayerId),
+              children: {
+                false: const Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('This region', key: Key('layers-scope-region'))),
+                true: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6),
+                  child: Text('Everywhere', key: const Key('layers-scope-everywhere'), style: canEverywhere ? null : TextStyle(color: Theme.of(context).disabledColor)),
+                ),
+              },
+              onValueChanged: (v) {
+                if (v == null || (v && !canEverywhere)) return;
+                model.setLayer(kNetworkLayerId, v);
+              },
+            ),
+          ),
+        ),
+      ),
+        if (st.isOn(kNetworkLayerId)) _InlineKey(layerId: kNetworkLayerId, model: model),
+        // "Everywhere": what it costs, and why it may not be offered (the network layer's own hint and status).
+        if (hint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(hint, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant))),
+        if (status.detail != null)
+          Text(status.detail!, key: const Key('layer-network-status'), style: t.textTheme.bodySmall?.copyWith(color: status.availability == LayerAvailability.failed ? t.colorScheme.error : t.colorScheme.onSurfaceVariant)),
+        if (status.canRetry)
+          CupertinoButton(
+            key: const Key('layer-network-retry'),
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(Hit.min, Hit.min),
+            onPressed: () => model.retry(kNetworkLayerId),
+            child: const Text('Retry'),
+          ),
+      ]),
+    );
+  }
+}
+
+/// The layers this map cannot draw, as one closed line at the bottom of the sheet; open, each with its reason.
+class _NotOnThisMap extends StatefulWidget {
+  final int count;
+  final List<Widget> children;
+  const _NotOnThisMap({required this.count, required this.children});
+
+  @override
+  State<_NotOnThisMap> createState() => _NotOnThisMapState();
+}
+
+class _NotOnThisMapState extends State<_NotOnThisMap> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Column(
+      key: const Key('layers-not-here'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _NavRow(
+          key: const Key('layers-not-here-toggle'),
+          title: 'Not on this map',
+          trailing: '${widget.count}',
+          chevron: false,
+          onTap: () => setState(() => _open = !_open),
+        ),
+        if (_open) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.xs),
+            child: Text('These layers are drawn on other maps.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          ),
+          ...widget.children,
+        ],
+      ],
+    );
+  }
+}
+
+/// A small heading inside a section ("Advanced").
+class _SubLabel extends StatelessWidget {
+  final String text;
+  const _SubLabel(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
+      child: Text(text, style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+    );
+  }
+}
 
 /// A layer of the definition the app cannot draw (Live packets, Path): a disabled switch with the reason under it.
 class _InactiveRow extends StatelessWidget {
@@ -371,16 +533,25 @@ class _TextAction extends StatelessWidget {
 
 class _SectionLabel extends StatelessWidget {
   final String text;
-  const _SectionLabel(this.text, {super.key});
+
+  /// One plain line under the heading (what the section is for).
+  final String? hint;
+  const _SectionLabel(this.text, {super.key, this.hint});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
-      child: Semantics(
-        header: text.isNotEmpty,
-        child: Text(text.toUpperCase(), style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant, letterSpacing: 0.6)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: text.isNotEmpty,
+            child: Text(text.toUpperCase(), style: t.textTheme.labelMedium?.copyWith(color: t.colorScheme.onSurfaceVariant, letterSpacing: 0.6)),
+          ),
+          if (hint != null) Text(hint!, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        ],
       ),
     );
   }
@@ -431,18 +602,11 @@ class _NavRow extends StatelessWidget {
   }
 }
 
-/// The base maps the definition offers (Chart, Light, Dark; Topo and Satellite when it advertises them) as 72 x 72 tiles (replaces the cycling button and its toast, U10).
+/// The base maps the app offers (Road, Light, Dark; Topo and Satellite when the definition advertises them), each a real thumbnail
+/// of the style (build 77, Round 1 N3; assets/map/thumbs), the chosen one outlined in the accent with a tick.
 class _BaseMapPicker extends StatelessWidget {
   final MapLayersModel model;
   const _BaseMapPicker({required this.model});
-
-  static Color _tint(BaseMapStyle s, Brightness b) => switch (s) {
-    BaseMapStyle.chart => b == Brightness.dark ? const Color(0xFF2B2F36) : MapTokens.landLight,
-    BaseMapStyle.street => const Color(0xFFF2EFE9),
-    BaseMapStyle.dark => const Color(0xFF1B1F24),
-    BaseMapStyle.topo => const Color(0xFFEFE9D6),
-    BaseMapStyle.satellite => const Color(0xFF3F5B3A),
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -452,11 +616,12 @@ class _BaseMapPicker extends StatelessWidget {
     return Padding(
       key: const Key('layers-base-map'),
       padding: const EdgeInsets.symmetric(horizontal: Gap.l),
-      // One row (build 76): four tiles fit an iPhone SE without wrapping to a second line; more scroll sideways.
+      // One row: up to five tiles share the row's width (bigger targets on a bigger phone); on a phone too narrow for five at
+      // 60 pt (an iPhone SE) the row scrolls sideways.
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [LayoutBuilder(builder: (context, box) {
-        // Up to four tiles share the row's width (bigger targets on a bigger phone); more than four scroll sideways.
         final n = model.availableBaseStyles.length;
-        final w = n <= 4 && box.maxWidth.isFinite ? ((box.maxWidth - (n - 1) * Gap.s) / n).clamp(72.0, 120.0) : 72.0;
+        final share = box.maxWidth.isFinite ? (box.maxWidth - (n - 1) * Gap.s) / n : 0.0;
+        final w = n <= 5 && share >= 60 ? share.clamp(60.0, 120.0) : 72.0;
         return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -467,7 +632,7 @@ class _BaseMapPicker extends StatelessWidget {
             Semantics(
               button: true,
               selected: s == sel,
-              label: '${s.labelIn(ActiveMapDefinition.current)} base map. ${s.blurb}',
+              label: '${s.label} base map. ${s.blurb}',
               child: ExcludeSemantics(
                 child: GestureDetector(
                   key: Key('base-map-${s.id}'),
@@ -480,20 +645,36 @@ class _BaseMapPicker extends StatelessWidget {
                         Container(
                           width: w,
                           height: 56,
-                          decoration: BoxDecoration(
-                            color: _tint(s, t.brightness),
+                          foregroundDecoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: s == sel ? t.colorScheme.primary : t.colorScheme.outlineVariant, width: s == sel ? 3 : 1),
                           ),
-                          child: Center(
-                            child: s == sel
-                                ? AppSymbolIcon(AppSymbols.checkmarkCircleFill, size: 22, color: t.colorScheme.primary)
-                                : null,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.asset(
+                                  s.thumbnailAsset(appDark: t.brightness == Brightness.dark),
+                                  key: Key('base-map-thumb-${s.id}'),
+                                  fit: BoxFit.cover,
+                                  excludeFromSemantics: true,
+                                  errorBuilder: (_, _, _) => ColoredBox(color: t.colorScheme.surfaceContainerHighest),
+                                ),
+                                if (s == sel)
+                                  Center(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(color: t.colorScheme.surface, shape: BoxShape.circle),
+                                      child: AppSymbolIcon(AppSymbols.checkmarkCircleFill, size: 22, color: t.colorScheme.primary),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 2),
                         // The chosen map's name is bold in the accent colour, so the choice reads without the tick too.
-                        Text(s.labelIn(ActiveMapDefinition.current), style: t.textTheme.labelMedium?.copyWith(fontWeight: s == sel ? FontWeight.w700 : null, color: s == sel ? t.colorScheme.primary : null), maxLines: 1),
+                        Text(s.label, style: t.textTheme.labelMedium?.copyWith(fontWeight: s == sel ? FontWeight.w700 : null, color: s == sel ? t.colorScheme.primary : null), maxLines: 1),
                       ],
                     ),
                   ),
@@ -509,7 +690,7 @@ class _BaseMapPicker extends StatelessWidget {
   }
 }
 
-/// By SNR | Heard, under the Ping dots row (the dots' colours; This drive's cells always use the coverage bands with v2).
+/// Signal strength | Reached or not (build 77 plain words; it was By SNR | Heard), under the Ping dots row (the dots' colours; This drive's cells always use the coverage bands with v2).
 class _PingModeRow extends StatelessWidget {
   final MapLayersModel model;
   const _PingModeRow({required this.model});
@@ -526,8 +707,8 @@ class _PingModeRow extends StatelessWidget {
           child: CupertinoSlidingSegmentedControl<PingColorMode>(
             groupValue: model.pingColors,
             children: const {
-              PingColorMode.snr: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('By SNR', key: Key('layer-color-snr'))),
-              PingColorMode.result: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('Heard', key: Key('layer-color-result'))),
+              PingColorMode.snr: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('Signal strength', key: Key('layer-color-snr'))),
+              PingColorMode.result: Padding(padding: EdgeInsets.symmetric(horizontal: Gap.m, vertical: 6), child: Text('Reached or not', key: Key('layer-color-result'))),
             },
             onValueChanged: (v) {
               if (v != null) model.pingColors = v;
@@ -718,9 +899,7 @@ class NetworkAgeLegend extends StatelessWidget {
   }
 
   static String _stamp(DateTime t) {
-    final l = t.toLocal();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
+    return tf.shortDateTime(t);
   }
 }
 

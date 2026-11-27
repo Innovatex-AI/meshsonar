@@ -7,7 +7,9 @@
 //   topTrailing   under the banner, right (button column)
 //   toast         under the banner, centred
 //   controls      bottom-right column of round buttons, directly above the attribution
-//   attribution   bottom-right, the AttributionLine (never clipped, always present)
+//   attribution   bottom-right, the AttributionLine (never clipped, always present). Build 77 (Round 1 decision 5): at ONE fixed
+//                 spot, [MapOverlayHost.attributionClearance] above the bottom (the dock's resting height), so it never rides up
+//                 with a panel; a panel pulled up over it covers it, and the controls then sit above the panel instead.
 //   bottom        full width above the attribution (hint, report card, result flash, inspector panel)
 //
 // Layout is a single CustomMultiChildLayout pass, so the banner height needs no probe widget and no shared notifier: the
@@ -47,6 +49,10 @@ class MapOverlayHost extends StatefulWidget {
   /// the published insets include both. Callers change these at settle, never per animation frame.
   final double topClearance;
   final double bottomClearance;
+
+  /// Where the credit sits: this far above the host's bottom, whatever [bottomClearance] is now (the resting height of the
+  /// panel under the map). Null = [bottomClearance] (a map with no panel).
+  final double? attributionClearance;
   const MapOverlayHost({
     super.key,
     required this.map,
@@ -61,6 +67,7 @@ class MapOverlayHost extends StatefulWidget {
     this.insets,
     this.topClearance = 0,
     this.bottomClearance = 0,
+    this.attributionClearance,
   });
 
   @override
@@ -128,7 +135,7 @@ class _MapOverlayHostState extends State<MapOverlayHost> {
         fit: StackFit.expand,
         children: [
           widget.map,
-          CustomMultiChildLayout(delegate: _OverlayLayout(_laidOut, widget.topClearance, widget.bottomClearance), children: slots),
+          CustomMultiChildLayout(delegate: _OverlayLayout(_laidOut, widget.topClearance, widget.bottomClearance, widget.attributionClearance ?? widget.bottomClearance), children: slots),
         ],
       ),
     );
@@ -145,8 +152,8 @@ class _SlotClip extends CustomClipper<Rect> {
 
 class _OverlayLayout extends MultiChildLayoutDelegate {
   final void Function(EdgeInsets) onInsets;
-  final double top, bottomClear;
-  _OverlayLayout(this.onInsets, this.top, this.bottomClear);
+  final double top, bottomClear, attrClear;
+  _OverlayLayout(this.onInsets, this.top, this.bottomClear, this.attrClear);
 
   @override
   void performLayout(Size size) {
@@ -165,10 +172,13 @@ class _OverlayLayout extends MultiChildLayoutDelegate {
     put(MapSlot.banner, Offset.zero);
     final topY = banner.height + m;
 
-    // Attribution: the bottom-right corner (first: it is never squeezed).
+    // Attribution: the bottom-right corner (first: it is never squeezed), at its own fixed clearance (decision 5). The slots
+    // above stack on [attrTop]: the credit's top while it is inside the slot rect, else the rect's bottom (a panel raised over
+    // the credit covers it, and the buttons ride on the panel).
     final attr = lay(MapSlot.attribution, BoxConstraints(maxWidth: (w - 2 * m).clamp(0.0, w)));
-    final attrTop = h - m - attr.height;
-    put(MapSlot.attribution, Offset(w - m - attr.width, attrTop));
+    final attrY = size.height - attrClear - m - attr.height - top; // relative to the slot rect, like every y below
+    if (hasChild(MapSlot.attribution)) positionChild(MapSlot.attribution, Offset(w - m - attr.width, attrY + top));
+    final attrTop = attrY + attr.height <= h - m + 0.5 ? attrY : h - m;
 
     // The button column (top-trailing) keeps the whole height it had before: its tap targets matter most while driving, and it
     // scales itself down to fit. On a pane short enough that it reaches the bottom stack (under [kCompactPane]) the bottom stack

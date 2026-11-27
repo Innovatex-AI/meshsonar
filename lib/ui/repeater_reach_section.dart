@@ -249,7 +249,7 @@ class _ReachMap extends StatelessWidget {
         key: const Key('reach-map'),
         borderRadius: BorderRadius.circular(Corners.small),
         child: SizedBox(
-          height: 190,
+          height: MapPreview.compactHeight,
           child: MapPreview(
             fit: CameraFit.bounds(bounds: LatLngBounds.fromPoints(pts), padding: const EdgeInsets.all(18), maxZoom: 15),
             tiles: tiles,

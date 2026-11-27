@@ -1,0 +1,3336 @@
+{
+  "v": 2,
+  "schemaMinor": 10,
+  "capabilities": [
+    "basemap.topo",
+    "basemap.satellite",
+    "layer.estimated",
+    "layer.redundancy",
+    "layer.snrlinks",
+    "layer.plan",
+    "plan.link",
+    "plan.coverage",
+    "plan.suggest",
+    "plan.share",
+    "layer.nodes",
+    "coverage.summary",
+    "labels.spec",
+    "symbols.set",
+    "variables.colourBy",
+    "packetTypes",
+    "pages",
+    "variables.all",
+    "filters.node",
+    "layers.groups5",
+    "layers.sections",
+    "legend.detail",
+    "legend.extras",
+    "legend.live",
+    "colours.noReplyNeutral",
+    "status.words"
+  ],
+  "scope": {
+    "kind": "region",
+    "slug": "cmh",
+    "name": "Columbus, US"
+  },
+  "basemaps": [
+    {
+      "id": "road",
+      "name": "Road",
+      "description": "Streets and town names; light or dark with the site theme.",
+      "render": "vector",
+      "vector": {
+        "tiles": "https://api.meshsonar.com/basemap/t/na-20261108/{z}/{x}/{y}.bin",
+        "glyphs": "https://api.meshsonar.com/basemap/fonts/{fontstack}/{range}.pbf",
+        "sprite": {
+          "light": "https://api.meshsonar.com/basemap/sprites/v4/white",
+          "dark": "https://api.meshsonar.com/basemap/sprites/v4/black"
+        },
+        "flavour": {
+          "light": "white",
+          "dark": "black"
+        },
+        "bounds": [
+          -170,
+          7,
+          -50,
+          84
+        ],
+        "maxzoom": 14
+      },
+      "fallbackStyle": {
+        "light": "https://tiles.openfreemap.org/styles/positron",
+        "dark": "https://tiles.openfreemap.org/styles/dark"
+      },
+      "hillshade": null,
+      "topo": null,
+      "satellite": null,
+      "attribution": [
+        "Protomaps",
+        "© OpenStreetMap contributors"
+      ],
+      "maxZoom": 20
+    },
+    {
+      "id": "relief",
+      "name": "Relief",
+      "description": "The road map with hill shading from open terrain data.",
+      "render": "vector",
+      "vector": {
+        "tiles": "https://api.meshsonar.com/basemap/t/na-20261108/{z}/{x}/{y}.bin",
+        "glyphs": "https://api.meshsonar.com/basemap/fonts/{fontstack}/{range}.pbf",
+        "sprite": {
+          "light": "https://api.meshsonar.com/basemap/sprites/v4/white",
+          "dark": "https://api.meshsonar.com/basemap/sprites/v4/black"
+        },
+        "flavour": {
+          "light": "white",
+          "dark": "black"
+        },
+        "bounds": [
+          -170,
+          7,
+          -50,
+          84
+        ],
+        "maxzoom": 14
+      },
+      "fallbackStyle": {
+        "light": "https://tiles.openfreemap.org/styles/positron",
+        "dark": "https://tiles.openfreemap.org/styles/dark"
+      },
+      "topo": null,
+      "satellite": null,
+      "hillshade": {
+        "tiles": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+        "encoding": "terrarium",
+        "exaggeration": 0.35,
+        "maxzoom": 14
+      },
+      "attribution": [
+        "Protomaps",
+        "© OpenStreetMap contributors",
+        "AWS Terrain Tiles (USGS, SRTM and others)"
+      ],
+      "maxZoom": 20
+    },
+    {
+      "id": "plain",
+      "name": "Plain",
+      "description": "No background map: only the data, on a plain ground.",
+      "render": "none",
+      "vector": null,
+      "fallbackStyle": null,
+      "hillshade": null,
+      "topo": null,
+      "satellite": null,
+      "attribution": [],
+      "maxZoom": 20
+    },
+    {
+      "id": "topo",
+      "name": "Topo",
+      "description": "Land cover, water and roads in a topographic palette, with hill shading from open terrain data.",
+      "render": "vector",
+      "vector": {
+        "tiles": "https://api.meshsonar.com/basemap/t/na-20261108/{z}/{x}/{y}.bin",
+        "glyphs": "https://api.meshsonar.com/basemap/fonts/{fontstack}/{range}.pbf",
+        "sprite": {
+          "light": "https://api.meshsonar.com/basemap/sprites/v4/white",
+          "dark": "https://api.meshsonar.com/basemap/sprites/v4/black"
+        },
+        "flavour": {
+          "light": "white",
+          "dark": "black"
+        },
+        "bounds": [
+          -170,
+          7,
+          -50,
+          84
+        ],
+        "maxzoom": 14
+      },
+      "fallbackStyle": {
+        "light": "https://tiles.openfreemap.org/styles/positron",
+        "dark": "https://tiles.openfreemap.org/styles/dark"
+      },
+      "hillshade": {
+        "tiles": "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+        "encoding": "terrarium",
+        "exaggeration": 0.55,
+        "maxzoom": 14
+      },
+      "topo": {
+        "base": {
+          "light": "light",
+          "dark": "dark"
+        },
+        "overrides": {
+          "light": {
+            "background": "#E9E2CE",
+            "earth": "#EFE9D6",
+            "park_a": "#CFE3B4",
+            "park_b": "#C2DBA6",
+            "wood_a": "#BCD6A0",
+            "wood_b": "#B0CF95",
+            "scrub_a": "#D2DDB0",
+            "scrub_b": "#C8D6A2",
+            "sand": "#F1E3B7",
+            "beach": "#F1E3B7",
+            "glacier": "#F4F8FA",
+            "water": "#A9D0E5",
+            "buildings": "#D8CDB6",
+            "industrial": "#E3DAC2",
+            "hospital": "#EAD9CF",
+            "school": "#EBDDC2",
+            "pedestrian": "#EFE6D2",
+            "minor_a": "#FBF8EF",
+            "minor_b": "#F5F0E0",
+            "minor_casing": "#C8BB9F",
+            "minor_service": "#F5F0E0",
+            "minor_service_casing": "#CFC3A8",
+            "link": "#F4E3B4",
+            "link_casing": "#B79F6B",
+            "major": "#F4D58B",
+            "major_casing_early": "#B79F6B",
+            "major_casing_late": "#B79F6B",
+            "highway": "#EDA95A",
+            "highway_casing_early": "#A9783A",
+            "highway_casing_late": "#A9783A",
+            "railway": "#7B6F5A",
+            "boundaries": "#8A6F4E",
+            "landcover": {
+              "barren": "#E2D8BE",
+              "farmland": "#E3E6C4",
+              "forest": "#BCD6A0",
+              "glacier": "#F4F8FA",
+              "grassland": "#D5E4B6",
+              "scrub": "#CCD9A4",
+              "urban_area": "#E6DFCB"
+            }
+          },
+          "dark": {
+            "background": "#161A15",
+            "earth": "#1B201A",
+            "park_a": "#243425",
+            "park_b": "#2A3C2B",
+            "wood_a": "#26382A",
+            "wood_b": "#2D412F",
+            "scrub_a": "#2B3624",
+            "scrub_b": "#31402A",
+            "sand": "#3A3622",
+            "beach": "#3A3622",
+            "glacier": "#2B3438",
+            "water": "#12324A",
+            "buildings": "#2C2E27",
+            "industrial": "#25271F",
+            "hospital": "#30262A",
+            "school": "#2E2C22",
+            "pedestrian": "#23271F",
+            "minor_a": "#3A3C32",
+            "minor_b": "#33352C",
+            "minor_casing": "#161814",
+            "minor_service": "#30322A",
+            "minor_service_casing": "#161814",
+            "link": "#5A4C2C",
+            "link_casing": "#161814",
+            "major": "#6D5A2E",
+            "major_casing_early": "#161814",
+            "major_casing_late": "#161814",
+            "highway": "#8A5F2A",
+            "highway_casing_early": "#161814",
+            "highway_casing_late": "#161814",
+            "railway": "#8C8672",
+            "boundaries": "#9C876A",
+            "landcover": {
+              "barren": "#2A2A22",
+              "farmland": "#242A20",
+              "forest": "#26382A",
+              "glacier": "#2B3438",
+              "grassland": "#27331F",
+              "scrub": "#2B3624",
+              "urban_area": "#22251E"
+            }
+          }
+        },
+        "contours": null
+      },
+      "satellite": null,
+      "attribution": [
+        "Protomaps",
+        "© OpenStreetMap contributors",
+        "AWS Terrain Tiles (USGS, SRTM and others)"
+      ],
+      "maxZoom": 20
+    },
+    {
+      "id": "satellite",
+      "name": "Satellite",
+      "description": "Aerial imagery: USGS NAIP in the US, Esri World Imagery elsewhere. Needs a connection.",
+      "render": "raster",
+      "vector": null,
+      "fallbackStyle": null,
+      "hillshade": null,
+      "topo": null,
+      "satellite": {
+        "sources": [
+          {
+            "id": "esri",
+            "name": "Esri World Imagery",
+            "tiles": "https://meshsonar.com/api/map/satellite/esri/{z}/{y}/{x}",
+            "tileSize": 256,
+            "minzoom": 0,
+            "maxzoom": 18,
+            "bounds": [
+              -180,
+              -85.0511,
+              180,
+              85.0511
+            ],
+            "attribution": [
+              "Powered by Esri. Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+            ],
+            "layerMaxZoom": null
+          },
+          {
+            "id": "naip",
+            "name": "USGS NAIP",
+            "tiles": "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+            "tileSize": 256,
+            "minzoom": 0,
+            "maxzoom": 16,
+            "bounds": [
+              -125,
+              24.4,
+              -66.9,
+              49.5
+            ],
+            "attribution": [
+              "Imagery: USGS National Map (NAIP)"
+            ],
+            "layerMaxZoom": 17
+          }
+        ],
+        "esriAvailable": true,
+        "labels": {
+          "from": "vector",
+          "flavour": "black",
+          "note": "Town and road names from our vector tiles, drawn over the imagery inside the basemap extract."
+        }
+      },
+      "attribution": [
+        "Powered by Esri. Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        "Imagery: USGS National Map (NAIP)",
+        "Protomaps",
+        "© OpenStreetMap contributors"
+      ],
+      "maxZoom": 20
+    }
+  ],
+  "defaultBasemap": "road",
+  "groups": [
+    {
+      "id": "coverage",
+      "name": "Coverage"
+    },
+    {
+      "id": "network",
+      "name": "Network"
+    },
+    {
+      "id": "activity",
+      "name": "Activity"
+    },
+    {
+      "id": "mine",
+      "name": "Mine"
+    },
+    {
+      "id": "context",
+      "name": "Context"
+    }
+  ],
+  "layers": [
+    {
+      "id": "borders",
+      "name": "Region outline",
+      "group": "context",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/regions-index"
+      },
+      "style": "border",
+      "tap": "none",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "border",
+          "label": "Region outline",
+          "detail": "The edge of a MeshSonar region."
+        }
+      ],
+      "hint": "The edge of each region.",
+      "section": "appearance"
+    },
+    {
+      "id": "predicted",
+      "name": "Estimated between drives",
+      "group": "coverage",
+      "defaultOn": true,
+      "minZoom": 8,
+      "maxZoom": 22,
+      "source": {
+        "type": "mvt",
+        "url": "/api/coverage/tiles/predicted/{z}/{x}/{y}.mvt?preset={preset}&v={version}",
+        "sourceLayer": "predicted",
+        "minzoom": 8,
+        "maxzoom": 16
+      },
+      "style": "coverage-predicted",
+      "tap": "cell",
+      "hidesWithTime": true,
+      "hint": "A best guess for places nobody has driven, within 1 km of a measurement.",
+      "legend": [
+        {
+          "kind": "hatch",
+          "band": 4,
+          "label": "Estimated, not driven",
+          "detail": "Striped cells are an estimate from nearby measured cells. They get fainter further from a measurement."
+        }
+      ],
+      "section": "coverage"
+    },
+    {
+      "id": "heard",
+      "name": "Heard in passing",
+      "group": "coverage",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "mvt",
+        "url": "/api/coverage/tiles/heard/{z}/{x}/{y}.mvt?preset={preset}&v={version}",
+        "sourceLayer": "heard",
+        "minzoom": 0,
+        "maxzoom": 16
+      },
+      "style": "coverage-heard",
+      "tap": "cell",
+      "hidesWithTime": true,
+      "hint": "Places where a MeshSonar phone heard a repeater without sending a ping.",
+      "legend": [
+        {
+          "kind": "outline",
+          "band": 4,
+          "label": "Heard in passing",
+          "detail": "A phone heard a repeater here without pinging. The outline is the colour of the average signal it heard. It is not a measurement."
+        }
+      ],
+      "section": "coverage"
+    },
+    {
+      "id": "measured",
+      "name": "Measured coverage",
+      "group": "coverage",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "mvt",
+        "url": "/api/coverage/tiles/measured/{z}/{x}/{y}.mvt?preset={preset}&v={version}",
+        "sourceLayer": "measured",
+        "minzoom": 0,
+        "maxzoom": 16
+      },
+      "style": "coverage-measured",
+      "tap": "cell",
+      "legend": [
+        {
+          "kind": "bands",
+          "from": 5,
+          "to": 1,
+          "note": "Weak to strong",
+          "label": "Signal strength",
+          "detail": "The average signal of the pings in each cell, from weak to strong."
+        },
+        {
+          "kind": "band",
+          "band": 0,
+          "label": "No reply",
+          "detail": "A ping was sent here and no repeater answered."
+        },
+        {
+          "kind": "band",
+          "band": 6,
+          "label": "Heard, no direct signal",
+          "detail": "A ping was answered here, but no signal strength was recorded for it."
+        },
+        {
+          "kind": "faint",
+          "label": "Few pings",
+          "detail": "A faint cell has under 3 pings, so it is less certain."
+        }
+      ],
+      "hint": "Places someone drove and pinged from.",
+      "section": "coverage"
+    },
+    {
+      "id": "redundancy",
+      "name": "Backup coverage",
+      "group": "coverage",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-link-graph?sources=measured&drive=1 (drive rows: [repeaterIdx, h3, attempts, snrMean], count distinct repeaterIdx per h3)"
+      },
+      "style": "redundancy",
+      "tap": "none",
+      "hidesWithTime": true,
+      "hint": "How many repeaters reach each place. One means there is no backup.",
+      "legend": [
+        {
+          "kind": "step",
+          "step": 1,
+          "label": "1 repeater",
+          "detail": "Only one repeater was measured here: if it goes down, there is no coverage."
+        },
+        {
+          "kind": "step",
+          "step": 2,
+          "label": "2 repeaters",
+          "detail": "Two repeaters were measured here."
+        },
+        {
+          "kind": "step",
+          "step": 3,
+          "label": "3 repeaters",
+          "detail": "Three repeaters were measured here."
+        },
+        {
+          "kind": "step",
+          "step": 4,
+          "label": "4 or more",
+          "detail": "Four or more repeaters were measured here."
+        }
+      ],
+      "section": "coverage"
+    },
+    {
+      "id": "drive",
+      "name": "This drive",
+      "group": "mine",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "a drive's res-11 mean cells and pings"
+      },
+      "style": "drive",
+      "tap": "none",
+      "panelOnly": true,
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "ping",
+          "state": "heard",
+          "label": "Ping answered",
+          "detail": "A repeater answered this ping. The colour is its signal strength."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "ping",
+          "state": "none",
+          "label": "Ping, no reply",
+          "detail": "No repeater answered this ping."
+        }
+      ],
+      "hint": "Your pings from this drive, in the same cells and colours.",
+      "section": "drive"
+    },
+    {
+      "id": "snrlinks",
+      "name": "Link quality",
+      "group": "network",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-link-graph?drive=0 (link rows: [aIdx, bIdx, source, width, snrDb, snrN, rssi, n, feeds, mix, lastAt, km])"
+      },
+      "style": "snr-link",
+      "tap": "none",
+      "hint": "Lines between repeaters that hear each other. Colour is the signal, width is how busy the link is.",
+      "legend": [
+        {
+          "kind": "bands",
+          "from": 5,
+          "to": 1,
+          "note": "Weak to strong",
+          "label": "Link signal",
+          "detail": "The signal strength one repeater reports for another."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "snrlink",
+          "state": "none",
+          "label": "Link, no reading",
+          "detail": "The two repeaters pass packets to each other, but neither reported a signal strength. Width is how many packets."
+        }
+      ],
+      "section": "repeaters"
+    },
+    {
+      "id": "links",
+      "name": "Lines when I tap",
+      "group": "network",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/repeater-reach | /api/cmh/cell-links"
+      },
+      "style": "link",
+      "tap": "none",
+      "hint": "Tap a repeater or a cell to see what it reaches.",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "link",
+          "label": "Link line",
+          "detail": "From the repeater or cell you tapped to what it reaches. The label is the signal strength."
+        }
+      ],
+      "section": "repeaters"
+    },
+    {
+      "id": "network",
+      "name": "Repeaters everywhere",
+      "group": "network",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/network-repeaters"
+      },
+      "style": "repeater",
+      "tap": "repeater",
+      "hint": "Every repeater in the country, not only this region (loads about 4 MB).",
+      "legend": [],
+      "section": "repeaters"
+    },
+    {
+      "id": "live",
+      "name": "Live packets",
+      "group": "activity",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the region's live packet stream"
+      },
+      "style": "live",
+      "tap": "repeater",
+      "panelOnly": true,
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "live",
+          "label": "Packet in flight",
+          "detail": "A packet travelling from repeater to repeater right now."
+        }
+      ],
+      "hint": "Packets crossing the mesh right now.",
+      "section": "repeaters"
+    },
+    {
+      "id": "repeaters",
+      "name": "Repeaters",
+      "group": "network",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-repeaters (hub: /api/cmh/network-repeaters)"
+      },
+      "style": "repeater",
+      "tap": "repeater",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "repeater",
+          "state": "fresh",
+          "label": "Heard today",
+          "detail": "Heard in the last 24 hours: a solid ring."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "repeater",
+          "state": "recent",
+          "label": "Heard this week",
+          "detail": "Heard in the last 7 days: a dashed ring."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "repeater",
+          "state": "stale",
+          "label": "Not heard lately",
+          "detail": "Not heard for over 7 days: faded, no ring."
+        }
+      ],
+      "controls": [
+        {
+          "id": "names",
+          "name": "Names",
+          "defaultOn": true,
+          "urlKey": "names",
+          "rule": "repeaterNames",
+          "hint": "Name beside each repeater, from street zoom (z14); fewer when crowded."
+        }
+      ],
+      "section": "repeaters"
+    },
+    {
+      "id": "estimated",
+      "name": "Estimated positions",
+      "group": "network",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-repeater-estimates"
+      },
+      "style": "repeater-estimated",
+      "tap": "repeater",
+      "hint": "Repeaters that do not share a position, placed from the repeaters they hear. Paler means less sure.",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "estimated",
+          "state": "high",
+          "label": "Estimated position",
+          "detail": "This repeater shares no position. It is placed from 3 or more repeaters it hears, so it is approximate."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "estimated",
+          "state": "low",
+          "label": "Rough estimate",
+          "detail": "Placed from only one or two repeaters, or ones far apart, so it is less sure."
+        }
+      ],
+      "section": "repeaters"
+    },
+    {
+      "id": "observers",
+      "name": "Listening stations",
+      "group": "network",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-observers"
+      },
+      "style": "observer",
+      "tap": "observer",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "observer",
+          "state": "online",
+          "label": "Station, online",
+          "detail": "A listening station (observer) that is reporting now."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "observer",
+          "state": "offline",
+          "label": "Station, offline",
+          "detail": "A listening station (observer) that has stopped reporting."
+        }
+      ],
+      "hint": "Radios that listen all day and report what they hear (observers).",
+      "section": "people"
+    },
+    {
+      "id": "phones",
+      "name": "Phones on the move",
+      "group": "network",
+      "defaultOn": true,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "geojson",
+        "endpoint": "/api/cmh/region-observers (kind = mobile)"
+      },
+      "style": "phone",
+      "tap": "observer",
+      "hint": "MeshSonar phones listening while they travel, shown only to about 5 km.",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "phone",
+          "label": "Phone on the move",
+          "detail": "A MeshSonar phone listening while it travels. The spot is approximate (about 5 km) and fades 10 minutes after it was last heard."
+        }
+      ],
+      "section": "people"
+    },
+    {
+      "id": "plan",
+      "name": "Plan",
+      "group": "mine",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the plan's planned nodes, their predicted footprints and planned links (client-drawn from the plan JSON)"
+      },
+      "style": "plan",
+      "tap": "none",
+      "panelOnly": true,
+      "hint": "Your planned repeaters and links. A prediction, not a measurement.",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "plan",
+          "label": "Planned repeater",
+          "detail": "A repeater in your plan. The dashed ring means it is not built yet."
+        },
+        {
+          "kind": "bands",
+          "from": 5,
+          "to": 1,
+          "note": "Weak to strong",
+          "label": "Predicted signal",
+          "detail": "The signal the planned repeaters are predicted to give."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "planlink",
+          "state": "likely",
+          "label": "Planned link",
+          "detail": "The colour says how likely the link is to work. It is dashed because it is a model."
+        }
+      ],
+      "section": "drive"
+    },
+    {
+      "id": "path",
+      "name": "Route",
+      "group": "activity",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the page's path: hops in order, each with a number, a name, and whether its position is certain"
+      },
+      "style": "path",
+      "tap": "none",
+      "panelOnly": true,
+      "hint": "The route a page is showing.",
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "pathhop",
+          "label": "Hop, in order",
+          "detail": "Each hop is numbered in the order the packet took: number, then name."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "path",
+          "label": "Known hop",
+          "detail": "A solid line joins two hops whose positions are known for sure."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "pathlikely",
+          "label": "Likely hop",
+          "detail": "A dashed line goes to a hop that is the best match, not proven. Hops with no position are listed, not drawn."
+        }
+      ],
+      "section": "repeaters"
+    },
+    {
+      "id": "pick",
+      "name": "Picked point",
+      "group": "mine",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the point a tool asks for"
+      },
+      "style": "pick",
+      "tap": "none",
+      "panelOnly": true,
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "pick",
+          "label": "Picked point",
+          "detail": "The point you picked."
+        }
+      ],
+      "section": "drive"
+    },
+    {
+      "id": "footprint",
+      "name": "Predicted footprint",
+      "group": "coverage",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the painter's predicted footprint from one site (margin over the floor, the five signal bands)"
+      },
+      "style": "footprint",
+      "tap": "none",
+      "panelOnly": true,
+      "hint": "Predicted from one site. A model, not a measurement.",
+      "legend": [
+        {
+          "kind": "bands",
+          "from": 5,
+          "to": 2,
+          "note": "Weak to strong",
+          "label": "Predicted signal",
+          "detail": "Predicted from this site in 5 dB steps above the weakest signal a radio can use. Places below that are not shaded."
+        }
+      ],
+      "section": "coverage"
+    },
+    {
+      "id": "track",
+      "name": "Drive track",
+      "group": "mine",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "a drive's line and ping dots; the part the public does not see is dashed"
+      },
+      "style": "track",
+      "tap": "none",
+      "panelOnly": true,
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "ping",
+          "state": "heard",
+          "label": "Ping answered",
+          "detail": "A repeater answered this ping. The colour is its signal strength."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "ping",
+          "state": "none",
+          "label": "Ping, no reply",
+          "detail": "No repeater answered this ping."
+        },
+        {
+          "kind": "symbol",
+          "symbol": "hiddentrack",
+          "label": "Hidden part",
+          "detail": "The part of the drive the public does not see: faded and dashed."
+        }
+      ],
+      "hint": "The line of a drive and its pings.",
+      "section": "drive"
+    },
+    {
+      "id": "zones",
+      "name": "Privacy zones",
+      "group": "mine",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the account's privacy zones: a dashed circle each, numbered"
+      },
+      "style": "zone",
+      "tap": "none",
+      "panelOnly": true,
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "zone",
+          "label": "Privacy zone",
+          "detail": "Pings inside this circle are never shown to the public."
+        }
+      ],
+      "hint": "Places you chose to keep off the public map.",
+      "section": "drive"
+    },
+    {
+      "id": "candidates",
+      "name": "Boundary candidates",
+      "group": "context",
+      "defaultOn": false,
+      "minZoom": 0,
+      "maxZoom": 22,
+      "source": {
+        "type": "local",
+        "what": "the boundary review's candidate outline and the nodes it gains or loses (admin only)"
+      },
+      "style": "candidate",
+      "tap": "none",
+      "panelOnly": true,
+      "legend": [
+        {
+          "kind": "symbol",
+          "symbol": "candidate",
+          "label": "Candidate boundary",
+          "detail": "A proposed new edge for the region (moderators only)."
+        }
+      ],
+      "section": "appearance"
+    }
+  ],
+  "palettes": [
+    {
+      "id": "standard",
+      "name": "Standard",
+      "blurb": "Red to yellow to green for signal strength. Dark slate where nothing answered.",
+      "themes": {
+        "light": {
+          "bands": [
+            "#0E1B2B",
+            "#B80321",
+            "#D36C1D",
+            "#8F6C00",
+            "#749119",
+            "#18631D",
+            "#707070"
+          ],
+          "noReplyOutline": "#0E1B2B",
+          "noReplyPoint": "#0E1B2B",
+          "link": {
+            "color": "#FFFFFF",
+            "casing": "#0C1E28",
+            "casingOpacity": 0.85,
+            "width": 2.6,
+            "dash": null
+          }
+        },
+        "dark": {
+          "bands": [
+            "#35425D",
+            "#F63647",
+            "#FB8F41",
+            "#FCE738",
+            "#8DCE3C",
+            "#0AA349",
+            "#6E6E6E"
+          ],
+          "noReplyOutline": "#35425D",
+          "noReplyPoint": "#35425D",
+          "link": {
+            "color": "#FFFFFF",
+            "casing": "#081219",
+            "casingOpacity": 0.85,
+            "width": 2.6,
+            "dash": null
+          }
+        }
+      },
+      "predicted": {
+        "light": {
+          "fill": 0.35,
+          "hatch": 0.6,
+          "none": 0.5
+        },
+        "dark": {
+          "fill": 0.2,
+          "hatch": 0.4,
+          "none": 0.3
+        }
+      }
+    },
+    {
+      "id": "colour_blind",
+      "name": "Colour-blind safe",
+      "blurb": "Orange and yellow for weak, light blue and blue for strong, never red against green. Dark slate where nothing answered. Link lines are dashed.",
+      "themes": {
+        "light": {
+          "bands": [
+            "#0E1B2B",
+            "#592B21",
+            "#B63202",
+            "#988400",
+            "#3887B8",
+            "#2A3EAD",
+            "#A0A0A0"
+          ],
+          "noReplyOutline": "#0E1B2B",
+          "noReplyPoint": "#0E1B2B",
+          "link": {
+            "color": "#0C1E28",
+            "casing": "#FFFFFF",
+            "casingOpacity": 0.85,
+            "width": 3,
+            "dash": [
+              9,
+              5
+            ]
+          }
+        },
+        "dark": {
+          "bands": [
+            "#35425D",
+            "#E14C33",
+            "#F4993C",
+            "#F7E555",
+            "#86DBFD",
+            "#438AF1",
+            "#6E6E6E"
+          ],
+          "noReplyOutline": "#35425D",
+          "noReplyPoint": "#35425D",
+          "link": {
+            "color": "#F4F7F9",
+            "casing": "#0D1B26",
+            "casingOpacity": 0.85,
+            "width": 3,
+            "dash": [
+              9,
+              5
+            ]
+          }
+        }
+      },
+      "predicted": {
+        "light": {
+          "fill": 0.35,
+          "hatch": 0.6,
+          "none": 0.5
+        },
+        "dark": {
+          "fill": 0.2,
+          "hatch": 0.4,
+          "none": 0.3
+        }
+      }
+    }
+  ],
+  "defaultPalette": "standard",
+  "drawing": {
+    "measured": 0.85,
+    "faint": 0.55,
+    "noReplyFill": 0.6,
+    "noReplyFillFaint": 0.35,
+    "noReplyLine": 0.9,
+    "noReplyLineFaint": 0.55,
+    "point": 0.9,
+    "pointFaint": 0.55,
+    "noReplyPoint": 0.6,
+    "pointRadius": 1.5,
+    "predictedPointRadius": 1,
+    "hatch": {
+      "repeat": 8,
+      "width": 2,
+      "widthNone": 1
+    },
+    "heard": {
+      "lineWidth": 1.6,
+      "lineOpacity": 0.9,
+      "ringRadius": 2.2,
+      "ringWidth": 1.2,
+      "ringOpacity": 0.85
+    },
+    "faintBelow": 3
+  },
+  "bands": [
+    {
+      "band": 0,
+      "key": "noReply",
+      "label": "No reply",
+      "marginMin": null,
+      "marginMax": null,
+      "token": "coverage-band-0"
+    },
+    {
+      "band": 1,
+      "key": "edge",
+      "label": "Edge",
+      "marginMin": null,
+      "marginMax": 0,
+      "token": "coverage-band-1"
+    },
+    {
+      "band": 2,
+      "key": "weak",
+      "label": "Weak",
+      "marginMin": 0,
+      "marginMax": 5,
+      "token": "coverage-band-2"
+    },
+    {
+      "band": 3,
+      "key": "fair",
+      "label": "Fair",
+      "marginMin": 5,
+      "marginMax": 10,
+      "token": "coverage-band-3"
+    },
+    {
+      "band": 4,
+      "key": "good",
+      "label": "Good",
+      "marginMin": 10,
+      "marginMax": 15,
+      "token": "coverage-band-4"
+    },
+    {
+      "band": 5,
+      "key": "excellent",
+      "label": "Excellent",
+      "marginMin": 15,
+      "marginMax": null,
+      "token": "coverage-band-5"
+    },
+    {
+      "band": 6,
+      "key": "heardNoSnr",
+      "label": "Heard, no direct signal",
+      "marginMin": null,
+      "marginMax": null,
+      "token": "coverage-band-6"
+    }
+  ],
+  "symbols": {
+    "repeater": {
+      "icon": "tower",
+      "sizePx": 22,
+      "colours": {
+        "light": {
+          "icon": "#1F2933",
+          "disc": "#FFFFFF",
+          "ring": "#1F2933"
+        },
+        "dark": {
+          "icon": "#E6EDF3",
+          "disc": "#12161B",
+          "ring": "#E6EDF3"
+        }
+      },
+      "states": [
+        {
+          "id": "fresh",
+          "ring": "solid",
+          "opacity": 1,
+          "label": "Heard in the last 24 h"
+        },
+        {
+          "id": "recent",
+          "ring": "dashed",
+          "opacity": 1,
+          "label": "Heard in the last 7 days"
+        },
+        {
+          "id": "stale",
+          "ring": "none",
+          "opacity": 0.45,
+          "label": "Not heard for over 7 days"
+        }
+      ]
+    },
+    "observer": {
+      "icon": "triangle",
+      "sizePx": 18,
+      "colours": {
+        "light": {
+          "stroke": "#2A6B9C",
+          "fill": "#FFFFFF",
+          "offline": "#5B636D"
+        },
+        "dark": {
+          "stroke": "#6AAEE0",
+          "fill": "#12161B",
+          "offline": "#9AA2AB"
+        }
+      }
+    },
+    "phone": {
+      "icon": "phone",
+      "sizePx": 18,
+      "fadeMinutes": 10,
+      "minOpacity": 0.2,
+      "colours": {
+        "light": {
+          "stroke": "#2A6B9C",
+          "fill": "#FFFFFF"
+        },
+        "dark": {
+          "stroke": "#6AAEE0",
+          "fill": "#12161B"
+        }
+      }
+    },
+    "cluster": {
+      "kind": "count-bubble",
+      "maxZoom": 11,
+      "minPoints": 4,
+      "radiusPx": [
+        13,
+        15,
+        18,
+        22,
+        27
+      ],
+      "stepsAt": [
+        10,
+        50,
+        200,
+        1000
+      ],
+      "colours": {
+        "light": {
+          "fill": "#FFFFFF",
+          "stroke": "#1F2933",
+          "text": "#1F2933"
+        },
+        "dark": {
+          "fill": "#12161B",
+          "stroke": "#E6EDF3",
+          "text": "#E6EDF3"
+        }
+      }
+    },
+    "drivePing": {
+      "radiusPx": 3.5,
+      "strokePx": 1,
+      "track": {
+        "light": "#1F2933",
+        "dark": "#E6EDF3",
+        "opacity": 0.55,
+        "widthPx": 2
+      }
+    },
+    "link": {
+      "labelBands": true
+    },
+    "border": {
+      "widthPx": 1.4,
+      "colours": {
+        "light": "#4B5563",
+        "dark": "#9CA3AF"
+      },
+      "opacity": 0.75,
+      "fillOpacity": 0.04
+    },
+    "selection": {
+      "widthPx": 2.4,
+      "colours": {
+        "light": "#111827",
+        "dark": "#F9FAFB"
+      }
+    },
+    "estimated": {
+      "endpoint": "/api/cmh/region-repeater-estimates",
+      "opacity": {
+        "high": 0.8,
+        "medium": 0.6,
+        "low": 0.4
+      },
+      "confidence": {
+        "high": "3 or more located neighbours, all within 15 km of each other",
+        "medium": "2 or more located neighbours within 40 km of each other (3 or more spread over 15 to 40 km, or 2)",
+        "low": "1 located neighbour, or neighbours more than 40 km apart"
+      }
+    },
+    "redundancy": {
+      "steps": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "opacity": 0.72,
+      "colours": {
+        "light": [
+          "#D9C8F0",
+          "#B496DD",
+          "#8A5FC4",
+          "#5B2E94"
+        ],
+        "dark": [
+          "#4A3470",
+          "#7A55B0",
+          "#A98ADB",
+          "#D9C8F7"
+        ]
+      },
+      "labels": [
+        "1 repeater: a single point of failure",
+        "2 repeaters",
+        "3 repeaters",
+        "4 or more repeaters"
+      ]
+    },
+    "snrLink": {
+      "opacity": 0.85,
+      "widthPx": [
+        1.2,
+        5
+      ],
+      "widthAtPackets": [
+        1,
+        500
+      ],
+      "noSnr": {
+        "light": "#6B7280",
+        "dark": "#9CA3AF"
+      },
+      "casing": {
+        "light": "#FFFFFF",
+        "dark": "#0D1B26"
+      },
+      "casingOpacity": 0.6
+    },
+    "plan": {
+      "icon": "tower",
+      "sizePx": 24,
+      "ring": "dashed",
+      "colours": {
+        "light": {
+          "icon": "#FFFFFF",
+          "disc": "#6A1B9A",
+          "ring": "#6A1B9A"
+        },
+        "dark": {
+          "icon": "#12161B",
+          "disc": "#CE93D8",
+          "ring": "#CE93D8"
+        }
+      },
+      "footprintOpacity": 0.45,
+      "linkWidthPx": 3,
+      "linkDash": [
+        6,
+        4
+      ],
+      "verdictBand": {
+        "likely": 5,
+        "marginal": 3,
+        "unlikely": 1
+      }
+    },
+    "node": {
+      "sizePx": 16,
+      "strokePx": 1.6,
+      "roles": [
+        {
+          "id": "repeater",
+          "shape": "circle",
+          "letter": "R",
+          "label": "Repeater: a circle"
+        },
+        {
+          "id": "room",
+          "shape": "hexagon",
+          "letter": "M",
+          "label": "Room server: a hexagon"
+        },
+        {
+          "id": "companion",
+          "shape": "square",
+          "letter": "C",
+          "label": "Companion (someone's radio): a square"
+        },
+        {
+          "id": "sensor",
+          "shape": "triangle",
+          "letter": "S",
+          "label": "Sensor: a triangle"
+        },
+        {
+          "id": "unknown",
+          "shape": "diamond",
+          "letter": "?",
+          "label": "Role not known yet: a diamond"
+        }
+      ],
+      "status": [
+        {
+          "id": "active",
+          "opacity": 1,
+          "colours": {
+            "light": "#0B6FB8",
+            "dark": "#5AB0EE"
+          },
+          "label": "Active: heard as often as usual",
+          "word": "Active"
+        },
+        {
+          "id": "degraded",
+          "opacity": 1,
+          "colours": {
+            "light": "#C77800",
+            "dark": "#F0B440"
+          },
+          "label": "Heard less often: still heard, but less than usual",
+          "word": "Heard less often"
+        },
+        {
+          "id": "silent",
+          "opacity": 0.55,
+          "colours": {
+            "light": "#6B7280",
+            "dark": "#8B95A3"
+          },
+          "label": "Not heard lately: nothing heard for longer than usual",
+          "word": "Not heard lately"
+        },
+        {
+          "id": "unknown",
+          "opacity": 0.8,
+          "colours": {
+            "light": "#A3ACB8",
+            "dark": "#5C6673"
+          },
+          "label": "Not known yet: not enough history to say",
+          "word": "Not known yet"
+        }
+      ],
+      "stroke": {
+        "light": "#FFFFFF",
+        "dark": "#0D1117"
+      },
+      "hash": [
+        {
+          "id": "multi",
+          "colours": {
+            "light": "#00876A",
+            "dark": "#3DD6A8"
+          },
+          "label": "Uses a 2- or 3-byte hash: its hops read clearly in paths"
+        },
+        {
+          "id": "one",
+          "colours": {
+            "light": "#C2410C",
+            "dark": "#FF8A5C"
+          },
+          "label": "Uses a 1-byte hash: its hops can be confused with others"
+        },
+        {
+          "id": "mixed",
+          "colours": {
+            "light": "#A16207",
+            "dark": "#E8C547"
+          },
+          "label": "Seen with more than one hash size"
+        },
+        {
+          "id": "unknown",
+          "colours": {
+            "light": "#A3ACB8",
+            "dark": "#5C6673"
+          },
+          "label": "Hash size not seen yet"
+        }
+      ],
+      "prefixMinZoom": 12,
+      "heat": {
+        "radiusPx": 22,
+        "opacity": 0.6,
+        "maxZoom": 14,
+        "ramp": {
+          "light": [
+            "#DCEBFA",
+            "#7DB6EC",
+            "#2F7FC8",
+            "#0B4A86"
+          ],
+          "dark": [
+            "#16324F",
+            "#2F6FAE",
+            "#5AB0EE",
+            "#BFE2FF"
+          ]
+        }
+      },
+      "important": {
+        "colours": {
+          "light": "#A11D6A",
+          "dark": "#F27AC0"
+        },
+        "widthPx": [
+          2,
+          6
+        ],
+        "opacity": 0.85,
+        "label": "Important link: the mesh would split without it, or it joins two critical nodes",
+        "nodeLabel": "Critical node: losing it cuts part of the mesh off (ring)"
+      },
+      "neighbour": {
+        "colours": {
+          "light": "#0F766E",
+          "dark": "#2DD4BF"
+        },
+        "widthPx": 2.2,
+        "fadeOthers": 0.18,
+        "label": "Direct neighbour of the selected node (line from it)"
+      },
+      "selected": {
+        "colours": {
+          "light": "#111827",
+          "dark": "#F9FAFB"
+        },
+        "label": "Selected node (ring)"
+      }
+    },
+    "set": {
+      "v": 2,
+      "sizePx": 24,
+      "viewBox": 24,
+      "neutral": {
+        "light": {
+          "fill": "#FFFFFF",
+          "ink": "#1F2933"
+        },
+        "dark": {
+          "fill": "#12161B",
+          "ink": "#E6EDF3"
+        }
+      },
+      "onTint": {
+        "light": "#FFFFFF",
+        "dark": "#0D1117"
+      },
+      "ring": {
+        "r": 11.1,
+        "widthPx": 1.7,
+        "dash": [
+          3.4,
+          2.6
+        ]
+      },
+      "strokePx": 1.7,
+      "freshness": [
+        {
+          "id": "fresh",
+          "ring": "solid",
+          "opacity": 1,
+          "label": "Heard in the last 24 h"
+        },
+        {
+          "id": "recent",
+          "ring": "dashed",
+          "opacity": 1,
+          "label": "Heard in the last 7 days"
+        },
+        {
+          "id": "stale",
+          "ring": "none",
+          "opacity": 0.45,
+          "label": "Not heard for over 7 days"
+        }
+      ],
+      "roles": [
+        {
+          "id": "repeater",
+          "name": "Repeater",
+          "label": "Repeater: a tower in a circle",
+          "badge": "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0Z",
+          "glyph": [
+            {
+              "d": "M8.5 17.5 12 9l3.5 8.5M10 14.5h4",
+              "mode": "stroke"
+            },
+            {
+              "d": "M10.5 6.4a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0Z",
+              "mode": "fill"
+            }
+          ]
+        },
+        {
+          "id": "room",
+          "name": "Room server",
+          "label": "Room server: a rounded square",
+          "badge": "M7 3.5h10A3.5 3.5 0 0 1 20.5 7v10a3.5 3.5 0 0 1-3.5 3.5H7A3.5 3.5 0 0 1 3.5 17V7A3.5 3.5 0 0 1 7 3.5Z",
+          "glyph": [
+            {
+              "d": "M8.5 10.5h7M8.5 13.8h4.6",
+              "mode": "stroke"
+            }
+          ]
+        },
+        {
+          "id": "companion",
+          "name": "Companion",
+          "label": "Companion (someone's radio): a small square",
+          "badge": "M7.8 6h8.4A1.8 1.8 0 0 1 18 7.8v8.4a1.8 1.8 0 0 1-1.8 1.8H7.8A1.8 1.8 0 0 1 6 16.2V7.8A1.8 1.8 0 0 1 7.8 6Z",
+          "glyph": []
+        },
+        {
+          "id": "sensor",
+          "name": "Sensor",
+          "label": "Sensor: a small circle with a dot",
+          "badge": "M6 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0Z",
+          "glyph": [
+            {
+              "d": "M10.3 12a1.7 1.7 0 1 0 3.4 0a1.7 1.7 0 1 0 -3.4 0Z",
+              "mode": "fill"
+            }
+          ]
+        },
+        {
+          "id": "unknown",
+          "name": "Role not known",
+          "label": "Role not known yet: a diamond",
+          "badge": "M12 3 21 12 12 21 3 12Z",
+          "glyph": []
+        },
+        {
+          "id": "observer",
+          "name": "Observer",
+          "label": "Observer: an eye on a mast",
+          "badge": "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0Z",
+          "glyph": [
+            {
+              "d": "M6.8 9.6Q12 5 17.2 9.6Q12 14.2 6.8 9.6Z",
+              "mode": "stroke"
+            },
+            {
+              "d": "M10.5 9.6a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0Z",
+              "mode": "fill"
+            },
+            {
+              "d": "M12 13.4v4.6M9.6 18h4.8",
+              "mode": "stroke"
+            }
+          ]
+        },
+        {
+          "id": "phone",
+          "name": "Moving phone",
+          "label": "Moving MeshSonar phone (approximate, ~5 km; fades 10 min after last heard)",
+          "badge": "M8.2 3.5h7.6A1.7 1.7 0 0 1 17.5 5.2v13.6a1.7 1.7 0 0 1-1.7 1.7H8.2a1.7 1.7 0 0 1-1.7-1.7V5.2A1.7 1.7 0 0 1 8.2 3.5Z",
+          "glyph": [
+            {
+              "d": "M10.4 6.4h3.2",
+              "mode": "stroke"
+            },
+            {
+              "d": "M10.6 17a1.4 1.4 0 1 0 2.8 0a1.4 1.4 0 1 0 -2.8 0Z",
+              "mode": "fill"
+            }
+          ]
+        }
+      ],
+      "tints": {
+        "status": [
+          {
+            "id": "active",
+            "label": "Active: heard as often as usual",
+            "fill": {
+              "light": "#0B6FB8",
+              "dark": "#5AB0EE"
+            },
+            "word": "Active"
+          },
+          {
+            "id": "degraded",
+            "label": "Heard less often: still heard, but less than usual",
+            "fill": {
+              "light": "#C77800",
+              "dark": "#F0B440"
+            },
+            "word": "Heard less often"
+          },
+          {
+            "id": "silent",
+            "label": "Not heard lately: nothing heard for longer than usual",
+            "fill": {
+              "light": "#6B7280",
+              "dark": "#8B95A3"
+            },
+            "word": "Not heard lately"
+          },
+          {
+            "id": "unknown",
+            "label": "Not known yet: not enough history to say",
+            "fill": {
+              "light": "#A3ACB8",
+              "dark": "#5C6673"
+            },
+            "word": "Not known yet"
+          }
+        ],
+        "hash": [
+          {
+            "id": "multi",
+            "label": "Uses a 2- or 3-byte hash: its hops read clearly in paths",
+            "fill": {
+              "light": "#00876A",
+              "dark": "#3DD6A8"
+            }
+          },
+          {
+            "id": "one",
+            "label": "Uses a 1-byte hash: its hops can be confused with others",
+            "fill": {
+              "light": "#C2410C",
+              "dark": "#FF8A5C"
+            }
+          },
+          {
+            "id": "mixed",
+            "label": "Seen with more than one hash size",
+            "fill": {
+              "light": "#A16207",
+              "dark": "#E8C547"
+            }
+          },
+          {
+            "id": "unknown",
+            "label": "Hash size not seen yet",
+            "fill": {
+              "light": "#A3ACB8",
+              "dark": "#5C6673"
+            }
+          }
+        ],
+        "role": [
+          {
+            "id": "repeater",
+            "label": "Repeater",
+            "fill": {
+              "light": "#2A78D6",
+              "dark": "#6DA7EC"
+            }
+          },
+          {
+            "id": "room",
+            "label": "Room server",
+            "fill": {
+              "light": "#7B4FB5",
+              "dark": "#B79BE6"
+            }
+          },
+          {
+            "id": "companion",
+            "label": "Companion",
+            "fill": {
+              "light": "#0E7C86",
+              "dark": "#4FC3CC"
+            }
+          },
+          {
+            "id": "sensor",
+            "label": "Sensor",
+            "fill": {
+              "light": "#B5560B",
+              "dark": "#F0A060"
+            }
+          },
+          {
+            "id": "unknown",
+            "label": "Role not known",
+            "fill": {
+              "light": "#A3ACB8",
+              "dark": "#5C6673"
+            }
+          }
+        ]
+      }
+    },
+    "path": {
+      "v": 1,
+      "certainty": [
+        {
+          "id": "certain",
+          "label": "Certain hop: its position is known",
+          "line": "solid"
+        },
+        {
+          "id": "likely",
+          "label": "Likely hop: the best match, not proven",
+          "line": "dashed"
+        }
+      ],
+      "colours": {
+        "light": {
+          "line": "#1D4ED8",
+          "disc": "#1D4ED8",
+          "number": "#FFFFFF",
+          "halo": "#FFFFFF"
+        },
+        "dark": {
+          "line": "#7FB0FF",
+          "disc": "#7FB0FF",
+          "number": "#0D1117",
+          "halo": "#0D1117"
+        }
+      },
+      "widthPx": 3.5,
+      "dash": [
+        2,
+        2
+      ],
+      "discRadiusPx": 9,
+      "numberPx": 11,
+      "label": "{n} · {name}",
+      "unplacedNote": "Hops with no known position are listed, never drawn, and the line stops there.",
+      "observer": {
+        "label": "Observer that heard it",
+        "symbol": "observer"
+      }
+    },
+    "tools": {
+      "v": 1,
+      "zone": {
+        "label": "Privacy zone",
+        "fill": {
+          "light": "#64748B",
+          "dark": "#94A3B8"
+        },
+        "fillOpacity": {
+          "normal": 0.16,
+          "active": 0.28
+        },
+        "edge": {
+          "light": "#1F2933",
+          "dark": "#E6EDF3"
+        },
+        "edgeWidthPx": {
+          "normal": 1,
+          "active": 2
+        },
+        "dash": [
+          2,
+          2
+        ]
+      },
+      "hiddenTrack": {
+        "label": "Hidden from the public: faded and dashed",
+        "colour": {
+          "light": "#64748B",
+          "dark": "#94A3B8"
+        },
+        "opacity": 0.6,
+        "widthPx": 2,
+        "dash": [
+          1,
+          2
+        ]
+      },
+      "handle": {
+        "fill": {
+          "light": "#FFFFFF",
+          "dark": "#12161B"
+        },
+        "edge": {
+          "light": "#1F2933",
+          "dark": "#E6EDF3"
+        },
+        "moveFill": {
+          "light": "#1F2933",
+          "dark": "#E6EDF3"
+        }
+      },
+      "boundary": {
+        "current": {
+          "label": "Region today",
+          "colour": {
+            "light": "#1F2933",
+            "dark": "#E6EDF3"
+          },
+          "widthPx": 2,
+          "dash": [
+            3,
+            2
+          ]
+        },
+        "candidate": {
+          "label": "Candidate boundary",
+          "colour": {
+            "light": "#C2410C",
+            "dark": "#FDBA74"
+          },
+          "fillOpacity": 0.16,
+          "widthPx": 2.5
+        },
+        "neighbour": {
+          "label": "Neighbouring regions",
+          "colour": {
+            "light": "#64748B",
+            "dark": "#94A3B8"
+          },
+          "fillOpacity": 0.1,
+          "widthPx": 1,
+          "dash": [
+            1,
+            1.5
+          ]
+        },
+        "selected": {
+          "light": "#1F2933",
+          "dark": "#E6EDF3"
+        },
+        "nodes": {
+          "in": {
+            "light": "#1F2933",
+            "dark": "#E6EDF3"
+          },
+          "gain": {
+            "light": "#1D4ED8",
+            "dark": "#7FB0FF"
+          },
+          "lose": {
+            "light": "#C2410C",
+            "dark": "#FDBA74"
+          },
+          "out": {
+            "light": "#64748B",
+            "dark": "#94A3B8"
+          },
+          "ringWidthPx": 1.8
+        }
+      },
+      "pick": {
+        "label": "The point you picked",
+        "fill": {
+          "light": "#1D4ED8",
+          "dark": "#7FB0FF"
+        },
+        "edge": {
+          "light": "#FFFFFF",
+          "dark": "#0D1117"
+        },
+        "radiusPx": 9
+      }
+    }
+  },
+  "labels": {
+    "basemapLabelsAboveCoverage": true,
+    "repeaterNames": {
+      "minZoom": 9,
+      "collision": true,
+      "font": [
+        "Noto Sans Regular"
+      ],
+      "sizePx": 12,
+      "maxWidthEm": 8
+    },
+    "regionNames": {
+      "collision": true,
+      "font": [
+        "Noto Sans Medium"
+      ],
+      "sizePx": 12
+    },
+    "spec": {
+      "v": 2,
+      "font": {
+        "weight": "semibold",
+        "web": {
+          "ours": [
+            "Noto Sans Medium"
+          ],
+          "fallback": [
+            "Noto Sans Bold"
+          ],
+          "italic": [
+            "Noto Sans Italic"
+          ]
+        }
+      },
+      "size": [
+        {
+          "fromZoom": 0,
+          "px": 12
+        },
+        {
+          "fromZoom": 12,
+          "px": 13
+        },
+        {
+          "fromZoom": 14,
+          "px": 14
+        }
+      ],
+      "maxWidthPx": 150,
+      "tones": {
+        "light": {
+          "ink": "#1B1F24",
+          "halo": "#FFFFFF"
+        },
+        "dark": {
+          "ink": "#F4F6F8",
+          "halo": "#0D1117"
+        }
+      },
+      "haloPx": 3,
+      "basemapTone": {
+        "road": "theme",
+        "relief": "theme",
+        "plain": "theme",
+        "topo": "theme",
+        "satellite": "dark"
+      },
+      "staleOpacity": 0.7,
+      "pill": {
+        "on": [
+          "topo",
+          "satellite"
+        ],
+        "radius": 8,
+        "alpha": 0.88,
+        "paddingPx": [
+          3,
+          8
+        ]
+      },
+      "things": [
+        {
+          "id": "selected",
+          "fromZoom": 0,
+          "text": "name"
+        },
+        {
+          "id": "repeater",
+          "fromZoom": 11,
+          "importantFromZoom": 9,
+          "text": "name"
+        },
+        {
+          "id": "room",
+          "fromZoom": 11,
+          "importantFromZoom": 9,
+          "text": "name"
+        },
+        {
+          "id": "heard",
+          "fromZoom": 10,
+          "text": "name and SNR",
+          "note": "a repeater heard right now on a drive"
+        },
+        {
+          "id": "companion",
+          "fromZoom": 13,
+          "text": "name"
+        },
+        {
+          "id": "sensor",
+          "fromZoom": 13,
+          "text": "name"
+        },
+        {
+          "id": "unknown",
+          "fromZoom": 13,
+          "text": "name"
+        },
+        {
+          "id": "observer",
+          "fromZoom": 12,
+          "text": "name"
+        },
+        {
+          "id": "phone",
+          "fromZoom": 12,
+          "text": "name"
+        },
+        {
+          "id": "estimated",
+          "fromZoom": 12,
+          "text": "name",
+          "italic": true,
+          "opacity": 0.7
+        },
+        {
+          "id": "plan",
+          "fromZoom": 9,
+          "text": "plan name"
+        }
+      ],
+      "budget": [
+        {
+          "fromZoom": 9,
+          "max": 12
+        },
+        {
+          "fromZoom": 11,
+          "max": 24
+        },
+        {
+          "fromZoom": 12,
+          "max": 40
+        },
+        {
+          "fromZoom": 13,
+          "max": 56
+        },
+        {
+          "fromZoom": 14,
+          "max": 80
+        }
+      ],
+      "order": [
+        "selected",
+        "in use right now",
+        "heard in the last hour",
+        "fresh advert",
+        "everything else"
+      ],
+      "anchors": [
+        "right",
+        "left",
+        "top",
+        "bottom"
+      ],
+      "collision": {
+        "neverCover": [
+          "other names",
+          "markers",
+          "clusters",
+          "the position arrow",
+          "buttons",
+          "panels"
+        ],
+        "whenNoFit": "leave out, never shrink"
+      },
+      "hold": {
+        "holdMs": 300,
+        "fadeMs": 120
+      },
+      "switches": [
+        {
+          "id": "names",
+          "name": "Names",
+          "defaultOn": true,
+          "urlKey": "names"
+        },
+        {
+          "id": "hash",
+          "name": "Hash prefix",
+          "defaultOn": false,
+          "urlKey": "hl",
+          "note": "on by default on the Network Map page"
+        },
+        {
+          "id": "signal",
+          "name": "Signal tags",
+          "defaultOn": true,
+          "urlKey": "tags"
+        }
+      ]
+    }
+  },
+  "filters": {
+    "time": {
+      "key": "t",
+      "options": [
+        {
+          "id": "all",
+          "label": "All time",
+          "ms": 0
+        },
+        {
+          "id": "30d",
+          "label": "30 days",
+          "ms": 2592000000
+        },
+        {
+          "id": "7d",
+          "label": "7 days",
+          "ms": 604800000
+        },
+        {
+          "id": "24h",
+          "label": "24 h",
+          "ms": 86400000
+        }
+      ],
+      "default": "all",
+      "available": true,
+      "note": "Predicted coverage and Heard by phones are all-time and hide while a time window is picked."
+    },
+    "source": {
+      "key": "src",
+      "options": [
+        {
+          "id": "all",
+          "label": "All drives"
+        },
+        {
+          "id": "meshsonar",
+          "label": "MeshSonar"
+        },
+        {
+          "id": "meshmapper",
+          "label": "MeshMapper"
+        }
+      ],
+      "default": "all",
+      "available": true
+    },
+    "growth": {
+      "key": "asof",
+      "label": "Coverage growth (as of)",
+      "source": "/api/cmh/region-timeline",
+      "step": "day",
+      "tz": "UTC",
+      "debounceMs": 350,
+      "playTickMs": 1200,
+      "applies": "measured",
+      "available": true,
+      "note": "Predicted coverage and Heard by phones are all-time and hide while an earlier day is picked."
+    },
+    "node": [
+      {
+        "id": "type",
+        "name": "Node type",
+        "urlKey": "nt",
+        "values": [
+          "repeater",
+          "room",
+          "companion",
+          "sensor",
+          "unknown"
+        ]
+      },
+      {
+        "id": "status",
+        "name": "Status",
+        "urlKey": "st",
+        "values": [
+          "active",
+          "stale"
+        ]
+      },
+      {
+        "id": "lastHeard",
+        "name": "Last heard",
+        "urlKey": "lh",
+        "values": [
+          "1h",
+          "6h",
+          "24h",
+          "7d",
+          "30d",
+          "any"
+        ],
+        "default": "30d"
+      },
+      {
+        "id": "byteSize",
+        "name": "Byte size",
+        "urlKey": "bs",
+        "values": [
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "id": "neighbours",
+        "name": "Neighbours of the selected node",
+        "urlKey": "nb",
+        "values": [
+          "on"
+        ]
+      },
+      {
+        "id": "important",
+        "name": "Important links",
+        "urlKey": "il",
+        "values": [
+          "on"
+        ]
+      }
+    ]
+  },
+  "limits": {
+    "predictedFromZoom": 8,
+    "hexFromZoom": 13,
+    "tileMaxZoom": 22,
+    "maxZoom": 20,
+    "clusterMaxZoom": 11,
+    "summaryFromZoom": 5,
+    "summaryToZoom": 12
+  },
+  "urlKeys": [
+    "lat",
+    "lon",
+    "z",
+    "base",
+    "show",
+    "t",
+    "src",
+    "asof",
+    "names",
+    "palette",
+    "panel",
+    "nt",
+    "bs",
+    "cl",
+    "heat",
+    "hl",
+    "mb",
+    "cb",
+    "st",
+    "nb",
+    "il",
+    "lh"
+  ],
+  "panels": [
+    "layers",
+    "live",
+    "plan",
+    "cell:<res-11 H3 id>",
+    "repeater:<public key>",
+    "observer:<key>"
+  ],
+  "plan": {
+    "planV": 1,
+    "maxNodes": 30,
+    "goals": [
+      {
+        "id": "coverage",
+        "name": "Coverage"
+      },
+      {
+        "id": "links",
+        "name": "Links"
+      },
+      {
+        "id": "redundancy",
+        "name": "Redundancy"
+      },
+      {
+        "id": "overall",
+        "name": "Best overall"
+      }
+    ],
+    "defaultGoal": "overall",
+    "share": {
+      "base": "https://meshsonar.com/share/plan",
+      "fragment": true,
+      "codec": "deflate+base64url"
+    },
+    "endpoints": {
+      "link": "plan-link",
+      "verify": "plan-verify",
+      "suggest": "plan-suggest"
+    }
+  },
+  "coverage": {
+    "v": 1,
+    "res": 11,
+    "windowDays": 365,
+    "faintBelow": 3,
+    "bands": [
+      {
+        "band": 0,
+        "key": "noReply",
+        "label": "No reply",
+        "marginMin": null,
+        "marginMax": null,
+        "token": "coverage-band-0"
+      },
+      {
+        "band": 1,
+        "key": "edge",
+        "label": "Edge",
+        "marginMin": null,
+        "marginMax": 0,
+        "token": "coverage-band-1"
+      },
+      {
+        "band": 2,
+        "key": "weak",
+        "label": "Weak",
+        "marginMin": 0,
+        "marginMax": 5,
+        "token": "coverage-band-2"
+      },
+      {
+        "band": 3,
+        "key": "fair",
+        "label": "Fair",
+        "marginMin": 5,
+        "marginMax": 10,
+        "token": "coverage-band-3"
+      },
+      {
+        "band": 4,
+        "key": "good",
+        "label": "Good",
+        "marginMin": 10,
+        "marginMax": 15,
+        "token": "coverage-band-4"
+      },
+      {
+        "band": 5,
+        "key": "excellent",
+        "label": "Excellent",
+        "marginMin": 15,
+        "marginMax": null,
+        "token": "coverage-band-5"
+      },
+      {
+        "band": 6,
+        "key": "heardNoSnr",
+        "label": "Heard, no direct signal",
+        "marginMin": null,
+        "marginMax": null,
+        "token": "coverage-band-6"
+      }
+    ],
+    "floorsDb": {
+      "sf7": -7.5,
+      "sf8": -10,
+      "sf9": -12.5,
+      "sf10": -15,
+      "sf11": -17.5,
+      "sf12": -20
+    },
+    "edgesDb": {
+      "sf7": [
+        -7.5,
+        -2.5,
+        2.5,
+        7.5
+      ],
+      "sf8": [
+        -10,
+        -5,
+        0,
+        5
+      ],
+      "sf9": [
+        -12.5,
+        -7.5,
+        -2.5,
+        2.5
+      ],
+      "sf10": [
+        -15,
+        -10,
+        -5,
+        0
+      ],
+      "sf11": [
+        -17.5,
+        -12.5,
+        -7.5,
+        -2.5
+      ],
+      "sf12": [
+        -20,
+        -15,
+        -10,
+        -5
+      ]
+    },
+    "tiles": {
+      "url": "/api/coverage/tiles/{layer}/{z}/{x}/{y}.mvt?preset={preset}",
+      "layers": [
+        "measured",
+        "predicted",
+        "heard"
+      ],
+      "maxZoom": 22,
+      "hexFromZoom": 13,
+      "extent": {
+        "hex": 4096,
+        "points": 128
+      },
+      "predictedFromZoom": 8,
+      "properties": {
+        "measured": {
+          "band": "0-6",
+          "n": "attempts in the cell",
+          "h": "H3 id (hex), z >= 13 only"
+        },
+        "predicted": {
+          "band": "0-5 (0 = predicted no coverage)",
+          "o": "opacity 0.15-0.6 (fades with distance from the nearest measurement)",
+          "h": "H3 id (hex), z >= 13 only"
+        },
+        "heard": {
+          "band": "1-6, band of the mean heard SNR (same SF rule as measured)",
+          "n": "receptions heard by phones in the cell",
+          "r": "distinct repeaters heard (redundancy)",
+          "h": "H3 id (hex), z >= 13 only"
+        }
+      }
+    },
+    "predicted": {
+      "radiusM": 1000,
+      "minSources": 2,
+      "weight": "1/d^2",
+      "deadValueDb": "floor - 3",
+      "noCoverageBelowDb": "floor - 1.5",
+      "model": 1
+    },
+    "version": 1,
+    "defaultPreset": "sf7bw62.5",
+    "measuredBuild": 1,
+    "predictedBuild": 1,
+    "measuredAt": "2026-11-09T00:00:00.000Z",
+    "predictedAt": "2026-11-09T00:00:00.000Z",
+    "presets": [
+      {
+        "preset": "sf7bw62.5",
+        "sf": 7,
+        "cells": 1000
+      }
+    ],
+    "predictedCells": 500,
+    "heardVersion": 1,
+    "heardAt": "2026-11-09T00:00:00.000Z",
+    "heardCells": 1
+  },
+  "ladder": {
+    "minCellPx": 6,
+    "fromZoom": 5,
+    "toZoom": 12,
+    "hexFromZoom": 13,
+    "steps": [
+      {
+        "z": 12,
+        "res": 10
+      },
+      {
+        "z": 11,
+        "res": 9
+      },
+      {
+        "z": 10,
+        "res": 9
+      },
+      {
+        "z": 9,
+        "res": 8
+      },
+      {
+        "z": 8,
+        "res": 7
+      },
+      {
+        "z": 7,
+        "res": 6
+      },
+      {
+        "z": 6,
+        "res": 6
+      },
+      {
+        "z": 5,
+        "res": 5
+      }
+    ],
+    "strength": {
+      "min": 0.45,
+      "span": 0.55,
+      "of": "f"
+    },
+    "tiles": {
+      "measured": {
+        "url": "/api/coverage/tiles/measured-summary/{z}/{x}/{y}.mvt?preset={preset}&v={version}",
+        "sourceLayer": "measured-summary",
+        "properties": {
+          "band": "0-6",
+          "n": "attempts inside",
+          "f": "share of the cell measured, 0..1",
+          "c": "res-11 cells inside",
+          "h": "H3 id of the summary cell",
+          "r": "its H3 resolution"
+        }
+      },
+      "predicted": {
+        "url": "/api/coverage/tiles/predicted-summary/{z}/{x}/{y}.mvt?preset={preset}&v={version}",
+        "sourceLayer": "predicted-summary",
+        "properties": {
+          "band": "0-5",
+          "o": "mean opacity 0.15-0.6",
+          "f": "share of the cell predicted, 0..1",
+          "c": "res-11 cells inside",
+          "h": "H3 id of the summary cell",
+          "r": "its H3 resolution"
+        }
+      },
+      "extent": 1024
+    },
+    "tapCard": "/api/coverage/summary/{h3}?preset={preset}"
+  },
+  "variables": {
+    "colourBy": {
+      "id": "colourBy",
+      "name": "Colour nodes by",
+      "urlKey": "cb",
+      "default": "none",
+      "options": [
+        {
+          "id": "none",
+          "label": "Nothing (neutral)"
+        },
+        {
+          "id": "status",
+          "label": "Status"
+        },
+        {
+          "id": "hash",
+          "label": "Hash size"
+        },
+        {
+          "id": "role",
+          "label": "Role"
+        },
+        {
+          "id": "scope",
+          "label": "Scope",
+          "available": false,
+          "note": "No scope data from the network yet: this fills in once nodes report their scopes."
+        }
+      ],
+      "pageDefaults": {
+        "map": "status"
+      }
+    },
+    "basemap": {
+      "urlKey": "base",
+      "ids": [
+        "road",
+        "relief",
+        "plain",
+        "topo",
+        "satellite"
+      ],
+      "default": "road"
+    },
+    "palette": {
+      "urlKey": "palette",
+      "ids": [
+        "standard",
+        "colour_blind"
+      ],
+      "default": "standard"
+    },
+    "labels": {
+      "options": [
+        {
+          "id": "names",
+          "name": "Names",
+          "urlKey": "names"
+        },
+        {
+          "id": "hash",
+          "name": "Hash prefix",
+          "urlKey": "hl"
+        },
+        {
+          "id": "signal",
+          "name": "Signal tags",
+          "urlKey": null
+        }
+      ]
+    },
+    "time": {
+      "urlKey": "t"
+    },
+    "source": {
+      "urlKey": "src"
+    },
+    "pingColour": {
+      "options": [
+        {
+          "id": "snr",
+          "name": "By SNR"
+        },
+        {
+          "id": "heard",
+          "name": "Heard / No reply"
+        }
+      ],
+      "default": "snr",
+      "note": "The Drive map's ping dots; the website has no pings on this map."
+    },
+    "cluster": {
+      "urlKey": "cl",
+      "default": true
+    }
+  },
+  "pages": {
+    "breakpoints": {
+      "tablet": 768,
+      "desktop": 1100
+    },
+    "mapHeights": {
+      "short": 200,
+      "standard": 280,
+      "tall": {
+        "share": 0.5,
+        "minPx": 320,
+        "maxPx": 560
+      }
+    },
+    "aliases": {
+      "nodes": "repeaters",
+      "heardcells": "heard"
+    },
+    "pages": [
+      {
+        "id": "map",
+        "name": "Map",
+        "route": "/map",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [
+          "layers"
+        ],
+        "camera": "fit-scope",
+        "names": true,
+        "colourBy": "status",
+        "layers": [
+          "borders",
+          "measured",
+          "predicted",
+          "heard",
+          "repeaters",
+          "estimated",
+          "observers",
+          "phones",
+          "links"
+        ]
+      },
+      {
+        "id": "live",
+        "name": "Live",
+        "route": "/live",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [
+          "live"
+        ],
+        "camera": "fit-scope",
+        "names": true,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "repeaters",
+          "observers",
+          "phones",
+          "live"
+        ]
+      },
+      {
+        "id": "home",
+        "name": "Home",
+        "route": "/",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-scope",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "measured",
+          "predicted",
+          "repeaters"
+        ]
+      },
+      {
+        "id": "drives",
+        "name": "Drives",
+        "route": "/drives",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-scope",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "measured",
+          "predicted",
+          "heard"
+        ]
+      },
+      {
+        "id": "drive-next",
+        "name": "Where to drive next",
+        "route": "/coverage/next",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-scope",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "measured",
+          "predicted",
+          "repeaters"
+        ]
+      },
+      {
+        "id": "topology",
+        "name": "Topology",
+        "route": "/analytics/topology",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-scope",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "repeaters",
+          "snrlinks"
+        ]
+      },
+      {
+        "id": "drive-detail",
+        "name": "A drive",
+        "route": "/me/drives/$id",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-drive",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "drive",
+          "track",
+          "zones",
+          "repeaters"
+        ]
+      },
+      {
+        "id": "path",
+        "name": "A path",
+        "route": "/packets/$hash",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-selection",
+        "names": true,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "repeaters",
+          "observers",
+          "path"
+        ]
+      },
+      {
+        "id": "node",
+        "name": "A node",
+        "route": "/nodes/$key",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-selection",
+        "names": true,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "measured",
+          "repeaters",
+          "links"
+        ]
+      },
+      {
+        "id": "observer",
+        "name": "An observer",
+        "route": "/observers/$key",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-selection",
+        "names": true,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "repeaters",
+          "observers",
+          "heard"
+        ]
+      },
+      {
+        "id": "plan-share",
+        "name": "A shared plan",
+        "route": "/share/plan",
+        "mode": "still",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-selection",
+        "names": true,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "measured",
+          "plan"
+        ]
+      },
+      {
+        "id": "pick",
+        "name": "Pick a point",
+        "route": "/tools/prefix",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [],
+        "camera": "url",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "repeaters",
+          "pick"
+        ]
+      },
+      {
+        "id": "painter",
+        "name": "Coverage painter",
+        "route": "/tools/coverage",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [
+          "layers"
+        ],
+        "camera": "fit-scope",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "repeaters",
+          "measured",
+          "footprint",
+          "pick"
+        ]
+      },
+      {
+        "id": "link",
+        "name": "Link tool",
+        "route": "/tools/link",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-scope",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "repeaters",
+          "pick",
+          "path"
+        ]
+      },
+      {
+        "id": "zones",
+        "name": "Privacy zones",
+        "route": "/me/privacy",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-drive",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "zones",
+          "track"
+        ]
+      },
+      {
+        "id": "boundaries",
+        "name": "Boundary review",
+        "route": "/admin/boundaries",
+        "mode": "full",
+        "basemap": "road",
+        "panels": [],
+        "camera": "fit-selection",
+        "names": false,
+        "colourBy": "none",
+        "layers": [
+          "borders",
+          "candidates",
+          "repeaters"
+        ]
+      }
+    ]
+  },
+  "packetTypes": {
+    "types": [
+      {
+        "type": 4,
+        "id": "advert",
+        "name": "Advert",
+        "light": "#2A78D6",
+        "dark": "#3987E5"
+      },
+      {
+        "type": 5,
+        "id": "grp-txt",
+        "name": "Group text",
+        "light": "#0A86B0",
+        "dark": "#5CC8F0"
+      },
+      {
+        "type": 2,
+        "id": "txt-msg",
+        "name": "Direct message",
+        "light": "#A53FC4",
+        "dark": "#E08AF0"
+      },
+      {
+        "type": 3,
+        "id": "ack",
+        "name": "Ack",
+        "light": "#5A6F85",
+        "dark": "#9FB3C8"
+      },
+      {
+        "type": 1,
+        "id": "response",
+        "name": "Response",
+        "light": "#D9457F",
+        "dark": "#D55181"
+      },
+      {
+        "type": 9,
+        "id": "trace",
+        "name": "Trace",
+        "light": "#2B3A47",
+        "dark": "#E6ECF2"
+      },
+      {
+        "type": 8,
+        "id": "path",
+        "name": "Path",
+        "light": "#5B49D6",
+        "dark": "#8478F0"
+      },
+      {
+        "type": 0,
+        "id": "req",
+        "name": "Request",
+        "light": "#625348",
+        "dark": "#B9AFA6"
+      }
+    ],
+    "other": {
+      "light": "#6F7780",
+      "dark": "#8A929B"
+    }
+  },
+  "sections": [
+    {
+      "id": "style",
+      "name": "Map style",
+      "kind": "basemap",
+      "hint": "The background map.",
+      "layers": []
+    },
+    {
+      "id": "coverage",
+      "name": "Signal coverage",
+      "kind": "layers",
+      "hint": "Where a radio can reach a repeater.",
+      "layers": [
+        "measured",
+        "predicted",
+        "heard",
+        "redundancy",
+        "footprint"
+      ],
+      "advanced": [
+        "redundancy"
+      ]
+    },
+    {
+      "id": "drive",
+      "name": "My drive",
+      "kind": "layers",
+      "hint": "What you measured yourself.",
+      "layers": [
+        "drive",
+        "track",
+        "zones",
+        "pick",
+        "plan"
+      ]
+    },
+    {
+      "id": "repeaters",
+      "name": "Repeaters",
+      "kind": "layers",
+      "hint": "The radios that pass messages on.",
+      "layers": [
+        "repeaters",
+        "network",
+        "estimated",
+        "links",
+        "snrlinks",
+        "live",
+        "path"
+      ]
+    },
+    {
+      "id": "people",
+      "name": "People and listeners",
+      "kind": "layers",
+      "hint": "Listening stations, phones and your friends.",
+      "layers": [
+        "observers",
+        "phones"
+      ],
+      "clientRows": [
+        "friends"
+      ]
+    },
+    {
+      "id": "appearance",
+      "name": "Appearance",
+      "kind": "appearance",
+      "hint": "Sizes, colours and outlines.",
+      "layers": [
+        "borders",
+        "candidates"
+      ],
+      "collapsed": true
+    },
+    {
+      "id": "filters",
+      "name": "Filters",
+      "kind": "filters",
+      "hint": "Show only part of the data.",
+      "layers": [],
+      "collapsed": true
+    }
+  ],
+  "legend": {
+    "v": 1,
+    "order": [
+      "coverage",
+      "drive",
+      "repeaters",
+      "people",
+      "appearance"
+    ],
+    "ramp": {
+      "label": "Weak to strong",
+      "noReply": "No reply"
+    },
+    "extras": [
+      {
+        "id": "position",
+        "section": "drive",
+        "symbol": "position",
+        "label": "Your position",
+        "detail": "Where your phone is now. The arrow points the way you are heading.",
+        "on": "drive",
+        "client": true
+      },
+      {
+        "id": "heardTick",
+        "section": "drive",
+        "symbol": "heardtick",
+        "label": "Heard this drive",
+        "detail": "A tick on a repeater that answered at least one of your pings on this drive.",
+        "on": "drive",
+        "client": true
+      },
+      {
+        "id": "cluster",
+        "section": "repeaters",
+        "symbol": "cluster",
+        "label": "Several repeaters",
+        "detail": "The number is how many repeaters are close together here. Zoom in to see each one.",
+        "on": "all"
+      },
+      {
+        "id": "selected",
+        "section": "repeaters",
+        "symbol": "selected",
+        "label": "Selected",
+        "detail": "The ring marks the one you tapped.",
+        "on": "all"
+      },
+      {
+        "id": "room",
+        "section": "repeaters",
+        "symbol": "room",
+        "label": "Room server",
+        "detail": "A rounded square is a room server: a radio that keeps a shared message board.",
+        "on": "all"
+      },
+      {
+        "id": "friend",
+        "section": "people",
+        "symbol": "friend",
+        "label": "Friend",
+        "detail": "A friend who shares their position with you in a MeshTrack group.",
+        "on": "drive",
+        "client": true
+      },
+      {
+        "id": "meet",
+        "section": "people",
+        "symbol": "meet",
+        "label": "Meet point",
+        "detail": "The meeting place your MeshTrack group set.",
+        "on": "drive",
+        "client": true
+      }
+    ],
+    "live": {
+      "title": "Live packets",
+      "packetTypes": {
+        "title": "Packet colours",
+        "from": "packetTypes"
+      },
+      "lineStyles": {
+        "title": "Route lines",
+        "styles": [
+          {
+            "id": "known",
+            "line": "solid",
+            "label": "Known hop",
+            "detail": "The repeater that passed the packet on is known for sure."
+          },
+          {
+            "id": "likely",
+            "line": "dashed",
+            "label": "Likely hop",
+            "detail": "The best match for a hop that several repeaters could be."
+          },
+          {
+            "id": "unplaced",
+            "line": "dotted",
+            "label": "Hop nobody can place",
+            "detail": "A hop that matches no repeater with a known position. Drawn faint."
+          }
+        ]
+      }
+    }
+  },
+  "version": "7fa69de3"
+}

@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -131,9 +132,12 @@ void main() {
       await t.pumpAndSettle();
       await openSheet(t);
       final ys = [
-        for (final g in ['coverage', 'network', 'context']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['coverage', 'drive', 'repeaters', 'people', 'appearance']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
-      expect(ys, orderedEquals([...ys]..sort()), reason: 'Coverage, Network, Context (the definition groups)');
+      expect(ys, orderedEquals([...ys]..sort()), reason: 'build 77: Signal coverage, My drive, Repeaters, People and listeners, Appearance');
+      // What this server cannot give (Predicted, Heard by phones: no coverageV2) is in the one "Not on this map" line.
+      await t.tap(find.byKey(const Key('layers-not-here-toggle'), skipOffstage: false));
+      await t.pumpAndSettle();
       for (final key in [
         'layer-network-coverage', 'layer-heardcells', 'layer-predicted', 'layer-hexes', 'layer-pings', //
         'layer-phones', 'layer-observers', 'layer-region-repeaters', 'layer-labels', 'layer-network', 'layer-links', 'layer-borders',
@@ -189,6 +193,10 @@ void main() {
       await t.pumpAndSettle();
       expect(h.state.globalRepeaterSet.state, SyncState.unsupported);
       await openSheet(t);
+      expect(find.byKey(const Key('layers-repeater-scope')), findsNothing, reason: 'no Everywhere to offer');
+      await revealInLayersSheet(t, find.byKey(const Key('layers-not-here-toggle')));
+      await t.tap(find.byKey(const Key('layers-not-here-toggle')));
+      await t.pumpAndSettle();
       expect(sw(t, 'layer-network').value, isFalse, reason: 'the server does not offer it: shown off, with the reason');
       expect(sw(t, 'layer-network').onChanged, isNull);
       expect(sw(t, 'layer-region-repeaters').value, isTrue, reason: 'Repeaters is its own switch');
@@ -204,7 +212,7 @@ void main() {
       await t.pumpAndSettle();
       await openSheet(t);
       expect(statusText(t, 'network'), "Couldn't load. Check the connection and retry.");
-      expect(sw(t, 'layer-network').onChanged, isNotNull);
+      expect(find.byKey(const Key('layers-scope-everywhere')), findsOneWidget, reason: 'Everywhere still works');
       final calls = srv.networkCalls;
       srv.networkStatus = 200;
       srv.now = srv.now.add(const Duration(seconds: 11));
@@ -225,7 +233,7 @@ void main() {
       expect(find.byKey(RepeaterPainterLayer.paintKey), findsOneWidget, reason: 'on by default (D3, Andy Oct 24)');
       expect(indexedCountOf(t, kNetworkLayerId), 2, reason: 'the Seattle repeater is outside CMH + 40 km; the roster layer (on by default) draws the 3rd one itself');
       await openSheet(t);
-      expect(sw(t, 'layer-network').value, isTrue);
+      expect(t.widget<CupertinoSlidingSegmentedControl<bool>>(find.byKey(const Key('layers-repeater-scope'))).groupValue, isTrue, reason: 'Everywhere');
       expect(statusText(t, 'network'), '3 repeaters in and around Columbus, US · 4 hidden by their owners · Data: MeshCore Map (map.meshcore.io)');
       expect(find.byKey(const Key('layer-network-key')), findsOneWidget);
       for (final l in ['heard in 24 h (solid ring)', 'heard in 7 d (dashed ring)', 'older (faded)']) {

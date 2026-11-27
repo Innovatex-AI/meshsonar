@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/time_format.dart' as tf;
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/core/map_definition.dart';
@@ -147,7 +148,7 @@ void main() {
       final poly = tester.widget<PolylineLayer>(find.byType(PolylineLayer));
       expect(poly.polylines, hasLength(1));
       Finder label(String l) => find.byWidgetPredicate((w) => w is Semantics && w.properties.label == l);
-      expect(label('Sam Lee, last heard 1 min ago'), findsOneWidget, reason: 'VoiceOver reads the name and when');
+      expect(label('Sam Lee, last heard ${tf.relativeTime(_now.subtract(const Duration(minutes: 1)), now: _now)}'), findsOneWidget, reason: 'VoiceOver reads the name and when (the one time formatter, build 77)');
       expect(label('Meet-up point: Gate 3'), findsOneWidget);
       expect(label('Your last shared position'), findsOneWidget);
     });

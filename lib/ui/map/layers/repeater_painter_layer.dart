@@ -256,7 +256,15 @@ class RepeaterPainterLayer extends StatefulWidget {
   /// A tap on a badge of the drive.
   final ValueChanged<RepeaterBadge>? onBadgeTap;
 
-  const RepeaterPainterLayer({super.key, required this.sources, this.badges = const [], this.selectedKey, this.onHit, this.onBadgeTap});
+  /// Build 77 (Round 1 F1): how strong the LISTS' repeaters and clusters are drawn (Live dims its idle nodes to 0.62 so the
+  /// packets stay the picture); [badges] are always drawn at full strength (on Live: the nodes a packet is crossing).
+  final double sourceOpacity;
+
+  /// "Colour nodes by" (build 77, Live and Drive): the ARGB tint of a repeater key, or null for neutral. A tinted repeater gets
+  /// a ring in its tint around the badge.
+  final int? Function(String key)? tintOf;
+
+  const RepeaterPainterLayer({super.key, required this.sources, this.badges = const [], this.selectedKey, this.onHit, this.onBadgeTap, this.sourceOpacity = 1, this.tintOf});
 
   static const ValueKey<String> paintKey = ValueKey('repeater-painter-paint');
 
@@ -320,6 +328,8 @@ class _RepeaterPainterLayerState extends State<RepeaterPainterLayer> {
           theme: theme,
           atlas: atlas,
           onPick: _onPick,
+          sourceOpacity: widget.sourceOpacity,
+          tintOf: widget.tintOf,
         );
         return MobileLayerTransformer(
           child: GestureDetector(
@@ -359,7 +369,13 @@ class RepeaterPainter extends CustomPainter {
   final RepeaterSpriteAtlas? atlas;
   final ValueChanged<RepeaterPick>? onPick;
 
-  RepeaterPainter({required this.scene, required this.camera, required this.theme, required this.atlas, this.onPick});
+  final double sourceOpacity;
+  final int? Function(String key)? tintOf;
+
+  RepeaterPainter({required this.scene, required this.camera, required this.theme, required this.atlas, this.onPick, this.sourceOpacity = 1, this.tintOf});
+
+  /// Tests: how many repeaters the last paint drew dimmed, and how many tinted.
+  int debugDimmed = 0, debugTinted = 0;
 
   /// Painted on the last frame (tests, profiling).
   int debugSprites = 0, debugClusters = 0;
@@ -367,30 +383,58 @@ class RepeaterPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final singles = scene.singles;
-    debugSprites = singles.length;
+    final dim = sourceOpacity < 1;
+    // Lists' repeaters and clusters first (dimmed in one layer when asked), then the badges at full strength on top.
+    final listed = dim ? [for (final it in scene.singles) if (it.badge == null) it] : scene.singles;
+    final badges = dim ? [for (final it in scene.singles) if (it.badge != null) it] : const <RepeaterItem>[];
+    debugSprites = scene.singles.length;
     debugClusters = scene.clusters.length;
-    final a = atlas;
-    debugUsedAtlas = a != null;
-    if (singles.isNotEmpty) {
-      if (a != null) {
-        final c = Float32List(singles.length * 2);
-        final idx = List<int>.filled(singles.length, 0);
-        for (var i = 0; i < singles.length; i++) {
-          final it = singles[i];
-          c[i * 2] = it.at.dx;
-          c[i * 2 + 1] = it.at.dy;
-          idx[i] = RepeaterSpriteSpec(it.freshness, it.room, it.variant).index;
-        }
-        a.draw(canvas, c, idx, singles.length);
-      } else {
-        for (final it in singles) {
-          paintRepeaterSprite(canvas, it.at, RepeaterSpriteSpec(it.freshness, it.room, it.variant), theme, scale: it.iconScale);
-        }
-      }
-    }
+    debugDimmed = dim ? listed.length + scene.clusters.length : 0;
+    debugUsedAtlas = atlas != null;
+    if (dim) canvas.saveLayer(Offset.zero & size, Paint()..color = Color.fromRGBO(0, 0, 0, sourceOpacity));
+    _paintSingles(canvas, listed);
     for (final c in scene.clusters) {
       _paintCluster(canvas, c);
+    }
+    if (dim) canvas.restore();
+    _paintSingles(canvas, badges);
+    _paintTints(canvas);
+  }
+
+  void _paintSingles(Canvas canvas, List<RepeaterItem> singles) {
+    if (singles.isEmpty) return;
+    final a = atlas;
+    if (a != null) {
+      final c = Float32List(singles.length * 2);
+      final idx = List<int>.filled(singles.length, 0);
+      for (var i = 0; i < singles.length; i++) {
+        final it = singles[i];
+        c[i * 2] = it.at.dx;
+        c[i * 2 + 1] = it.at.dy;
+        idx[i] = RepeaterSpriteSpec(it.freshness, it.room, it.variant).index;
+      }
+      a.draw(canvas, c, idx, singles.length);
+    } else {
+      for (final it in singles) {
+        paintRepeaterSprite(canvas, it.at, RepeaterSpriteSpec(it.freshness, it.room, it.variant), theme, scale: it.iconScale);
+      }
+    }
+  }
+
+  /// "Colour nodes by": a ring in the tint around each tinted repeater (drawn over the sprite, so the atlas stays one draw).
+  void _paintTints(Canvas canvas) {
+    debugTinted = 0;
+    final f = tintOf;
+    if (f == null) return;
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    for (final it in scene.singles) {
+      final argb = f(it.key);
+      if (argb == null) continue;
+      debugTinted++;
+      ring.color = Color(argb).withValues(alpha: it.badge == null && sourceOpacity < 1 ? sourceOpacity : 1);
+      canvas.drawCircle(it.at, it.radius + 1.5, ring);
     }
   }
 
@@ -523,7 +567,12 @@ class RepeaterPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(RepeaterPainter oldDelegate) =>
-      !identical(oldDelegate.scene, scene) || oldDelegate.camera != camera || oldDelegate.theme != theme || !identical(oldDelegate.atlas, atlas);
+      !identical(oldDelegate.scene, scene) ||
+      oldDelegate.camera != camera ||
+      oldDelegate.theme != theme ||
+      !identical(oldDelegate.atlas, atlas) ||
+      oldDelegate.sourceOpacity != sourceOpacity ||
+      oldDelegate.tintOf != tintOf;
 }
 
 /// "Repeater Alpha Tower, room server, advertised in the last 24 hours, heard this drive".

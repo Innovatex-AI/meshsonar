@@ -27,8 +27,8 @@ void main() {
       final c = CoverageBandColors.of(ColourPalette.standard, b, definition: def);
       expect(discs(t, 'drive-key-bands'), [for (var i = 1; i <= 5; i++) c[i]]);
       expect(discs(t, 'drive-key-noreply'), [c.noReplyPoint]);
-      expect(find.text('Heard: weak → strong'), findsOneWidget);
-      expect(find.text('Not heard'), findsOneWidget);
+      expect(find.text('Weak → strong'), findsOneWidget, reason: 'the main map\'s wording (D-17)');
+      expect(find.text('No reply'), findsOneWidget);
       expect(find.text('This drive'), findsOneWidget);
       expect(find.text('Hidden from the public: faded and dashed'), findsOneWidget);
       expect(find.text('Privacy zone'), findsOneWidget);

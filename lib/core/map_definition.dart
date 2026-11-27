@@ -77,6 +77,18 @@ class MapDefinition {
   List<MapLayerDef>? _layerDefs;
   MapLayerDef? layerDef(String id) => layerDefs.where((l) => l.id == id).firstOrNull;
 
+  /// The Layers sheet sections (schemaMinor 10, capability `layers.sections`); empty on an older definition (the app groups
+  /// the rows itself then).
+  List<LayerSectionDef> get layerSections => _sections ??= [
+    if (hasCapability('layers.sections'))
+      for (final e in (json['sections'] as List? ?? const [])) if (e is Map) LayerSectionDef.fromJson(e.cast<String, dynamic>()),
+  ];
+  List<LayerSectionDef>? _sections;
+
+  /// The legend block (schemaMinor 10); the built-in words on an older definition.
+  LegendDef get legendDef => _legend ??= json['legend'] is Map ? LegendDef.fromJson((json['legend'] as Map).cast<String, dynamic>()) : LegendDef.builtIn;
+  LegendDef? _legend;
+
   /// The palettes the reader can pick (Standard, Colour-blind safe), in the definition's order.
   List<PaletteDef> get paletteDefs => [
     for (final p in palettes) PaletteDef(p['id'] as String, p['name'] as String? ?? p['id'] as String, p['blurb'] as String? ?? ''),
@@ -359,7 +371,10 @@ class LegendEntryDef {
   final String kind;
   final int? band, from, to, step;
   final String? label, note, symbol, state;
-  const LegendEntryDef({required this.kind, this.band, this.from, this.to, this.step, this.label, this.note, this.symbol, this.state});
+
+  /// The longer explanation behind a short label (schemaMinor 10, capability `legend.detail`); null on an older definition.
+  final String? detail;
+  const LegendEntryDef({required this.kind, this.band, this.from, this.to, this.step, this.label, this.note, this.symbol, this.state, this.detail});
   factory LegendEntryDef.fromJson(Map<String, dynamic> j) => LegendEntryDef(
     kind: j['kind'] as String? ?? 'symbol',
     band: (j['band'] as num?)?.toInt(),
@@ -370,6 +385,7 @@ class LegendEntryDef {
     note: j['note'] as String?,
     symbol: j['symbol'] as String?,
     state: j['state'] as String?,
+    detail: j['detail'] as String?,
   );
 }
 
@@ -380,6 +396,9 @@ class MapLayerDef {
   final double minZoom, maxZoom;
   final String? hint;
   final List<LegendEntryDef> legend;
+
+  /// The Layers sheet section the layer is listed in (schemaMinor 10, `layers.sections`); null on an older definition.
+  final String? section;
   const MapLayerDef({
     required this.id,
     required this.name,
@@ -393,6 +412,7 @@ class MapLayerDef {
     this.maxZoom = 22,
     this.hint,
     this.legend = const [],
+    this.section,
   });
   factory MapLayerDef.fromJson(Map<String, dynamic> j) => MapLayerDef(
     id: j['id'] as String,
@@ -407,8 +427,146 @@ class MapLayerDef {
     maxZoom: (j['maxZoom'] as num?)?.toDouble() ?? 22,
     hint: j['hint'] as String?,
     legend: [for (final e in (j['legend'] as List? ?? const [])) if (e is Map) LegendEntryDef.fromJson(e.cast<String, dynamic>())],
+    section: j['section'] as String?,
   );
 }
+
+/// One section of the Layers sheet (schemaMinor 10, capability `layers.sections`).
+class LayerSectionDef {
+  final String id, name, kind;
+  final String? hint;
+
+  /// The layers listed in it, top row first.
+  final List<String> layers;
+
+  /// Layers listed under "Advanced" in it.
+  final List<String> advanced;
+  final bool collapsed;
+
+  /// Rows the app adds itself (people: "friends").
+  final List<String> clientRows;
+  const LayerSectionDef({required this.id, required this.name, required this.kind, this.hint, this.layers = const [], this.advanced = const [], this.collapsed = false, this.clientRows = const []});
+
+  static List<String> _strs(Object? v) => [if (v is List) for (final e in v) if (e is String) e];
+  factory LayerSectionDef.fromJson(Map<String, dynamic> j) => LayerSectionDef(
+    id: j['id'] as String? ?? '',
+    name: j['name'] as String? ?? j['id'] as String? ?? '',
+    kind: j['kind'] as String? ?? 'layers',
+    hint: j['hint'] as String?,
+    layers: _strs(j['layers']),
+    advanced: _strs(j['advanced']),
+    collapsed: j['collapsed'] == true,
+    clientRows: _strs(j['clientRows']),
+  );
+}
+
+/// One extra legend entry that is not a layer (schemaMinor 10, `legend.extras`): your position, a cluster bubble, ...
+class LegendExtraDef {
+  final String id, section, symbol, label;
+  final String? detail;
+
+  /// Which maps show it: `all`, `drive` or `live`.
+  final String on;
+  const LegendExtraDef({required this.id, required this.section, required this.symbol, required this.label, this.detail, this.on = 'all'});
+  factory LegendExtraDef.fromJson(Map<String, dynamic> j) => LegendExtraDef(
+    id: j['id'] as String? ?? '',
+    section: j['section'] as String? ?? 'repeaters',
+    symbol: j['symbol'] as String? ?? '',
+    label: j['label'] as String? ?? '',
+    detail: j['detail'] as String?,
+    on: j['on'] as String? ?? 'all',
+  );
+}
+
+/// A Live route line style in the legend (`legend.live.lineStyles.styles[]`).
+class LegendLineStyleDef {
+  final String id, line, label;
+  final String? detail;
+  const LegendLineStyleDef({required this.id, required this.line, required this.label, this.detail});
+}
+
+/// The top-level `legend` block (schemaMinor 10). [LegendDef.builtIn] is what the app shows with an older definition: the same
+/// words, so the panel reads the same on today's server.
+class LegendDef {
+  /// Sections in panel order: coverage first.
+  final List<String> order;
+  final String rampLabel, noReplyLabel;
+  final List<LegendExtraDef> extras;
+  final String liveTitle, packetTypesTitle, lineStylesTitle;
+  final List<LegendLineStyleDef> lineStyles;
+  const LegendDef({
+    required this.order,
+    required this.rampLabel,
+    required this.noReplyLabel,
+    required this.extras,
+    required this.liveTitle,
+    required this.packetTypesTitle,
+    required this.lineStylesTitle,
+    required this.lineStyles,
+  });
+
+  static const LegendDef builtIn = LegendDef(
+    order: ['coverage', 'drive', 'repeaters', 'people', 'appearance'],
+    rampLabel: 'Weak to strong',
+    noReplyLabel: 'No reply',
+    extras: [
+      LegendExtraDef(id: 'position', section: 'drive', symbol: 'position', label: 'Your position', detail: 'Where your phone is now. The arrow points the way you are heading.', on: 'drive'),
+      LegendExtraDef(id: 'heardTick', section: 'drive', symbol: 'heardtick', label: 'Heard this drive', detail: 'A tick on a repeater that answered at least one of your pings on this drive.', on: 'drive'),
+      LegendExtraDef(id: 'cluster', section: 'repeaters', symbol: 'cluster', label: 'Several repeaters', detail: 'The number is how many repeaters are close together here. Zoom in to see each one.'),
+      LegendExtraDef(id: 'selected', section: 'repeaters', symbol: 'selected', label: 'Selected', detail: 'The ring marks the one you tapped.'),
+      LegendExtraDef(id: 'room', section: 'repeaters', symbol: 'room', label: 'Room server', detail: 'A rounded square is a room server: a radio that keeps a shared message board.'),
+      LegendExtraDef(id: 'friend', section: 'people', symbol: 'friend', label: 'Friend', detail: 'A friend who shares their position with you in a MeshTrack group.', on: 'drive'),
+      LegendExtraDef(id: 'meet', section: 'people', symbol: 'meet', label: 'Meet point', detail: 'The meeting place your MeshTrack group set.', on: 'drive'),
+    ],
+    liveTitle: 'Live packets',
+    packetTypesTitle: 'Packet colours',
+    lineStylesTitle: 'Route lines',
+    lineStyles: [
+      LegendLineStyleDef(id: 'known', line: 'solid', label: 'Known hop', detail: 'The repeater that passed the packet on is known for sure.'),
+      LegendLineStyleDef(id: 'likely', line: 'dashed', label: 'Likely hop', detail: 'The best match for a hop that several repeaters could be.'),
+      LegendLineStyleDef(id: 'unplaced', line: 'dotted', label: 'Hop nobody can place', detail: 'A hop that matches no repeater with a known position. Drawn faint.'),
+    ],
+  );
+
+  static List<String> _strs(Object? v) => [if (v is List) for (final e in v) if (e is String) e];
+
+  /// Reads `legend`; anything missing keeps the built-in value.
+  factory LegendDef.fromJson(Map<String, dynamic> j) {
+    const b = LegendDef.builtIn;
+    final ramp = j['ramp'] is Map ? (j['ramp'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    final live = j['live'] is Map ? (j['live'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    final pt = live['packetTypes'] is Map ? (live['packetTypes'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    final ls = live['lineStyles'] is Map ? (live['lineStyles'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
+    final order = _strs(j['order']);
+    final extras = [for (final e in (j['extras'] as List? ?? const [])) if (e is Map) LegendExtraDef.fromJson(e.cast<String, dynamic>())];
+    final styles = [
+      for (final e in (ls['styles'] as List? ?? const []))
+        if (e is Map && e['id'] is String && e['label'] is String)
+          LegendLineStyleDef(id: e['id'] as String, line: e['line'] as String? ?? 'solid', label: e['label'] as String, detail: e['detail'] as String?),
+    ];
+    return LegendDef(
+      order: order.isEmpty ? b.order : order,
+      rampLabel: ramp['label'] as String? ?? b.rampLabel,
+      noReplyLabel: ramp['noReply'] as String? ?? b.noReplyLabel,
+      extras: j.containsKey('extras') ? extras : b.extras,
+      liveTitle: live['title'] as String? ?? b.liveTitle,
+      packetTypesTitle: pt['title'] as String? ?? b.packetTypesTitle,
+      lineStylesTitle: ls['title'] as String? ?? b.lineStylesTitle,
+      lineStyles: styles.isEmpty ? b.lineStyles : styles,
+    );
+  }
+}
+
+/// The section of a layer when the definition does not say (an older definition): the schemaMinor 10 grouping.
+String layerSectionOf(MapLayerDef l) =>
+    l.section ??
+    switch (l.id) {
+      'measured' || 'predicted' || 'heard' || 'redundancy' || 'footprint' => 'coverage',
+      'drive' || 'track' || 'zones' || 'pick' || 'plan' => 'drive',
+      'observers' || 'phones' => 'people',
+      'borders' || 'candidates' => 'appearance',
+      _ => 'repeaters',
+    };
 
 class MapFilterOptionDef {
   final String id, label;
