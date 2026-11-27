@@ -36,34 +36,42 @@ void main() {
     expect(find.byKey(const Key('site-radio-preset')), findsNothing);
   });
 
-  testWidgets('state (b): siteConfig.radioPreset == null shows a clear "no preset" state', (tester) async {
+  // Build 77 (round 5 S6): Server (advanced) shows which region the server answers for; the region's preset is shown
+  // once, in My radio's settings (it was repeated here, with a path to a row that did not exist).
+  Future<void> openRadioScreen(WidgetTester tester) async {
+    await closeSettingsPage(tester);
+    await showSetting(tester, 'radio-tab-link');
+    await tester.tap(find.byKey(const Key('radio-tab-link')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('radio-region-preset')), 200,
+        scrollable: find.descendant(of: find.byKey(const Key('radio-list')), matching: find.byType(Scrollable)).first);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('state (b): siteConfig.radioPreset == null: Server (advanced) names the region, My radio\'s settings says "no preset"', (tester) async {
     final h = await openSettings(tester, siteConfig: const SiteConfig(region: _region, radioPreset: null));
     expect(h.state.siteConfig?.radioPreset, isNull);
     await showSetting(tester, 'site-region');
     expect(find.byKey(const Key('site-region')), findsOneWidget);
     expect(find.text('cmh.meshsonar.com'), findsOneWidget);
-
-    await showSetting(tester, 'site-radio-preset');
-    expect(find.byKey(const Key('site-radio-preset')), findsOneWidget);
+    expect(find.text('Radio preset'), findsNothing, reason: 'no second copy of the comparison on Server (advanced)');
+    expect(find.textContaining('More > Radio setup'), findsNothing, reason: 'that row never existed');
+    await openRadioScreen(tester);
     expect(find.text('This region has no suggested preset.'), findsOneWidget);
-    expect(find.byKey(const Key('site-radio-preset-no-radio')), findsNothing);
-    expect(find.byKey(const Key('site-radio-preset-compare')), findsNothing);
+    expect(find.byKey(const Key('radio-region-compare')), findsNothing);
   });
 
-  testWidgets('state (c): a preset with no radio connected shows the preset and "no radio connected"', (tester) async {
+  testWidgets('state (c): a preset with no radio connected: My radio\'s settings shows the preset', (tester) async {
     final h = await openSettings(tester, siteConfig: const SiteConfig(region: _region, radioPreset: _preset));
     expect(h.state.connected, isFalse);
-    await showSetting(tester, 'site-radio-preset');
-    expect(find.byKey(const Key('site-radio-preset-no-radio')), findsOneWidget);
-    expect(find.byKey(const Key('site-radio-preset-compare')), findsNothing);
+    await openRadioScreen(tester);
+    expect(find.byKey(const Key('radio-not-connected')), findsOneWidget);
+    expect(find.byKey(const Key('radio-region-compare')), findsOneWidget);
     expect(find.textContaining('MeshCore US Recommended'), findsOneWidget);
-    expect(find.text('910.525 MHz · 62.5 kHz · SF7 · CR5'), findsOneWidget);
-    expect(find.text('No radio connected to compare.'), findsOneWidget);
   });
 
-  testWidgets('state (d): a preset with a radio connected shows both, clearly labeled', (tester) async {
+  testWidgets('state (d): a preset with a radio connected: My radio\'s settings compares them', (tester) async {
     final h = await openSettings(tester, siteConfig: const SiteConfig(region: _region, radioPreset: _preset));
-    // Harness.selfInfo's radio differs from the region preset so "yours" and "this region's" are distinguishable.
     h.selfInfo = const SelfInfo(
       publicKey: 'ABCDEF0123',
       name: 'Truck Radio',
@@ -73,14 +81,10 @@ void main() {
     await h.state.connectSimulator();
     await tester.pumpAndSettle();
     expect(h.state.connected, isTrue);
-
-    await showSetting(tester, 'site-radio-preset');
-    expect(find.byKey(const Key('site-radio-preset-compare')), findsOneWidget);
-    expect(find.byKey(const Key('site-radio-preset-no-radio')), findsNothing);
-    expect(find.text('Yours'), findsOneWidget);
-    expect(find.text('915.000 MHz · 125.0 kHz · SF8 · CR6'), findsOneWidget);
+    await openRadioScreen(tester);
+    expect(find.byKey(const Key('radio-region-compare')), findsOneWidget);
     expect(find.textContaining('MeshCore US Recommended'), findsOneWidget);
-    expect(find.text('910.525 MHz · 62.5 kHz · SF7 · CR5'), findsOneWidget);
+    expect(find.textContaining('915.000'), findsWidgets);
   });
 
   testWidgets('a server-URL change clears the old siteConfig immediately, never shows it against the new server',

@@ -1,4 +1,5 @@
-// Settings > Diagnostics: the in-app diagnostic log (memory only, this session) to read, copy or clear, and Report a
+// Settings > Diagnostics: the in-app diagnostic log (memory only, this session) to read, copy or clear, the message log
+// (build 77: what the phone and the radio said about delivering messages, kept in the chat database), and Report a
 // problem. Copying applies the same redaction as problem reports (lib/core/redact.dart): driver keys, tokens and
 // passwords are replaced and coordinates rounded to 3 decimals, so a pasted log never leaks a secret or a home.
 import 'package:flutter/material.dart';
@@ -6,6 +7,9 @@ import 'package:flutter/services.dart';
 
 import '../design/app_surfaces.dart';
 import '../../app/app_state.dart';
+import '../../app/chat_controller.dart';
+import '../../app/chat_wiring.dart';
+import '../../chat/message_log.dart';
 import '../../core/diagnostics.dart';
 import '../../core/map_prefs.dart';
 import '../../core/power_profile.dart';
@@ -31,6 +35,18 @@ List<Widget> diagnosticsSectionRows(BuildContext context) {
         subtitle: const Text('App events since it started. Copy them with secrets hidden.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DiagnosticsLogScreen())),
+      ),
+    ),
+    // Build 77 (round 3 M12, round 5 S3): directly under the diagnostic log, the same read-and-copy page.
+    SettingsAnchor(
+      id: 'message-log',
+      child: ListTile(
+        key: const Key('message-log'),
+        leading: const Icon(Icons.forum_outlined),
+        title: Text(settingsEntry('message-log').title),
+        subtitle: const Text('How messages were delivered. Copy it with secrets hidden.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const MessageLogScreen())),
       ),
     ),
     SettingsAnchor(
@@ -178,6 +194,117 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: SelectableText(lines[lines.length - i],
                             style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
+                      ),
+              ),
+      ),
+    );
+  }
+}
+
+/// The text Copy puts on the clipboard for the message log: the app build in the header, the log in UTC (whatever the
+/// Time zone setting, so two people's logs line up), and the same redaction as the diagnostic log on top of the log's own
+/// rule (it never holds message text, keys or passwords).
+RedactionResult messageLogExport(AppState s, ChatController c) {
+  final info = s.services.appInfo;
+  final raw = c.exportMessageLog(header: ['MeshSonar ${info.version ?? ''} ${info.platform ?? ''}'.trim()]);
+  return redactText(raw);
+}
+
+/// Settings > Storage & diagnostics > Message log: the newest lines, in the app's own time, with Copy (UTC, secrets
+/// hidden) and Clear.
+class MessageLogScreen extends StatefulWidget {
+  /// Tests inject a controller; the app reads [ChatWiring.controller].
+  final ChatController? controller;
+  const MessageLogScreen({super.key, this.controller});
+  @override
+  State<MessageLogScreen> createState() => _MessageLogScreenState();
+}
+
+class _MessageLogScreenState extends State<MessageLogScreen> {
+  ChatController? get _c => widget.controller ?? ChatWiring.controller.value;
+
+  Future<void> _copy(BuildContext context, AppState s, ChatController c) async {
+    final r = messageLogExport(s, c);
+    await Clipboard.setData(ClipboardData(text: r.text));
+    if (!context.mounted) return;
+    final what = redactionSummary(r.counts);
+    showAppToast(context, 'Message log copied${what == null ? '.' : ' ($what).'}', kind: AppToastKind.success);
+  }
+
+  void _clear(BuildContext context, ChatController c) {
+    runWithUndo(context, 'Clearing the message log.', commit: () async {
+      c.service.log.clear();
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final t = Theme.of(context);
+    final c = _c;
+    final lines = c == null ? const <MessageLogLine>[] : c.service.log.recent();
+    final shown = [for (final l in lines) '${MessageLog.lineTime(l.tsMs)}  ${redactText(l.text).text}'];
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(settingsEntry('message-log').title),
+        actions: [
+          IconButton(
+            key: const Key('message-log-copy'),
+            tooltip: 'Copy (secrets hidden, times in UTC)',
+            icon: const Icon(Icons.copy_rounded),
+            onPressed: c == null || lines.isEmpty ? null : () => _copy(context, s, c),
+          ),
+          IconButton(
+            key: const Key('message-log-clear'),
+            tooltip: 'Clear the message log',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: c == null || lines.isEmpty ? null : () => _clear(context, c),
+          ),
+        ],
+      ),
+      bottomNavigationBar: c == null || lines.isEmpty
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: FilledButton.icon(
+                  key: const Key('message-log-copy-button'),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: () => _copy(context, s, c),
+                  icon: const Icon(Icons.copy_rounded),
+                  label: const Text('Copy message log'),
+                ),
+              ),
+            ),
+      body: SafeArea(
+        child: lines.isEmpty
+            ? Center(
+                key: const Key('message-log-empty'),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                      c == null
+                          ? 'Connect your radio once: the message log is kept with your chats.'
+                          : 'Nothing logged yet. Send a direct message, then come back.',
+                      textAlign: TextAlign.center),
+                ),
+              )
+            : ListView.builder(
+                key: const Key('message-log-lines'),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                itemCount: shown.length + 1,
+                itemBuilder: (_, i) => i == 0
+                    ? Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                            '${shown.length} line${shown.length == 1 ? '' : 's'}, newest first. No message text; a copy hides secrets and gives times in UTC.',
+                            key: const Key('message-log-count'),
+                            style: t.textTheme.bodySmall),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: SelectableText(shown[shown.length - i], style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
                       ),
               ),
       ),

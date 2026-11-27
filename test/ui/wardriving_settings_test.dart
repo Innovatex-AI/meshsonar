@@ -42,8 +42,9 @@ void main() {
     for (final id in ['channel', 'send-pings', 'interval', 'min-distance', 'listen-window']) {
       final e = settingsEntries.where((e) => e.id == id).single;
       expect(e.section, 'wardriving', reason: id);
-      // Build 76: the listen window is one level down (Driving > Advanced); the other four are on the first level.
-      expect(e.page, id == 'listen-window' ? 'driving-advanced' : isNull, reason: id);
+      // Build 76: the listen window is one level down (Driving > Advanced); build 77: the channel too (set once), on
+      // Driving > Ping details; the other three are on the first level.
+      expect(e.page, id == 'listen-window' || id == 'channel' ? 'driving-advanced' : isNull, reason: id);
     }
     expect(settingsSections.firstWhere((s) => s.id == 'wardriving').title, 'Driving');
   });
@@ -60,13 +61,17 @@ void main() {
     // Build 76: the section is titled Driving; four controls on its first level, the listen window on Driving > Advanced.
     expect(find.byType(SettingsScreen), findsOneWidget);
     expect(find.byType(SettingsPageScreen), findsNothing, reason: 'the section itself, not a page');
-    for (final k in ['channel', 'send-pings', 'interval', 'min-distance']) {
+    for (final k in ['send-pings', 'interval', 'min-distance']) {
       expect(find.descendant(of: find.byKey(const Key('section-wardriving')), matching: find.byKey(Key(k))), findsOneWidget, reason: k);
     }
+    expect(find.byKey(const Key('channel')), findsNothing, reason: 'build 77: on Driving > Ping details');
     expect(find.byKey(const Key('listen-window')), findsNothing);
     await showSetting(tester, 'listen-window');
     expect(find.descendant(of: find.byKey(const Key('settings-page-driving-advanced')), matching: find.byKey(const Key('listen-window'))),
         findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('settings-page-driving-advanced')), matching: find.byKey(const Key('channel'))),
+        findsOneWidget);
+    expect(find.text('Ping details'), findsWidgets, reason: 'the page was "Advanced" until build 77');
     await slide(tester, 'listen-window-slider', listenStops.indexOf(12));
     expect(h.settings.saved.listenWindowSec, 12, reason: 'saved to disk');
     expect(h.state.settings.listenWindowSec, 12);

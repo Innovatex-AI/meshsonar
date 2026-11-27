@@ -14,6 +14,7 @@ import '../../radio/airtime.dart';
 import '../../radio/wardrive_engine.dart' show formatPingText, pingTagLength;
 import '../app.dart';
 import 'ping_feedback_rows.dart';
+import 'settings_index.dart';
 import 'settings_kit.dart';
 
 const String wardrivingHelp = 'An auto-ping goes out when the time has passed and you have moved the distance.';
@@ -83,7 +84,8 @@ String pingPreviewText() => formatPingText('k3x9m2q7ab'.substring(0, pingTagLeng
 /// "214 ms" / "1.2 s".
 String airtimeLabel(double ms) => ms < 1000 ? '${ms.round()} ms' : '${(ms / 1000).toStringAsFixed(1)} s';
 
-/// Driving, first level: send or listen-only, the channel, how often and how far apart.
+/// Driving, first level: send or listen-only, how often and how far apart, ping feedback. (The channel, set once, is on
+/// Ping details since build 77.)
 List<Widget> wardrivingSectionRows(BuildContext context) {
   final s = AppScope.of(context);
   final st = s.settings;
@@ -105,6 +107,25 @@ List<Widget> wardrivingSectionRows(BuildContext context) {
         onChanged: s.driving ? null : (v) => s.updateSettings(st.copyWith(discoveryMode: !v)),
       ),
     ),
+    SettingsAnchor(id: 'interval', child: tiles[0]),
+    SettingsAnchor(id: 'min-distance', child: tiles[1]),
+    pingFeedbackRows(context),
+  ];
+}
+
+/// Driving > Ping details (it was "Advanced" until build 77): the wardrive channel, the listen window, Keep repeaters lit
+/// (it was Map & display > Heard list hold), and the read-only facts (what goes on the air, airtime, this drive's counters).
+List<Widget> drivingAdvancedRows(BuildContext context) {
+  final s = AppScope.of(context);
+  final st = s.settings;
+  final sending = !st.discoveryMode;
+  final info = s.selfInfo;
+  final airMs = info == null
+      ? null
+      : wardrivePingAirtimeMs(radioName: info.name, sf: info.radio.sf, bwKhz: info.radio.bwKhz, cr: info.radio.cr);
+  final shareOfTime = airMs == null || st.intervalSec <= 0 ? null : 100 * airMs / (st.intervalSec * 1000);
+  final shown = info?.name.isNotEmpty == true ? info!.name : 'Your radio';
+  return [
     SettingsAnchor(
       id: 'channel',
       child: ListTile(
@@ -133,25 +154,24 @@ List<Widget> wardrivingSectionRows(BuildContext context) {
               },
       ),
     ),
-    SettingsAnchor(id: 'interval', child: tiles[0]),
-    SettingsAnchor(id: 'min-distance', child: tiles[1]),
-    pingFeedbackRows(context),
-  ];
-}
-
-/// Driving > Advanced: the listen window and the read-only facts (what goes on the air, airtime, this drive's counters).
-List<Widget> drivingAdvancedRows(BuildContext context) {
-  final s = AppScope.of(context);
-  final st = s.settings;
-  final sending = !st.discoveryMode;
-  final info = s.selfInfo;
-  final airMs = info == null
-      ? null
-      : wardrivePingAirtimeMs(radioName: info.name, sf: info.radio.sf, bwKhz: info.radio.bwKhz, cr: info.radio.cr);
-  final shareOfTime = airMs == null || st.intervalSec <= 0 ? null : 100 * airMs / (st.intervalSec * 1000);
-  final shown = info?.name.isNotEmpty == true ? info!.name : 'Your radio';
-  return [
     SettingsAnchor(id: 'listen-window', child: pingCadenceTiles(context)[2]),
+    SettingsAnchor(
+      id: 'heard-hold',
+      child: SliderTile(
+        key: const Key('heard-hold'),
+        sliderKey: const Key('heard-hold-slider'),
+        icon: Icons.cell_tower,
+        title: settingsEntry('heard-hold').title,
+        stops: holdStops,
+        value: st.heardHoldPings,
+        label: (v) => '$v ping${v == 1 ? '' : 's'}',
+        caption: 'A repeater stays bright in the heard list this long after it was last heard, then greys out.',
+        minLabel: '1',
+        maxLabel: '10',
+        onChanged: (v) => s.updateSettings(s.settings.copyWith(heardHoldPings: v)),
+      ),
+    ),
+
     SettingsAnchor(
       id: 'ping-message',
       child: ListTile(

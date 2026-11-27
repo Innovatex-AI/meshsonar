@@ -67,9 +67,10 @@ void main() {
       expect(lastConnectedText(now.subtract(const Duration(seconds: 30)), now), 'Last connected just now');
       expect(lastConnectedText(now.subtract(const Duration(minutes: 12)), now), 'Last connected 12 min ago');
       expect(lastConnectedText(DateTime(2026, 11, 7, 9), now), 'Last connected 6 h ago');
-      expect(lastConnectedText(DateTime(2026, 11, 6, 23), now), 'Last connected yesterday');
-      expect(lastConnectedText(DateTime(2026, 10, 28), now), 'Last connected 10 days ago');
-      expect(lastConnectedText(DateTime(2026, 3, 3), now), 'Last connected on 3 Mar 2026');
+      // Build 77: the app's one wording (lib/core/time_format.dart relativeTime), the date after 60 days.
+      expect(lastConnectedText(DateTime(2026, 11, 6, 23), now), 'Last connected 16 h ago');
+      expect(lastConnectedText(DateTime(2026, 10, 28), now), 'Last connected 10 d ago');
+      expect(lastConnectedText(DateTime(2026, 3, 3), now), 'Last connected on Mar 3, 2026');
       expect(lastConnectedText(null, now), 'Last connection time unknown');
     });
   });
@@ -177,40 +178,27 @@ void main() {
   });
 
   group('Settings > Radio', () {
-    testWidgets('Auto-connect: three choices, Always by default, the mid-drive footer; a choice is saved', (tester) async {
+    testWidgets('Auto-connect: one switch (build 77), On by default, the mid-drive footer; a change is saved', (tester) async {
       final r = install(tester, twoSaved());
       final h = Harness();
       useTallScreen(tester);
       await h.pumpApp(tester);
       await openSettingsTab(tester);
       await showSetting(tester, 'auto-connect');
-      expect(find.byKey(const Key('auto-connect-always')), findsOneWidget);
-      expect(find.byKey(const Key('auto-connect-launch')), findsOneWidget);
-      expect(find.byKey(const Key('auto-connect-off')), findsOneWidget);
-      // Build 76: one row, the three choices side by side; the line under them says what the picked one does and
-      // always ends with the mid-drive sentence.
-      Set<AutoConnectMode> picked() =>
-          tester.widget<SegmentedButton<AutoConnectMode>>(find.byKey(const Key('auto-connect-selector'))).selected;
+      SwitchListTile tile() => tester.widget<SwitchListTile>(find.byKey(const Key('auto-connect')));
       String footer() => tester.widget<Text>(find.byKey(const Key('auto-connect-footer'))).data!;
       const midDrive = 'While driving, a dropped radio is always reconnected.';
-      expect(find.descendant(of: find.byKey(const Key('auto-connect')), matching: find.byKey(const Key('auto-connect-selector'))), findsOneWidget);
-      expect(picked(), {AutoConnectMode.always});
-      expect(tester.widget<Text>(find.byKey(const Key('auto-connect-always'))).data, 'Always');
-      expect(tester.widget<Text>(find.byKey(const Key('auto-connect-launch'))).data, 'At launch');
-      expect(tester.widget<Text>(find.byKey(const Key('auto-connect-off'))).data, 'Off');
+      expect(find.byType(SegmentedButton<AutoConnectMode>), findsNothing, reason: 'Always / At launch / Off is gone');
+      expect(tile().value, isTrue);
       expect(footer(), '${AutoConnectMode.always.summary} $midDrive');
-      await tester.ensureVisible(find.byKey(const Key('auto-connect-off')));
-      await tester.tap(find.byKey(const Key('auto-connect-off')));
+      await tester.tap(find.byKey(const Key('auto-connect')));
       await tester.pumpAndSettle();
       expect(r.prefs.autoConnect, AutoConnectMode.off);
-      expect(picked(), {AutoConnectMode.off});
-      expect(footer(), '${AutoConnectMode.off.summary} $midDrive', reason: 'the mid-drive sentence stays for every choice');
-      await tester.ensureVisible(find.byKey(const Key('auto-connect-launch')));
-      await tester.tap(find.byKey(const Key('auto-connect-launch')));
+      expect(tile().value, isFalse);
+      expect(footer(), '${AutoConnectMode.off.summary} $midDrive', reason: 'the mid-drive sentence stays either way');
+      await tester.tap(find.byKey(const Key('auto-connect')));
       await tester.pumpAndSettle();
-      expect(r.prefs.autoConnect, AutoConnectMode.launchOnly);
-      expect(picked(), {AutoConnectMode.launchOnly});
-      expect(footer(), '${AutoConnectMode.launchOnly.summary} $midDrive');
+      expect(r.prefs.autoConnect, AutoConnectMode.always);
     });
 
     testWidgets('Saved radios row: counts, names the auto-connect radio, opens the same list (tap connects there)', (tester) async {
@@ -312,13 +300,11 @@ void main() {
       expect(find.text('CLAIMED RADIOS'), findsNothing, reason: 'no section header any more');
       expect(find.descendant(of: find.byKey(const Key('section-driver')), matching: find.byKey(const Key('page-claims'))), findsOneWidget);
       expect(find.descendant(of: find.byKey(const Key('page-claims')), matching: find.text('Claimed radios')), findsOneWidget);
-      await showSetting(tester, 'my-radios');
+      await openSettingsPageRow(tester, 'claims');
       expect(find.byKey(const Key('settings-page-claims')), findsOneWidget);
       expect(find.descendant(of: find.byType(AppBar), matching: find.text('Claimed radios')), findsOneWidget, reason: 'page title');
-      expect(find.descendant(of: find.byKey(const Key('my-radios')), matching: find.text('Claimed radios')), findsOneWidget);
-      for (final k in ['claim-my-radio', 'claim-repeater']) {
-        expect(find.descendant(of: find.byKey(const Key('settings-page-claims')), matching: find.byKey(Key(k))), findsOneWidget, reason: k);
-      }
+      // No driver key on this phone: build 77 shows one note and one button in place of three rows that each said so.
+      expect(find.descendant(of: find.byKey(const Key('settings-page-claims')), matching: find.byKey(const Key('claims-need-key'))), findsOneWidget);
       expect(find.text('My radios'), findsNothing);
       expect(find.text('MY RADIOS'), findsNothing);
       final nav = tester.state<NavigatorState>(find.byType(Navigator).first);

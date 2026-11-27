@@ -1,4 +1,4 @@
-// Settings > Radio: the link to the Radio tab's read-only details, Auto-connect (Always / At launch only / Off), the saved
+// Settings > Radio: the link to My radio's settings (read-only details), Auto-connect (one switch, build 77), the saved
 // radios list, and each radio's antenna setup. Nothing here writes RF settings to a radio. The pinging controls (channel, discovery, interval, distance, listen window) are Wardriving.
 import 'package:flutter/material.dart';
 
@@ -24,38 +24,46 @@ List<Widget> radioSectionRows(BuildContext context) {
   return [
     SettingsAnchor(
       id: 'radio-tab',
-      child: ListTile(
-        key: const Key('radio-tab-link'),
-        leading: const Icon(Icons.settings_input_antenna),
-        title: Text(settingsEntry('radio-tab').title),
-        subtitle: Text(s.connected
-            ? 'What your radio reports, next to the region\'s preset.'
-            : 'No radio connected. Tap to connect one.'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioScreen())),
+      // Server (advanced) > Radio preset (until build 77) showed the same comparison: its id lands here.
+      child: SettingsAnchor(
+        id: 'site-radio-preset',
+        child: ListTile(
+          key: const Key('radio-tab-link'),
+          leading: const Icon(Icons.settings_input_antenna),
+          title: Text(settingsEntry('radio-tab').title),
+          subtitle: Text(
+            s.connected ? 'What your radio reports, next to the region\'s preset.' : 'No radio connected. Tap to connect one.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioScreen())),
+        ),
       ),
     ),
     const SettingsAnchor(id: 'auto-connect', child: AutoConnectTile()),
     const SettingsAnchor(id: 'saved-radios', child: SavedRadiosRow()),
     SettingsAnchor(
       id: 'antenna',
-      child: Column(key: const Key('antenna-group'), children: [
-        if (st.antennaProfiles.isEmpty)
-          ListTile(
-            key: const Key('antenna-none'),
-            leading: const Icon(Icons.info_outline),
-            title: const Text('Antenna: no radio set up yet'),
-            subtitle: const Text('Connect a radio and MeshSonar asks about its antenna.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioScreen())),
-          ),
-        for (final e in st.antennaProfiles.entries) AntennaProfileTile(radioKey: e.key, profile: e.value),
-      ]),
+      child: Column(
+        key: const Key('antenna-group'),
+        children: [
+          if (st.antennaProfiles.isEmpty)
+            ListTile(
+              key: const Key('antenna-none'),
+              leading: const Icon(Icons.info_outline),
+              title: const Text('Antenna: no radio set up yet'),
+              subtitle: const Text('Connect a radio and MeshSonar asks about its antenna.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RadioScreen())),
+            ),
+          for (final e in st.antennaProfiles.entries) AntennaProfileTile(radioKey: e.key, profile: e.value),
+        ],
+      ),
     ),
   ];
 }
 
-/// Settings > Radio > Auto-connect: Always (default), At launch only, Off, with the mid-drive footer.
+/// Settings > Radio > Auto-connect: one switch (build 77, redesign round 5 decision 5; it was Always / At launch / Off), with
+/// the mid-drive footer.
 class AutoConnectTile extends StatelessWidget {
   const AutoConnectTile({super.key});
 
@@ -76,30 +84,13 @@ class AutoConnectTile extends StatelessWidget {
           listenable: rt.prefs,
           builder: (context, _) {
             final cur = rt.prefs.autoConnect;
-            // One row: the three choices side by side, and what the picked one does under them.
-            return ListTile(
+            return SwitchListTile(
               key: const Key('auto-connect'),
-              leading: const Icon(Icons.bluetooth_searching),
+              secondary: const Icon(Icons.bluetooth_searching),
               title: Text(settingsEntry('auto-connect').title),
-              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 6, bottom: 6),
-                  child: SegmentedButton<AutoConnectMode>(
-                    key: const Key('auto-connect-selector'),
-                    showSelectedIcon: false,
-                    segments: [
-                      for (final m in AutoConnectMode.values)
-                        ButtonSegment(
-                          value: m,
-                          label: segmentLabel(m == AutoConnectMode.launchOnly ? 'At launch' : m.label, key: Key('auto-connect-${m.id}')),
-                        ),
-                    ],
-                    selected: {cur},
-                    onSelectionChanged: (v) => rt.setAutoConnect(v.first),
-                  ),
-                ),
-                Text('${cur.summary} $autoConnectFooter', key: const Key('auto-connect-footer')),
-              ]),
+              subtitle: Text('${cur.summary} $autoConnectFooter', key: const Key('auto-connect-footer')),
+              value: cur == AutoConnectMode.always,
+              onChanged: (v) => rt.setAutoConnect(v ? AutoConnectMode.always : AutoConnectMode.off),
             );
           },
         );
@@ -133,9 +124,11 @@ class SavedRadiosRow extends StatelessWidget {
           key: const Key('saved-radios'),
           leading: const Icon(Icons.bluetooth),
           title: Text(e.title),
-          subtitle: Text(n == 0
-              ? 'None yet. Every radio you connect to is saved here.'
-              : '$n ${n == 1 ? 'radio' : 'radios'}${star != null ? ' · auto-connect: ${star.displayName}' : ''}'),
+          subtitle: Text(
+            n == 0
+                ? 'None yet. Every radio you connect to is saved here.'
+                : '$n ${n == 1 ? 'radio' : 'radios'}${star != null ? ' · auto-connect: ${star.displayName}' : ''}',
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => openSavedRadios(context),
         );
@@ -155,7 +148,8 @@ class AntennaProfileTile extends StatelessWidget {
     final ok = await showAppAlert(
       context,
       title: 'Forget the antenna of $name?',
-      message: 'Its drives keep what they recorded. The next time this radio connects, MeshSonar asks '
+      message:
+          'Its drives keep what they recorded. The next time this radio connects, MeshSonar asks '
           'about its antenna again.',
       confirmLabel: 'Forget',
       destructive: true,
@@ -187,4 +181,3 @@ class AntennaProfileTile extends StatelessWidget {
     );
   }
 }
-
