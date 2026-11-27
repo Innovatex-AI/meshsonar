@@ -9,8 +9,12 @@
 //  * showText = false: a lock screen is a public place. A notification then reads "Alex: New message" (who and where
 //    help triage; the words stay private). Turn it on to see the text. We choose the safe side and say so in Settings.
 //  * quiet hours off. When on, alerts still arrive and count, silently.
-//  * autoConnect = always: the behaviour before the setting existed (reconnect at launch and on coming back to the front).
-//    Mid-drive reconnect is not governed by it and always runs.
+//  * autoConnect = on (always): the behaviour before the setting existed (reconnect at launch and on coming back to the
+//    front). Mid-drive reconnect is not governed by it and always runs. Build 77 (redesign round 5, decision 5): one
+//    on/off switch; a file saved with the old "At launch only" reads as On.
+//  * Build 77 (round 5, decision 6): on iPhone the alert sound and quiet hours belong to the phone (Settings >
+//    Notifications > MeshSonar > Sounds, and Focus), so [systemSoundAndQuiet] is true there: [sound] reads true and
+//    [quiet] reads off, whatever an older build saved. The saved values are kept, so Android keeps its own switches.
 import 'dart:convert';
 import 'dart:io';
 
@@ -41,13 +45,11 @@ class QuietHours {
   }
 }
 
-/// Settings > Radio > Auto-connect: when the app connects to the starred saved radio by itself.
+/// Settings > Radio > Auto-connect: whether the app connects to the starred saved radio by itself. One switch (build 77);
+/// the "At launch only" choice of build 76 reads as [always].
 enum AutoConnectMode {
   /// At launch and every time the app comes back to the front with the link gone (default).
-  always('always', 'Always', 'At launch and whenever you come back to the app.'),
-
-  /// Only right after the app starts.
-  launchOnly('launch', 'At launch only', 'Only when the app starts. Coming back to the app does not reconnect.'),
+  always('always', 'On', 'At launch and whenever you come back to the app.'),
 
   /// Never by itself: tap a radio to connect.
   off('off', 'Off', 'Never by itself. Tap a radio to connect.');
@@ -60,7 +62,8 @@ enum AutoConnectMode {
   bool get atLaunch => this != off;
   bool get onForeground => this == always;
 
-  static AutoConnectMode fromId(Object? id) => values.firstWhere((m) => m.id == id, orElse: () => always);
+  /// Anything but 'off' is On: 'always', build 76's 'launch', a missing or damaged value.
+  static AutoConnectMode fromId(Object? id) => id == off.id ? off : always;
 }
 
 class AlertPrefs extends ChangeNotifier {
@@ -75,16 +78,22 @@ class AlertPrefs extends ChangeNotifier {
   AutoConnectMode _autoConnect = AutoConnectMode.always;
   QuietHours _quiet = const QuietHours();
 
-  AlertPrefs([this._file]);
+  /// True where the phone itself decides the alert sound and quiet hours (iPhone: per-app Sounds and Focus). Then Settings
+  /// shows no Sound or Quiet hours rows, [sound] is true and [quiet] is off. Tests pass it; the app passes
+  /// `defaultTargetPlatform == TargetPlatform.iOS`.
+  final bool systemSoundAndQuiet;
+
+  AlertPrefs([this._file, bool? systemSoundAndQuiet])
+      : systemSoundAndQuiet = systemSoundAndQuiet ?? (defaultTargetPlatform == TargetPlatform.iOS);
 
   /// Global switch. Off = nothing is shown, in the app or outside. Messages are still stored and counted.
   bool get enabled => _enabled;
-  bool get sound => _sound;
+  bool get sound => systemSoundAndQuiet || _sound;
   bool get vibrate => _vibrate;
 
   /// Message text in notifications. Default false (see the file header).
   bool get showText => _showText;
-  QuietHours get quiet => _quiet;
+  QuietHours get quiet => systemSoundAndQuiet ? const QuietHours() : _quiet;
 
   /// We showed the system prompt once. On iOS this is the only way to tell "denied" from "never asked".
   bool get asked => _asked;

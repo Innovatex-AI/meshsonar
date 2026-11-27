@@ -13,6 +13,7 @@ import 'settings/display_section.dart' show UnitsTile;
 import 'settings/settings_index.dart';
 import 'settings/settings_kit.dart';
 import 'settings/settings_pages.dart';
+import 'shell/more_help_screen.dart';
 
 export 'settings/account_section.dart'
     show DriverKeyScreen, KeyStatusBadge, keyStatusLabel, keyStatusHelp, confirmServerChange;
@@ -26,7 +27,7 @@ const double settingsTwoPaneWidth = 840;
 
 class SettingsScreen extends StatefulWidget {
   /// Opens on this place: a section id from settings_index.dart ('privacy' from More > Privacy), a pre-76 section id
-  /// (they still work: 'observer' opens Sharing & privacy > Observer and MQTT feeds), a page id or a row id.
+  /// (they still work: 'observer' opens Sharing & privacy > Sharing status and other sites), a page id or a row id.
   final String? initialSection;
   const SettingsScreen({super.key, this.initialSection});
   @override
@@ -98,12 +99,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// A row on the first level is scrolled to and tinted; a row on a page opens that page with the row tinted (the
   /// list behind is left at the row that opens the page, so Back makes sense).
   void _openEntry(SettingsEntry e) {
+    if (e.elsewhere != null) {
+      _openElsewhere(e);
+      return;
+    }
     if (e.page == null) {
       _jumpTo(e.id, e.section, '${e.title}, in ${e.where}');
       return;
     }
     _jumpTo(settingsPageRowAnchor(e.page!), e.section, '${e.title}, in ${e.where}', tint: false);
     openSettingsPage(context, e.page!, highlight: e.id);
+  }
+
+  /// A row that moved out of Settings (build 77): its search result opens the place it lives now. Only "Show the intro
+  /// again" (More > Help) today.
+  void _openElsewhere(SettingsEntry e) {
+    setState(() {
+      _search.clear();
+      _query = '';
+    });
+    FocusManager.instance.primaryFocus?.unfocus();
+    final shell = ShellScope.maybeRead(context);
+    if (shell != null) {
+      shell.openMore(MoreItem.help);
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => MoreHelpScreen(onOpen: (_) {})));
   }
 
   /// App bar Search: back to the top and into the field, from anywhere in the list.

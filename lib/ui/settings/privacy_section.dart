@@ -154,7 +154,7 @@ String sharingItemsCaption(AppState s) {
 /// The "What is shared" page: one switch per kind of drive data, then the full list of everything that leaves the phone.
 List<Widget> sharingPageRows(BuildContext context) => [
       for (final c in dataCategories)
-        if (!identical(c, telemetryCategory)) SettingsAnchor(id: c.toggleKey, child: DataCategoryTile(category: c)),
+        if (!identical(c, telemetryCategory)) SettingsAnchor(id: c.toggleKey, child: DataCategoryTile(category: c, destinationSaidAbove: true)),
       SettingsAnchor(
         id: 'privacy-what-shared',
         child: _linkRow(context, 'privacy-what-shared', Icons.fact_check_outlined,
@@ -232,14 +232,23 @@ class TelemetryLocationTile extends StatelessWidget {
 /// One collection switch: title, what it shares, and what is waiting on the phone.
 class DataCategoryTile extends StatelessWidget {
   final DataCategory category;
-  const DataCategoryTile({super.key, required this.category});
+
+  /// The page says once at the top where drive data goes (contextDestinationLine), so the row leaves that line out and
+  /// keeps to one line of its own (build 77, round 5 S8: every row repeated the same long sentence).
+  final bool destinationSaidAbove;
+  const DataCategoryTile({super.key, required this.category, this.destinationSaidAbove = false});
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final c = category;
     final on = c.isOn(s.settings);
-    final status = !on ? 'Off: nothing is collected.' : c.onStatus?.call(s);
+    var status = !on ? 'Off: nothing is collected.' : c.onStatus?.call(s);
+    if (status != null && destinationSaidAbove) {
+      final where = contextDestinationLine(s);
+      final rest = status.split('\n').where((l) => l != where && l.isNotEmpty).join('\n');
+      status = rest.isEmpty ? null : rest;
+    }
     return SwitchListTile(
       key: Key(c.toggleKey),
       secondary: Icon(categoryIcon(c.coreId)),

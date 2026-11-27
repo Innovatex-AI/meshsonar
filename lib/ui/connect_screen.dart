@@ -1,6 +1,9 @@
 // Pick a radio: scan Bluetooth for MeshCore companions (and, in debug builds only, the Simulator).
 // Sections: current radio, saved radios (tap to connect without a scan, swipe to forget, hold for nickname / auto-connect
 // star: saved_radios_screen.dart), nearby radios (signal bars, a spinner on the one being connected), the Simulator, a tip.
+// Build 77 (round 5 R2, R3): Bluetooth off says where to turn it on (Control Centre; the app's own settings page cannot)
+// and the scan starts again by itself when the person comes back to the app; one Scan again; a failed connect also
+// names the wrong-PIN / old-pairing fix.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
@@ -22,12 +25,22 @@ class ConnectScreen extends StatefulWidget {
   State<ConnectScreen> createState() => _ConnectScreenState();
 }
 
-class _ConnectScreenState extends State<ConnectScreen> {
+/// Under a failed connect: the usual cause first, then the fix for a wrong PIN or an old pairing.
+const String connectFailedTip = 'Close the MeshCore app (only one app can use the radio at a time), then tap the radio again.';
+const String connectPairingTip =
+    'Wrong PIN or paired before? iPhone Settings > Bluetooth > (i) > Forget This Device, then try again.';
+const String connectPairingTipAndroid =
+    'Wrong PIN or paired before? Android Settings > Connected devices > the radio > Forget, then try again.';
+
+class _ConnectScreenState extends State<ConnectScreen> with WidgetsBindingObserver {
   List<RadioDevice> _found = const [];
   bool _scanning = false;
   bool _scannedOnce = false;
   String? _scanError;
   bool _permissionProblem = false;
+
+  /// The scan failed because Bluetooth is off (not a permission problem).
+  bool _bluetoothOff = false;
   String? _connectingId;
 
   /// Some platforms never close the scan stream (no adapter, plugin quirks). Stop showing "Scanning" after this.
@@ -57,6 +70,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _saved = AlertsHost.runtime.value?.savedRadios?..addListener(_savedChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !AppScope.read(context).connected) _scan();
@@ -111,17 +125,32 @@ class _ConnectScreenState extends State<ConnectScreen> {
   String _scanMessage(Object e) {
     final l = e.toString().toLowerCase();
     _permissionProblem = l.contains('permission');
+    _bluetoothOff = false;
     if (l.contains('permission')) {
       return 'MeshSonar is not allowed to use Bluetooth. Allow it in Settings to find your radio.';
     }
     if (l.contains('off') || l.contains('unavailable') || l.contains('not supported') || l.contains('adapter')) {
-      return 'Bluetooth is off. Turn it on, then scan again.';
+      _bluetoothOff = true;
+      return defaultTargetPlatform == TargetPlatform.android
+          ? 'Bluetooth is off. Turn it on in Quick Settings, then come back: the scan starts again by itself.'
+          : 'Bluetooth is off. Turn it on in Control Centre, then come back: the scan starts again by itself.';
     }
     return 'Bluetooth scan didn\'t work. Turn Bluetooth on and try again.';
   }
 
+  /// Back from Control Centre or the phone's Settings: a scan that failed runs again by itself.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (_scanError == null || _scanning || _connectingId != null) return;
+    final s = AppScope.read(context);
+    if (s.connecting || s.connected) return;
+    _scan();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _saved?.removeListener(_savedChanged);
     _scanGuard?.cancel();
     _sub?.cancel();
@@ -177,7 +206,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
               Padding(
                 key: const Key('connect-error-tip'),
                 padding: const EdgeInsets.fromLTRB(Gap.xs, Gap.xs, Gap.xs, 0),
-                child: Text('Close the MeshCore app (only one app can use the radio at a time), then tap the radio again.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                child: Text(connectFailedTip, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+              ),
+              Padding(
+                key: const Key('connect-error-pairing'),
+                padding: const EdgeInsets.fromLTRB(Gap.xs, Gap.xs, Gap.xs, 0),
+                child: Text(defaultTargetPlatform == TargetPlatform.android ? connectPairingTipAndroid : connectPairingTip,
+                    style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
               ),
             ],
             if (saved != null && !saved.isEmpty)
@@ -226,8 +261,9 @@ class _ConnectScreenState extends State<ConnectScreen> {
             ),
             if (_scanError != null) ...[
               ErrorBanner(_scanError!),
-              // Build 76: the button shows for every Bluetooth problem (it used to show for a permission problem only, so
-              // "Bluetooth looks off" was a dead end), and the path is this phone's, not both platforms'.
+              // Build 77 (round 5 R2): "Open Settings" only where the app's own settings page can fix it (a permission, or
+              // a scan that failed for another reason). Bluetooth off is fixed in Control Centre, which the words say, and
+              // the scan restarts on coming back. Scan again is the one button in the Nearby radios header.
               if (_permissionProblem)
                 Padding(
                   padding: const EdgeInsets.only(top: Gap.xs, left: Gap.xs),
@@ -236,25 +272,17 @@ class _ConnectScreenState extends State<ConnectScreen> {
                     style: t.textTheme.bodySmall,
                   ),
                 ),
-              Wrap(
-                spacing: Gap.s,
-                runSpacing: Gap.xs,
-                children: [
-                  FilledButton.tonalIcon(
+              if (!_bluetoothOff)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.tonalIcon(
                     key: const Key('open-app-settings'),
                     style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
                     onPressed: () => unawaited(openAppSettingsPage()),
                     icon: const Icon(Icons.settings_outlined),
                     label: const Text('Open Settings'),
                   ),
-                  TextButton(
-                    key: const Key('scan-retry'),
-                    style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-                    onPressed: busy ? null : _scan,
-                    child: const Text('Scan again'),
-                  ),
-                ],
-              ),
+                ),
             ],
             if (_found.isEmpty && !_scanning && _scannedOnce && _scanError == null)
               _InfoCard(

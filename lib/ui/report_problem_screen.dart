@@ -9,6 +9,7 @@ import 'account/reports_history_screen.dart';
 import '../app/app_state.dart';
 import '../core/api.dart';
 import '../core/report_body.dart';
+import '../core/time_format.dart' as tf;
 import 'app.dart';
 import 'design/app_surfaces.dart';
 import 'pick_field.dart';
@@ -332,7 +333,7 @@ class _DrivePicker extends StatelessWidget {
     final drives = s.sessions.take(_recent).map((x) => x.session).toList();
     String label(String id, DateTime startedAt, String? recorded) {
       final name = driveLabel(s, id, recorded);
-      return name == null ? formatDateTime(startedAt) : '$name, ${formatDateTime(startedAt)}';
+      return name == null ? tf.dateTime(startedAt, weekday: true) : '$name, ${tf.dateTime(startedAt, weekday: true)}';
     }
 
     return PickField<String?>(

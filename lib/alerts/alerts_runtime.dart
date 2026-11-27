@@ -178,6 +178,8 @@ class AlertsRuntime with WidgetsBindingObserver {
     if (c == _wasConnected) return;
     _wasConnected = c;
     if (!c) log.add('link', 'app sees the radio gone');
+    // Connected by any path (build 77, round 5 R1): the strip's "Could not reach" goes away.
+    if (c) reconnect?.radioConnected();
   }
 
   void _onConnected(RadioDevice device, RadioKind kind, SelfInfo info) {

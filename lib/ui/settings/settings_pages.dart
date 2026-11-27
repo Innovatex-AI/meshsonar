@@ -14,10 +14,12 @@ import 'display_section.dart';
 import 'drives_section.dart';
 import 'maps_section.dart';
 import 'meshtrack_section.dart';
+import 'messages_section.dart';
 import 'my_radios_section.dart';
 import 'notifications_section.dart';
 import 'observer_section.dart';
 import 'privacy_profile_rows.dart';
+import 'data_sharing.dart' show contextDestinationLine;
 import 'privacy_section.dart';
 import 'radio_section.dart';
 import 'region_section.dart';
@@ -48,7 +50,12 @@ List<Widget> settingsSectionRows(BuildContext context, String id) {
     'display' => [
         const SettingsAnchor(id: 'region-pick', child: RegionPickTile()),
         ...mapsSectionRows(context),
-        ...displaySectionRows(context),
+        // Build 77: "Keep repeaters lit" (was Heard list hold) is on Driving > Ping details; display_section.dart still
+        // builds it (lead to delete it there), so it is left out here.
+        for (final w in displaySectionRows(context))
+          if (!(w is SettingsAnchor && w.id == 'heard-hold'))
+            // More > Chat's "Vibrate on taps" was this switch: its old id lands here.
+            w is SettingsAnchor && w.id == 'ui-haptics' ? SettingsAnchor(id: 'chat-haptics', child: w) : w,
       ],
     'privacy' => [
         // One switch: it has the anchor of the pre-76 Privacy switch and of the pre-76 Observer switch.
@@ -96,6 +103,7 @@ List<Widget> settingsPageRows(BuildContext context, String id) {
     'meshtrack' => meshTrackSectionRows(context),
     'storage-items' => storageSectionRows(context),
     'diagnostics-advanced' => diagnosticsAdvancedRows(context),
+    'delivery' => const [DeliveryRows()],
     _ => [ListTile(title: Text('Nothing here: ${s.settings.serverUrl}'))],
   };
 }
@@ -107,6 +115,7 @@ String? settingsPageHelp(String id) => switch (id) {
       'battery' => batteryHelp,
       'observer' => observerHelp,
       'sharing' => 'Each kind of drive data is saved with your drive. Off stops it at once.',
+      'delivery' => deliveryHelp,
       'meshtrack' => meshTrackHelp,
       'storage-items' => storageHelp,
       'diagnostics-advanced' => diagnosticsHelp,
@@ -195,7 +204,8 @@ class _SettingsPageScreenState extends State<SettingsPageScreen> {
     final t = Theme.of(context);
     final c = t.colorScheme;
     final p = settingsPage(widget.pageId);
-    final help = settingsPageHelp(p.id);
+    // What is shared: where the data goes is said once at the top, not under every switch (build 77, round 5 S8).
+    final help = p.id == 'sharing' ? '${settingsPageHelp(p.id)} ${contextDestinationLine(AppScope.of(context))}' : settingsPageHelp(p.id);
     final rows = settingsPageRows(context, p.id);
     return Scaffold(
       appBar: AppBar(title: Text(p.title)),

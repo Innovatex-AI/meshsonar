@@ -25,7 +25,7 @@ Widget pingFeedbackRows(BuildContext context) {
         SwitchListTile(
           key: const Key('ping-sound'),
           secondary: const Icon(Icons.volume_up_outlined),
-          title: const Text('Sound when a ping finishes'),
+          title: const Text('Ping sound'),
           subtitle: const Text('A click when heard, another tone when not. Follows the ring/silent switch.'),
           value: st.pingSound,
           onChanged: (v) {

@@ -178,20 +178,23 @@ void main() {
     expect(rt.log.entries.map((e) => e.detail), contains('skip (launch): auto-connect Off'));
   });
 
-  testWidgets('Auto-connect At launch only: launch connects, a later return to the front does not', (tester) async {
-    final (rt, h, _, _, _) = await rig(tester, remembered: const SavedRadio(id: 'aa:bb', name: 'MeshCore-Truck'), mode: AutoConnectMode.launchOnly);
-    rt.startLaunchReconnect();
-    await tester.pump(const Duration(milliseconds: 1100));
-    await tester.pump();
+  testWidgets('build 77 (round 5 R1): after the reconnect gave up, connecting by hand clears "Could not reach"', (tester) async {
+    final (rt, h, _, _, _) = await rig(tester, remembered: const SavedRadio(id: 'zz:zz', name: 'Gone'));
+    rt.reconnect = LaunchReconnect(
+      store: rt.savedRadios,
+      connect: (_) async => false,
+      isConnected: () => h.state.connected,
+      mode: () => rt.prefs.autoConnect,
+      wait: (_) async {},
+      maxAttempts: 1,
+    );
+    await rt.reconnect!.run();
+    expect(rt.reconnect!.state, LaunchReconnectState.gaveUp);
+    await h.state.connect(truck, RadioKind.bluetooth);
     await tester.pump();
     expect(h.state.connected, isTrue);
-    h.links.last.drop();
-    await tester.pump();
-    final before = h.links.length;
-    rt.didChangeAppLifecycleState(AppLifecycleState.resumed);
-    await tester.pump(const Duration(milliseconds: 1100));
-    await tester.pump();
-    expect(h.links.length, before, reason: 'no foreground connect in At launch only');
+    expect(rt.reconnect!.state, LaunchReconnectState.idle);
+    expect(rt.reconnect!.statusText, isNull);
   });
 
   testWidgets('setAutoConnect saves the mode and Off clears a "Could not reach" line', (tester) async {

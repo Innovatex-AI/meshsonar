@@ -2,6 +2,7 @@
 // Background Bluetooth test screen. Uses a fake LocalNotifications; no OS is involved.
 import 'toast_test_kit.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/alerts/alert_coordinator.dart';
@@ -14,12 +15,14 @@ import 'package:meshsonar/alerts/radio_queue_watch.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
 import 'package:meshsonar/platform/local_notifications.dart';
+import 'package:meshsonar/app/app_state.dart' show RadioKind;
 import 'package:meshsonar/ui/alerts/alerts_status_strip.dart';
 import 'package:meshsonar/ui/alerts/in_app_banner.dart';
 import 'package:meshsonar/ui/alerts/permission_prompt.dart';
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/settings/ble_diagnostics_screen.dart';
 import 'package:meshsonar/ui/settings/notifications_section.dart';
+import 'package:meshsonar/ui/settings/settings_index.dart' show searchSettings;
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 
 import '../alerts/fakes.dart';
@@ -121,6 +124,8 @@ void main() {
     testWidgetsT('previews default to hidden and the text says why; the switch flips it', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
+      s.fake.state = NotificationPermission.granted;
+      await s.coordinator.refreshPermission();
       await openNotifications(tester, Harness());
       await showSetting(tester, 'notif-previews');
       expect(s.prefs.showText, isFalse);
@@ -131,9 +136,48 @@ void main() {
       expect(find.textContaining('also on a locked screen'), findsOneWidget);
     });
 
+    testWidgetsT('build 77: until notifications are allowed, sound, text and quiet hours are greyed with the reason', (tester) async {
+      useTallScreen(tester);
+      final s = await install(tester);
+      await openNotifications(tester, Harness());
+      expect(find.text('Not allowed yet'), findsOneWidget);
+      for (final k in ['notif-sound', 'notif-previews', 'notif-quiet']) {
+        await showSetting(tester, k);
+        final tile = tester.widget<SwitchListTile>(find.byKey(Key(k)));
+        expect(tile.onChanged, isNull, reason: '$k does nothing yet, so it does not look live');
+        expect(find.descendant(of: find.byKey(Key(k)), matching: find.text(allowNotificationsFirst)), findsOneWidget, reason: k);
+      }
+      expect(tester.widget<SwitchListTile>(find.byKey(const Key('notif-enabled'))).onChanged, isNotNull, reason: 'the master switch stays live');
+      s.fake.state = NotificationPermission.granted;
+      await s.coordinator.refreshPermission();
+      await tester.pumpAndSettle();
+      await showSetting(tester, 'notif-sound');
+      expect(tester.widget<SwitchListTile>(find.byKey(const Key('notif-sound'))).onChanged, isNotNull);
+      expect(find.text(allowNotificationsFirst), findsNothing);
+    });
+
+    testWidgetsT('build 77: on iPhone there is no Sound or Quiet hours row (the phone has them); search does not offer them', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      useTallScreen(tester);
+      final s = await install(tester);
+      s.fake.state = NotificationPermission.granted;
+      await s.coordinator.refreshPermission();
+      final h = Harness();
+      await openNotifications(tester, h);
+      expect(find.byKey(const Key('notif-sound')), findsNothing);
+      expect(find.byKey(const Key('notif-quiet')), findsNothing);
+      expect(find.byKey(const Key('notif-previews')), findsOneWidget);
+      expect(searchSettings('quiet hours', state: h.state).map((e) => e.id), isNot(contains('notif-quiet')));
+      expect(searchSettings('sound', state: h.state).map((e) => e.id), isNot(contains('notif-sound')));
+      debugDefaultTargetPlatformOverride = null;
+    });
+
     testWidgetsT('master switch and sound; quiet hours show their pickers when on', (tester) async {
       useTallScreen(tester);
       final s = await install(tester);
+      s.fake.state = NotificationPermission.granted;
+      await s.coordinator.refreshPermission();
       await openNotifications(tester, Harness());
       await showSetting(tester, 'notif-sound');
       await tester.tap(find.byKey(const Key('notif-sound')));
@@ -267,6 +311,9 @@ void main() {
       expect(notifyModeLabel(c(NotifyMode.muted), now), 'Muted until you turn it back on');
       expect(notifyModeLabel(c(NotifyMode.muted, until: now.add(const Duration(hours: 2)).millisecondsSinceEpoch), now), 'Muted until 2:00 PM');
       expect(notifyModeLabel(c(NotifyMode.muted, until: now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch), now), 'All messages');
+      expect(notifyModeLabel(c(NotifyMode.muted, until: DateTime(2026, 11, 2, 9).millisecondsSinceEpoch), now), 'Muted until tomorrow 9:00 AM');
+      // Build 77: the same day of another month is not today (build 76 compared the day of the month only).
+      expect(notifyModeLabel(c(NotifyMode.muted, until: DateTime(2026, 12, 1, 13).millisecondsSinceEpoch), now), 'Muted until Dec 1, 1:00 PM');
     });
   });
 
@@ -471,6 +518,32 @@ void main() {
       await tester.tap(find.byKey(const Key('queue-dismiss')));
       await tester.pump();
       expect(find.byKey(const Key('queue-strip')), findsNothing);
+    });
+
+    testWidgetsT('build 77 (round 5 R1): "Not connected" has Dismiss, and goes once a radio is connected by hand', (tester) async {
+      final s = await install(tester);
+      final lr = LaunchReconnect(store: s.store, connect: (d) async => false, isConnected: () => false, wait: (d) async {}, maxAttempts: 1);
+      s.runtime.reconnect = lr;
+      final h = Harness();
+      await h.state.init();
+      await tester.pumpWidget(AppScope(state: h.state, child: const MaterialApp(home: Scaffold(body: AlertsStatusStrip()))));
+      await tester.runAsync(() => lr.run());
+      await tester.pump();
+      expect(find.byKey(const Key('reconnect-strip')), findsOneWidget);
+      expect(find.byKey(const Key('reconnect-dismiss')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('reconnect-dismiss')));
+      await tester.pump();
+      expect(find.byKey(const Key('reconnect-strip')), findsNothing);
+      expect(lr.state, LaunchReconnectState.idle);
+
+      // Gave up again, then the person connects from the Connect screen (not through Reconnect): the line goes at once.
+      await tester.runAsync(() => lr.run());
+      await tester.pump();
+      expect(find.byKey(const Key('reconnect-strip')), findsOneWidget);
+      await tester.runAsync(() => h.state.connect(h.bt.devices.first, RadioKind.bluetooth));
+      await tester.pump();
+      expect(h.state.connected, isTrue);
+      expect(find.byKey(const Key('reconnect-strip')), findsNothing, reason: 'a connected radio is never "Not connected"');
     });
 
     testWidgetsT('the reconnecting wording while a try runs', (tester) async {

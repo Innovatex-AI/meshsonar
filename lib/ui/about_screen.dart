@@ -127,6 +127,16 @@ class AboutScreen extends StatelessWidget {
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
             ),
+            // Build 77 (round 5 S12): beside the privacy policy here and in Help (it was only in Settings > About).
+            ListTile(
+              key: const Key('about-terms'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Terms of service'),
+              subtitle: const Text('Opens in your browser'),
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => s.openWebPage('/terms'),
+            ),
             fold(
               id: 'about-licence',
               icon: Icons.gavel_outlined,

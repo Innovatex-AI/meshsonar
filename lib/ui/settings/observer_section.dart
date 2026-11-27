@@ -27,6 +27,7 @@ import '../../core/api.dart';
 import '../../core/mqtt_presets.dart';
 import '../../core/observer_engine.dart';
 import '../../core/observer_status.dart' show ObserverCallOutcome, observerCallText;
+import '../../core/time_format.dart' as tf;
 import '../app.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
@@ -157,12 +158,7 @@ class _ObserverStatusTileState extends State<ObserverStatusTile> {
     });
   }
 
-  String _ago(Duration d) {
-    if (d.inMinutes < 1) return 'just now';
-    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-    if (d.inHours < 48) return '${d.inHours} h ago';
-    return '${d.inDays} days ago';
-  }
+  String _ago(Duration d) => tf.relativeDuration(d);
 
   @override
   Widget build(BuildContext context) {
@@ -580,7 +576,7 @@ class _PresetPickerState extends State<_PresetPicker> {
     final offline = _refresh == MqttPresetRefresh.offline;
     final failed = _refresh == MqttPresetRefresh.failed;
     final asOf = c.list.asOf;
-    final date = asOf == null ? '' : ' (list of ${asOf.toIso8601String().substring(0, 10)})';
+    final date = asOf == null ? '' : ' (list of ${tf.dateOnly(asOf)})';
     return switch (c.origin) {
       MqttPresetOrigin.server => 'Up to date with the server$date.',
       MqttPresetOrigin.saved => offline

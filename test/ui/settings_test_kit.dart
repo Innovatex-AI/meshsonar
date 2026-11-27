@@ -45,6 +45,13 @@ String? settingsPageOfKey(String key) {
     ('ping-preview', 'driving-advanced'),
     ('wardrive-counters', 'driving-advanced'),
     ('listen-window', 'driving-advanced'),
+    // Build 77
+    ('heard-hold', 'driving-advanced'),
+    ('channel', 'driving-advanced'),
+    ('upload-when', 'uploads'),
+    ('upload-while-driving', 'uploads'),
+    ('delivery-', 'delivery'),
+    ('claims-', 'claims'),
   ]) {
     if (key.startsWith(prefix)) return page;
   }

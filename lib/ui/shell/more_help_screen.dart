@@ -1,5 +1,7 @@
-// More > Help (build 71): the help rows that used to sit one by one on the More list. How it works (with the tour),
-// Method, Colour legend, Report a problem, My reports, Privacy policy. Row keys keep their old `more-*` names.
+// More > Help (build 71): the help rows that used to sit one by one on the More list. How it works, Show the intro again,
+// Method, Map legend, Report a problem, My reports, Privacy policy, Terms of service. Row keys keep their old `more-*`
+// names. Build 77 (round 5 S7, S12): one name per thing ("Map legend" as in Settings, "Show the intro again" as in How it
+// works; the Settings tour row is gone) and the terms beside the privacy policy.
 import 'package:flutter/material.dart';
 
 import '../../core/server_url.dart' show privacyPolicyUrl;
@@ -37,7 +39,7 @@ class MoreHelpScreen extends StatelessWidget {
               )),
             ),
             MoreRow(MoreItem.method, Icons.menu_book_outlined, 'Method', 'How the numbers are worked out', onOpen: onOpen),
-            MoreRow(MoreItem.legend, Icons.palette_outlined, 'Colour legend', 'What the map colours mean', onOpen: onOpen),
+            MoreRow(MoreItem.legend, Icons.palette_outlined, 'Map legend', 'What the colours and symbols mean', onOpen: onOpen),
             const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
             ListTile(
               key: const Key('more-report'),
@@ -58,6 +60,15 @@ class MoreHelpScreen extends StatelessWidget {
               subtitle: const Text('Opens in your browser'),
               trailing: const Icon(Icons.open_in_new, size: 18),
               onTap: () => s.services.openUrl(Uri.parse(privacyPolicyUrl)),
+            ),
+            ListTile(
+              key: const Key('more-terms'),
+              minVerticalPadding: Gap.s,
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Terms of service'),
+              subtitle: const Text('Opens in your browser'),
+              trailing: const Icon(Icons.open_in_new, size: 18),
+              onTap: () => s.openWebPage('/terms'),
             ),
             const SizedBox(height: Gap.xl),
           ],
