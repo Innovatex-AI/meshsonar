@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/settings_store.dart';
+import 'package:meshsonar/core/time_format.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -42,6 +43,24 @@ void main() {
     await store.save(s);
     expect((await FileSettingsStore(f).load()).toJson(), s.toJson());
     expect(File('${f.path}.tmp').existsSync(), isFalse);
+  });
+
+  test('time zone: defaults to the phone, is left out of the file until changed, and round-trips', () async {
+    expect(const Settings().timeZone, TimeZonePreference.phone);
+    expect(const Settings().toJson().containsKey('time_zone'), isFalse);
+    // A settings file written by build 76 or earlier has no such field.
+    expect(Settings.fromJson({'interval_sec': 30}).timeZone, TimeZonePreference.phone);
+    expect(Settings.fromJson({'time_zone': 'somewhere'}).timeZone, TimeZonePreference.phone);
+    expect(Settings.fromJson({'time_zone': 7}).timeZone, TimeZonePreference.phone);
+
+    final f = File(p.join(tmp.path, 'settings.json'));
+    final s = const Settings().copyWith(timeZone: TimeZonePreference.utc);
+    expect(s.toJson()['time_zone'], 'utc');
+    expect(s.copyWith(intervalSec: 20).timeZone, TimeZonePreference.utc, reason: 'copyWith keeps it');
+    await FileSettingsStore(f).save(s);
+    expect((await FileSettingsStore(f).load()).timeZone, TimeZonePreference.utc);
+    await FileSettingsStore(f).save(s.copyWith(timeZone: TimeZonePreference.phone));
+    expect((await FileSettingsStore(f).load()).timeZone, TimeZonePreference.phone);
   });
 
   test('rapid saves are serialized; last one wins', () async {
