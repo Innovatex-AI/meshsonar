@@ -1,11 +1,16 @@
-// Shared bits of the Nodes screens (AZ-3.4): the favourite star, the Watch button and its sheet, the status dot, a
-// section card, key-value rows, and plain value formatting (distance through Units, volts, clock offsets).
+// Shared bits of the Nodes screens (AZ-3.4): the favourite star, the status dot, a section card, key-value rows, the
+// "Updated X ago · pull to refresh" line, and plain value formatting (distance through Units, volts, clock offsets).
+// The bell (Watch) was removed in build 77 (Round 2 N-U9): it saved a watch that never alerted. Watches already saved
+// stay on the phone (lib/core/v1/favourites_store.dart) and are simply not shown.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
+import '../../../core/time_format.dart';
 import '../../../core/v1/nodes_api.dart';
 import '../../app.dart';
-import '../../design/app_surfaces.dart' show showAppSheet, showAppToast;
+import '../../design/app_surfaces.dart' show showAppToast;
 import '../network_context.dart';
 
 /// The colour of a node or observer status.
@@ -14,17 +19,21 @@ Color nodeStatusColor(BuildContext context, String status) {
   final m = MeshSonarColors.of(context);
   return switch (status) {
     'active' || 'online' => m.snrStrong,
-    'degraded' || 'stale' => m.beacon,
+    // Amber is the warning colour: heard less often than usual, or a report that is late.
+    'degraded' || 'stale' => m.warning,
     'silent' || 'offline' => cs.error,
     _ => cs.outline,
   };
 }
 
-String observerStatusLabel(String s) => switch (s) {
+/// An observer's status in a word. [label] is the server's own wording, used when it sent one.
+String observerStatusLabel(String s, {String? label}) =>
+    label ??
+    switch (s) {
       'online' => 'Online',
       'stale' => 'Stale',
       'offline' => 'Offline',
-      _ => 'Unknown',
+      _ => 'Not known',
     };
 
 String observerKindLabel(String k) => switch (k) {
@@ -33,6 +42,16 @@ String observerKindLabel(String k) => switch (k) {
       'outside' => 'Outside feed',
       _ => 'Observer',
     };
+
+/// What an observer is, with what the server adds (Round 2 N-U4): a phone that moves or stays put, and a station
+/// MeshSonar itself runs. Each addition shows only when the server sent it.
+String observerKindWords(ObserverRow r) {
+  if (r.kind == 'phone') {
+    return switch (r.phoneKind) { 'mobile' => 'Phone observer, moving', 'fixed' => 'Phone observer, fixed', _ => 'Phone observer' };
+  }
+  if (r.kind == 'fixed' && r.operatedByMeshsonar == true) return 'MeshSonar observer, run by MeshSonar';
+  return observerKindLabel(r.kind);
+}
 
 class StatusDot extends StatelessWidget {
   final String status;
@@ -108,8 +127,11 @@ class NodeSection extends StatelessWidget {
   /// What the closed row says under its title (the headline figure, or what the section is in plain words).
   final String? summary;
   final Key? summaryKey;
+
+  /// Opens a [collapsible] section from outside (a link on the page that jumps to it).
+  final ExpansibleController? controller;
   const NodeSection(
-      {super.key, required this.title, required this.children, this.id, this.collapsible = false, this.initiallyOpen = false, this.summary, this.summaryKey});
+      {super.key, required this.title, required this.children, this.id, this.collapsible = false, this.initiallyOpen = false, this.summary, this.summaryKey, this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -127,6 +149,7 @@ class NodeSection extends StatelessWidget {
             childrenPadding: const EdgeInsets.only(bottom: Gap.s),
             expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
             initiallyExpanded: initiallyOpen,
+            controller: controller,
             title: head,
             subtitle: summary == null
                 ? null
@@ -265,106 +288,90 @@ class FavouriteStar extends StatelessWidget {
           key: Key('fav-${kind.name}-$id'),
           tooltip: on ? 'Remove from favourites' : 'Add to favourites',
           isSelected: on,
-          icon: Icon(on ? Icons.star : Icons.star_border, color: on ? MeshSonarColors.of(context).beacon : null),
+          // The star is a choice, not a warning: the accent, never amber.
+          icon: Icon(on ? Icons.star : Icons.star_border, color: on ? Theme.of(context).colorScheme.primary : null),
           onPressed: () => store.toggleFavourite(kind, id, name: name, region: region),
         );
       });
 }
 
-/// The Watch button: opens the watch sheet; filled while something is watched.
-class WatchButton extends StatelessWidget {
-  /// `node` or `observer`.
-  final String kind;
-  final String target;
-  final String? name, region;
-  const WatchButton({super.key, required this.kind, required this.target, this.name, this.region});
+/// "Updated 5 min ago · pull to refresh" at the top of a list that loads once and does not poll (Round 2 N-U11):
+/// the rows say "heard 22 min ago" as of the load, so a list left open says how old it is. Ticks on its own.
+class UpdatedLine extends StatefulWidget {
+  /// When the list was loaded; null shows nothing.
+  final DateTime? at;
+  final DateTime Function() clock;
+  const UpdatedLine({super.key, required this.at, this.clock = DateTime.now});
+
+  static String textOf(DateTime at, DateTime now) {
+    final ago = relativeTime(at, now: now);
+    return 'Updated $ago \u00B7 pull to refresh';
+  }
 
   @override
-  Widget build(BuildContext context) => FavouritesListener(builder: (context, store) {
-        final on = store.isWatched(kind, target);
-        return IconButton(
-          key: const Key('watch-button'),
-          tooltip: on ? 'Watching' : 'Watch',
-          isSelected: on,
-          icon: Icon(on ? Icons.notifications_active : Icons.notifications_none),
-          onPressed: () => showWatchSheet(context, store: store, kind: kind, target: target, name: name, region: region),
-        );
-      });
+  State<UpdatedLine> createState() => _UpdatedLineState();
 }
 
-/// The watch sheet: which events, saved on this phone. No alerts yet (AZ-3.8 adds push), and the sheet says so.
-Future<void> showWatchSheet(BuildContext context,
-    {required NetworkFavouritesStore store, required String kind, required String target, String? name, String? region}) {
-  return showAppSheet<void>(context, detents: const [0.6, 0.92], builder: (ctx, c) => _WatchSheet(store: store, kind: kind, target: target, name: name, region: region, controller: c));
-}
-
-class _WatchSheet extends StatefulWidget {
-  final NetworkFavouritesStore store;
-  final String kind, target;
-  final String? name, region;
-  final ScrollController controller;
-  const _WatchSheet({required this.store, required this.kind, required this.target, this.name, this.region, required this.controller});
-  @override
-  State<_WatchSheet> createState() => _WatchSheetState();
-}
-
-class _WatchSheetState extends State<_WatchSheet> {
-  late Set<String> _events;
-  late final bool _existing;
+class _UpdatedLineState extends State<UpdatedLine> {
+  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
-    final w = widget.store.watchOf(widget.kind, widget.target);
-    _existing = w != null;
-    _events = {...(w?.events ?? watchEventsByKind[widget.kind]!)};
+    _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
-  Future<void> _save() async {
-    final nav = Navigator.of(context);
-    try {
-      await widget.store.setWatch(widget.kind, widget.target, region: widget.region, name: widget.name, events: _events.toList());
-    } on StateError catch (e) {
-      if (mounted) showAppToast(context, e.message);
-      return;
-    }
-    nav.pop();
-  }
-
-  Future<void> _remove() async {
-    final nav = Navigator.of(context);
-    await widget.store.removeWatch(widget.kind, widget.target);
-    nav.pop();
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final at = widget.at;
+    if (at == null) return const SizedBox.shrink();
     final t = Theme.of(context);
-    final all = watchEventsByKind[widget.kind]!;
-    return ListView(
-      key: const Key('watch-sheet'),
-      controller: widget.controller,
-      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, Gap.xl),
-      children: [
-        Semantics(header: true, child: Text('Watch ${widget.name ?? 'this ${widget.kind}'}', style: t.textTheme.titleLarge)),
-        const SizedBox(height: Gap.s),
-        Text('Alerts arrive in a later update; the watch is kept on this phone.', key: const Key('watch-note'), style: t.textTheme.bodyMedium),
-        const SizedBox(height: Gap.s),
-        for (final e in all)
-          CheckboxListTile(
-            key: Key('watch-event-$e'),
-            contentPadding: EdgeInsets.zero,
-            value: _events.contains(e),
-            title: Text(watchEventLabel(e)),
-            onChanged: (v) => setState(() => v == true ? _events.add(e) : _events.remove(e)),
-          ),
-        const SizedBox(height: Gap.m),
-        FilledButton(key: const Key('watch-save'), onPressed: _events.isEmpty ? null : _save, child: Text(_existing ? 'Save' : 'Watch')),
-        if (_existing) ...[
-          const SizedBox(height: Gap.s),
-          OutlinedButton(key: const Key('watch-remove'), onPressed: _remove, child: const Text('Stop watching')),
-        ],
-      ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
+      child: Text(UpdatedLine.textOf(at, widget.clock()), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+    );
+  }
+}
+
+/// A plain link row on a page: "Packets it heard  ›" (at least 44 pt). Find it by `link-<id>`.
+class PageLink extends StatelessWidget {
+  final String id, label;
+  final String? detail;
+  final IconData icon;
+  final VoidCallback onTap;
+  const PageLink({super.key, required this.id, required this.label, required this.onTap, this.detail, this.icon = Icons.chevron_right});
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Semantics(
+      button: true,
+      child: InkWell(
+        key: Key('link-$id'),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Row(children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(label, style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.primary)),
+                  if (detail != null) Text(detail!, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                ]),
+              ),
+            ),
+            Icon(icon, color: t.colorScheme.primary, size: 20),
+          ]),
+        ),
+      ),
     );
   }
 }

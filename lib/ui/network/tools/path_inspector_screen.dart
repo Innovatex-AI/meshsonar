@@ -23,6 +23,10 @@ class PathInspectorScreen extends StatefulWidget {
   /// A hop list from a link; inspected straight away when it parses.
   final String? initialHops;
 
+  /// The observer that heard these hops (from a packet copy's "Work out the likely route"): sent with the request so
+  /// the server ranks routes that end near it. Dropped as soon as the person edits the hops.
+  final String? initialObserver;
+
   /// Test seam.
   final ToolsApi? api;
 
@@ -32,7 +36,7 @@ class PathInspectorScreen extends StatefulWidget {
 
   /// Given: the tool sits in place inside the Tools section and its back arrow calls this (see ToolFrame).
   final VoidCallback? onClose;
-  const PathInspectorScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHops, this.api, this.nodes, this.onClose});
+  const PathInspectorScreen({super.key, required this.baseUrl, required this.regionSlug, this.initialHops, this.initialObserver, this.api, this.nodes, this.onClose});
 
   @override
   State<PathInspectorScreen> createState() => _PathInspectorScreenState();
@@ -80,7 +84,9 @@ class _PathInspectorScreenState extends State<PathInspectorScreen> {
       _hashSize = input.hashSize;
     });
     try {
-      final r = await _api.pathInspect(input.hops, hashSize: input.hashSize);
+      // The observer only belongs to the hops it came with.
+      final observer = _text.text.trim() == (widget.initialHops ?? '').trim() ? widget.initialObserver : null;
+      final r = await _api.pathInspect(input.hops, hashSize: input.hashSize, observer: observer);
       if (!mounted) return;
       setState(() {
         _result = r;

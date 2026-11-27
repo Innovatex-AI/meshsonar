@@ -1,6 +1,8 @@
 // One page of the website shown inside the app (build 71, stream D): Analytics tabs, Scope Audit, Compare observers,
-// Region definition, Status. It loads `<baseUrl><path>` with `embed=1` (the site then leaves its own bars out) on a dark
-// background, with a progress bar, an offline / error page with Retry, and "Open in browser".
+// Region definition. It loads `<baseUrl><path>` with `embed=1` (the site then leaves its own bars out), the app's
+// theme (`theme=dark|light`) and its time setting (`tz=local|utc`) on the app's own background, with a progress bar,
+// an offline / error page with Retry, and "Open in browser". When the phone changes theme or the person changes the
+// time setting, the page is loaded again with the new values (Round 2 W2).
 //
 // Rules (the decisions are in site_links.dart, tested on their own):
 // - The page may only move to https pages on meshsonar.com or a subdomain. Any other link opens in the system browser.
@@ -17,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/network_request.dart';
+import '../../../core/time_format.dart' show TimeZonePreference, activeTimeZone;
 import '../../../platform/open_url.dart';
 import '../../design/state_views.dart';
 import '../../shell/shell_controller.dart' show ShellScope;
@@ -149,6 +152,11 @@ class _SitePageViewState extends State<SitePageView> {
   bool get _slow => _error == _slowText;
 
   late final Uri? _start = sitePageUri(widget.baseUrl, widget.path);
+
+  /// The theme and time setting the loaded page was given; null before the first load.
+  SiteLook? _look;
+
+  SiteLook _lookNow() => SiteLook(dark: Theme.of(context).brightness == Brightness.dark, utc: activeTimeZone == TimeZonePreference.utc);
   SiteWebEngine? _engine;
   bool _noEngine = false;
   bool _loading = true;
@@ -193,7 +201,21 @@ class _SitePageViewState extends State<SitePageView> {
       }
       return;
     }
-    if (_engine != null) return;
+    if (_engine != null) {
+      final look = _look, now = _lookNow();
+      if (look == null || look == now) return;
+      if (look.dark == now.dark) {
+        // The time setting changed: the same page again, with the new value.
+        _load(notify: false);
+        return;
+      }
+      // The phone switched theme: a new web view on the new background, at the same address, with the new look.
+      _gen++;
+      _engine = null;
+      _timer?.cancel();
+      _canGoBack = false;
+      _shownOnce = false;
+    }
     final g = ++_gen;
     void on(void Function() f) {
       if (g == _gen) f();
@@ -239,7 +261,10 @@ class _SitePageViewState extends State<SitePageView> {
     }
 
     notify ? setState(set) : set();
-    unawaited(e.load(_current != null && isMeshSonarHost(_current!) ? withEmbed(_current!) : start).catchError((Object _) => _onError('The page could not be loaded.')));
+    final look = _look = _lookNow();
+    // The address is rebuilt from scratch so an older theme or tz on it is replaced, not kept.
+    final at = withoutEmbed(_current != null && isMeshSonarHost(_current!) ? _current! : start);
+    unawaited(e.load(withEmbed(at, look)).catchError((Object _) => _onError('The page could not be loaded.')));
   }
 
   FutureOr<bool> _onNavigate(Uri url, bool mainFrame) {
@@ -249,9 +274,10 @@ class _SitePageViewState extends State<SitePageView> {
         // A link that dropped `embed` is loaded again with it, once per address: a server redirect that strips it
         // is then let through instead of being retried for ever.
         final key = '${url.host}${url.path}';
-        if (url.scheme == 'https' && !hasEmbed(url) && _embedAdded != key) {
+        final look = _look ?? _lookNow();
+        if (url.scheme == 'https' && !hasEmbed(url, look) && _embedAdded != key) {
           _embedAdded = key;
-          unawaited(_engine?.load(withEmbed(url)));
+          unawaited(_engine?.load(withEmbed(withoutEmbed(url), look)));
           return false;
         }
         if (_embedAdded != key) _embedAdded = null;

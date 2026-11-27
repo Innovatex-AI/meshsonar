@@ -12,11 +12,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/time_format.dart';
 import '../../../core/v1/nodes_api.dart';
-import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
+import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty;
 import '../../theme.dart';
 import '../network_context.dart';
-import '../packets/packet_ui.dart' show WebTwinLine, plainServerText;
+import '../packets/packet_ui.dart' show WebTwinLine, dotJoin, plainServerText, stillCountingText;
 import 'node_routes.dart';
 import 'node_ui.dart';
 import 'observers_directory.dart';
@@ -30,7 +31,10 @@ typedef ObserverListView = ObserversDirectoryView;
 class NodeDirectoryView extends StatefulWidget {
   final String baseUrl, regionSlug;
   final NodeQuery initial;
-  const NodeDirectoryView({super.key, required this.baseUrl, required this.regionSlug, this.initial = NodeQuery.all});
+
+  /// Test seam for "Updated X ago".
+  final DateTime Function() clock;
+  const NodeDirectoryView({super.key, required this.baseUrl, required this.regionSlug, this.initial = NodeQuery.all, this.clock = DateTime.now});
   @override
   State<NodeDirectoryView> createState() => _NodeDirectoryViewState();
 }
@@ -46,6 +50,9 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
   String? _next;
   bool _legacy = false, _loadingMore = false;
   DateTime? _asOf;
+
+  /// When the first page of the list on screen was loaded (for "Updated X ago").
+  DateTime? _loadedAt;
   String? _statusNote;
   Map<String, int> _roleCounts = const {}, _statusCounts = const {};
   int _gen = 0;
@@ -87,10 +94,11 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
         _next = p.next;
         _legacy = p.source == NetworkReadSource.legacy;
         _asOf = p.offlineAsOf;
+        _loadedAt = widget.clock().toUtc();
         _roleCounts = p.roleCounts;
         _statusCounts = p.statusCounts;
         final st = p.status;
-        _statusNote = st != null && st.state.name != 'ready' ? (plainServerText(st.reason) ?? 'The data is ${st.state.name}.') : null;
+        _statusNote = st != null && st.state.name != 'ready' ? (plainServerText(st.reason) ?? stillCountingText) : null;
         _state = _Load.ready;
       });
     } on V1Error catch (e) {
@@ -206,12 +214,13 @@ class _NodeDirectoryViewState extends State<NodeDirectoryView> {
               prefixIcon: const Icon(Icons.search),
               hintText: 'Search nodes by name or ID',
               isDense: true,
-              border: const OutlineInputBorder(),
               suffixIcon: _search.text.isEmpty ? null : IconButton(key: const Key('nodes-search-clear'), tooltip: 'Clear the search', icon: const Icon(Icons.close), onPressed: _clearSearch),
             ),
           ),
         ),
         _filters(context),
+        // An offline copy says its own age below; a fresh list says when it was loaded.
+        if (_asOf == null && _state == _Load.ready) KeyedSubtree(key: const Key('nodes-updated'), child: UpdatedLine(at: _loadedAt, clock: widget.clock)),
         if (_asOf != null) Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l), child: RegionOfflineAsOf(asOf: _asOf!, onRetry: _load)),
         if (_legacy || _statusNote != null)
           Padding(
@@ -313,23 +322,30 @@ class _NodeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final bits = [
+    final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
+    // One line that is kept whole (a separator never starts a line), and the relays on their own short line under
+    // it, so a row is the same height whether or not the node relayed anything (Round 2 N-V5).
+    final bits = dotJoin([
       nodeRoleLabel(row.role),
-      nodeStatusLabel(row.status),
-      row.lastHeardAt == null ? 'never heard' : 'heard ${agoText(row.lastHeardAt)}',
-      if (row.relayed24h != null && row.relayed24h! > 0) 'relayed ${row.relayed24h} today',
+      nodeStatusLabel(row.status, label: row.statusLabel),
+      row.lastHeardAt == null ? 'never heard' : 'heard ${relativeTime(row.lastHeardAt)}',
       if (row.usefulnessGrade != null) 'grade ${row.usefulnessGrade}',
-    ];
+    ]);
+    final relayed = row.relayed24h != null && row.relayed24h! > 0 ? 'relayed ${row.relayed24h} today' : null;
     return ListTile(
       key: Key('node-row-${row.key}'),
       onTap: onTap,
       leading: Padding(padding: const EdgeInsets.only(top: 6), child: StatusDot(row.status)),
-      minTileHeight: 56,
+      minTileHeight: 76,
       title: Row(children: [
-        Flexible(child: Text(readableName(row.label), maxLines: 2, overflow: TextOverflow.ellipsis)),
-        if (fav) ...[const SizedBox(width: Gap.xs), Icon(Icons.star, size: 16, color: MeshSonarColors.of(context).beacon, semanticLabel: 'Favourite')],
+        Flexible(child: Text(readableName(row.label), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        // A favourite is a choice, not a warning: the accent, never amber.
+        if (fav) ...[const SizedBox(width: Gap.xs), Icon(Icons.star, size: 16, color: t.colorScheme.primary, semanticLabel: 'Favourite')],
       ]),
-      subtitle: Text(bits.join(' · '), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text(bits, key: Key('node-row-line-${row.key}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: muted),
+        if (relayed != null) Text(relayed, key: Key('node-row-relayed-${row.key}'), maxLines: 1, style: muted),
+      ]),
       // The short ID stays (radio people read it), small; the chevron says a tap opens the node.
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(row.prefix, style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant), semanticsLabel: 'ID ${row.prefix}'),

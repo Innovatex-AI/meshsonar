@@ -267,7 +267,6 @@ class _ToolsSectionState extends State<ToolsSection> {
               hintText: 'Find a tool',
               prefixIcon: const Icon(Icons.search),
               isDense: true,
-              border: const OutlineInputBorder(),
               suffixIcon: query.isEmpty
                   ? null
                   : IconButton(

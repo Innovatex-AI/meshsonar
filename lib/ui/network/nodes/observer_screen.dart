@@ -1,27 +1,36 @@
 // An observer's page in the Network tab (AZ-3.4). Website twin: `/observers/:id`.
 //
-// Shows what the API supplies, each section only when present: status and identity (kind, source, firmware, model,
-// radio, uptime, reboots), the last hour (packets, noise floor, airtime with the duty-cycle warning, clock offset,
-// battery), metrics over 24 h (noise floor, airtime TX/RX, packets, battery; reboot marks; a missing sample is a gap,
-// never a zero), its neighbour report and the nodes it hears most. Star, Watch and Share in the app bar.
+// Order (build 77, Round 2 N-U4): name and status, its map, a Stats block with links, the last 24 hours as charts,
+// hardware, "Hears directly", "Heard most". Each line shows only when the server sent its number.
+//   Stats: packets last hour and in 24 h, nodes heard in 24 h, noise now, battery, last report, airtime, clock,
+//   uptime, restarts. Links: Packets it heard (Packets filtered to this observer), Nodes it hears (jumps to "Heard
+//   most"), Compare with another observer, Noise and airtime at every observer (Analytics > RF Health), Show on the
+//   live map.
+//   Charts over 24 h: noise floor, airtime TX/RX, packets, battery; reboot marks; a missing sample is a gap, never a
+//   zero, and a 0 dBm noise sample is "no reading", so it is a gap too (N-V4).
+// Star and Share in the app bar (the bell was removed in build 77: it saved a watch that never alerted).
 // `/v1` not live: today's region-observer (row, top nodes and the hourly charts as the metrics). Offline: the stored copy.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../../core/network_request.dart';
+import '../../../core/time_format.dart';
 import '../../../core/v1/nodes_api.dart';
 import '../../charts/chart_frame.dart';
 import '../../charts/time_line_chart.dart';
 import '../../map/map_preview.dart' show MapPreview;
 import '../../map/still/place_map.dart';
 import '../../map/still/still_nodes.dart' show stillRepeatersOf;
-import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
+import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty;
+import '../../shell/shell_controller.dart' show ShellController;
 import '../../theme.dart';
 import '../network_context.dart';
+import '../analytics/site_page_view.dart';
 import '../network_share.dart';
 import '../packets/packet_ui.dart' show WebTwinLine, snrText;
 import 'node_routes.dart';
+import '../tools/tools_section.dart' show sitePathOfTool;
 import 'node_ui.dart';
 
 class NetworkObserverScreen extends StatefulWidget {
@@ -66,7 +75,6 @@ class _NetworkObserverScreenState extends State<NetworkObserverScreen> {
               title: Text(name, key: const Key('observer-title'), maxLines: 1, overflow: TextOverflow.ellipsis),
               actions: [
                 FavouriteStar(kind: FavouriteKind.observer, id: id, name: p?.detail.row.name, region: widget.regionSlug),
-                WatchButton(kind: 'observer', target: id, name: p?.detail.row.name, region: widget.regionSlug),
                 NetworkShareButton(request: NetworkRequest.observer(id, region: widget.regionSlug), subject: '$name on MeshSonar'),
               ],
             ),
@@ -105,10 +113,51 @@ class _NetworkObserverScreenState extends State<NetworkObserverScreen> {
 
 String _uptime(int s) => s >= 86400 ? '${(s / 86400).toStringAsFixed(1)} days' : (s >= 3600 ? '${(s / 3600).round()} h' : '${(s / 60).round()} min');
 
-class ObserverPageBody extends StatelessWidget {
+/// "2 s off": how far an observer's clock is from the server's (the server sends the size of the gap, not its side).
+String clockOffText(double s) => s.abs() < 1 ? 'Right' : '${skewText(s.abs()).replaceFirst(RegExp(r' (ahead|behind)$'), '')} off';
+
+class ObserverPageBody extends StatefulWidget {
   final ObserverPage page;
   final String baseUrl, regionSlug;
   const ObserverPageBody({super.key, required this.page, required this.baseUrl, required this.regionSlug});
+
+  @override
+  State<ObserverPageBody> createState() => _ObserverPageBodyState();
+}
+
+class _ObserverPageBodyState extends State<ObserverPageBody> {
+  ObserverPage get page => widget.page;
+  String get baseUrl => widget.baseUrl;
+  String get regionSlug => widget.regionSlug;
+
+  final ExpansibleController _topOpen = ExpansibleController();
+  final GlobalKey _topKey = GlobalKey();
+
+  @override
+  void dispose() {
+    _topOpen.dispose();
+    super.dispose();
+  }
+
+  /// Leaves the pages above the tab and opens a Network section at [r].
+  void _openSection(NetworkRequest r) {
+    final shell = ShellController.of(context);
+    if (shell == null) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    shell.openNetwork(r);
+  }
+
+  void _pushSite(String path, String title) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: path), builder: (_) => SitePageView(baseUrl: baseUrl, path: path, title: title)));
+
+  /// "Nodes it hears": opens "Heard most" and brings it into view.
+  void _showHeardMost() {
+    _topOpen.expand();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final c = _topKey.currentContext;
+      if (c != null && mounted) Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 250), alignment: 0.1);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,21 +165,44 @@ class ObserverPageBody extends StatelessWidget {
     final r = d.row;
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
-    final lastHour = <Widget>[
-      if (r.packets1h != null) KvRow('Packets last hour', '${r.packets1h}'),
-      if (r.packets24h != null) KvRow('Packets in 24 h', '${r.packets24h}'),
-      if (r.noiseFloorDbm != null) KvRow('Noise floor', '${r.noiseFloorDbm!.round()} dBm'),
+    // Each line only when the server sent its number (an older server, a phone or an outside feed sends fewer).
+    final stats = <Widget>[
+      if (r.packets1h != null) KvRow('Packets last hour', '${r.packets1h}', valueKey: const Key('observer-stat-packets1h')),
+      if (r.packets24h != null) KvRow('Packets in 24 h', '${r.packets24h}', valueKey: const Key('observer-stat-packets24h')),
+      if (r.nodesHeard24h != null) KvRow('Nodes heard in 24 h', '${r.nodesHeard24h}', valueKey: const Key('observer-stat-nodes24h')),
+      if (r.noiseReading != null) KvRow('Noise now', '${r.noiseReading!.round()} dBm', valueKey: const Key('observer-stat-noise')),
+      if (r.batteryMv != null) KvRow('Battery', voltsText(r.batteryMv!)),
+      KvRow('Last report', r.lastSeen == null ? 'None yet' : relativeTime(r.lastSeen), valueKey: const Key('observer-stat-last')),
       if (r.airtimeTxPct1h != null) KvRow('Airtime sending', '${r.airtimeTxPct1h!.toStringAsFixed(1)}%'),
       if (r.airtimeRxPct1h != null) KvRow('Airtime receiving', '${r.airtimeRxPct1h!.toStringAsFixed(1)}%'),
-      if (r.clockOffsetS != null) KvRow('Clock', skewText(r.clockOffsetS!)),
-      if (r.batteryMv != null) KvRow('Battery', voltsText(r.batteryMv!)),
+      if (r.clockOffsetS != null) KvRow('Clock', clockOffText(r.clockOffsetS!)),
+      if (d.uptimeS != null) KvRow('Up for', _uptime(d.uptimeS!), valueKey: const Key('observer-stat-uptime')),
+      if (d.reboots7d != null) KvRow('Restarts in 7 days', '${d.reboots7d}${d.lastReboot == null ? '' : ', last ${relativeTime(d.lastReboot)}'}'),
+    ];
+    final links = <Widget>[
+      PageLink(
+          id: 'observer-packets',
+          label: 'Packets it heard',
+          detail: 'The Packets list, filtered to this observer',
+          onTap: () => _openSection(NetworkRequest(section: NetworkSection.packets, observerId: r.id, region: regionSlug))),
+      if (d.topNodes.isNotEmpty) PageLink(id: 'observer-nodes', label: 'Nodes it hears', detail: 'The nodes it heard most, further down', icon: Icons.arrow_downward, onTap: _showHeardMost),
+      PageLink(
+          id: 'observer-compare',
+          label: 'Compare with another observer',
+          detail: 'What both hear, and what only one does',
+          onTap: () => _pushSite(sitePathOfTool('compare', 'a=${Uri.encodeQueryComponent(r.id)}'), 'Compare observers')),
+      PageLink(
+          id: 'observer-rf-health', label: 'Noise and airtime at every observer', detail: 'Analytics: RF Health', onTap: () => _pushSite('/analytics/rf-health', 'RF Health')),
+      PageLink(
+          id: 'observer-live',
+          label: 'Show on the live map',
+          detail: 'Live, showing what this observer hears',
+          onTap: () => _openSection(NetworkRequest(section: NetworkSection.live, observerId: r.id, region: regionSlug))),
     ];
     final hardware = <Widget>[
       if (d.model != null) KvRow('Model', d.model!),
       if (r.firmware != null) KvRow('Firmware', r.firmware!),
       if (d.radio != null) KvRow('Radio', radioText(d.radio!), valueKey: const Key('observer-radio')),
-      if (d.uptimeS != null) KvRow('Up for', _uptime(d.uptimeS!)),
-      if (d.reboots7d != null) KvRow('Restarts in 7 days', '${d.reboots7d}${d.lastReboot == null ? '' : ', last ${agoText(d.lastReboot)}'}'),
       if (d.qualityFlags.isNotEmpty) KvRow('Data quality', d.qualityFlags.join(', ')),
       if (d.trusted == false) const KvRow('Data quality', 'Not trusted for hop naming'),
     ];
@@ -147,14 +219,15 @@ class ObserverPageBody extends StatelessWidget {
         Row(children: [
           StatusDot(r.status, size: 12),
           const SizedBox(width: Gap.s),
-          Expanded(child: Text('${observerKindLabel(r.kind)} · ${observerStatusLabel(r.status)}', style: t.textTheme.titleMedium)),
+          Expanded(
+              child: Text('${observerKindWords(r)} · ${observerStatusLabel(r.status, label: r.statusLabel)}', key: const Key('observer-kind'), style: t.textTheme.titleMedium)),
         ]),
-        Text(r.lastSeen == null ? 'No report yet' : 'Last report ${agoText(r.lastSeen)}${r.iata == null ? '' : ' · area ${r.iata}'}',
+        Text(r.lastSeen == null ? 'No report yet' : 'Last report ${relativeTime(r.lastSeen)}${r.iata == null ? '' : ' · area ${r.iata}'}',
             key: const Key('observer-seen'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         if (r.dutyCycleWarn)
           Padding(
             padding: const EdgeInsets.only(top: Gap.xs),
-            child: Text('Sending more than the duty-cycle limit', key: const Key('observer-duty-warn'), style: t.textTheme.bodyMedium?.copyWith(color: MeshSonarColors.of(context).beacon)),
+            child: Text('Sending more than the duty-cycle limit', key: const Key('observer-duty-warn'), style: t.textTheme.bodyMedium?.copyWith(color: MeshSonarColors.of(context).warning)),
           ),
         if (r.kind == 'phone') Text('Phone observers never show a position.', style: muted),
         // MAP slice 5: the observer's small map (page `observer`), when the definition presets one and it has a public position.
@@ -164,30 +237,30 @@ class ObserverPageBody extends StatelessWidget {
             padding: const EdgeInsets.only(top: Gap.s),
             child: StillPlaceMap(page: 'observer', role: 'observer', name: r.name, lat: r.position!.lat, lon: r.position!.lon, freshness: switch (r.status) { 'online' => 'fresh', 'stale' => 'recent', _ => 'stale' }, repeaters: stillRepeatersOf(context, regionSlug: regionSlug)),
           ),
-        if (lastHour.isNotEmpty) NodeSection(id: 'observer-now', title: 'Right now', children: lastHour),
+        NodeSection(id: 'observer-stats', title: 'Stats', children: [...stats, const SizedBox(height: Gap.xs), ...links]),
+        if (page.metrics != null) ..._metrics(context, page.metrics!),
         if (hardware.isNotEmpty)
           NodeSection(
               id: 'observer-hardware',
               title: 'Hardware',
               collapsible: true,
-              summary: [?d.model, ?r.firmware, if (d.model == null && r.firmware == null) 'Radio settings, uptime, restarts'].join(' · '),
+              summary: [?d.model, ?r.firmware, if (d.model == null && r.firmware == null) 'Radio settings and data quality'].join(' · '),
               children: hardware),
-        if (page.metrics != null) ..._metrics(context, page.metrics!),
         if (d.neighbours.isNotEmpty)
-          NodeSection(id: 'observer-neighbours', title: 'Hears directly (${d.neighbours.length})', collapsible: true, summary: 'Nodes in radio range of this observer${d.neighbourReportAt == null ? '' : ' · reported ${agoText(d.neighbourReportAt)}'}', children: [
+          NodeSection(id: 'observer-neighbours', title: 'Hears directly (${d.neighbours.length})', collapsible: true, summary: 'Nodes in radio range of this observer${d.neighbourReportAt == null ? '' : ' · reported ${relativeTime(d.neighbourReportAt)}'}', children: [
             NodeMoreList(id: 'observer-neighbours', children: [
             for (final n in d.neighbours)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 trailing: const Icon(Icons.chevron_right),
                 title: Text(readableName(n.node.label), maxLines: 2, overflow: TextOverflow.ellipsis),
-                subtitle: Text([if (n.snr != null) snrText(n.snr), if (n.heardAgoS != null) 'heard ${agoText(DateTime.now().toUtc().subtract(Duration(seconds: n.heardAgoS!)))}'].join(' · ')),
+                subtitle: Text([if (n.snr != null) snrText(n.snr), if (n.heardAgoS != null) 'heard ${relativeDuration(Duration(seconds: n.heardAgoS!))}'].join(' · ')),
                 onTap: () => openNetworkNode(context, baseUrl: baseUrl, regionSlug: regionSlug, nodeKey: n.node.key),
               ),
             ]),
           ]),
         if (d.topNodes.isNotEmpty)
-          NodeSection(id: 'observer-top', title: 'Heard most', collapsible: true, summary: 'Top: ${readableName(d.topNodes.first.$1.label)} · ${d.topNodes.first.$2} packets', children: [
+          NodeSection(key: _topKey, controller: _topOpen, id: 'observer-top', title: 'Heard most', collapsible: true, summary: 'Top: ${readableName(d.topNodes.first.$1.label)} · ${d.topNodes.first.$2} ${d.topNodes.first.$2 == 1 ? 'packet' : 'packets'}', children: [
             NodeMoreList(id: 'observer-top', children: [
             for (final (n, c) in d.topNodes)
               ListTile(
@@ -207,14 +280,13 @@ class ObserverPageBody extends StatelessWidget {
     );
   }
 
-  String _time(DateTime t) {
-    final l = t.toLocal();
-    return '${l.month}/${l.day} ${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
-  }
+  /// A chart point's time, in the zone the app is showing ("Nov 10, 6:14 PM").
+  String _time(DateTime t) => shortDateTime(t);
 
   List<Widget> _metrics(BuildContext context, ObserverMetrics m) {
     final pal = chartPalette(context);
-    final gap = m.fiveMinute ? const Duration(minutes: 11) : const Duration(hours: 2);
+    // A missing reading breaks the line: anything wider than one and a half steps is a gap.
+    final gap = m.fiveMinute ? const Duration(minutes: 8) : const Duration(minutes: 95);
     final reboots = [for (final s in m.samples) if (s.rebooted) (s.at, Theme.of(context).colorScheme.error)];
     Widget chart(String id, String title, String unit, List<ChartSeries> series, String Function(ObserverSample) cell, {double? ref, String? refLabel}) {
       final pts = series.expand((s) => s.points).toList();
@@ -226,12 +298,13 @@ class ObserverPageBody extends StatelessWidget {
         table: ChartTable(head: const ['Time', 'Value'], rows: [for (final s in m.samples.reversed.take(96)) [_time(s.at), cell(s)]]),
         // The dashed line is named in the caption under the chart, never on top of the data line.
         caption: '${ref == null || refLabel == null ? '' : 'Dashed line: $refLabel (${trimNumber(ref, 1)} $unit). '}'
-            'One reading every ${m.fiveMinute ? '5 minutes' : 'hour'}. Gaps are missing readings; red ticks are restarts.',
+            'One reading every ${m.fiveMinute ? '5 minutes' : 'hour'}, times in ${zoneLabel()}. Gaps are missing readings; red ticks are restarts.',
         chart: TimeLineChart(series: series, yLabel: unit, xFormat: _time, breakGap: gap, floorMarks: reboots, refLine: ref, legend: series.length > 1),
       );
     }
 
-    final nf = [for (final s in m.samples) if (s.noiseFloorDbm != null) (s.at, s.noiseFloorDbm!)];
+    // 0 dBm is "no reading": left out, so it is a gap and the axis fits the real values.
+    final nf = [for (final s in m.samples) if (s.noiseReading != null) (s.at, s.noiseReading!)];
     final tx = [for (final s in m.samples) if (s.airtimeTxPct != null) (s.at, s.airtimeTxPct!)];
     final rx = [for (final s in m.samples) if (s.airtimeRxPct != null) (s.at, s.airtimeRxPct!)];
     final pk = [for (final s in m.samples) if (s.packetsRx != null) (s.at, s.packetsRx!.toDouble())];
@@ -240,7 +313,7 @@ class ObserverPageBody extends StatelessWidget {
     return [
       NodeSection(id: 'observer-metrics', title: 'Last 24 hours', children: [
         if (nf.isNotEmpty)
-          chart('obs-noise', 'Noise floor', 'dBm', [ChartSeries(name: 'Noise floor', points: nf, color: pal[0])], (s) => v(s.noiseFloorDbm, 0),
+          chart('obs-noise', 'Noise floor', 'dBm', [ChartSeries(name: 'Noise floor', points: nf, color: pal[0])], (s) => v(s.noiseReading, 0),
               ref: -100, refLabel: 'interference above this'),
         if (tx.isNotEmpty || rx.isNotEmpty)
           chart(
