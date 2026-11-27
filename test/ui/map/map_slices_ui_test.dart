@@ -17,7 +17,7 @@ import 'package:meshsonar/core/v1/nodes_api.dart' show NodeRow, PacketPosition;
 import 'package:meshsonar/ui/map/active_map_definition.dart';
 import 'package:meshsonar/ui/map/layers/observer_layer.dart';
 import 'package:meshsonar/ui/map/layers/repeater_name_labels.dart';
-import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart' show RepeaterBadge;
+import 'package:meshsonar/ui/map/layers/repeater_painter_layer.dart' show RepeaterBadge, RepeaterPainterLayer;
 import 'package:meshsonar/ui/map/layers/repeater_sprites.dart';
 import 'package:meshsonar/ui/map/map_size_controls.dart';
 import 'package:meshsonar/ui/map/node_symbol.dart';
@@ -120,16 +120,27 @@ void main() {
       expect(liveNodeTint(_node('a' * 64, 'x'), 'hash'), 'unknown');
     });
 
-    testWidgets('at region zoom the nodes are on the map as symbols and named; the packet-crossed one is solid', (t) async {
-      await _pumpMap(t, liveNodeLayers(nodes: nodes, inUse: {'aa' * 32}, style: BaseMapStyle.chart, brightness: Brightness.light));
-      expect(find.byKey(ValueKey('live-node-${'aa' * 32}')), findsOneWidget);
-      expect(find.byKey(ValueKey('live-node-${'bb' * 32}')), findsOneWidget);
-      expect(find.byKey(ValueKey('live-node-${'cc' * 32}')), findsNothing, reason: 'a companion is not a Live node');
-      NodeSymbolPainter p(String k) => t.widget<CustomPaint>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(CustomPaint)).first).painter! as NodeSymbolPainter;
-      expect(p('live-node-${'aa' * 32}').opacity, 1, reason: 'a packet is crossing it');
-      expect(p('live-node-${'bb' * 32}').opacity, lessThan(1), reason: 'dim, so the packets stay the picture');
-      expect(p('live-node-${'bb' * 32}').role.id, 'room');
-      // The names are the one label engine's: a painter with both names (spec: repeaters from zoom 11, 24 at most).
+    // Build 77 (Round 1 F1): the Live nodes are drawn by the Drive map's repeater painter.
+    Future<LiveNodeSource> source(WidgetTester t, Set<String> inUse) async {
+      final n = LiveNodeSource()..setNodes(nodes);
+      n.source.claimedKeys = inUse;
+      await t.runAsync(() => n.source.settled);
+      addTearDown(n.dispose);
+      return n;
+    }
+
+    RepeaterPainterLayer painterOf(WidgetTester t) =>
+        t.widget<RepeaterPainterLayer>(find.descendant(of: find.byKey(const Key('live-nodes-markers')), matching: find.byType(RepeaterPainterLayer)));
+
+    testWidgets('at region zoom the nodes are drawn by the repeater painter and named; the packet-crossed one is a full-strength badge', (t) async {
+      final n = await source(t, {'aa' * 32});
+      await _pumpMap(t, liveNodeLayers(nodes: n, inUse: {'aa' * 32}, style: BaseMapStyle.chart, brightness: Brightness.light, onHit: (_) {}));
+      final p = painterOf(t);
+      expect(p.sourceOpacity, 0.62, reason: 'idle nodes dim, so the packets stay the picture');
+      expect([for (final b in p.badges) b.key], ['aa' * 32], reason: 'in use: a badge on top, never inside a cluster');
+      final pts = n.source.globalPoints;
+      expect([for (var i = 0; i < pts.length; i++) pts.key[i]], ['bb' * 32], reason: 'a companion and a node with no position are not Live nodes; the one in use left the list');
+      expect(pts.isRoom(0), isTrue);
       final labels = t.widgetList<CustomPaint>(find.byKey(RepeaterNameLabels.paintKey));
       expect(labels, isNotEmpty);
       final lp = labels.first.painter! as LabelPainter;
@@ -138,25 +149,27 @@ void main() {
       expect(lp.pill, isFalse, reason: 'Chart is the Road map: a halo, not a pill');
     });
 
-    testWidgets('zoomed out (below the first name zoom) only the nodes in use are drawn', (t) async {
-      await _pumpMap(t, liveNodeLayers(nodes: nodes, inUse: {'bb' * 32}, style: BaseMapStyle.chart, brightness: Brightness.light), zoom: 8);
-      expect(find.byKey(ValueKey('live-node-${'aa' * 32}')), findsNothing);
-      expect(find.byKey(ValueKey('live-node-${'bb' * 32}')), findsOneWidget);
+    testWidgets('zoomed out the node in use is still drawn, at full strength', (t) async {
+      final n = await source(t, {'bb' * 32});
+      await _pumpMap(t, liveNodeLayers(nodes: n, inUse: {'bb' * 32}, style: BaseMapStyle.chart, brightness: Brightness.light, onHit: (_) {}), zoom: 8);
+      expect([for (final b in painterOf(t).badges) b.key], ['bb' * 32]);
     });
 
-    testWidgets('Colour nodes by Status tints the node badges; Nothing leaves them neutral', (t) async {
+    testWidgets('Colour nodes by Status tints the nodes; Nothing leaves them neutral', (t) async {
       MapPrefs.shared.colourBy = 'status';
-      await _pumpMap(t, liveNodeLayers(nodes: nodes, inUse: const {}, style: BaseMapStyle.chart, brightness: Brightness.light));
-      NodeSymbolPainter p(String k) => t.widget<CustomPaint>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(CustomPaint)).first).painter! as NodeSymbolPainter;
-      expect(p('live-node-${'aa' * 32}').tint, 0xFF0B6FB8, reason: 'active');
-      expect(p('live-node-${'bb' * 32}').tint, 0xFFC77800, reason: 'degraded');
+      final n = await source(t, const {});
+      await _pumpMap(t, liveNodeLayers(nodes: n, inUse: const {}, style: BaseMapStyle.chart, brightness: Brightness.light, onHit: (_) {}));
+      expect(painterOf(t).tintOf!('aa' * 32), 0xFF0B6FB8, reason: 'active');
+      expect(painterOf(t).tintOf!('bb' * 32), 0xFFC77800, reason: 'degraded');
       MapPrefs.shared.colourBy = 'none';
       await t.pump();
-      expect(p('live-node-${'aa' * 32}').tint, isNull);
+      expect(painterOf(t).tintOf, isNull);
     });
 
     testWidgets('no nodes: nothing is added to the map', (t) async {
-      expect(liveNodeLayers(nodes: const [], inUse: const {}, style: BaseMapStyle.chart, brightness: Brightness.light), isEmpty);
+      final n = LiveNodeSource();
+      addTearDown(n.dispose);
+      expect(liveNodeLayers(nodes: n, inUse: const {}, style: BaseMapStyle.chart, brightness: Brightness.light, onHit: (_) {}), isEmpty);
     });
   });
 

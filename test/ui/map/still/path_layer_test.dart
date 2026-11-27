@@ -161,17 +161,17 @@ void main() {
       expect(MapPreview.presetNames('path'), isTrue);
     });
 
-    testWidgets('the still height comes from the preset word, else the caller\'s', (tester) async {
+    testWidgets('the still height comes from the preset word, else the caller\'s snapped to one of the two standard heights (N6)', (tester) async {
       late BuildContext ctx;
       await tester.pumpWidget(MaterialApp(home: Builder(builder: (c) {
         ctx = c;
         return const SizedBox();
       })));
-      expect(MapPreview.stillHeight(ctx, 'path', fallback: 123), 123);
+      expect(MapPreview.stillHeight(ctx, 'path', fallback: 123), MapPreview.compactHeight);
       ActiveMapDefinition.notifier.value = _live();
-      // the path preset says no height word: still the caller's
-      expect(MapPreview.stillHeight(ctx, 'path', fallback: 123), 123);
-      expect(MapPreview.stillHeight(ctx, null, fallback: 77), 77);
+      // the path preset says no height word: still the caller's, snapped
+      expect(MapPreview.stillHeight(ctx, 'path', fallback: 123), MapPreview.compactHeight);
+      expect(MapPreview.stillHeight(ctx, null, fallback: 300), MapPreview.tallHeight);
     });
   });
 

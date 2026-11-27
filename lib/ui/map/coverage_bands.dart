@@ -124,6 +124,10 @@ class PredictedOpacity {
   }
 }
 
+/// The Predicted hatch line width (build 77, Round 1 F14): 2 px on a dark map; 1.4 px on a light one, where a 2 px hatch over
+/// the street grid read as a pink wash over the whole city. The colours and opacities stay the definition's.
+double predictedHatchWidth(CoverageBandColors c) => c.dark ? 2 : 1.4;
+
 /// Predicted opacity `o` (0.15-0.6, server) in ten 0.05 steps so cells can share styles: 0.15, 0.20, ... 0.60. At most 0.025 off
 /// the server's value either way (the website uses `o` as is).
 const int kPredictedOpacitySteps = 10;
@@ -144,7 +148,7 @@ List<CellStyle> predictedStyles(CoverageBandColors c) => [
         const none = Color(0x00000000);
         final k = PredictedOpacity.of(c);
         if (b == 0) return CellStyle(none, none, 0, c.noReplyPoint.withValues(alpha: o * k.noneHatch), none, 1);
-        return CellStyle(c[b].withValues(alpha: o * k.fill), none, 0, c[b].withValues(alpha: o * k.hatch), c[b].withValues(alpha: o), 2);
+        return CellStyle(c[b].withValues(alpha: o * k.fill), none, 0, c[b].withValues(alpha: o * k.hatch), c[b].withValues(alpha: o), predictedHatchWidth(c));
       }(),
 ];
 
@@ -190,7 +194,7 @@ List<CellStyle> predictedSummaryStyles(CoverageBandColors c, CoverageLadder ladd
           () {
             final o = predictedOpacityOfStep(step) * _strengthOfStep(ladder, s);
             if (b == 0) return CellStyle(none, none, 0, c.noReplyPoint.withValues(alpha: o * k.noneHatch), none, 1);
-            return CellStyle(c[b].withValues(alpha: o * k.fill), none, 0, c[b].withValues(alpha: o * k.hatch), none, 2);
+            return CellStyle(c[b].withValues(alpha: o * k.fill), none, 0, c[b].withValues(alpha: o * k.hatch), none, predictedHatchWidth(c));
           }(),
   ];
 }

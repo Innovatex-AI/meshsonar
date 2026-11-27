@@ -90,6 +90,12 @@ String satelliteCredit(MapDefinition def) {
   final sat = def.satellite;
   if (sat == null) return '';
   final imagery = {for (final s in sat.sources) ...s.attribution}; // an Esri line is not shown when Esri is not drawn
-  final lines = [...sat.credits, if (sat.labels) ...def.basemapCredits('satellite').where((a) => !imagery.contains(a))];
+  // Our names over the imagery are OpenStreetMap data: the short credit (decision 5); Protomaps is named in the credits sheet.
+  final lines = <String>{
+    ...sat.credits,
+    if (sat.labels)
+      for (final a in def.basemapCredits('satellite').where((a) => !imagery.contains(a)))
+        if (a.contains('OpenStreetMap')) kOsmCreditShort else if (a != 'Protomaps') a,
+  };
   return lines.join(' · ');
 }

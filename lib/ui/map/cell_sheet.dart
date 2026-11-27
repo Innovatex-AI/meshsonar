@@ -1,4 +1,5 @@
 // Tap a network-coverage cell: a bottom sheet with what the network measured there (the website's cell popup).
+import '../../core/time_format.dart' as tf;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -39,17 +40,13 @@ NetworkCell? networkCellAt(List<NetworkCell> cells, LatLng p) {
 String heardPercent(CoverageCell c) =>
     c.pings <= 0 ? '-' : '${(100 * c.heard / c.pings).round()}%';
 
-/// "3 min ago", "5 h ago", "2 d ago", or the date for older; '-' when unparseable.
+/// "3 min ago", "5 h ago", "2 d ago", or the date for older (the one time formatter, core/time_format.dart); '-' when unparseable.
 String lastSeenText(String iso, {DateTime? now}) {
   final t = DateTime.tryParse(iso);
   if (t == null) return '-';
   final d = (now ?? DateTime.now()).toUtc().difference(t.toUtc());
-  if (d.inMinutes < 1) return 'just now';
-  if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-  if (d.inHours < 48) return '${d.inHours} h ago';
-  if (d.inDays < 60) return '${d.inDays} d ago';
-  final l = t.toLocal();
-  return '${l.year}-${l.month.toString().padLeft(2, '0')}-${l.day.toString().padLeft(2, '0')}';
+  if (d.inDays < 60) return tf.relativeTime(t, now: now);
+  return tf.dateOnly(t);
 }
 
 Future<void> showCellSheet(BuildContext context, NetworkCell n) {

@@ -121,10 +121,10 @@ void main() {
         await tester.pump();
         if (s.isVector) {
           final layer = tester.widget<BasemapLayer>(find.byType(BasemapLayer));
-          expect(layer.dark, s.darkLook, reason: s.id);
-          expect(layer.look, s.look, reason: s.id);
+          expect(layer.dark, s.isDark(appDark: false), reason: s.id);
+          expect(layer.look, s.look, reason: '${s.id}: no coverage drawn, the plain look');
           expect(find.byType(TileLayer), findsNothing, reason: s.id);
-          expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.text('Protomaps © OpenStreetMap contributors')), findsOneWidget);
+          expect(find.descendant(of: find.byKey(const Key('map-attribution')), matching: find.text('© OpenStreetMap')), findsOneWidget);
         } else {
           final layers = tester.widgetList<TileLayer>(find.byType(TileLayer)).toList();
           expect(layers.map((l) => l.urlTemplate), [contains('/api/map/satellite/esri/'), contains('basemap.nationalmap.gov')], reason: 'Esri (our proxy) then NAIP, from the definition');

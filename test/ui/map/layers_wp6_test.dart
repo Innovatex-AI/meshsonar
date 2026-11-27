@@ -243,26 +243,26 @@ void main() {
       return model;
     }
 
-    testWidgets('the website Layers panel: Basemap, Coverage, Network, Context, Filters, Palette; rows and names from the definition', (t) async {
+    testWidgets('build 77 plain-word sections: Map style, Signal coverage, My drive, Repeaters, People, Appearance, Filters; rows and names from the definition', (t) async {
       await openSheet(t);
       final ys = [
-        for (final g in ['base', 'coverage', 'network', 'context', 'labels', 'filters', 'palette']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
+        for (final g in ['base', 'coverage', 'drive', 'repeaters', 'people', 'appearance', 'filters']) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy,
       ];
       expect([...ys]..sort(), ys);
       final rows = [
-        'layer-hexes', 'layer-pings', 'layer-network-coverage', 'layer-heardcells', 'layer-predicted', //
-        'layer-phones', 'layer-observers', 'layer-region-repeaters', 'layer-network', 'layer-links', 'layer-borders',
-        'layer-labels', // Names moved to the Labels section, below Context (build 74)
+        'layer-network-coverage', // Measured first (N1); Predicted and Heard by phones need coverageV2: "Not on this map" here
+        'layer-hexes', 'layer-pings', //
+        'layer-region-repeaters', 'layer-labels', 'layer-links', //
+        'layer-observers', 'layer-phones', 'layer-borders',
       ];
       final rowY = [for (final id in rows) t.getTopLeft(find.byKey(Key(id), skipOffstage: false)).dy];
-      expect([...rowY]..sort(), rowY, reason: 'top of the map first, as on the website');
-      for (final id in ['layer-rings', 'layer-neighbours', 'layer-repeaters-scope']) {
+      expect([...rowY]..sort(), rowY, reason: 'the build 77 order');
+      for (final id in ['layer-rings', 'layer-neighbours', 'layer-repeaters-scope', 'layers-group-network', 'layers-group-context', 'layers-group-labels']) {
         expect(find.byKey(Key(id), skipOffstage: false), findsNothing, reason: '$id is gone');
       }
-      for (final text in ['Measured coverage', 'Heard by phones', 'Predicted coverage', 'This drive', 'Ping dots', 'Moving phones', 'Observers', 'Repeaters', 'Names', 'All MeshCore repeaters', 'Link lines', 'Region borders']) {
+      for (final text in ['Measured coverage', 'This drive', 'Ping dots', 'Moving phones', 'Observers', 'Repeaters', 'Names', 'Link lines', 'Region borders']) {
         expect(find.text(text, skipOffstage: false), findsWidgets, reason: text);
       }
-      expect(find.text('Colour by'), findsNothing);
       expect(find.textContaining('Range rings'), findsNothing);
     });
 
@@ -306,29 +306,31 @@ void main() {
     testWidgets('a layer that is off shows the definition hint; Predicted / Heard say they are not on an old server', (t) async {
       final m = await openSheet(t);
       expect(m.layerState.isOn('network'), isFalse);
-      expect(find.textContaining('Turn on to see every repeater in the country', skipOffstage: false), findsOneWidget);
-      // Predicted and Heard (no ping, Nov 9) both say so: the fake server has neither coverageV2 nor coverageHeard.
+      // Predicted and Heard (no ping, Nov 9) both say so: the fake server has neither coverageV2 nor coverageHeard. Build 77: they
+      // are in the one "Not on this map" line at the bottom, open for the reasons.
+      expect(find.byKey(const Key('layer-predicted'), skipOffstage: false), findsNothing, reason: 'closed: one line');
+      await t.scrollUntilVisible(find.byKey(const Key('layers-not-here-toggle')), 200,
+          scrollable: find.descendant(of: find.byKey(const Key('layers-sheet')), matching: find.byType(Scrollable)).first);
+      await t.tap(find.byKey(const Key('layers-not-here-toggle')));
+      await t.pumpAndSettle();
       expect(find.text('Not available on this server yet', skipOffstage: false), findsAtLeastNWidgets(2), reason: 'the fake server has no coverageV2');
+      // A layer's hint stays visible on or off (N1); All MeshCore repeaters is not offered by this fake server, so it is here too.
+      expect(find.textContaining('Turn on to see every repeater in the country', skipOffstage: false), findsOneWidget);
       expect(t.widget<Switch>(find.byKey(const Key('layer-predicted'), skipOffstage: false)).onChanged, isNull);
       expect(t.widget<Switch>(find.byKey(const Key('layer-heardcells'), skipOffstage: false)).onChanged, isNull, reason: 'Heard needs coverageHeard');
     });
 
-    testWidgets('Repeaters and All MeshCore repeaters are two switches (website); Names is under Repeaters', (t) async {
+    testWidgets('Repeaters is ONE switch (build 77 N1): off hides this region\'s and every MeshCore repeater; Names is under it', (t) async {
       final m = await openSheet(t);
       expect(t.widget<Switch>(find.byKey(const Key('layer-region-repeaters'))).value, isTrue);
-      expect(find.byKey(const Key('layer-network'), skipOffstage: false), findsOneWidget, reason: 'a switch of its own');
       m.setLayer('network', true);
       await t.pumpAndSettle();
-      expect(m.layerState.isOn('network'), isTrue);
-      expect(m.layerState.isOn('repeaters'), isTrue, reason: 'independent switches');
+      expect(t.widget<Switch>(find.byKey(const Key('layer-labels'))).onChanged, isNotNull);
       await t.ensureVisible(find.byKey(const Key('layer-region-repeaters')));
       await t.tap(find.byKey(const Key('layer-region-repeaters')));
       await t.pumpAndSettle();
       expect(m.layerState.isOn('repeaters'), isFalse);
-      expect(m.layerState.isOn('network'), isTrue);
-      expect(t.widget<Switch>(find.byKey(const Key('layer-labels'))).onChanged, isNotNull, reason: 'names for All MeshCore repeaters too');
-      m.setLayer('network', false);
-      await t.pumpAndSettle();
+      expect(m.layerState.isOn('network'), isFalse, reason: 'the one switch off hides them all');
       expect(t.widget<Switch>(find.byKey(const Key('layer-labels'))).onChanged, isNull, reason: 'Names needs a repeater layer on');
     });
 

@@ -38,8 +38,8 @@ void main() {
         banner: const SizedBox(height: 56, width: double.infinity, child: Text('gps banner')),
       ),
     };
-    // Satellite's credit is the definition's imagery credits (Esri, USGS NAIP) plus ours; the others carry their own line.
-    String creditOf(BaseMapStyle s) => s.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : s.attribution;
+    // Satellite's credit is the definition's imagery credits (Esri, USGS NAIP) plus ours; the others the short line (decision 5).
+    String creditOf(BaseMapStyle s) => s.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : '© OpenStreetMap';
     for (final style in BaseMapStyle.values) {
       for (final e in states.entries) {
         for (final scale in [1.0, 2.0]) {
@@ -67,14 +67,14 @@ void main() {
       await tester.pump();
       expect(find.textContaining('Powered by Esri'), findsOneWidget);
       expect(find.textContaining('USGS National Map (NAIP)'), findsOneWidget);
-      expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget, reason: 'our names are drawn over the imagery');
+      expect(find.textContaining('© OpenStreetMap'), findsOneWidget, reason: 'our names are drawn over the imagery');
     });
 
     testWidgets('Topo is our own map: no OpenTopoMap credit any more', (tester) async {
       await tester.pumpWidget(_app(CoverageMap(pings: const [], showTiles: true, baseStyle: BaseMapStyle.topo)));
       await tester.pump();
       expect(find.textContaining('OpenTopoMap'), findsNothing);
-      expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
+      expect(find.text('© OpenStreetMap'), findsOneWidget);
     });
 
     testWidgets('the (i) has a 44 x 44 hit area and opens the Credits sheet', (tester) async {

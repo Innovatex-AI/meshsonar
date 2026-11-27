@@ -123,16 +123,17 @@ void main() {
 
     testWidgets('repeaters: fresh / recent / older badges, the green tick and the room-server square (Drive plan 6.3)', (tester) async {
       await pumpLegend(tester);
-      expect(find.text('Solid badge: fresh'), findsOneWidget);
-      expect(find.text('Tinted badge with a ring: recent'), findsOneWidget);
-      expect(find.text('Hollow dashed badge: older'), findsOneWidget);
-      expect(find.text('Green tick: heard this drive'), findsOneWidget);
+      expect(find.text('Solid ring: heard in 24 hours'), findsOneWidget);
+      expect(find.text('Dashed ring: heard this week'), findsOneWidget);
+      expect(find.text('No ring, faded: older'), findsOneWidget);
+      expect(find.textContaining('blue and amber'), findsNothing, reason: 'build 77: the guide no longer describes symbols the map does not draw');
+      expect(find.text('Tick: heard this drive'), findsOneWidget);
       expect(find.textContaining('room server'), findsOneWidget);
     });
 
     testWidgets('link lines: orange and solid in the standard palette; the label is the best SNR', (tester) async {
       await pumpLegend(tester);
-      expect(find.text('Orange line: who heard what'), findsOneWidget);
+      expect(find.text('Line: who heard what'), findsOneWidget);
       expect(find.textContaining('best signal (SNR)'), findsOneWidget);
       final p = tester.widget<CustomPaint>(find.descendant(of: find.byKey(const Key('legend-link-sample')), matching: find.byType(CustomPaint))).painter! as LinkSamplePainter;
       expect(p.line, const Color(0xFFFF6D00));

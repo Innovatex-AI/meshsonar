@@ -146,14 +146,15 @@ void main() {
       expect(MapDefinition.bundled.colourBy, isNull);
     });
 
-    test('packet types: the definition list equals the colours Live, the feed and the table always used, light and dark', () {
-      final def = _v2().packetTypes!;
+    test('packet types: the definition list (schemaMinor 10, build 77 colour language) equals the built-in colours, light and dark', () {
+      final v2m10 = MapDefinition.parse(File('test/fixtures/map_v2/definition-v2-minor10-cmh.json').readAsStringSync());
+      final def = v2m10.packetTypes!;
       expect(def.byType.keys.toSet(), {0, 1, 2, 3, 4, 5, 8, 9});
       for (final type in [0, 1, 2, 3, 4, 5, 8, 9, 6, 7, 10, 99]) {
         for (final b in [Brightness.light, Brightness.dark]) {
           ActiveMapDefinition.debugSet(); // the built-in list
           final builtin = packetTypeColorFor(type, b);
-          ActiveMapDefinition.debugSet(_v2()); // the definition's list
+          ActiveMapDefinition.debugSet(v2m10); // the definition's list
           expect(packetTypeColorFor(type, b), builtin, reason: 'type $type $b');
         }
       }

@@ -49,9 +49,10 @@ class DriveKey extends StatelessWidget {
         item(
           const Key('drive-key-bands'),
           ExcludeSemantics(child: Row(mainAxisSize: MainAxisSize.min, children: [for (var b = 1; b <= 5; b++) _Disc(bands[b], t.colorScheme.onSurface)])),
-          'Heard: weak → strong',
+          // The main map's wording (Round 5 D-17): one phrase for the same ramp on every map.
+          'Weak → strong',
         ),
-      if (dots) item(const Key('drive-key-noreply'), ExcludeSemantics(child: _Disc(bands.noReplyPoint, t.colorScheme.onSurface)), 'Not heard'),
+      if (dots) item(const Key('drive-key-noreply'), ExcludeSemantics(child: _Disc(bands.noReplyPoint, t.colorScheme.onSurface)), def.legendDef.noReplyLabel),
       if (dots && outlined)
         item(
           const Key('drive-key-outlined'),

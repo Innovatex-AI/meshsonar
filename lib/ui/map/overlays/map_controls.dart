@@ -11,7 +11,9 @@ const double kControlGap = 12;
 
 /// Where the single Recenter / heading button is: not following (tap = follow, north-up), following north-up (tap = heading-up),
 /// following heading-up (tap = north-up). Apple Maps' three-state location button.
-enum RecenterMode { notFollowing, followingNorthUp, followingHeadingUp }
+/// [showWhole] (build 77, Round 5 D-13): a map of one past drive (no live position): the button frames the whole drive again,
+/// "Show whole drive", instead of jumping to the last ping and following it.
+enum RecenterMode { notFollowing, followingNorthUp, followingHeadingUp, showWhole }
 
 class MapControlButton extends StatelessWidget {
   final Widget icon;
@@ -62,6 +64,9 @@ class MapControlColumn extends StatelessWidget {
   final bool recenterVisible;
   final RecenterMode recenterMode;
   final VoidCallback onRecenter;
+
+  /// The map's press-and-hold actions as a visible button (Round 1 N8: "Meet here" was long-press only). Null = no button.
+  final VoidCallback? onMore;
   const MapControlColumn({
     super.key,
     required this.onLayers,
@@ -71,12 +76,14 @@ class MapControlColumn extends StatelessWidget {
     required this.recenterVisible,
     required this.recenterMode,
     required this.onRecenter,
+    this.onMore,
   });
 
   static String recenterLabel(RecenterMode m) => switch (m) {
         RecenterMode.notFollowing => 'Follow my location',
         RecenterMode.followingNorthUp => 'Following, north up. Tap for heading up',
         RecenterMode.followingHeadingUp => 'Following, heading up. Tap for north up',
+        RecenterMode.showWhole => 'Show whole drive',
       };
 
   @override
@@ -88,6 +95,10 @@ class MapControlColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        if (onMore != null) ...[
+          MapControlButton(key: const Key('map-more'), label: 'Map actions, such as Meet here', onPressed: onMore, icon: const Icon(Icons.more_horiz_rounded)),
+          const SizedBox(height: kControlGap),
+        ],
         MapControlButton(
           key: const Key('map-compass'),
           visible: compassVisible,
@@ -107,6 +118,7 @@ class MapControlColumn extends StatelessWidget {
             RecenterMode.notFollowing => Icons.near_me_outlined,
             RecenterMode.followingNorthUp => Icons.near_me,
             RecenterMode.followingHeadingUp => Icons.navigation_rounded,
+            RecenterMode.showWhole => Icons.fit_screen_rounded,
           }),
         ),
       ],
