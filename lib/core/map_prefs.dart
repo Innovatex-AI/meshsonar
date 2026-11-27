@@ -142,6 +142,7 @@ class MapPrefs extends ChangeNotifier {
   String? _colourBy;
   int _basemapCachePurged = 0;
   final Map<String, LayerPrefs> _layers = {};
+  final Set<String> _tipsSeen = {};
   bool _loaded = false;
   Future<void>? _loading;
 
@@ -165,6 +166,10 @@ class MapPrefs extends ChangeNotifier {
   int get basemapCachePurged => _basemapCachePurged;
   set basemapCachePurged(int v) => _set(() => _basemapCachePurged = v, _basemapCachePurged != v);
   bool get loaded => _loaded;
+
+  /// The one-time map tips already shown on this device (build 77, Round 1 N8: `cell`, `repeater`, `longpress`).
+  bool tipSeen(String id) => _tipsSeen.contains(id);
+  void markTipSeen(String id) => _set(() => _tipsSeen.add(id), !_tipsSeen.contains(id));
 
   /// The remembered layer choices of map page [pageId] (read synchronously: the file is loaded before the first frame, see
   /// openSharedMapPrefs in main). [LayerPrefs.empty] when nothing was chosen.
@@ -211,6 +216,7 @@ class MapPrefs extends ChangeNotifier {
     if (_colourBy != null) 'colour_by': _colourBy,
     if (_basemapCachePurged != 0) 'basemap_cache_purged': _basemapCachePurged,
     if (_layers.isNotEmpty) 'layers': {for (final e in _layers.entries) e.key: e.value.toJson()},
+    if (_tipsSeen.isNotEmpty) 'tips_seen': (_tipsSeen.toList()..sort()),
   };
 
   void applyJson(Object? j) {
@@ -222,6 +228,11 @@ class MapPrefs extends ChangeNotifier {
     _iconSize = MapSizeChoice.parse(j['icon_size']);
     _colourBy = j['colour_by'] is String ? j['colour_by'] as String : null;
     if (j['basemap_cache_purged'] is int) _basemapCachePurged = j['basemap_cache_purged'] as int;
+    if (j['tips_seen'] is List) {
+      _tipsSeen
+        ..clear()
+        ..addAll([for (final t in j['tips_seen'] as List) if (t is String) t]);
+    }
     final ls = j['layers'];
     if (ls is Map) {
       _layers.clear();

@@ -64,6 +64,9 @@ class MapControlColumn extends StatelessWidget {
   final bool recenterVisible;
   final RecenterMode recenterMode;
   final VoidCallback onRecenter;
+
+  /// The map's press-and-hold actions as a visible button (Round 1 N8: "Meet here" was long-press only). Null = no button.
+  final VoidCallback? onMore;
   const MapControlColumn({
     super.key,
     required this.onLayers,
@@ -73,6 +76,7 @@ class MapControlColumn extends StatelessWidget {
     required this.recenterVisible,
     required this.recenterMode,
     required this.onRecenter,
+    this.onMore,
   });
 
   static String recenterLabel(RecenterMode m) => switch (m) {
@@ -91,6 +95,10 @@ class MapControlColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        if (onMore != null) ...[
+          MapControlButton(key: const Key('map-more'), label: 'Map actions, such as Meet here', onPressed: onMore, icon: const Icon(Icons.more_horiz_rounded)),
+          const SizedBox(height: kControlGap),
+        ],
         MapControlButton(
           key: const Key('map-compass'),
           visible: compassVisible,

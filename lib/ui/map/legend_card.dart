@@ -171,7 +171,7 @@ Widget legendEntryKey(BuildContext context, LegendEntryDef e, MapDefinition def)
         child: Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: c[e.state == 'none' ? 0 : 4])),
       );
     default:
-      return ExcludeSemantics(child: Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: mc.beacon)));
+      return ExcludeSemantics(child: Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: mc.repeater)));
   }
 }
 

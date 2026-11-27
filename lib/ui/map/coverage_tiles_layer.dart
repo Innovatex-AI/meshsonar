@@ -51,6 +51,9 @@ bool coverageTilesOverlap((int, int, int) a, (int, int, int) b) {
   return (ax >> (az - bz)) == bx && (ay >> (az - bz)) == by;
 }
 
+/// What a coverage layer shows in the view now (the map's status pill, Round 1 N5).
+enum CoverageViewStatus { shown, loading, failed, empty, notAtThisZoom }
+
 class CoverageTilesLayer extends StatefulWidget {
   final CoverageTileLayer layer;
   final CoverageTileStore store;
@@ -63,7 +66,10 @@ class CoverageTilesLayer extends StatefulWidget {
   /// The Map Definition's coverage ladder (`coverage.summary`), or null = build 72 behaviour. With it the summary layers draw
   /// the picture from [CoverageLadder.fromZoom] to the res-11 hexagons, and the dot layers keep to the zooms below it.
   final CoverageLadder? ladder;
-  const CoverageTilesLayer({super.key, required this.layer, required this.store, required this.meta, required this.colors, this.faintBelow = 3, this.ladder});
+
+  /// What the layer shows in this view (build 77, Round 1 N5: the map says what it is doing), after each build.
+  final ValueChanged<CoverageViewStatus>? onStatus;
+  const CoverageTilesLayer({super.key, required this.layer, required this.store, required this.meta, required this.colors, this.faintBelow = 3, this.ladder, this.onStatus});
 
   @override
   State<CoverageTilesLayer> createState() => CoverageTilesLayerState();
@@ -169,6 +175,7 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
               ((widget.layer == CoverageTileLayer.measured && camera.zoom >= ladder.fromZoom && camera.zoom < ladder.hexFromZoom) ||
                   (widget.layer == CoverageTileLayer.predicted && camera.zoom < ladder.hexFromZoom)));
     if (skip || (!measured && !summary && camera.zoom < meta.predictedFromZoom)) {
+      if (widget.onStatus case final report?) WidgetsBinding.instance.addPostFrameCallback((_) => report(CoverageViewStatus.notAtThisZoom));
       _endHold();
       _shownZ = null;
       _data = CellLayerData.empty;
@@ -269,6 +276,13 @@ class CoverageTilesLayerState extends State<CoverageTilesLayer> {
     }
     // The reference is the last picture with no hole: a hole stays a hole until it is filled.
     if (lost.isEmpty) _drawnTiles = drawn;
+    if (widget.onStatus case final report?) {
+      final cells = parts.fold<int>(0, (n, p) => n + p.length);
+      final status = !resolved
+          ? (store.offline ? CoverageViewStatus.failed : CoverageViewStatus.loading)
+          : (bare.isNotEmpty && store.offline ? CoverageViewStatus.failed : (cells == 0 ? CoverageViewStatus.empty : CoverageViewStatus.shown));
+      WidgetsBinding.instance.addPostFrameCallback((_) => report(status));
+    }
     final sig = used.join(',');
     if (_stylesFor != widget.colors || _styles == null) {
       _styles = switch (widget.layer) {

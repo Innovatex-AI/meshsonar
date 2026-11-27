@@ -29,16 +29,17 @@ void main() {
     }
 
     test('light: fills vs land #F2EFE9', () {
-      table(Brightness.light, MapTokens.landLight, [4.52, 4.11, 4.21]);
+      table(Brightness.light, MapTokens.landLight, [6.72, 3.41, 4.21]);
     });
 
     test('dark: fills vs #2B2F36', () {
-      table(Brightness.dark, _chartDark, [5.82, 6.67, 5.29]);
+      table(Brightness.dark, _chartDark, [7.63, 4.54, 5.29]);
     });
 
-    test('the exact palette of the plan', () {
-      expect([for (final f in RepeaterFreshness.values) freshnessColor(f, Brightness.light).toARGB32()], [0xFF0072B2, 0xFFB35C00, 0xFF6B7280]);
-      expect([for (final f in RepeaterFreshness.values) freshnessColor(f, Brightness.dark).toARGB32()], [0xFF56B4E9, 0xFFF0A92E, 0xFF9CA3AF]);
+    test('the exact palette (build 77 colour language)', () {
+      // Build 77 colour language: the neutral repeater slate, faded for recent; amber only for warnings.
+      expect([for (final f in RepeaterFreshness.values) freshnessColor(f, Brightness.light).toARGB32()], [0xFF3F5663, 0xFF74838B, 0xFF6B7280]);
+      expect([for (final f in RepeaterFreshness.values) freshnessColor(f, Brightness.dark).toARGB32()], [0xFFB4C6D0, 0xFF8A98A1, 0xFF9CA3AF]);
     });
 
     test('the rejected research orange #E69F00 would fail 3:1 on the light land (why #B35C00)', () {

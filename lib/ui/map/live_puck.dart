@@ -547,7 +547,7 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
                     center: c,
                     pose: pose,
                     color: t.colorScheme.primary,
-                    weakColor: mc.beacon,
+                    weakColor: mc.warning,
                     echoColor: mc.linkLine,
                     silentColor: mc.silent,
                     sentSince: puck.waiting && puck.sentAt != null ? now.difference(puck.sentAt!) : null,
@@ -569,7 +569,7 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
                   // The arrow on the screen: the heading plus however much the map is turned.
                   angle: heading == null ? null : (heading + camera.rotation) * math.pi / 180,
                   weak: weak,
-                  weakColor: mc.beacon,
+                  weakColor: mc.warning,
                   fromCompass: puck.headingFromCompass,
                 ),
               ),
@@ -584,7 +584,7 @@ class _PuckLayerState extends State<PuckLayer> with SingleTickerProviderStateMix
                       decoration: BoxDecoration(
                         color: t.colorScheme.surface.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(7),
-                        border: Border.all(color: mc.beacon, width: 1.2),
+                        border: Border.all(color: mc.warning, width: 1.2),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),

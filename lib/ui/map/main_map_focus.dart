@@ -39,7 +39,11 @@ class MapFocusRequest {
 
   /// Targets to draw, in order; empty = none.
   final List<MapFocusTarget> targets;
-  const MapFocusRequest(this.at, this.zoom, this.seq, {this.showLayers = const {}, this.planId, this.targets = const []});
+
+  /// Which tab's map takes it (build 77, Round 1 N6: "Open the map" opens the map of the tab you are in): `drive` (the default
+  /// and the Drive map's) or `plan` (the Plan map, when it takes focus requests). Network > Live has its own (LiveMapFocus).
+  final String target;
+  const MapFocusRequest(this.at, this.zoom, this.seq, {this.showLayers = const {}, this.planId, this.targets = const [], this.target = 'drive'});
 
   /// It asks for more than a camera move.
   bool get hasOverlay => showLayers.isNotEmpty || planId != null || targets.isNotEmpty;
@@ -54,9 +58,9 @@ class MainMapFocus {
   static final PlanOverlayController overlay = PlanOverlayController();
   static int _seq = 0;
 
-  static void request(LatLng at, double zoom, {Set<String> showLayers = const {}, String? planId, List<MapFocusTarget> targets = const []}) =>
+  static void request(LatLng at, double zoom, {Set<String> showLayers = const {}, String? planId, List<MapFocusTarget> targets = const [], String target = 'drive'}) =>
       notifier.value = MapFocusRequest(at, zoom.clamp(3, 18).toDouble(), ++_seq,
-          showLayers: Set.unmodifiable(showLayers), planId: planId, targets: List.unmodifiable(targets));
+          showLayers: Set.unmodifiable(showLayers), planId: planId, targets: List.unmodifiable(targets), target: target);
 
   /// The main map took [r]: clears it (only if nothing newer came in).
   static void taken(MapFocusRequest r) {

@@ -23,12 +23,20 @@
 // Build 75: a page preset that lists `repeaters` / `observers` draws them (node symbols) from the nodes the caller passes in
 // [MapPreview.repeaters] / [MapPreview.observers]: the region's already-loaded list; no list, nothing drawn, nothing fetched.
 //
-// Keys: the map keeps the caller's [mapKey]; 'map-preview-open' is the Open button.
+// Build 77 (Round 1 N6): every small map matches the main map. It follows the base map the person chose (Road, Light, Dark, Topo,
+// Satellite; one vector layer, names inside: BaseMapStyle.resolve(..., labelsAbove: false)), on the style's own background (no
+// navy flash before the tiles), with the one credit pill, one mini legend ("Weak → strong") whenever it draws coverage, and one
+// of two standard heights ([MapPreview.compactHeight], [MapPreview.tallHeight]). "Open the map" opens the map of the tab you
+// are in: Network > Live on a Network page, the Plan map on the Plan tab, else the Drive map.
+//
+// Keys: the map keeps the caller's [mapKey]; 'map-preview-open' is the Open button; 'map-preview-legend' the mini legend.
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../core/basemap.dart' show BasemapSource;
 import '../../core/coverage_v2.dart' show CoverageTileLayer;
+import '../../core/map_styles.dart';
 import '../../core/map_definition_pages.dart';
 import '../../core/map_definition_v2.dart';
 import '../../core/map_prefs.dart';
@@ -45,7 +53,10 @@ import 'layers/plan_layer.dart' show planLayerWidgets;
 import 'layers/region_borders_layer.dart' show RegionBordersLayer, regionBorderRings;
 import 'layers/plan_overlay.dart' show PlanOverlayController;
 import 'layers/registry.dart' show definitionLayerIds, kHeardCellsLayerId, kPlanLayerId;
+import 'coverage_map.dart' show CoverageMap;
 import 'main_map_focus.dart';
+import 'satellite_layers.dart' show basemapLayersFor;
+import '../network/live/live_map_focus.dart';
 import 'overlays/mini_map_credit.dart';
 import 'still/still_nodes.dart';
 
@@ -255,14 +266,38 @@ class MapPreview extends StatelessWidget {
     ];
   }
 
+  /// The two standard heights of a small map (Round 1 N6): a card or list row, and a detail page's map.
+  static const double compactHeight = 180;
+  static const double tallHeight = 260;
+
+  /// "Open the map": the map of the tab the person is in (Round 1 N6): Network > Live from a Network page, the Plan map from the
+  /// Plan tab, the Drive map from anywhere else (Drive, Chat, More).
   void _open(BuildContext context) {
     final at = openAt;
     if (at == null) return;
-    MainMapFocus.request(at, openZoom ?? zoom);
     final shell = ShellScope.maybeOf(context);
-    if (shell == null) return;
-    shell.select(AppTab.drive);
-    Navigator.of(context).popUntil((r) => r.isFirst);
+    final z = openZoom ?? zoom;
+    switch (shell?.tab) {
+      case AppTab.network:
+        LiveMapFocus.request(at, z);
+        Navigator.of(context).popUntil((r) => r.isFirst);
+        shell!.openNetwork(const NetworkRequest(section: NetworkSection.live));
+      case AppTab.plan:
+        MainMapFocus.request(at, z, target: 'plan');
+        Navigator.of(context).popUntil((r) => r.isFirst);
+      case _:
+        MainMapFocus.request(at, z);
+        if (shell == null) return;
+        shell.select(AppTab.drive);
+        Navigator.of(context).popUntil((r) => r.isFirst);
+    }
+  }
+
+  /// The base map the person chose (Settings / Layers), resolved for a small map: one layer, names inside.
+  static ResolvedBasemap resolvedFor(BuildContext context, {required bool coverageOn}) {
+    final s = AppScope.maybeOf(context);
+    final choice = BaseMapStyle.effective(BaseMapStyle.parse(s?.settings.baseMapStyle), ActiveMapDefinition.current);
+    return BaseMapStyle.resolve(choice, appDark: Theme.of(context).brightness == Brightness.dark, coverageOn: coverageOn, labelsAbove: false);
   }
 
   @override
@@ -274,6 +309,11 @@ class MapPreview extends StatelessWidget {
   Widget _build(BuildContext context, MapPrefs p) {
     final mc = MeshSonarColors.of(context);
     final t = Theme.of(context);
+    final cov = effectiveCoverage(p);
+    final covLayers = _coverageLayers(context, cov);
+    final r = resolvedFor(context, coverageOn: covLayers.isNotEmpty);
+    // The style's own background (the main map's): no navy flash before the tiles; Satellite and no tiles keep the theme's.
+    final bg = tiles && basemap == null && r.base != null ? (basemapBackgroundColor(BasemapSource.ours, dark: r.dark, look: r.base!) ?? mc.mapBackground) : mc.mapBackground;
     final map = FlutterMap(
       key: mapKey,
       mapController: controller,
@@ -283,20 +323,25 @@ class MapPreview extends StatelessWidget {
         initialCameraFit: fit,
         minZoom: minZoom,
         maxZoom: maxZoom,
-        backgroundColor: mc.mapBackground,
+        backgroundColor: bg,
         interactionOptions: InteractionOptions(flags: _flags),
         onTap: interaction == MapPreviewInteraction.edit ? onTap : null,
         onPositionChanged: onPositionChanged,
         onMapReady: onMapReady,
       ),
       children: [
-        if (basemap != null) basemap! else if (tiles) const BasemapLayer(),
-        ..._coverageLayers(context, effectiveCoverage(p)),
+        if (basemap != null)
+          basemap!
+        else if (tiles)
+          ...basemapLayersFor(r, ActiveMapDefinition.current, tiles: BasemapLayer.sharedTiles, userAgentPackageName: CoverageMap.userAgentPackageName),
+        ...covLayers,
         if (preset?.has('borders') == true) ..._borders(context),
         ..._nodeLayers(p),
         ...overlays,
         if (planOverlay case final plan? when p.previewLayerOn(layerPage, kPlanLayerId, fallback: true)) ...planLayerWidgets(plan),
-        const MiniMapCredit(),
+        MiniMapCredit(style: basemap == null ? r.choice : BaseMapStyle.chart),
+        // The one mini legend whenever coverage is drawn (Round 1 N6), in the main map's wording.
+        if (covLayers.isNotEmpty) const MiniMapLegend(),
       ],
     );
     if (openAt == null) return map;
@@ -335,6 +380,36 @@ class MapPreview extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The small maps' legend (Round 1 N6): the band ramp and "Weak → strong", top-left, not tappable. The main map's chip wording.
+class MiniMapLegend extends StatelessWidget {
+  const MiniMapLegend({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final bands = CoverageBandColors.of(MeshSonarColors.of(context).palette, t.brightness);
+    return Align(
+      alignment: Alignment.topLeft,
+      child: IgnorePointer(
+        child: Container(
+          key: const Key('map-preview-legend'),
+          margin: const EdgeInsets.all(6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(color: t.colorScheme.surface.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(12), border: Border.all(color: t.colorScheme.outlineVariant)),
+          child: Semantics(
+            label: 'Legend: weak to strong signal',
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              for (final b in const [1, 2, 3, 4, 5]) ExcludeSemantics(child: Padding(padding: const EdgeInsets.only(right: 2), child: Container(width: 9, height: 9, color: bands[b]))),
+              const SizedBox(width: 4),
+              ExcludeSemantics(child: Text('Weak → strong', style: t.textTheme.labelSmall)),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }

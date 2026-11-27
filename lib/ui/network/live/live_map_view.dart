@@ -67,6 +67,7 @@ import '../packets/packet_detail_screen.dart';
 import '../packets/packet_ui.dart' show ageText, snrText;
 import 'live_map_controller.dart';
 import 'live_nodes_layer.dart';
+import 'live_map_focus.dart';
 import 'live_replay_entry.dart';
 import 'packet_type_colors.dart';
 
@@ -206,6 +207,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     unawaited(_loadNodes());
     // Live does not open empty (Round 2 N-U2): the latest 20 packets, once, under "Latest packets".
     unawaited(_c.loadLatest());
+    LiveMapFocus.notifier.addListener(_takeFocus);
     final r = widget.request;
     if (r?.packetHash != null) unawaited(_loadFocus(r!.packetHash!, r.mapTime, observationId: LiveReplayRequests.take(r.packetHash!)));
   }
@@ -473,8 +475,16 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     }
   }
 
+  /// "Open the map" from a small map on a Network page: look at that spot (Round 1 N6).
+  void _takeFocus() {
+    if (!_mapReady || !mounted || LiveMapFocus.notifier.value == null) return;
+    final (at, zoom) = LiveMapFocus.take()!;
+    _map.move(at, zoom);
+  }
+
   @override
   void dispose() {
+    LiveMapFocus.notifier.removeListener(_takeFocus);
     WidgetsBinding.instance.removeObserver(this);
     PowerProfile.removeListener(_powerChanged);
     _favs?.removeListener(_favsChanged);
@@ -736,6 +746,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
               onMapReady: () {
                 _mapReady = true;
                 if (_c.focus != null) _fitFocus();
+                _takeFocus();
               },
             ),
           ),
@@ -795,7 +806,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
         final c = _c.replayClock;
         return (
           'Replay ${replaySpeedLabel(_c.speed)} · ${c == null ? '' : windowTimeText(c.playhead, _c.window)}',
-          cs.tertiary,
+          cs.primary,
         );
       case LiveMode.live:
         break;

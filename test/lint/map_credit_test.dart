@@ -40,7 +40,7 @@ void main() {
         if (f.readAsStringSync().contains('FlutterMap(')) f.path.replaceAll('\\', '/'),
     ]..sort();
     expect(maps, ['lib/ui/map/coverage_map.dart', 'lib/ui/map/map_preview.dart'], reason: 'small maps are MapPreview (map_preview.dart), never a FlutterMap of their own');
-    expect(File('lib/ui/map/map_preview.dart').readAsStringSync(), contains('const MiniMapCredit()'));
+    expect(File('lib/ui/map/map_preview.dart').readAsStringSync(), contains('MiniMapCredit(style:'), reason: 'the credit of the base map the small map draws');
   });
 
   test('the mini map credit is the short OpenStreetMap credit (imagery credit on Satellite), build 77 decision 5', () {

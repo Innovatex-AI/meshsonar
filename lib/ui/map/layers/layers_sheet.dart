@@ -21,6 +21,7 @@
 // 'layers-group-palette', 'layers-group-labels', 'layers-group-activity', 'layers-group-mine'), the switch per layer from [layerSwitchKey], 'layer-<id>-status', 'layer-<id>-retry', 'layer-<id>-key',
 // 'layer-color-snr', 'layer-color-result', 'layers-palette-<paletteId>', 'layers-filter', 'layers-credits', 'layers-legend',
 // 'layers-reset', 'network-legend'.
+import '../../../core/time_format.dart' as tf;
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 
@@ -898,9 +899,7 @@ class NetworkAgeLegend extends StatelessWidget {
   }
 
   static String _stamp(DateTime t) {
-    final l = t.toLocal();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
+    return tf.shortDateTime(t);
   }
 }
 

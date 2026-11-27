@@ -3,7 +3,7 @@
 // Usage:
 //   CoverageMap(
 //     pings: pings,                       // every ping to draw, any order (dots coloured by result or SNR)
-//     repeaters: state.repeaters,         // RepeaterRef cache: amber beacon markers, name on tap
+//     repeaters: state.repeaters,         // RepeaterRef cache: repeater markers, name on tap
 //     position: LatLng(fix.lat, fix.lon), // optional "you are here"; follow mode keeps it where it is on the screen
 //     repeaterLabel: state.repeaterLabel, // optional: prefix -> display name for the link labels
 //     heard: heardSnapshot(state.heard),  // optional: live/holding/stale repeaters (Drive screen)
@@ -30,7 +30,7 @@
 //      off by default) and the region roster (`repeaters`) as clustered painters from a [RepeaterMapSource], then
 //      the viewed region's observers with a public position (`observers`). Taps open detail sheets through
 //      showMapHitSheet (sheets/map_hit_sheet.dart); a cluster zooms to its members.
-//   6. Repeaters (amber beacons). Heard ones pop up and glow while live, then grey out when stale. Tap for the name.
+//   6. Repeaters (neutral badges). Heard ones pop up and glow while live, then grey out when stale. Tap for the name.
 //   7. Ping dots: heard = the palette's SNR ramp by best SNR (-10 → +10 dB; red → yellow → green on Standard) or plain green
 //      in "result" mode; heard nothing = grey. The newest dot pulses once.
 //   (Measured / Predicted coverage v2 are MVT tiles coloured by the mean-SNR band, coverage_bands.dart.)
@@ -61,6 +61,7 @@
 //     plan's nodes, never the targets). Null (the default, the Drive map) = no handles, nothing changes.
 //   - [takesFocusRequests] false (the default) keeps a secondary map (the planner's, a detail map) from taking "Open the map
 //     here" requests meant for the Drive map.
+import '../../core/time_format.dart' as tf;
 import 'dart:async' show StreamController, StreamSubscription, Timer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:math' as math;
@@ -144,6 +145,8 @@ import 'basemap_layer.dart';
 import 'map_size_controls.dart' show colourByNow;
 import 'node_symbol.dart' show nodeTintArgb, rosterTintId;
 import 'parts/ping_dots_layer.dart';
+import 'parts/map_status_pill.dart';
+import 'parts/map_feedback.dart';
 import 'satellite_layers.dart';
 import 'layers/m3_layers.dart';
 import '../design/anchored_sheet.dart';
@@ -354,6 +357,9 @@ class CoverageMap extends StatefulWidget {
   /// This is the main map (the Drive tab's): it answers "Open the map here" from previews (main_map_focus.dart).
   final bool takesFocusRequests;
 
+  /// The tab whose focus requests this map takes ([MapFocusRequest.target]): `drive` (default) or `plan`.
+  final String focusTarget;
+
   /// A drive is running on this map (the Drive tab's): repeater names use the smaller driving budget so the road reads at a
   /// glance. The Names switch in Layers still turns them all off or back on.
   final bool fewerNames;
@@ -473,6 +479,7 @@ class CoverageMap extends StatefulWidget {
     this.regionBorders = const [],
     this.legend,
     this.takesFocusRequests = false,
+    this.focusTarget = 'drive',
     this.fewerNames = false,
     this.openLegend,
     this.viewController,
@@ -523,6 +530,16 @@ class CoverageMap extends StatefulWidget {
   static H3? hexEngine = loadHexEngine();
 
   static const String userAgentPackageName = 'com.meshsonar.app';
+
+  /// The one-time map tips (Round 1 N8). Off under `flutter test` (they would sit over every other test's map); tests of the
+  /// tips turn it on.
+  static bool showTips = () {
+    try {
+      return !Platform.environment.containsKey('FLUTTER_TEST');
+    } catch (_) {
+      return true;
+    }
+  }();
 
   /// Build 77 (Round 1 F2): the base map's names drawn as a second vector layer above the coverage on the full maps. False keeps
   /// one layer (names inside the base, under the coverage), the switch for a device that fails the map performance gate with
@@ -1142,7 +1159,7 @@ class _CoverageMapState extends State<CoverageMap> {
           : 'Heard ${ping.echoes.length} repeater${ping.echoes.length == 1 ? '' : 's'}${best == null ? '' : '  ·  best ${formatSnrShort(best)} dB'}${_linkUnplaced > 0 ? '  ·  $_linkUnplaced not on the map' : ''}';
       return MapInfoPanel(
         key: ValueKey('info-panel-ping-${ping.id}'),
-        title: 'Ping at ${ping.ts.toLocal().hour.toString().padLeft(2, '0')}:${ping.ts.toLocal().minute.toString().padLeft(2, '0')}',
+        title: 'Ping at ${tf.timeOfDay(ping.ts)}',
         summary: summary,
         busy: false,
         body: PingDetailSheet(ping: ping, lookup: lookup, scrollController: _pingScroll),
@@ -1276,6 +1293,7 @@ class _CoverageMapState extends State<CoverageMap> {
 
   /// A tap on a clustered repeater layer or an observer (cells come through [MapOptions.onTap]).
   void _onHit(MapHit hit) {
+    if (hit is RepeaterHit || hit is ClusterHit) MapPrefs.shared.markTipSeen('repeater');
     // One tap, one decision (MapHitResolver): the same tap also reaches the map itself and any marker under the finger.
     _hits.submit(MapHitCandidate(hit is ObserverHit ? MapHitKind.observer : MapHitKind.repeater, () => _applyHit(hit)));
   }
@@ -1457,6 +1475,9 @@ class _CoverageMapState extends State<CoverageMap> {
   @override
   void initState() {
     super.initState();
+    // What is on the map when it opens is the baseline: only cells and repeaters that arrive later flash or ring.
+    _noteNewCells();
+    _noteFirstHeard();
     _selectedRepeater = widget.highlightKey;
     _hadCamera = _vc.initialised;
     if (!_hadCamera) {
@@ -1521,6 +1542,9 @@ class _CoverageMapState extends State<CoverageMap> {
   @override
   void didUpdateWidget(CoverageMap old) {
     super.didUpdateWidget(old);
+    if (!identical(old.layerState, widget.layerState)) WidgetsBinding.instance.addPostFrameCallback((_) => _updateStatus());
+    if (!identical(old.pings, widget.pings) || old.pings.length != widget.pings.length) _noteNewCells();
+    if (!identical(old.heard, widget.heard)) _noteFirstHeard();
     if (old.follow != widget.follow) _follow = widget.follow;
     // The viewed region changed (or the index finished loading) while there is nothing else to look at: recentre.
     final fallbackChanged = old.fallbackCenter != widget.fallbackCenter || old.fallbackBounds != widget.fallbackBounds;
@@ -1573,7 +1597,7 @@ class _CoverageMapState extends State<CoverageMap> {
   /// "Open the map here" from a preview (map_preview.dart): look at that spot and stop following until Recenter.
   void _onFocusRequest() {
     final r = MainMapFocus.notifier.value;
-    if (r == null || !_ready || !mounted) return;
+    if (r == null || !_ready || !mounted || r.target != widget.focusTarget) return;
     MainMapFocus.taken(r);
     _follow = false;
     _controller.move(r.at, r.zoom);
@@ -1595,6 +1619,7 @@ class _CoverageMapState extends State<CoverageMap> {
     final ls = widget.layerState ?? kDefaultLayerState;
     final node = (src != null && ls.isOn(kPlanLayerId)) ? planNodeAt(src.drawnNodes, _controller.camera, point) : null;
     unawaited(AppHaptics.selection());
+    MapPrefs.shared.markTipSeen('longpress');
     _applyHit(node != null
         ? PlanNodeHit(nodeId: node.id, name: node.name, lat: node.at.latitude, lon: node.at.longitude)
         : LongPressHit(lat: point.latitude, lon: point.longitude));
@@ -1749,6 +1774,8 @@ class _CoverageMapState extends State<CoverageMap> {
 
   @override
   void dispose() {
+    _status.dispose();
+    _tipTimer?.cancel();
     MainMapFocus.notifier.removeListener(_onFocusRequest);
     _hits.dispose();
     _listenedHost?.removeListener(_onPanelHost);
@@ -1952,6 +1979,60 @@ class _CoverageMapState extends State<CoverageMap> {
 
   static List<Widget>? _layerWidgets(String slot, Map<String, List<Widget> Function()> build) => build[slot]?.call();
 
+  /// Each layer of a slot fades in when it is switched on (Round 1 N7). Keyed by the layer's own key, so a layer that stays on
+  /// keeps its state and never fades again.
+  static List<Widget> _fadeIn(String slot, List<Widget>? layers) => [
+    for (final (i, w) in (layers ?? const <Widget>[]).indexed) MapFadeIn(key: ValueKey('fade-$slot-${w.key ?? i}'), child: w),
+  ];
+
+  // ---- feedback moments (Round 1 N7)
+  Set<String>? _seenCells;
+  Set<String>? _seenHeard;
+  List<NewCellFlash> _flashes = const [];
+  List<FirstHeard> _rings = const [];
+
+  /// A drive cell that was not on the map before flashes once (the first picture of a map does not flash).
+  void _noteNewCells() {
+    final ls = widget.layerState ?? kDefaultLayerState;
+    if (!ls.isOn('hexes') || CoverageMap.hexEngine == null) return;
+    final cells = _ensureHexes();
+    final ids = {for (final c in cells) c.id};
+    final seen = _seenCells;
+    _seenCells = ids;
+    if (seen == null) return;
+    final fresh = [
+      for (final c in cells)
+        if (!seen.contains(c.id)) NewCellFlash(c.id, [for (final p in c.boundary) LatLng(p.lat, p.lon)]),
+    ];
+    if (fresh.isEmpty) return;
+    _flashes = [..._flashes, ...fresh.take(6)];
+    Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      setState(() => _flashes = [for (final f in _flashes) if (!fresh.any((n) => n.id == f.id)) f]);
+    });
+  }
+
+  /// A repeater heard for the first time on this drive: a ring at its place and a success tap.
+  void _noteFirstHeard() {
+    final heard = widget.heard;
+    if (heard == null) return;
+    final keys = {for (final h in heard) if (h.ref != null) h.ref!.key};
+    final seen = _seenHeard;
+    _seenHeard = {...?seen, ...keys};
+    if (seen == null) return;
+    final fresh = [
+      for (final h in heard)
+        if (h.ref != null && !seen.contains(h.ref!.key)) FirstHeard(h.ref!.key, LatLng(h.ref!.lat, h.ref!.lon)),
+    ];
+    if (fresh.isEmpty) return;
+    firstHeardTap();
+    _rings = [..._rings, ...fresh];
+    Timer(const Duration(milliseconds: 1300), () {
+      if (!mounted) return;
+      setState(() => _rings = [for (final r in _rings) if (!fresh.any((n) => n.key == r.key)) r]);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final mc = MeshSonarColors.of(context);
@@ -2041,6 +2122,7 @@ class _CoverageMapState extends State<CoverageMap> {
               _userZoom = _controller.camera.zoom;
               _headingUpApplied = _prefs.headingUp;
               _reportBounds(force: true);
+              WidgetsBinding.instance.addPostFrameCallback((_) => _updateStatus());
               final z = _controller.camera.zoom;
               if (z != _lastZoom) {
                 _lastZoom = z;
@@ -2049,6 +2131,7 @@ class _CoverageMapState extends State<CoverageMap> {
               if (z != _zoomNow) {
                 final before = hexResolution, captionsBefore = _captions;
                 _zoomNow = z;
+                WidgetsBinding.instance.addPostFrameCallback((_) => _updateStatus());
                 if (before != hexResolution || captionsBefore != _captions) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? setState(() {}) : null);
               }
               if (_selectedRepeater != null && widget.highlightKey == _selectedRepeater) {
@@ -2067,7 +2150,10 @@ class _CoverageMapState extends State<CoverageMap> {
                 if (h == null) {
                   _hits.tapReachedMap();
                 } else {
-                  _hits.submit(MapHitCandidate(MapHitKind.cell, () => _showCoverageCell(v2, h.h3, h.lat, h.lon)));
+                  _hits.submit(MapHitCandidate(MapHitKind.cell, () {
+                    MapPrefs.shared.markTipSeen('cell');
+                    _showCoverageCell(v2, h.h3, h.lat, h.lon);
+                  }));
                 }
                 return;
               }
@@ -2090,6 +2176,7 @@ class _CoverageMapState extends State<CoverageMap> {
               if (_zoomNow != camera.zoom) {
                 final before = hexResolution, captionsBefore = _captions;
                 _zoomNow = camera.zoom;
+                WidgetsBinding.instance.addPostFrameCallback((_) => _updateStatus());
                 if (before != hexResolution || captionsBefore != _captions) setState(() {});
               }
               // Every rotation is tracked (Round 1 F9): heading-up turns the map at any panel position, not only a gesture.
@@ -2109,11 +2196,18 @@ class _CoverageMapState extends State<CoverageMap> {
             // Online tiles, kept in the on-device tile cache once seen. Build 77 (Round 1 F2 / N3): what the choice draws is
             // BaseMapStyle.resolve: with coverage on, Road / Light / Dark draw the data-first map, and the names are a second pass
             // ABOVE the coverage ('basemapLabels' in the paint order). Satellite: Esri (our proxy) then NAIP (satellite_layers.dart).
+            // A new base map fades in (Round 1 N7).
             if (tiles)
-              ...basemapLayersFor(resolved, ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),
+              MapFadeIn(
+                key: ValueKey('fade-basemap-${resolved.choice.id}-${resolved.base?.name}'),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: basemapLayersFor(resolved, ActiveMapDefinition.current, tiles: _tiles(), userAgentPackageName: CoverageMap.userAgentPackageName, reset: _tileReset.stream, wide: wide),
+                ),
+              ),
             // The definition's layers, in its drawing order (bottom to top: borders, predicted, heard, measured, drive, links,
             // network, live, repeaters, observers, phones). The app's drive extras (ping dots, the position, names) stay on top.
-            for (final id in _paintOrder()) ...?_layerWidgets(id, {
+            for (final id in _paintOrder()) ..._fadeIn(id, _layerWidgets(id, {
               // The base map's names, over every coverage layer and under the repeaters (nothing on the OpenFreeMap fallback).
               'basemapLabels': () => [
                 if (tiles) ?basemapLabelsLayerFor(resolved, ActiveMapDefinition.current, tiles: _tiles(), reset: _tileReset.stream),
@@ -2160,6 +2254,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   meta: v2.meta,
                   colors: CoverageBandColors.of(mc.palette, t.brightness),
                   ladder: ladder,
+                  onStatus: (s) => _setCoverageStatus(CoverageTileLayer.measuredSummary, s),
                 ),
               if (layerState.isOn('measured'))
                 CoverageTilesLayer(
@@ -2170,6 +2265,7 @@ class _CoverageMapState extends State<CoverageMap> {
                   colors: CoverageBandColors.of(mc.palette, t.brightness),
                   faintBelow: v2.meta.faintBelow,
                   ladder: ladder,
+                  onStatus: (s) => _setCoverageStatus(CoverageTileLayer.measured, s),
                 ),
             ] else if (layerState.isOn('measured') && widget.networkCells.isNotEmpty)
               CellRasterLayer(key: const Key('network-cells-layer'), data: _networkData(context)),
@@ -2196,9 +2292,10 @@ class _CoverageMapState extends State<CoverageMap> {
                       Polyline(
                         points: [LatLng(latest.lat, latest.lon), LatLng(l.repeater.lat, l.repeater.lon)],
                         strokeWidth: 3,
+                        // Signal colour at the ping, the neutral link colour at the repeater (Round 1 N4: no amber).
                         gradientColors: [
                           mc.forPing(heard: true, snr: l.snr),
-                          mc.beacon.withValues(alpha: 0.75),
+                          mc.linkNeutral.withValues(alpha: 0.75),
                         ],
                       ),
                   ],
@@ -2217,9 +2314,9 @@ class _CoverageMapState extends State<CoverageMap> {
                           ? const StrokePattern.solid()
                           : _dashed,
                       gradientColors: h.phase == HeardPhase.fresh
-                          ? [mc.forPing(heard: true, snr: h.snrDb), mc.beacon.withValues(alpha: 0.85)]
+                          ? [mc.forPing(heard: true, snr: h.snrDb), mc.linkNeutral.withValues(alpha: 0.85)]
                           : null,
-                      color: h.phase == HeardPhase.fresh ? Colors.transparent : mc.beacon.withValues(alpha: 0.45),
+                      color: h.phase == HeardPhase.fresh ? Colors.transparent : mc.linkNeutral.withValues(alpha: 0.45),
                     ),
                 ],
               ),
@@ -2276,7 +2373,10 @@ class _CoverageMapState extends State<CoverageMap> {
                     showMobile: layerState.isOn('phones'),
                   ),
               ],
-            }),
+            })),
+            // Feedback moments (Round 1 N7): a new cell's flash, a first-heard repeater's ring.
+            NewCellFlashLayer(flashes: _flashes, color: t.colorScheme.onSurface),
+            FirstHeardRingLayer(rings: _rings, color: mc.repeater),
             // Every ping in one paint pass (F12): thousands of pings no longer build thousands of widgets.
             if (layerState.isOn('pings'))
               PingDotsLayer(
@@ -2331,7 +2431,7 @@ class _CoverageMapState extends State<CoverageMap> {
                           a: origin!,
                           b: LatLng(h.ref!.lat, h.ref!.lon),
                           text: AppScope.unitsOf(context).distance(approx: true, haversineM(origin.latitude, origin.longitude, h.ref!.lat, h.ref!.lon)),
-                          color: h.phase == HeardPhase.fresh ? mc.beacon : t.colorScheme.outline,
+                          color: h.phase == HeardPhase.fresh ? mc.repeater : t.colorScheme.outline,
                         ),
                   ],
                   blockers: const [],
@@ -2383,6 +2483,7 @@ class _CoverageMapState extends State<CoverageMap> {
           : widget.topLeading,
       ),
       topTrailing: widget.topTrailing,
+      toast: CoverageMap.showTips && widget.onLayers != null && widget.interactive ? _tip(context) : null,
       controls: _controls(context, pos, latest),
       bottom: _bottomColumn(context, tiles, mc, t, style),
       // The credit: always mounted (Drive plan section 8), bottom-right, tapped (i) opens the Credits sheet.
@@ -2418,15 +2519,103 @@ class _CoverageMapState extends State<CoverageMap> {
   }
 
   /// The top-leading slot's content with the legend card under it (the app keeps the lower-left corner free, Drive plan 9.3, so
-  /// the card sits under the chips and opens downward).
+  /// the card sits under the chips and opens downward), and the map's status pill beside the legend (Round 1 N5).
   Widget? _withLegend(Widget? top) {
     final legend = widget.legend;
     if (legend == null) return top;
+    final row = ValueListenableBuilder<MapStatus?>(
+      valueListenable: _status,
+      builder: (context, st, _) => Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          legend,
+          if (st != null) ...[
+            const SizedBox(width: Gap.xs),
+            MapStatusPill(status: st, onRetry: st == MapStatus.failed ? _retryCoverage : null),
+          ],
+        ],
+      ),
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [?top, if (top != null) const SizedBox(height: Gap.xs), legend],
+      children: [?top, if (top != null) const SizedBox(height: Gap.xs), row],
     );
+  }
+
+  // ---- one-time tips (Round 1 N8): tap a cell, tap a repeater, press and hold the map. One at a time, once per device.
+  String? _tipShown;
+  Timer? _tipTimer;
+
+  /// The first tip this map can teach that was never shown, or null.
+  String? _nextTip() {
+    final prefs = MapPrefs.shared;
+    final ls = widget.layerState ?? kDefaultLayerState;
+    final cells = ls.isOn('measured') && (widget.coverageV2 != null || widget.networkCells.isNotEmpty);
+    final repeaters = ls.isOn(kRosterLayerId) || ls.isOn(kNetworkLayerId) || widget.hitLayers != null;
+    for (final (id, ok) in [('cell', cells), ('repeater', repeaters), ('longpress', widget.onLongPress != null)]) {
+      if (ok && !prefs.tipSeen(id)) return id;
+    }
+    return null;
+  }
+
+  void _tipDone(String id) {
+    if (_tipShown == id) _tipShown = null;
+    _tipTimer?.cancel();
+    MapPrefs.shared.markTipSeen(id);
+    if (mounted) setState(() {});
+  }
+
+  Widget? _tip(BuildContext context) {
+    if (!MapPrefs.shared.loaded && MapPrefs.shared.read != null) return null;
+    final id = _tipShown ?? _nextTip();
+    if (id == null) return null;
+    if (_tipShown != id) {
+      _tipShown = id;
+      // Read once: it goes after a while on its own, and for good.
+      _tipTimer?.cancel();
+      _tipTimer = Timer(const Duration(seconds: 8), () => _tipDone(id));
+    }
+    final text = switch (id) {
+      'cell' => 'Tap a coloured cell to see how it was measured',
+      'repeater' => 'Tap a repeater to see its details',
+      _ => 'Press and hold the map for more, such as Meet here',
+    };
+    return MapTipPill(key: Key('map-tip-$id'), text: text, onClose: () => _tipDone(id));
+  }
+
+  // ---- the status pill (Round 1 N5)
+  final Map<CoverageTileLayer, CoverageViewStatus> _coverageStatus = {};
+  final ValueNotifier<MapStatus?> _status = ValueNotifier(null);
+
+  void _setCoverageStatus(CoverageTileLayer layer, CoverageViewStatus s) {
+    if (!mounted || _coverageStatus[layer] == s) return;
+    _coverageStatus[layer] = s;
+    _updateStatus();
+  }
+
+  /// Measured coverage's status (the summary or the cells, whichever this zoom draws), else whether names wait for a zoom.
+  void _updateStatus() {
+    if (!mounted) return;
+    final ls = widget.layerState ?? kDefaultLayerState;
+    CoverageViewStatus? cov;
+    if (ls.isOn('measured') && widget.coverageV2 != null) {
+      for (final l in const [CoverageTileLayer.measured, CoverageTileLayer.measuredSummary]) {
+        final s = _coverageStatus[l];
+        if (s != null && s != CoverageViewStatus.notAtThisZoom) cov = s;
+      }
+    }
+    final z = _zoomNow ?? _initialZoom;
+    final names = ls.isOn(kLabelsLayerId) && (ls.isOn(kRosterLayerId) || ls.isOn(kNetworkLayerId)) && z < ActiveMapDefinition.current.labelSpec.minZoom;
+    _status.value = mapStatusFor(coverage: cov, namesHiddenByZoom: names);
+  }
+
+  void _retryCoverage() {
+    final v2 = widget.coverageV2;
+    if (v2 == null) return;
+    v2.tiles.networkFailures = 0;
+    setState(() {});
   }
 
   /// The credit on the map (decision 5): "© OpenStreetMap" for our tiles and the OpenFreeMap fallback (who draws it, Protomaps or
@@ -2527,6 +2716,8 @@ class _CoverageMapState extends State<CoverageMap> {
           },
           recenterVisible: havePos,
           recenterMode: mode,
+          // Press-and-hold actions ("Meet here") are also a button (Round 1 N8): they act on the middle of the map.
+          onMore: widget.interactive && widget.onLongPress != null ? () => _onLongPress(_controller.camera.center) : null,
           onRecenter: () {
             switch (mode) {
               case RecenterMode.showWhole:
