@@ -113,8 +113,20 @@ class PacketChannel {
     return PacketChannel(id: j['id'] as String, name: _s(j['name']), kind: _s(j['kind']) ?? 'unknown');
   }
 
-  String get label => name ?? (id.startsWith('enc:') ? 'Unknown channel (hash ${id.substring(4)})' : id);
+  /// A channel MeshSonar has no key for. It has no name; its id is `enc:<one byte>`.
+  bool get isPrivate => name == null && id.startsWith('enc:');
+
+  /// The one-byte ID of a private channel ("96"), which only tells two private channels apart. Null otherwise.
+  /// Shown in three places only (Round 2 N-U5): the Channels list when several are listed, "More about this
+  /// packet", and the packet filter sheet.
+  String? get privateId => isPrivate ? id.substring(4) : null;
+
+  /// The name people read. A private channel is "Private channel" everywhere, with no number.
+  String get label => name ?? (id.startsWith('enc:') ? privateChannelName : id);
 }
+
+/// The one name of a channel MeshSonar has no key for (Round 2 N-U5).
+const String privateChannelName = 'Private channel';
 
 /// A transport scope (contract 2.2).
 class PacketScope {
@@ -210,8 +222,10 @@ class PacketListRow {
 
   /// "Advert: Library Room (room)", or a line built from the fields when the server sent none.
   String get title {
-    if (summary != null) return summary!;
     final t = packetTypeLabel(typeName);
+    // A private channel has one name whatever the server's line says (an older server sends "(channel 96, no key)").
+    if (channel != null && channel!.isPrivate && t.startsWith('Channel ')) return 'Private channel ${t.substring(8)}';
+    if (summary != null) return summary!;
     if (origin?.name != null) return '$t: ${origin!.name}';
     if (channel != null) return '$t on ${channel!.label}';
     return t;
@@ -296,6 +310,9 @@ class PacketHop {
 
   /// The SNR measured at this hop (TRACE only), dB.
   final double? snrDb;
+
+  /// The hop's own position as the server sends it (contract 2.3 `Hop.position`); null when it sent none.
+  final PacketPosition? ownPosition;
   const PacketHop({
     required this.index,
     required this.prefix,
@@ -306,6 +323,7 @@ class PacketHop {
     this.candidatesTotal = 0,
     this.evidence = const [],
     this.snrDb,
+    this.ownPosition,
   });
 
   static PacketHop? tryParse(Object? j) {
@@ -320,14 +338,17 @@ class PacketHop {
       candidatesTotal: _i(j['candidatesTotal']) ?? 0,
       evidence: _strs(j['evidence']),
       snrDb: _d(j['snrDb']),
+      ownPosition: PacketPosition.tryParse(j['position']),
     );
   }
 
-  /// The position of the resolved node (unique or likely), when the server gave one among the candidates.
+  /// The position of the resolved node (unique or likely): the hop's own position when the server sent one,
+  /// otherwise the matching candidate's. A hop with no resolved node is never placed.
   PacketPosition? get position {
     if (node == null) return null;
+    if (ownPosition != null) return ownPosition;
     for (final c in candidates) {
-      if (c.node.key == node!.key) return c.position;
+      if (c.node.key == node!.key && c.position != null) return c.position;
     }
     return null;
   }

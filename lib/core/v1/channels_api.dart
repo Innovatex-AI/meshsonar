@@ -13,6 +13,7 @@
 import 'package:http/http.dart' as http;
 
 import '../region_overview_api.dart' show RegionDataState, RegionDataStatus;
+import 'packet_models.dart' show privateChannelName;
 import 'v1_client.dart';
 
 export 'v1_client.dart';
@@ -70,7 +71,12 @@ class ChannelRow {
   /// True when the text cannot be read here (no key on the server).
   bool get private => !decodable || kind == 'unknown' || id.startsWith('enc:');
 
-  String get label => name ?? (private ? 'Private channel $hashByte' : id);
+  /// "Private channel" for a channel with no key: one name everywhere (Round 2 N-U5). Its one-byte ID is [privateId].
+  String get label => name ?? (private ? privateChannelName : id);
+
+  /// The one-byte ID that tells two private channels apart ("96"); null on a readable channel. Shown only when the
+  /// Channels list holds more than one private channel.
+  String? get privateId => private && name == null ? (id.startsWith('enc:') ? id.substring(4) : (hashByte.isNotEmpty ? hashByte : null)) : null;
 
   static ChannelRow? tryParse(Object? j) {
     if (j is! Map) return null;

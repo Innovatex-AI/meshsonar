@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/power_profile.dart';
 import '../../../core/v1/channels_api.dart';
+import '../../../core/v1/packet_models.dart' show privateChannelName;
 import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, groupInt;
 import '../../theme.dart';
 import '../packets/packet_ui.dart' show NoPacketFeedCard, PacketNote, plainServerText;
@@ -27,9 +28,9 @@ import 'channel_ui.dart';
 /// How often an open reader asks for newer messages.
 const Duration channelPollEvery = Duration(seconds: 20);
 
-/// "Public", "#test", or the id while the name is not known.
+/// "Public", "#test", "Private channel" (one name, Round 2 N-U5), or the id while the name is not known.
 String channelTitleOf(String channelId, [String? name]) =>
-    name ?? (channelId == 'public' ? 'Public' : (channelId.startsWith('tag:') ? '#${channelId.substring(4)}' : (channelId.startsWith('enc:') ? 'Private channel ${channelId.substring(4)}' : channelId)));
+    name ?? (channelId == 'public' ? 'Public' : (channelId.startsWith('tag:') ? '#${channelId.substring(4)}' : (channelId.startsWith('enc:') ? privateChannelName : channelId)));
 
 Future<void> openChannelReader(BuildContext context, {required String baseUrl, required String? regionSlug, required String channelId, String? title}) =>
     Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => ChannelReaderScreen(baseUrl: baseUrl, regionSlug: regionSlug, channelId: channelId, title: title)));

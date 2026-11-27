@@ -13,6 +13,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/api.dart' show CmatException;
 import '../core/region_cache.dart' show asOfLabel;
+import '../core/time_format.dart' show dateTime;
 import '../core/repeater_reach.dart';
 import '../core/units.dart';
 import 'app.dart';
@@ -21,7 +22,6 @@ import 'charts/chart_frame.dart';
 import 'map/coverage_map.dart' show CoverageMap;
 import 'region/region_dataset_view.dart' show FigureStrip;
 import 'settings_screen.dart' show DriverKeyScreen;
-import 'widgets.dart';
 import 'map/node_symbol.dart';
 
 final _hex = RegExp(r'^[0-9a-fA-F]{8,64}$');
@@ -183,7 +183,7 @@ class _RepeaterReachSectionState extends State<RepeaterReachSection> {
         ('Best SNR', snr(tot.bestSnr), null),
         ('Median SNR', snr(tot.medianSnr), null),
         ('Farthest', tot.farthestKm == null ? '—' : u.distance(tot.farthestKm! * 1000), tot.farthestKm == null ? 'needs the repeater position' : 'from the repeater'),
-        ('Last heard', tot.lastHeardAt == null ? '—' : formatDateTime(tot.lastHeardAt!), 'rounded to the hour'),
+        ('Last heard', tot.lastHeardAt == null ? '—' : dateTime(tot.lastHeardAt, weekday: true), 'rounded to the hour'),
       ]),
       const SizedBox(height: Gap.s),
       if (r.cells.isNotEmpty) ...[

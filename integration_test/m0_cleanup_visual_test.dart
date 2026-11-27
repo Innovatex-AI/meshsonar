@@ -54,7 +54,7 @@ void main() {
     // Build 71: the old Insights pages are replaced by the site's Analytics tabs, shown inside the app.
     if (await openNetworkSection(t, 'analytics')) {
       await shot(t, 'm0-analyze-tabs-end');
-      final overview = find.byKey(const Key('analytics-tab-overview'));
+      final overview = find.byKey(const Key('analytics-tab-rf-signal'));
       if (await waitFor(t, overview, timeout: const Duration(seconds: 5))) {
         await t.tap(overview);
         await sitePageProblem(t);

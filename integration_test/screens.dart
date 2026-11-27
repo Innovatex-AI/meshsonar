@@ -1124,7 +1124,8 @@ final List<ScreenStep> screens = [
     if (find.byKey(const Key('network-observer-screen')).evaluate().isNotEmpty) _stepFail('observer-page: Back did not close the observer page');
     _stepOk('network-observers');
   }, optional: true),
-  // Analytics: the list of the site's tabs, then ONE of them (Overview) opened as a site page inside the app.
+  // Analytics: the list, the native rows (Findings, Overview, My Repeaters), then ONE site page (RF / Signal) opened
+  // inside the app. Build 77: the website Overview row is gone on a region (the native Overview replaces it).
   ScreenStep('network-analytics', (t) async {
     await popToRoots(t);
     if (!await openNetworkSection(t, 'analytics')) _stepFail('network-analytics: no Analytics on the strip');
@@ -1132,10 +1133,10 @@ final List<ScreenStep> screens = [
     await shot(t, 'network-analytics');
     // Build 72: the region's Findings and Region overview (the Home section until then) are the first two rows; each
     // opens its native panel in place, with a back arrow to the list.
-    for (final (slug, panel) in [('findings', 'network-findings'), ('region-overview', 'network-region-overview')]) {
+    for (final (slug, panel) in [('findings', 'network-findings'), ('region-overview', 'network-region-overview'), ('my-repeaters', 'network-my-repeaters')]) {
       final row = find.byKey(Key('analytics-tab-$slug'));
-      if (row.evaluate().isEmpty) _stepFail('network-analytics: no $slug row');
-      if (t.getTopLeft(row.first).dy >= t.getTopLeft(find.byKey(const Key('analytics-tab-overview')).first).dy) {
+      if (!await scrollToFind(t, row, find.byKey(const Key('analytics-section')))) _stepFail('network-analytics: no $slug row');
+      if (slug != 'my-repeaters' && t.getTopLeft(row.first).dy >= t.getTopLeft(find.byKey(const Key('analytics-tab-rf-signal')).first).dy) {
         _stepFail('network-analytics: $slug is not above the site tabs');
       }
       await t.tap(row.first, warnIfMissed: false);
@@ -1149,16 +1150,17 @@ final List<ScreenStep> screens = [
       await pumpFor(t, const Duration(seconds: 1));
       if (find.byKey(const Key('analytics-section')).evaluate().isEmpty) _stepFail('network-analytics: Back from $slug did not return to the list');
     }
-    final tab = find.byKey(const Key('analytics-tab-overview'));
-    if (tab.evaluate().isEmpty) _stepFail('network-analytics: no Overview row');
+    if (find.byKey(const Key('analytics-tab-overview')).evaluate().isNotEmpty) _stepFail('network-analytics: the website Overview row is still listed');
+    final tab = find.byKey(const Key('analytics-tab-rf-signal'));
+    if (tab.evaluate().isEmpty) _stepFail('network-analytics: no RF / Signal row');
     await t.ensureVisible(tab.first);
     await pumpFor(t, const Duration(milliseconds: 400));
     await t.tap(tab.first, warnIfMissed: false);
     final problem = await sitePageProblem(t);
-    await shot(t, 'analytics-overview');
-    if (problem != null) _stepFail('analytics-overview: $problem');
+    await shot(t, 'analytics-rf-signal');
+    if (problem != null) _stepFail('analytics-rf-signal: $problem');
     await popToRoots(t);
-    if (find.byKey(const Key('site-page')).evaluate().isNotEmpty) _stepFail('analytics-overview: the site page did not close');
+    if (find.byKey(const Key('site-page')).evaluate().isNotEmpty) _stepFail('analytics-rf-signal: the site page did not close');
     _stepOk('network-analytics');
   }, optional: true),
   // Tools: the list, the three native tools with a real query each, and one site page (Status).
@@ -1235,15 +1237,21 @@ final List<ScreenStep> screens = [
     if (prefixState == 'none') _stepFail('tool-prefix: Check "$prefix" gave no answer in 25 s');
     _stepNote('tool-prefix', 'query "$prefix" -> $prefixState');
 
-    // One site page: Status.
+    // Status: native since build 77 (one call, three states).
+    await openTool('status', 'tool-status');
+    await _until(t, () => _firstKeyOf(t, ['status-page', 'status-error']) != 'none', const Duration(seconds: 25));
+    await shot(t, 'tool-status');
+    if (find.byKey(const Key('status-error')).evaluate().isNotEmpty) _stepFail('tool-status: shows an error (${_text(t, 'status-error') ?? ''})');
+    if (find.byKey(const Key('status-page')).evaluate().isEmpty) _stepFail('tool-status: no answer in 25 s');
+    // One site page: Scope Audit.
     await popToRoots(t);
     await openNetworkSection(t, 'tools');
-    final status = find.byKey(const Key('tool-row-status'));
-    if (!await scrollToFind(t, status, list, wait: const Duration(seconds: 6))) _stepFail('network-tools: no Status row');
-    await t.tap(status.first, warnIfMissed: false);
+    final audit = find.byKey(const Key('tool-row-scope-audit'));
+    if (!await scrollToFind(t, audit, list, wait: const Duration(seconds: 6))) _stepFail('network-tools: no Scope Audit row');
+    await t.tap(audit.first, warnIfMissed: false);
     final problem = await sitePageProblem(t);
-    await shot(t, 'tool-status');
-    if (problem != null) _stepFail('tool-status: $problem');
+    await shot(t, 'tool-scope-audit');
+    if (problem != null) _stepFail('tool-scope-audit: $problem');
     await popToRoots(t);
     _stepOk('network-tools');
   }, optional: true),

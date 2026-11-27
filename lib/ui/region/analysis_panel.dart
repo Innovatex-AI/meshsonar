@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../core/region_analysis_api.dart';
 import '../charts/heatmap.dart';
 import '../theme.dart';
+import '../../core/time_format.dart' show hourOfDayLabel, zoneLabel;
 import 'region_common.dart';
 
 class AnalysisPanel extends StatefulWidget {
@@ -127,7 +128,7 @@ class _AnalysisPanelState extends State<AnalysisPanel> {
           final total = d.sizes.fold(0, (a, h) => a + h.nodes);
           return Column(children: [
             for (final h in d.sizes)
-              _BarRow(label: '${h.bytes}-byte', value: h.nodes, max: total, trailing: '${h.nodes} nodes'),
+              _BarRow(label: '${h.bytes}-byte', value: h.nodes, max: total, trailing: '${h.nodes} node${h.nodes == 1 ? '' : 's'}'),
             if (d.collisionPrefixes > 0)
               Padding(
                 padding: const EdgeInsets.only(top: Gap.s),
@@ -234,7 +235,7 @@ class _Card<T> extends StatelessWidget {
             child: Text(
               '${st.state[0].toUpperCase()}${st.state.substring(1)}${st.reason != null ? ': ${st.reason}' : ''}',
               key: Key('section-status-$title'),
-              style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.tertiary),
+              style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
             ),
           ),
         builder(d),
@@ -308,11 +309,11 @@ class _Heatmap extends StatelessWidget {
         ),
       ),
       const SizedBox(height: Gap.s),
-      Text('Last 7 days, your phone\'s local time. Busiest: ${days[pd]} ${_hour(ph)} ($peak packets).',
+      Text('Last 7 days, times in ${zoneLabel()}. Busiest: ${days[pd]} ${_hour(ph)} ($peak packet${peak == 1 ? '' : 's'}).',
           style: t.textTheme.bodySmall),
     ]);
   }
 
-  static String _hour(int h) => '${h % 12 == 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}';
+  static String _hour(int h) => hourOfDayLabel(h);
 }
 

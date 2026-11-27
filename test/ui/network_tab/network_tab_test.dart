@@ -195,9 +195,10 @@ void main() {
     // Build 72: what Home held is the first two rows of Analytics, each opening its native panel in place.
     final findings = find.byKey(const Key('analytics-tab-findings')), overview = find.byKey(const Key('analytics-tab-region-overview'));
     expect(find.descendant(of: findings, matching: find.text('Findings')), findsOneWidget);
-    expect(find.descendant(of: overview, matching: find.text('Region overview')), findsOneWidget);
+    expect(find.descendant(of: overview, matching: find.text('Overview')), findsOneWidget, reason: 'build 77: the one Overview');
+    expect(find.byKey(const Key('analytics-tab-overview')), findsNothing, reason: 'no website Overview row on a region');
     expect(tester.getTopLeft(findings).dy, lessThan(tester.getTopLeft(overview).dy));
-    expect(tester.getTopLeft(overview).dy, lessThan(tester.getTopLeft(find.byKey(const Key('analytics-tab-overview'))).dy), reason: 'above the site tabs');
+    expect(tester.getTopLeft(overview).dy, lessThan(tester.getTopLeft(find.byKey(const Key('analytics-tab-rf-signal'))).dy), reason: 'above the site tabs');
     await tester.tap(findings);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));

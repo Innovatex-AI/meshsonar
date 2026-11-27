@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:meshsonar/core/map_definition.dart';
 import 'package:meshsonar/core/region_lookup.dart';
+import 'package:meshsonar/core/region_overview_api.dart' show RegionDataState;
 import 'package:meshsonar/ui/map/active_map_definition.dart';
 import 'package:meshsonar/core/v1/nodes_api.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart';
@@ -126,7 +127,7 @@ void main() {
     for (final n in ['Hilltop RPT', 'Library Room', 'Creek Gauge', 'Kestrel-07', 'Eastgate RPT']) {
       expect(find.text(n), findsOneWidget);
     }
-    expect(find.textContaining('Companion · Active'), findsOneWidget);
+    expect(find.textContaining('Companion\u00A0· Active'), findsOneWidget, reason: 'a separator is tied to the word before it');
     expect(find.text('Companion 1'), findsOneWidget, reason: 'role chips carry the counts');
 
     await t.ensureVisible(find.byKey(const Key('nodes-role-room')));
@@ -187,7 +188,7 @@ void main() {
     expect(find.byKey(const Key('packets-web-twin')), findsOneWidget);
   });
 
-  testWidgets('node page: every supplied section, star, watch sheet, share link', (t) async {
+  testWidgets('node page: every supplied section, star, no bell, share link', (t) async {
     tall(t);
     String? shared;
     debugNetworkShare = (text, subject) => shared = text;
@@ -226,16 +227,11 @@ void main() {
     await settle(t);
     expect(networkFavouritesForTest().isFavourite(FavouriteKind.node, hilltop), isTrue);
 
-    await t.tap(find.byKey(const Key('watch-button')));
-    await settle(t);
-    expect(find.byKey(const Key('watch-sheet')), findsOneWidget);
-    expect(find.text('Alerts arrive in a later update; the watch is kept on this phone.'), findsOneWidget);
-    await t.tap(find.byKey(const Key('watch-event-clock_bad')));
-    await t.tap(find.byKey(const Key('watch-save')));
-    await settle(t);
-    final w = networkFavouritesForTest().watchOf('node', hilltop)!;
-    expect(w.events, ['silent', 'battery_low']);
-    expect(w.region, 'cmh');
+    // Build 77 (Round 2 N-U9): no bell; the star stays.
+    expect(find.byKey(const Key('watch-button')), findsNothing);
+    expect(find.byKey(Key('fav-node-$hilltop')), findsOneWidget);
+    // Round 2 N-U3: "See who shares this ID" sits on the short ID row.
+    expect(find.byKey(const Key('link-node-shares-id')), findsOneWidget);
 
     await t.tap(find.byKey(const Key('network-share')));
     await settle(t);
@@ -327,7 +323,7 @@ void main() {
     await settle(t);
     expect(find.byKey(const Key('observers-list')), findsOneWidget);
     expect(find.text('OVCS Clintonville'), findsOneWidget);
-    expect(find.textContaining('Phone observer · Online'), findsOneWidget);
+    expect(find.textContaining('Phone observer\u00A0· Online'), findsOneWidget);
     final row = find.byKey(const Key('observer-row-$westside'));
     await t.ensureVisible(row);
     expect(t.getSize(row).height, greaterThanOrEqualTo(44));
@@ -376,7 +372,8 @@ void main() {
     tall(t);
     final j = jsonDecode(fixture('node-detail')) as Map<String, dynamic>;
     (((j['data'] as Map)['health'] as Map)['uptime'] as Map)['h24'] = 1.042; // 25 hourly buckets over a 24 h base
-    (j['meta'] as Map)['status'] = {'state': 'partial', 'reason': 'Some figures are missing: relay figures. Radio and clock arrive with AZ-1.5 to AZ-1.8.'};
+    // A note shows only while data is really missing (pending or failed); a "partial" footer is not printed (Round 2 W7).
+    (j['meta'] as Map)['status'] = {'state': 'pending', 'reason': 'Some figures are missing: relay figures. Radio and clock arrive with AZ-1.5 to AZ-1.8.'};
     nodesApiFactory = (b) => NodesApi(b,
         client: MockClient((r) async => r.url.path == '/v1/nodes/$hilltop' ? json(jsonEncode(j)) : json('{"error":{"code":"not_found","message":"none","requestId":"r"}}', 404)));
     await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
@@ -386,6 +383,22 @@ void main() {
     expect(find.textContaining('104%'), findsNothing);
     expect(t.widget<Text>(find.byKey(const Key('node-status-note'))).data, 'Some figures are missing: relay figures.');
     expect(find.textContaining('AZ-'), findsNothing);
+  });
+
+  testWidgets('node page (Round 2 W7): the server\'s "not on this page yet" footer of a partial answer is not printed', (t) async {
+    tall(t);
+    final j = jsonDecode(fixture('node-detail')) as Map<String, dynamic>;
+    (j['meta'] as Map)['status'] = {'state': 'partial', 'reason': 'Radio settings, scopes, usefulness, battery, clock, claim and recent adverts are not on this page yet.'};
+    nodesApiFactory = (b) => NodesApi(b,
+        client: MockClient((r) async => r.url.path == '/v1/nodes/$hilltop' ? json(jsonEncode(j)) : json('{"error":{"code":"not_found","message":"none","requestId":"r"}}', 404)));
+    await t.pumpWidget(app(const NetworkNodeScreen(baseUrl: base, regionSlug: 'cmh', nodeKey: hilltop, mapTiles: false)));
+    await settle(t);
+    expect(find.byKey(const Key('node-status-note')), findsNothing);
+    expect(find.textContaining('not on this page yet'), findsNothing);
+    expect(nodeStatusNoteShown(RegionDataState.partial), isFalse);
+    expect(nodeStatusNoteShown(RegionDataState.stale), isFalse);
+    expect(nodeStatusNoteShown(RegionDataState.pending), isTrue);
+    expect(nodeStatusNoteShown(RegionDataState.unavailable), isTrue);
   });
 
   testWidgets('observer page: radio settings are spelled out and the dashed line is named under the chart', (t) async {
@@ -499,6 +512,79 @@ void main() {
     await t.pumpWidget(app(const Scaffold(body: NodeDirectoryView(baseUrl: base, regionSlug: 'cmh')), scale: 2.5));
     await settle(t);
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('Round 2 N-U4, N-U11: Observers chips with counts, online first, the kind in words, "Updated X ago"', (t) async {
+    tall(t);
+    final now = DateTime.utc(2026, 11, 20, 14, 20);
+    var clock = now;
+    await t.pumpWidget(app(Scaffold(body: ObserversDirectoryView(baseUrl: base, regionSlug: 'cmh', clock: () => clock))));
+    await settle(t);
+    for (final (chip, label) in [('all', 'All 4'), ('online', 'Online 3'), ('meshsonar', 'MeshSonar 1'), ('phone', 'Phone 1'), ('outside', 'Outside 2')]) {
+      expect(find.descendant(of: find.byKey(Key('observers-chip-$chip')), matching: find.text(label)), findsOneWidget, reason: chip);
+    }
+    expect(find.text('Updated just now \u00B7 pull to refresh'), findsOneWidget);
+    clock = now.add(const Duration(minutes: 5));
+    await t.pump(const Duration(seconds: 31));
+    expect(find.text('Updated 5 min ago \u00B7 pull to refresh'), findsOneWidget, reason: 'the line ticks on its own');
+    // Online first: the stale outside feed is the last row.
+    final rows = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('observer-row-') && !(w.key as ValueKey<String>).value.contains('-what-') && !(w.key as ValueKey<String>).value.contains('-figures-'));
+    final ids = [for (final e in rows.evaluate()) ((e.widget.key as ValueKey<String>).value)];
+    expect(ids.last, startsWith('observer-row-src_31:'), reason: 'stale after online');
+    await t.ensureVisible(find.byKey(const Key('observers-chip-outside')));
+    await t.tap(find.byKey(const Key('observers-chip-outside')));
+    await settle(t);
+    expect(find.byKey(const Key('observer-row-$westside')), findsNothing, reason: 'a MeshSonar observer is not an outside feed');
+    expect(rows.evaluate().length, 2);
+    await t.ensureVisible(find.byKey(const Key('observers-chip-phone')));
+    await t.tap(find.byKey(const Key('observers-chip-phone')));
+    await settle(t);
+    expect(rows.evaluate().length, 1);
+  });
+
+  test('Round 2 N-U4: the Observers order is online, stale, offline, newest report first; the kind words', () {
+    ObserverRow r(String id, String status, int? min, {String kind = 'fixed', String? phoneKind, bool? ours}) => ObserverRow(
+        id: id, name: id, kind: kind, status: status, lastSeen: min == null ? null : DateTime.utc(2026, 11, 20, 14, min), phoneKind: phoneKind, operatedByMeshsonar: ours);
+    final order = observersInListOrder([r('a', 'offline', 50), r('b', 'online', 1), r('c', 'stale', 40), r('d', 'online', 9), r('e', 'online', null)]);
+    expect([for (final o in order) o.id], ['d', 'b', 'e', 'c', 'a']);
+    expect(observerKindWords(r('p', 'online', 1, kind: 'phone', phoneKind: 'mobile')), 'Phone observer, moving');
+    expect(observerKindWords(r('p', 'online', 1, kind: 'phone')), 'Phone observer');
+    expect(observerKindWords(r('f', 'online', 1, ours: true)), 'MeshSonar observer, run by MeshSonar');
+    expect(observerKindWords(r('f', 'online', 1, ours: false)), 'MeshSonar observer');
+    expect(observerKindWords(r('o', 'online', 1, kind: 'outside')), 'Outside feed');
+  });
+
+  testWidgets('Round 2 N-U4: the observer page has a Stats block with its links, no bell, the star', (t) async {
+    tall(t);
+    await t.pumpWidget(app(const NetworkObserverScreen(baseUrl: base, regionSlug: 'cmh', observerId: westside)));
+    await settle(t);
+    expect(find.byKey(const Key('node-section-observer-stats')), findsOneWidget);
+    expect(find.byKey(const Key('observer-stat-last')), findsOneWidget);
+    for (final id in ['observer-packets', 'observer-compare', 'observer-rf-health', 'observer-live']) {
+      expect(find.byKey(Key('link-$id')), findsOneWidget, reason: id);
+    }
+    expect(find.byKey(const Key('watch-button')), findsNothing);
+    expect(find.byKey(const Key('fav-observer-$westside')), findsOneWidget);
+    // Stats comes before the charts.
+    expect(t.getTopLeft(find.byKey(const Key('node-section-observer-stats'))).dy, lessThan(t.getTopLeft(find.byKey(const Key('node-section-observer-metrics'))).dy));
+  });
+
+  test('Round 2 N-V4: 0 dBm is "no reading", never a noise level', () {
+    expect(ObserverSample(DateTime.utc(2026), noiseFloorDbm: 0).noiseReading, isNull);
+    expect(ObserverSample(DateTime.utc(2026), noiseFloorDbm: -93.5).noiseReading, -93.5);
+    expect(const ObserverRow(id: 'x', name: 'x', kind: 'fixed', status: 'online', noiseFloorDbm: 0).noiseReading, isNull);
+  });
+
+  testWidgets('Round 2 N-V5, N-U11: a node row keeps its line whole, relays on their own line, "Updated X ago"', (t) async {
+    tall(t);
+    await t.pumpWidget(app(const Scaffold(body: NodeDirectoryView(baseUrl: base, regionSlug: 'cmh'))));
+    await settle(t);
+    expect(find.byKey(const Key('nodes-updated')), findsOneWidget);
+    expect(find.textContaining('pull to refresh'), findsOneWidget);
+    expect(find.byKey(const Key('node-row-relayed-$hilltop')), findsOneWidget);
+    expect(t.widget<Text>(find.byKey(const Key('node-row-relayed-$hilltop'))).data, 'relayed 1843 today');
+    expect(t.widget<Text>(find.byKey(const Key('node-row-line-$hilltop'))).data, isNot(contains('relayed')));
+    expect(t.widget<Text>(find.byKey(const Key('node-row-line-$hilltop'))).data, isNot(contains(' · ')), reason: 'no breakable separator');
   });
 
   group('MAP slice 5: the small maps on the node and observer pages', () {

@@ -154,10 +154,12 @@ void main() {
       expect(find.text('#wardriving'), findsOneWidget);
       expect(find.text('1,204 messages · 15 senders in 24 h'), findsOneWidget);
       expect(find.textContaining('Last: MeshMonitor'), findsOneWidget);
-      expect(find.text('Private channel fc'), findsOneWidget);
+      // Build 77 (Round 2 N-U5): one name, and no ID while only one private channel is listed.
+      expect(find.text('Private channel'), findsOneWidget);
+      expect(find.textContaining('ID fc'), findsNothing);
       expect(find.byKey(const Key('channel-private-enc:fc')), findsOneWidget);
       // readable rows above the private one, whatever order the server sent
-      expect(t.getTopLeft(find.text('Public')).dy, lessThan(t.getTopLeft(find.text('Private channel fc')).dy));
+      expect(t.getTopLeft(find.text('Public')).dy, lessThan(t.getTopLeft(find.text('Private channel')).dy));
       expect(t.takeException(), isNull, reason: 'no overflow at 375 pt');
 
       // a private row does not navigate
@@ -412,7 +414,7 @@ void main() {
       await t.pumpWidget(app(const ChannelReaderScreen(key: Key('p'), baseUrl: base, regionSlug: 'cmh', channelId: 'enc:fc')));
       await settle(t);
       expect(find.byKey(const Key('channel-private')), findsOneWidget);
-      expect(find.text('Private channel fc'), findsOneWidget);
+      expect(find.text('Private channel'), findsOneWidget);
       expect(s.at('/v1/channels/enc%3Afc/messages'), isEmpty);
     });
   });
@@ -485,6 +487,10 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byKey(const Key('channel-row-enc:fc')), findsOneWidget);
       expect(find.byKey(const Key('channel-private-enc:aa')), findsOneWidget);
+      // Several private channels: each is "Private channel", told apart by a grey "ID aa" (Round 2 N-U5).
+      expect(find.text('Private channel'), findsNWidgets(3));
+      expect(t.widget<Text>(find.byKey(const Key('channel-counts-enc:aa'))).data, startsWith('ID aa · '));
+      expect(t.widget<Text>(find.byKey(const Key('channel-counts-enc:fc'))).data, startsWith('ID fc · '));
       expect(t.takeException(), isNull);
     });
 

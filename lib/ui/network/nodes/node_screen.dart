@@ -2,8 +2,12 @@
 //
 // Sections, each shown only when the API supplied it (absent = hidden, never an empty box): identity and position,
 // node actions, health, activity (packets per hour, packet types), SNR trend, heard by, neighbours, paths through,
-// reach, your drives and drive reach (when it has a position), clock, battery, radio, hash size, recent adverts. The app bar has the favourite star, Watch (kept on the
-// phone; alerts come with AZ-3.8) and Share (the region-host web link).
+// reach, your drives and drive reach (when it has a position), clock, battery, radio, hash size, recent adverts. The
+// app bar has the favourite star and Share (the region-host web link); the bell was removed in build 77 (it saved a
+// watch that never alerted).
+// Tools next to the data they answer (Round 2 N-U3): "See who shares this ID" on the short ID row opens the Prefix
+// Tool with it; a repeater or room, with a radio connected, gets a "With your radio" block ("Test the path to it",
+// "Read its battery").
 // `/v1` not live: today's region-repeater fills identity, health, SNR trend, packet types, heard by and neighbours;
 // paths, reach, clock and battery do not exist there and stay hidden. Offline: the stored copy with "Offline - as of".
 import 'dart:async';
@@ -11,6 +15,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/network_request.dart';
+import '../../../core/time_format.dart';
 import '../../../core/v1/nodes_api.dart';
 import '../../charts/chart_frame.dart';
 import '../../charts/time_line_chart.dart';
@@ -20,9 +25,15 @@ import '../../map/still/still_nodes.dart' show stillRepeatersOf;
 import '../../nodes/node_actions.dart' show NodeActionBar;
 import '../../nodes/node_ref.dart';
 import '../../../core/repeater_detail_api.dart' show DailySnr;
-import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText;
+import '../../../core/region_overview_api.dart' show RegionDataState;
+import '../../app.dart' show AppScope;
+import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty;
 import '../../region/snr_trend_card.dart';
 import '../../repeater_reach_section.dart';
+import '../../tools/contact_ref.dart';
+import '../../tools/telemetry_screen.dart';
+import '../../tools/tools_host.dart';
+import '../../tools/trace_screen.dart';
 import '../../your_drives_section.dart';
 import '../../theme.dart';
 import '../network_context.dart';
@@ -30,6 +41,7 @@ import '../network_share.dart';
 import '../packets/packet_detail_screen.dart' show NetworkPacketScreen;
 import '../packets/packet_ui.dart' show HopConfidenceBadge, WebTwinLine, plainServerText, snrText;
 import '../../../core/v1/packet_models.dart' show hopConfidenceOf, packetTypeLabel;
+import '../tools/prefix_tool_screen.dart';
 import 'node_routes.dart';
 import 'node_ui.dart';
 
@@ -77,7 +89,6 @@ class _NetworkNodeScreenState extends State<NetworkNodeScreen> {
               title: Text(name, key: const Key('node-title'), maxLines: 1, overflow: TextOverflow.ellipsis),
               actions: [
                 FavouriteStar(kind: FavouriteKind.node, id: widget.nodeKey, name: p?.detail.name, region: widget.regionSlug),
-                WatchButton(kind: 'node', target: widget.nodeKey, name: p?.detail.name, region: widget.regionSlug),
                 NetworkShareButton(request: NetworkRequest.node(widget.nodeKey, region: widget.regionSlug), subject: '$name on MeshSonar'),
               ],
             ),
@@ -180,6 +191,7 @@ class NodePageBody extends StatelessWidget {
         if (d.radio != null) _radio(context, d.radio!),
         if (d.recentAdverts.isNotEmpty) _adverts(context, d),
         _about(context, d),
+        if (d.role == 'repeater' || d.role == 'room') _WithYourRadio(node: ref),
         // What this phone's own drives know about the node (they need its position, and show nothing without drives).
         if (!hidden && d.position != null) ...[
           Padding(
@@ -197,7 +209,9 @@ class NodePageBody extends StatelessWidget {
         // Quiet notes last: where the figures came from and what the server could not fill in.
         if (page.source == NetworkReadSource.legacy)
           Text('Some parts (paths, reach, clock, battery) are not available for this region yet.', key: const Key('node-legacy-note'), style: muted),
-        if (page.status != null && page.status!.state.name != 'ready' && plainServerText(page.status!.reason) != null)
+        // Only when data is really missing (still being built, or failed). A "partial" note is the server saying what a
+        // page does not cover by design, and it used to print under the very sections it called missing (Round 2 W7).
+        if (page.status != null && nodeStatusNoteShown(page.status!.state) && plainServerText(page.status!.reason) != null)
           Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(plainServerText(page.status!.reason)!, key: const Key('node-status-note'), style: muted)),
         WebTwinLine(Uri(scheme: 'https', host: '$regionSlug.meshsonar.com', path: '/nodes/${d.key}')),
       ],
@@ -225,9 +239,9 @@ class NodePageBody extends StatelessWidget {
       const SizedBox(height: Gap.xs),
       Row(children: [
         if (status != null) ...[StatusDot(status, size: 12), const SizedBox(width: Gap.s)],
-        Expanded(child: Text([nodeRoleLabel(d.role), if (status != null) nodeStatusLabel(status)].join(' · '), style: t.textTheme.titleMedium)),
+        Expanded(child: Text([nodeRoleLabel(d.role), if (status != null) nodeStatusLabel(status, label: d.health?.statusLabel)].join(' · '), style: t.textTheme.titleMedium)),
       ]),
-      Text(heard == null ? 'Not heard yet' : 'Last heard ${agoText(heard)}',
+      Text(heard == null ? 'Not heard yet' : 'Last heard ${relativeTime(heard)}',
           key: const Key('node-heard'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
       if (d.aka.isNotEmpty) Text('Also seen as ${d.aka.join(', ')}', style: t.textTheme.bodySmall),
       const SizedBox(height: Gap.xs),
@@ -239,13 +253,23 @@ class NodePageBody extends StatelessWidget {
   /// and how many relays share its short ID.
   Widget _about(BuildContext context, NodeDetail d) {
     final col = d.hashSize == null ? null : d.collisions[(d.hashSize ?? 1).toString()];
+    // The ID this node uses on air: its own size when known, else the one-byte one.
+    final shortId = d.prefixes['${d.hashSize ?? 1}'] ?? d.prefixes['1'] ?? d.prefix;
     return NodeSection(id: 'hash', title: 'More about this node', collapsible: true, summary: 'Short ID, first seen, last advert', children: [
       KvRow('Short ID in packets', [d.prefixes['1'] ?? d.prefix, ?d.prefixes['2'], ?d.prefixes['3']].join(' · ')),
+      if (shortId.isNotEmpty)
+        PageLink(
+          id: 'node-shares-id',
+          label: 'See who shares this ID',
+          detail: 'Prefix Tool, with $shortId filled in',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              settings: const RouteSettings(name: '/tools/prefix'), builder: (_) => PrefixToolScreen(baseUrl: baseUrl, regionSlug: regionSlug, initialPrefix: shortId))),
+        ),
       if (d.hashSize != null)
         KvRow('Short ID size', '${d.hashSize} byte${d.hashSize == 1 ? '' : 's'}${d.hashInconsistent ? ' (changes between packets)' : ''}'),
       if (col != null) KvRow('Shares its short ID with', col == 0 ? 'no other relay' : '$col other relay${col == 1 ? '' : 's'}'),
-      if (d.firstSeen != null) KvRow('First seen', agoText(d.firstSeen)),
-      if (d.lastAdvertAt != null) KvRow('Last advert', agoText(d.lastAdvertAt)),
+      if (d.firstSeen != null) KvRow('First seen', relativeTime(d.firstSeen)),
+      if (d.lastAdvertAt != null) KvRow('Last advert', relativeTime(d.lastAdvertAt)),
       if (d.claimed == true) const KvRow('Claimed', 'Claimed by its owner'),
     ]);
   }
@@ -276,21 +300,21 @@ class NodePageBody extends StatelessWidget {
     ]);
   }
 
-  String _hour(DateTime t) {
-    final l = t.toLocal();
-    return '${l.month}/${l.day} ${l.hour.toString().padLeft(2, '0')}:00';
-  }
+  /// An hour of the activity chart, in the zone the app is showing ("Nov 10, 6:00 PM").
+  String _hour(DateTime t) => shortDateTime(t);
+
+  static String _packets(int n) => '$n ${n == 1 ? 'packet' : 'packets'}';
 
   List<Widget> _activity(BuildContext context, NodeActivity a) {
     final pal = chartPalette(context);
     final out = <Widget>[];
     if (a.timeline.isNotEmpty) {
       final peak = a.timeline.reduce((x, y) => y.$2 > x.$2 ? y : x);
-      out.add(NodeSection(id: 'activity', title: 'Activity', collapsible: true, summary: 'Busiest hour: ${peak.$2} packets at ${_hour(peak.$1)}', children: [
+      out.add(NodeSection(id: 'activity', title: 'Activity', collapsible: true, summary: 'Busiest hour: ${_packets(peak.$2)} at ${_hour(peak.$1)}', children: [
         ChartFrame(
           id: 'node-activity',
           title: 'Packets per hour',
-          summary: 'Peak ${peak.$2} packets at ${_hour(peak.$1)}.',
+          summary: 'Peak ${_packets(peak.$2)} at ${_hour(peak.$1)}.',
           table: ChartTable(head: const ['Hour', 'Packets', 'Relayed'], rows: [
             for (final r in a.timeline.reversed.take(72)) [_hour(r.$1), '${r.$2}', r.$3 == null ? '—' : '${r.$3}']
           ]),
@@ -311,13 +335,14 @@ class NodePageBody extends StatelessWidget {
     }
     if (a.types.isNotEmpty) {
       final sorted = a.types.entries.toList()..sort((x, y) => y.value.compareTo(x.value));
-      out.add(NodeSection(id: 'types', title: 'Packet types', collapsible: true, summary: 'Mostly ${packetTypeLabel(sorted.first.key)} · ${sorted.fold<int>(0, (n, e) => n + e.value)} packets', children: [
+      out.add(NodeSection(id: 'types', title: 'Packet types', collapsible: true, summary: 'Mostly ${packetTypeLabel(sorted.first.key)} · ${_packets(sorted.fold<int>(0, (n, e) => n + e.value))}', children: [
         for (final e in sorted) KvRow(packetTypeLabel(e.key), '${e.value}'),
       ]));
     }
     final snr = [for (final s in a.snrTrend) if (s.$2 != null) (s.$1, s.$2!)];
     if (snr.isNotEmpty) {
-      String day(DateTime t) => '${t.month}/${t.day}';
+      // The server counts these per UTC day, so the day is named as a UTC day whatever the time setting.
+      String day(DateTime t) => utcDayLabel(t);
       // Collapsed by default (a small screen): the header says the latest reading; the card (summary, chart, table) is
       // the one the old region repeater page had.
       out.add(NodeSection(
@@ -348,7 +373,7 @@ class NodePageBody extends StatelessWidget {
             '${h.packets} ${h.packets == 1 ? 'packet' : 'packets'}',
             if (h.avgSnr != null) 'mean ${snrText(h.avgSnr)}',
             if (h.bestSnr != null) 'best ${snrText(h.bestSnr)}',
-            if (h.lastAt != null) 'last ${agoText(h.lastAt)}',
+            if (h.lastAt != null) 'last ${relativeTime(h.lastAt)}',
           ].join(' · ')),
           onTap: () => openNetworkObserver(context, baseUrl: baseUrl, regionSlug: regionSlug, observerId: h.observer.id),
         ),
@@ -393,7 +418,7 @@ class NodePageBody extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           trailing: r.sampleHash == null ? null : const Icon(Icons.chevron_right),
           title: Text(r.hops.map(hop).join(' › '), maxLines: 3, overflow: TextOverflow.ellipsis),
-          subtitle: Text(['${r.count} ${r.count == 1 ? 'packet' : 'packets'}', if (r.lastAt != null) 'last ${agoText(r.lastAt)}'].join(' · ')),
+          subtitle: Text(['${r.count} ${r.count == 1 ? 'packet' : 'packets'}', if (r.lastAt != null) 'last ${relativeTime(r.lastAt)}'].join(' · ')),
           onTap: r.sampleHash == null
               ? null
               : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: baseUrl, regionSlug: regionSlug, hash: r.sampleHash!))),
@@ -438,7 +463,8 @@ class NodePageBody extends StatelessWidget {
     final mv = b?.latestMv ?? d.batteryMv;
     final status = b?.status ?? d.batteryStatus ?? 'unknown';
     final pal = chartPalette(context);
-    String day(DateTime t) => '${t.month}/${t.day}';
+    // One reading per UTC day from the server.
+    String day(DateTime t) => utcDayLabel(t, label: false);
     final word = switch (status) { 'ok' => 'OK', 'low' => 'Low', 'critical' => 'Critical', _ => 'Unknown' };
     return NodeSection(id: 'battery', title: 'Battery', collapsible: true, summary: mv == null ? word : '${voltsText(mv)} · $word', children: [
       if (mv != null) KvRow('Battery', '${voltsText(mv)} · $word', valueKey: const Key('node-battery')),
@@ -447,7 +473,7 @@ class NodePageBody extends StatelessWidget {
           id: 'node-battery',
           title: 'Battery voltage',
           summary: 'From ${voltsText(b.series.first.$2)} to ${voltsText(b.series.last.$2)}.',
-          table: ChartTable(head: const ['Day', 'Voltage'], rows: [for (final s in b.series.reversed) [day(s.$1), voltsText(s.$2)]]),
+          table: ChartTable(head: const ['Day (UTC)', 'Voltage'], rows: [for (final s in b.series.reversed) [day(s.$1), voltsText(s.$2)]]),
           chart: TimeLineChart(
             series: [ChartSeries(name: 'Battery', points: [for (final s in b.series) (s.$1, s.$2 / 1000)], color: pal[0])],
             yLabel: 'V',
@@ -473,14 +499,60 @@ class NodePageBody extends StatelessWidget {
         for (final a in d.recentAdverts.take(10))
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(a.at == null ? shortKey(a.hash) : agoText(a.at)),
+            title: Text(a.at == null ? shortKey(a.hash) : relativeTime(a.at)),
             trailing: const Icon(Icons.chevron_right),
             subtitle: Text([
-              if (a.hops != null) '${a.hops} hops',
-              if (a.observers != null) '${a.observers} observers',
+              if (a.hops != null) '${a.hops} ${a.hops == 1 ? 'hop' : 'hops'}',
+              if (a.observers != null) '${a.observers} ${a.observers == 1 ? 'observer' : 'observers'}',
               if (a.signatureValid == false) 'signature not valid',
             ].join(' · ')),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => NetworkPacketScreen(baseUrl: baseUrl, regionSlug: regionSlug, hash: a.hash))),
           ),
       ]);
+}
+
+/// Whether the node page prints the server's status sentence: only while its data is still being built or could not
+/// be read. `partial` and `stale` are not printed: the page already hides every section it has no data for.
+bool nodeStatusNoteShown(RegionDataState state) => state == RegionDataState.pending || state == RegionDataState.unavailable;
+
+/// "With your radio" on a repeater or room page (Round 2 N-U3): the two radio tools that answer "can I reach it?" and
+/// "what is its battery?", opened for this node. Shown only while a radio is connected: with none there is nothing to
+/// do here, and the Tools list says how to connect one.
+class _WithYourRadio extends StatelessWidget {
+  final NodeRef node;
+  const _WithYourRadio({required this.node});
+
+  static ToolsHost? _host(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<ToolsHostScope>();
+    if (scope != null) return scope.host;
+    final app = AppScope.maybeOf(context);
+    return app == null ? null : AppStateToolsHost.of(app);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final host = _host(context);
+    if (host == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: host,
+      builder: (context, _) {
+        if (host.tools == null) return const SizedBox.shrink();
+        final name = host.radioName;
+        void open(Widget page, String route) => Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: route), builder: (_) => page));
+        return NodeSection(id: 'with-radio', title: 'With your radio', children: [
+          Text('Using ${name == null || name.isEmpty ? 'your connected radio' : name}.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          PageLink(
+              id: 'node-radio-trace',
+              label: 'Test the path to it',
+              detail: 'Sends one small packet to it and shows how well each repeater heard it',
+              onTap: () => open(TraceScreen(contact: ContactRef.fromNode(node)), '/tools/radio-trace')),
+          PageLink(
+              id: 'node-radio-telemetry',
+              label: 'Read its battery',
+              detail: 'Asks it for its battery and sensor readings',
+              onTap: () => open(TelemetryScreen(contact: ContactRef.fromNode(node)), '/tools/telemetry')),
+        ]);
+      },
+    );
+  }
 }

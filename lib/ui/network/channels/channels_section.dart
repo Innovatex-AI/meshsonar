@@ -10,7 +10,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/v1/channels_api.dart';
-import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, agoText, groupInt;
+import '../../../core/time_format.dart';
+import '../../region/region_common.dart' show RegionOfflineAsOf, RegionOfflineEmpty, groupInt;
 import '../../theme.dart';
 import '../packets/packet_ui.dart' show NoPacketFeedCard, PacketNote, WebTwinLine, plainServerText;
 import 'channel_reader.dart';
@@ -133,12 +134,13 @@ class _ChannelsSectionState extends State<ChannelsSection> {
                     label: 'Search messages',
                     child: InkWell(
                       key: const Key('channels-search'),
-                      borderRadius: BorderRadius.circular(Corners.chip),
+                      // The same field as Nodes and Tools: filled, small corners (Round 2 N-V5 "Also").
+                      borderRadius: BorderRadius.circular(Corners.small),
                       onTap: _search,
                       child: Container(
                         constraints: const BoxConstraints(minHeight: 44),
                         padding: const EdgeInsets.symmetric(horizontal: Gap.m),
-                        decoration: BoxDecoration(color: t.colorScheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(Corners.chip)),
+                        decoration: BoxDecoration(color: t.inputDecorationTheme.fillColor ?? t.colorScheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(Corners.small)),
                         child: Row(children: [
                           Icon(Icons.search, size: 20, color: t.colorScheme.onSurfaceVariant),
                           const SizedBox(width: Gap.s),
@@ -172,8 +174,9 @@ class _ChannelsSectionState extends State<ChannelsSection> {
                 ),
               for (final r in readable) _ChannelTile(row: r, onTap: () => setState(() => _open = (r.id, r.label))),
               // Private channels cannot be opened: one closed row holds them, so the readable ones are not pushed apart.
+              // Each is "Private channel"; with more than one, a grey "ID 96" tells them apart (Round 2 N-U5).
               if (private.isNotEmpty && readable.length + private.length <= 3)
-                for (final r in private) _ChannelTile(row: r)
+                for (final r in private) _ChannelTile(row: r, showId: private.length > 1)
               else if (private.isNotEmpty)
                 Theme(
                   data: t.copyWith(dividerColor: Colors.transparent),
@@ -182,7 +185,7 @@ class _ChannelsSectionState extends State<ChannelsSection> {
                     leading: Icon(Icons.lock_outline, color: t.colorScheme.onSurfaceVariant),
                     title: Text('Private channels (${private.length})'),
                     subtitle: Text('Listed only: their text cannot be read without the key', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-                    children: [for (final r in private) _ChannelTile(row: r)],
+                    children: [for (final r in private) _ChannelTile(row: r, showId: private.length > 1)],
                   ),
                 ),
               Padding(padding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.m), child: WebTwinLine(_web)),
@@ -217,7 +220,10 @@ class _ChannelTile extends StatelessWidget {
 
   /// Null on a private channel: the row is shown disabled and does not navigate.
   final VoidCallback? onTap;
-  const _ChannelTile({required this.row, this.onTap});
+
+  /// Several private channels are listed: each says its one-byte ID, the only thing that tells them apart.
+  final bool showId;
+  const _ChannelTile({required this.row, this.onTap, this.showId = false});
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +237,7 @@ class _ChannelTile extends StatelessWidget {
     ].join(' · ');
     final last = [
       if (r.lastSender != null) r.lastSender!,
-      if (r.lastMessageAt != null) agoText(r.lastMessageAt),
+      if (r.lastMessageAt != null) relativeTime(r.lastMessageAt),
     ].join(' · ');
     final heardIn = r.regions.isEmpty ? null : 'Heard in ${r.regions.take(3).join(', ')}${r.regions.length > 3 ? ' +${r.regions.length - 3}' : ''}';
     return Opacity(
@@ -243,7 +249,8 @@ class _ChannelTile extends StatelessWidget {
         leading: Icon(r.private ? Icons.lock_outline : (r.kind == 'public' ? Icons.public : Icons.tag), color: c.onSurfaceVariant),
         title: Text(r.label, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text('$counts in 24 h', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text([if (showId && r.privateId != null) 'ID ${r.privateId}', '$counts in 24 h'].join(' · '),
+              key: Key('channel-counts-${r.id}'), style: muted, maxLines: 1, overflow: TextOverflow.ellipsis),
           if (r.private)
             Text('Private: the text cannot be read without its key.', key: Key('channel-private-${r.id}'), style: muted)
           else if (last.isNotEmpty || heardIn != null)
