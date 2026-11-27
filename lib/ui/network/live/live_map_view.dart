@@ -22,7 +22,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -30,6 +30,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../app/app_state.dart' show AppState;
 import '../../../core/power_profile.dart';
+import '../../../core/time_format.dart' as tf;
 import '../../../core/map_styles.dart' show BaseMapStyle;
 import '../../../core/region_lookup.dart';
 import '../../../core/v1/live_api.dart';
@@ -52,12 +53,12 @@ import '../../map/coverage_map.dart';
 import '../../map/layers/app_repeater_feed.dart';
 import '../../map/layers/layers_model.dart' show PageLayersModel;
 import '../../map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
-import '../../map/layers/map_layer.dart' show MapLayerState;
+import '../../map/layers/map_layer.dart' show MapHit, MapLayerState;
 import '../../map/layers/region_borders_layer.dart' show regionBorderRings;
 import '../../map/layers/registry.dart' show repeatersOn;
 import '../../map/layers/repeater_map_source.dart'
     show RepeaterMapSource, kLabelsLayerId, kRosterLayerId;
-import '../../map/legend_card.dart' show LegendCard, kLegendPanelId;
+import '../../map/legend_card.dart' show LegendCard, MapLegendPage, toggleMapLegendPanel;
 import '../../map/legend_sheet.dart' show showMapLegend;
 import '../../map/main_map_focus.dart';
 import '../../map/map_layers.dart' show PingColorMode;
@@ -66,7 +67,12 @@ import '../packets/packet_detail_screen.dart';
 import '../packets/packet_ui.dart' show ageText, snrText;
 import 'live_map_controller.dart';
 import 'live_nodes_layer.dart';
+import 'live_replay_entry.dart';
 import 'packet_type_colors.dart';
+
+/// Tests: how many times a Live map built its table of every known repeater position (F12).
+@visibleForTesting
+int liveDebugPositionTableBuilds = 0;
 
 /// The page id the Live map's layer choices are remembered under (Map Definition page `live`).
 const String kLiveLayerPage = 'live';
@@ -102,12 +108,11 @@ const Set<String> networkMapLayers = {
   'estimated',
 };
 
-/// "14:02:05" in the phone's time.
-String clockText(DateTime t) {
-  final l = t.toLocal();
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${two(l.hour)}:${two(l.minute)}:${two(l.second)}';
-}
+/// "2:02:05 PM" in the time zone the person chose (build 77: the one time formatter, core/time_format.dart).
+String clockText(DateTime t) => tf.timeOfDay(t, seconds: true);
+
+/// A moment in a window longer than a day carries its date too ("Nov 3, 2:02:05 PM").
+String windowTimeText(DateTime t, String window) => window == '7d' || window == '30d' ? tf.shortDateTime(t, seconds: true) : clockText(t);
 
 const Map<String, String> _windowLabels = {
   '1h': '1 h',
@@ -153,7 +158,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
   final Map<String, GeoPoint> _observerPos = {};
 
   /// The region's repeaters and room servers (the `nodes` layer), drawn dim and named under the packets.
-  List<NodeRow> _nodes = const [];
+  final LiveNodeSource _nodes = LiveNodeSource();
   String? _focusError;
 
   /// One open panel on this map; the Live panel's resting height (the drawn packet sits on top of it).
@@ -199,8 +204,21 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     _c.start();
     unawaited(_loadObservers());
     unawaited(_loadNodes());
+    // Live does not open empty (Round 2 N-U2): the latest 20 packets, once, under "Latest packets".
+    unawaited(_c.loadLatest());
     final r = widget.request;
-    if (r?.packetHash != null) unawaited(_loadFocus(r!.packetHash!, r.mapTime));
+    if (r?.packetHash != null) unawaited(_loadFocus(r!.packetHash!, r.mapTime, observationId: LiveReplayRequests.take(r.packetHash!)));
+  }
+
+  @override
+  void didUpdateWidget(NetworkLiveMap old) {
+    super.didUpdateWidget(old);
+    // "Replay on map" again for the packet already open (the same map, a new request).
+    final r = widget.request;
+    if (!identical(r, old.request) && r?.packetHash != null) {
+      final obs = LiveReplayRequests.take(r!.packetHash!);
+      if (obs != null) unawaited(_loadFocus(r.packetHash!, r.mapTime, observationId: obs));
+    }
   }
 
   @override
@@ -258,7 +276,10 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     _wake();
     // The panels and the packet layer listen to the controller themselves; only the nodes in use can move the node layer.
     final use = _nodesInUse();
-    if (!setEquals(use, _inUse.value)) _inUse.value = use;
+    if (!setEquals(use, _inUse.value)) {
+      _nodes.source.claimedKeys = use; // in use: a full-strength badge, never inside a cluster
+      _inUse.value = use;
+    }
     // A drawn packet and the Layers panel share one spot: the newest one wins.
     if (_c.focus != null && _host.isOpen) _host.close();
   }
@@ -304,8 +325,20 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
   }
 
   // ---- positions: the app's node roster, the hop candidates in each packet, the observer list
+  //
+  // Build 77 (Round 1 F12): the table of every known repeater (the 56,889-point "All MeshCore" set included) is built only when
+  // the app's repeater lists themselves change, not on every dependency change of this screen; the observers' positions are read
+  // live from [_observerPos], so loading them needs no new table either.
+  List<Object?>? _positionsOf;
+  Map<String, GeoPoint> _nodePos = const {};
+
   void _updatePositions() {
     final s = AppScope.maybeOf(context);
+    final lists = <Object?>[s?.globalRepeaterSet.rows, s?.regionRepeaterSet.rows];
+    final same = _positionsOf != null && identical(lists[0], _positionsOf![0]) && identical(lists[1], _positionsOf![1]);
+    if (same) return;
+    _positionsOf = lists;
+    liveDebugPositionTableBuilds++;
     final nodes = <String, GeoPoint>{};
     if (s != null) {
       for (final r in [
@@ -315,13 +348,18 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
         nodes[r.key.toLowerCase()] = GeoPoint(r.lat, r.lon);
       }
     }
+    _nodePos = nodes;
+    _publishPositions();
+  }
+
+  void _publishPositions() {
     _c.setPositions(
       LivePositions(
-        node: (k) => nodes[k],
+        node: (k) => _nodePos[k],
         observer: (id) =>
             _observerPos[id] ??
             _observerPos[id.toLowerCase()] ??
-            nodes[id.toLowerCase()],
+            _nodePos[id.toLowerCase()],
       ),
     );
   }
@@ -343,7 +381,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
         cursor = p.next;
         if (cursor == null) break;
       }
-      if (mounted) setState(() => _nodes = liveDrawableNodes(rows));
+      if (mounted) setState(() => _nodes.setNodes(rows));
     } catch (_) {
       // no nodes drawn; the feed and the packets are unaffected
     } finally {
@@ -379,7 +417,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
           _observerPos[o.id] = GeoPoint(o.position!.lat, o.position!.lon);
         }
       }
-      if (mounted) _updatePositions();
+      if (mounted) _publishPositions();
     } catch (_) {
       // Observers without positions are simply not drawn; the feed still lists who heard each packet.
     } finally {
@@ -387,12 +425,17 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     }
   }
 
-  Future<void> _loadFocus(String hash, DateTime? at) async {
+  Future<void> _loadFocus(String hash, DateTime? at, {String? observationId}) async {
     final api = packetsApiFactory(widget.region.url);
     try {
       final d = await api.detail(hash);
       if (!mounted) return;
-      _c.showPacket(LiveV2Packet.fromDetail(d.detail, fallbackTime: at));
+      final p = LiveV2Packet.fromDetail(d.detail, fallbackTime: at);
+      if (observationId != null) {
+        _c.replayReception(p, observationId);
+      } else {
+        _c.showPacket(p);
+      }
       _fitFocus();
     } on V1Error catch (e) {
       if (mounted) {
@@ -444,6 +487,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     _source?.dispose();
     _feed?.dispose();
     _inUse.dispose();
+    _nodes.dispose();
     _view.dispose();
     _panels.dispose();
     super.dispose();
@@ -462,6 +506,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     MapLayerState layers,
     Brightness brightness,
     BaseMapStyle style,
+    ValueChanged<MapHit> onHit,
   ) {
     if (!repeatersOn(layers)) return const SizedBox.shrink();
     return ValueListenableBuilder<Set<String>>(
@@ -474,6 +519,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
           style: style,
           brightness: brightness,
           showNames: layers.isOn(kLabelsLayerId),
+          onHit: onHit,
         ),
       ),
     );
@@ -599,11 +645,13 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
       }
     }
 
+    // Reduce Motion (Round 1 F11): a packet's whole path is drawn at once and only fades; a replayed copy is drawn whole.
+    final still = MediaQuery.disableAnimationsOf(context);
     final fd = _c.focusDrawing;
-    if (fd != null) draw(fd, packetTypeColor(context, _c.focus!.type), 1e9, 1);
+    if (fd != null) draw(fd, packetTypeColor(context, _c.focus!.type), still ? 1e9 : (_c.focusProgress ?? 1e9), 1);
     for (final a in _c.animations) {
       final (prog, alpha) = _c.progressOf(a);
-      draw(a.drawing, packetTypeColor(context, a.packet.type), prog, alpha);
+      draw(a.drawing, packetTypeColor(context, a.packet.type), still ? 1e9 : prog, alpha);
     }
     // The lines and dots stay the picture (the nodes are drawn under them, MAP slices 2 and 3).
     return Stack(
@@ -655,21 +703,29 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
               panelInset: _hostOpen ? MediaQuery.paddingOf(context).bottom : null,
               onLayers: () =>
                   showGeneratedLayersSheet(context, model, host: _host),
+              // The same compact chip as Drive (Round 1 F4) and the one shared Legend panel, with Live's packet colours and lines.
               legend: LegendCard(
                 key: const Key('live-legend-card'),
                 on: layers.on,
                 meta: st.coverageV2 ? st.coverageMeta : null,
                 drivePanel: false,
+                compact: true,
+                page: MapLegendPage.live,
                 onOpen: _toggleLegend,
               ),
+              // Measured coverage on Live (Round 1 decision 4): opt-in, off by default, Live's own switch.
+              coverageV2: st.coverageV2 && layers.isOn('measured')
+                  ? CoverageV2Inputs(tiles: st.coverageTiles, meta: st.coverageMeta, drawTiles: !st.coverageTiles.offline, fetchCell: st.coverageCell)
+                  : null,
               openLegend: () =>
                   showMapLegend(context, pingColors: PingColorMode.snr),
               // The region's border, only when the definition's `live` page has it (a definition without pages draws none, as in build 74).
               regionBorders: preset?.has('borders') == true
                   ? regionBorderRings(widget.region)
                   : const [],
-              extraLayers: [
-                _nodeLayer(layers, brightness, base),
+              // The nodes hit-test through the map's own resolver: a tapped node opens the same repeater panel as on Drive.
+              hitLayers: (onHit) => [
+                _nodeLayer(layers, brightness, base, onHit),
                 _packetLayer(),
               ],
               bottomClearance: rest,
@@ -710,45 +766,16 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     );
   }
 
-  /// The legend as the map's transient panel (a second tap on the chip closes it).
+  /// The legend as the map's transient panel (a second tap on the chip closes it): the one Legend panel of every map.
   void _toggleLegend() {
-    if (_host.currentId == kLegendPanelId) return _host.close(kLegendPanelId);
     final s = _state!, model = _layers!;
-    _host.show(
-      id: kLegendPanelId,
-      builder: (context) => ListenableBuilder(
-        listenable: Listenable.merge([model, s]),
-        builder: (context, _) => MapPanel(
-          id: kLegendPanelId,
-          title: 'Legend',
-          leading: const Icon(Icons.palette_outlined, size: 18),
-          bottomSafe: false,
-          onClose: () => _host.close(kLegendPanelId),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Flexible(
-                child: LegendCard(
-                  asPanel: true,
-                  on: model.layerState.on,
-                  meta: s.coverageV2 ? s.coverageMeta : null,
-                  drivePanel: false,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  key: const Key('legend-open-guide'),
-                  onPressed: () =>
-                      showMapLegend(context, pingColors: PingColorMode.snr),
-                  child: const Text('Full guide'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    toggleMapLegendPanel(
+      host: _host,
+      listenable: Listenable.merge([model, s]),
+      on: () => model.layerState.on,
+      meta: () => s.coverageV2 ? s.coverageMeta : null,
+      drivePanel: () => false,
+      page: MapLegendPage.live,
     );
   }
 
@@ -767,7 +794,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
       case LiveMode.replay:
         final c = _c.replayClock;
         return (
-          'Replay ${replaySpeedLabel(_c.speed)} · ${c == null ? '' : clockText(c.playhead)}',
+          'Replay ${replaySpeedLabel(_c.speed)} · ${c == null ? '' : windowTimeText(c.playhead, _c.window)}',
           cs.tertiary,
         );
       case LiveMode.live:
@@ -801,9 +828,9 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
       title: label,
       headerKey: const Key('live-panel-header'),
       leading: Icon(Icons.circle, size: 10, color: color),
-      // The panel's own content count (rule 8), never a message count.
+      // The panel's own content count (rule 8), never a message count; "· filtered" while filters are on (Round 2 N-U7).
       status: Text(
-        '${feed.length} packet${feed.length == 1 ? '' : 's'}',
+        _countText(feed.length),
         key: const Key('live-map-count'),
       ),
       action: IconButton(
@@ -820,6 +847,8 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
       child: _body(context, label, feed),
     );
   }
+
+  String _countText(int n) => '$n packet${n == 1 ? '' : 's'}${_c.filter.isEmpty ? '' : ' · filtered'}';
 
   /// What the panel says under the feed: (the one plain line, the full text behind "Details" or null).
   List<(String, String?)> _notes() {
@@ -853,7 +882,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
     final t = Theme.of(context);
     final cs = t.colorScheme;
     final now = DateTime.now().toUtc();
-    final count = '${feed.length} packet${feed.length == 1 ? '' : 's'}';
+    final count = _countText(feed.length);
     return LayoutBuilder(
       builder: (context, box) => CustomScrollView(
         key: const Key('live-panel-body'),
@@ -928,13 +957,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
                             key: Key('live-window-$w'),
                             label: Text(_windowLabels[w] ?? w),
                             selected: _c.window == w,
-                            // The app's selected colour (the teal of the tab bar and the section strip), not the default
-                            // secondary fill, which reads as a warning on the dark theme.
-                            selectedColor: cs.primaryContainer,
-                            checkmarkColor: cs.onPrimaryContainer,
-                            labelStyle: _c.window == w
-                                ? TextStyle(color: cs.onPrimaryContainer)
-                                : null,
+                            // Selected = teal comes from the app's chip theme (build 77, N-V3), as on every tab.
                             onSelected: (_) => unawaited(_c.setWindow(w)),
                           ),
                         ),
@@ -947,6 +970,8 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    // Speed changes a replay only, so it shows only in replay (Round 2 N-U6).
+                    if (_c.mode == LiveMode.replay || (_c.mode == LiveMode.paused && _c.replayClock != null))
                     TextButton(
                       key: const Key('live-map-speed'),
                       onPressed: _cycleSpeed,
@@ -998,7 +1023,7 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
                   child: Text(
                     // The heading says what a tap does (one line: the first packet stays on screen on a small phone).
                     feed.isEmpty
-                        ? 'Waiting for packets'
+                        ? (_c.latestLoading ? 'Loading the latest packets' : 'Waiting for packets')
                         : 'Latest packets · tap one for details',
                     key: const Key('live-feed-heading'),
                     maxLines: 1,
@@ -1065,7 +1090,9 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
   Widget _focusPanel(BuildContext context, LiveV2Packet p) {
     final t = Theme.of(context);
     final d = _c.focusDrawing!;
-    final heard = '${p.observations.length} heard';
+    // One copy ("Replay on map"): who heard it; the whole packet: how many heard it.
+    final one = _c.focusObservationId != null && p.observations.length == 1;
+    final heard = one ? 'Heard by ${p.observations.single.observer.name}' : '${p.observations.length} heard';
     return MapPanel(
       key: const Key('live-focus-card'),
       id: 'live.focus',
@@ -1078,33 +1105,44 @@ class _NetworkLiveMapState extends State<NetworkLiveMap>
           shape: BoxShape.circle,
         ),
       ),
-      status: Text(heard),
+      status: Text(one ? '1 copy' : heard),
       bottomSafe: false,
       onClose: _c.clearFocus,
       closeKey: const Key('live-focus-close'),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, 4, 8),
-        child: Row(
+        child: Wrap(
+          // One line when it fits; the buttons go under the text on a narrow phone or with large text.
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
-                [
-                  heard,
-                  if (d.unplaced > 0)
-                    '${d.unplaced} hop${d.unplaced == 1 ? '' : 's'} not placed',
-                  if (d.isEmpty) 'no known positions to draw',
-                ].join(' · '),
-                style: t.textTheme.bodySmall,
-              ),
+            Text(
+              [
+                heard,
+                if (d.unplaced > 0)
+                  '${d.unplaced} hop${d.unplaced == 1 ? '' : 's'} not placed',
+                if (d.isEmpty) 'no known positions to draw',
+              ].join(' · '),
+              style: t.textTheme.bodySmall,
             ),
-            TextButton(
-              key: const Key('live-focus-replay'),
-              onPressed: () {
-                final at = p.firstSeen.subtract(const Duration(seconds: 30));
-                _c.clearFocus();
-                unawaited(_c.replayFrom(at));
-              },
-              child: const Text('Replay here'),
+            Wrap(
+              children: [
+                if (one)
+                  TextButton(
+                    key: const Key('live-focus-play-again'),
+                    onPressed: _c.playFocusAgain,
+                    child: const Text('Play again'),
+                  ),
+                TextButton(
+                  key: const Key('live-focus-replay'),
+                  onPressed: () {
+                    final at = p.firstSeen.subtract(const Duration(seconds: 30));
+                    _c.clearFocus();
+                    unawaited(_c.replayFrom(at));
+                  },
+                  child: const Text('Replay here'),
+                ),
+              ],
             ),
           ],
         ),
@@ -1212,16 +1250,17 @@ class _Legend extends StatelessWidget {
       color: t.colorScheme.onSurfaceVariant,
     );
     return Semantics(
-      label: 'Legend: solid line, hop known for sure. Dashed, likely hop. Faint grey, hops nobody can place.',
+      label: 'Route lines: solid, known hop. Dashed, likely hop. Faint dotted, hop nobody can place.',
       excludeSemantics: true,
       child: Wrap(
         spacing: 12,
         runSpacing: 2,
         children: [
-          Text('━ known hop', style: muted),
-          Text('╌ likely hop', style: muted),
+          // The same words as the Legend panel and the definition's legend.live (one wording per state, Round 1 N2).
+          Text('━ Known hop', style: muted),
+          Text('╌ Likely hop', style: muted),
           Text(
-            '┈ hop nobody can place',
+            '┈ Hop nobody can place',
             style: muted?.copyWith(color: ghostColor(context)),
           ),
         ],

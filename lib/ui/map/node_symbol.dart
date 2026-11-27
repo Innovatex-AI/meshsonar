@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/map_definition_v2.dart';
 import '../../core/map_prefs.dart';
+import '../../core/region_repeaters_api.dart' show RegionRepeater, RepeaterActivity;
 import 'active_map_definition.dart';
 
 /// A minimal SVG path reader: M m L l H h V v Q q C c A a Z z with implicit repeats; what `symbols.set` uses.
@@ -214,3 +215,24 @@ class NodeSymbol extends StatelessWidget {
     );
   }
 }
+
+/// The ARGB of tint [id] under "Colour nodes by" [variable] (`status`, `hash`, `role`) in the definition's symbol set, or null
+/// (neutral, or a variable or id the definition does not list). Build 77: the one lookup for the repeater painter (Drive and
+/// Live) and the node symbol widget.
+int? nodeTintArgb(String variable, String? id, {required bool dark}) {
+  if (id == null || variable == 'none') return null;
+  final set = ActiveMapDefinition.current.nodeSymbols;
+  return set.tints[variable]?.where((t) => t.id == id).firstOrNull?.of(dark);
+}
+
+/// The tint id of a roster repeater under "Colour nodes by" [variable] (the Drive map's repeaters; Live reads its own rows).
+String? rosterTintId(RegionRepeater r, String variable) => switch (variable) {
+  'status' => switch (r.status) {
+    RepeaterActivity.active || RepeaterActivity.fresh => 'active',
+    RepeaterActivity.quiet => 'degraded',
+    RepeaterActivity.stale => 'silent',
+  },
+  'role' => r.role,
+  'hash' => r.hashSizeBytes == null ? 'unknown' : (r.hashSizeBytes! >= 2 ? 'multi' : 'one'),
+  _ => null,
+};

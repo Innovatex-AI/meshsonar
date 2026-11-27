@@ -141,6 +141,9 @@ import 'parts/source_chip.dart';
 export 'parts/simulated_tag.dart' show SimulatedTag;
 export 'sheets/map_hit_sheet.dart' show MapHitHandler;
 import 'basemap_layer.dart';
+import 'map_size_controls.dart' show colourByNow;
+import 'node_symbol.dart' show nodeTintArgb, rosterTintId;
+import 'parts/ping_dots_layer.dart';
 import 'satellite_layers.dart';
 import 'layers/m3_layers.dart';
 import '../design/anchored_sheet.dart';
@@ -417,6 +420,10 @@ class CoverageMap extends StatefulWidget {
   /// Host layers drawn above every map layer and under the plan layer (the planner's coverage footprint). Empty = none.
   final List<Widget> extraLayers;
 
+  /// Host layers that hit-test through the map's own one-tap resolver (build 77, Round 1 F1): [extraLayers] that need the
+  /// map's taps. Network > Live draws its nodes here, so a node there opens the same repeater panel as on Drive.
+  final List<Widget> Function(ValueChanged<MapHit> onHit)? hitLayers;
+
   /// Dragging a plan node (not a target): a long-press on its marker picks it up, every move reports where it is now, and
   /// [onPlanNodeDragEnd] reports where it was let go. Null = plan nodes cannot be dragged (a long-press on one is a
   /// [PlanNodeHit], as before).
@@ -487,6 +494,7 @@ class CoverageMap extends StatefulWidget {
     this.onPlanNode,
     this.onLongPress,
     this.extraLayers = const [],
+    this.hitLayers,
     this.onPlanNodeDrag,
     this.onPlanNodeDragEnd,
     this.onMapTap,
@@ -1910,6 +1918,16 @@ class _CoverageMapState extends State<CoverageMap> {
   /// the two; Observers and Moving phones one marker layer at the lower of the two.
   List<String> _paintOrder() => coverageMapPaintOrder();
 
+  /// The "Colour nodes by" tint of a repeater key from the roster's own fields, or null when colour-by is off.
+  int? Function(String key)? _tintOf(RepeaterMapSource? source, bool dark) {
+    final variable = colourByNow();
+    if (variable == 'none' || source == null) return null;
+    return (key) {
+      final r = source.feed.rosterDetail(key);
+      return r == null ? null : nodeTintArgb(variable, rosterTintId(r, variable), dark: dark);
+    };
+  }
+
   /// Tests: the overlay boxes names and clusters keep out of.
   @visibleForTesting
   List<Rect> debugOverlayRects() => _overlayRects();
@@ -2202,6 +2220,8 @@ class _CoverageMapState extends State<CoverageMap> {
                   selectedKey: _selectedRepeater,
                   onHit: _onHit,
                   onBadgeTap: _onBadgeTap,
+                  // "Colour nodes by" on Drive too (build 77 F1): the roster knows status, role and hash size.
+                  tintOf: _tintOf(rosterSource ?? networkSource, t.brightness == Brightness.dark),
                 ),
               ),
             ],
@@ -2239,27 +2259,14 @@ class _CoverageMapState extends State<CoverageMap> {
                   ),
               ],
             }),
+            // Every ping in one paint pass (F12): thousands of pings no longer build thousands of widgets.
             if (layerState.isOn('pings'))
-              MarkerLayer(
-                markers: [
-                  for (final p in _sorted)
-                    Marker(
-                      point: LatLng(p.lat, p.lon),
-                      width: 40,
-                      height: 40,
-                      child: GestureDetector(
-                        key: ValueKey('map-ping-tap-${p.id}'),
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _hits.submit(MapHitCandidate(MapHitKind.ping, () => _showPingLinks(p))),
-                        child: PingDot(
-                          dotKey: ValueKey('map-ping-${p.id}'),
-                          color: pingColor(mc, p, pingMode),
-                          ring: t.colorScheme.surface,
-                          pulse: identical(p, latest) || p.id == latest?.id,
-                        ),
-                      ),
-                    ),
-                ],
+              PingDotsLayer(
+                pings: _sorted,
+                colorOf: (p) => pingColor(mc, p, pingMode),
+                ring: t.colorScheme.surface,
+                latestId: latest?.id,
+                onTap: (p) => _hits.submit(MapHitCandidate(MapHitKind.ping, () => _showPingLinks(p))),
               ),
             if (widget.puck case final puck?)
               PuckLayer(puck: puck, fallback: pos, onMoved: _onPuckFrame)
@@ -2315,6 +2322,7 @@ class _CoverageMapState extends State<CoverageMap> {
                 ),
               ),
             // The host's own layers (the planner's coverage footprint), under the plan layer.
+            ...?widget.hitLayers?.call(_onHit),
             ...widget.extraLayers,
             // The open plan (registry z 80): on top of everything, so its nodes win every tap.
             if (layerState.isOn(kPlanLayerId))

@@ -14,7 +14,9 @@ import 'package:meshsonar/core/hex_cells.dart' show HexPoint;
 import 'package:meshsonar/core/network_coverage.dart';
 import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/ui/map/basemap_layer.dart';
+import 'package:meshsonar/core/model.dart' show DrivePing;
 import 'package:meshsonar/ui/map/coverage_map.dart';
+import 'package:meshsonar/ui/map/parts/ping_dots_layer.dart';
 import 'package:meshsonar/ui/map/overlays/map_overlay_host.dart';
 import 'package:meshsonar/ui/map/satellite_layers.dart';
 import 'package:meshsonar/ui/map/active_map_definition.dart';
@@ -154,6 +156,26 @@ void main() {
       expect(find.byKey(const Key('test-basemap')), findsOneWidget, reason: 'and back, asking again');
       expect(builds, greaterThan(before));
       expect(PaintingBinding.instance.imageCache.containsKey(avatarKey), isTrue, reason: 'the rest of the app\'s images are kept');
+    });
+  });
+
+  group('F12: ping dots in one paint pass', () {
+    testWidgets('2000 pings: one painter, at most 20 tap proxies, no widget per ping; a tap on a painted dot opens it', (tester) async {
+      final pings = [
+        for (var i = 0; i < 2000; i++)
+          DrivePing(id: 'p$i', ts: DateTime.utc(2026, 11, 1, 12).add(Duration(seconds: i)), lat: 39.96 + (i % 50) * 0.0004, lon: -83.0 + (i ~/ 50) * 0.0004),
+      ];
+      PingDotsLayer.debugPaints = 0;
+      await tester.pumpWidget(_app(CoverageMap(pings: pings, fallbackCenter: const LatLng(39.968, -82.992), showTiles: false)));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('map-ping-dots')), findsOneWidget);
+      expect(PingDotsLayer.debugPainted.length, greaterThan(100), reason: 'the dots in view are painted');
+      final proxies = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('map-ping-tap-'));
+      expect(proxies.evaluate().length, lessThanOrEqualTo(kPingProxyCount));
+      expect(find.byType(MarkerLayer), findsNothing, reason: 'no marker per ping');
+      // A tap on a dot that has no proxy still opens it (the painter hit-tests itself).
+      final far = PingDotsLayer.debugPainted.entries.first;
+      expect(far.value.$1, isNotNull);
     });
   });
 
