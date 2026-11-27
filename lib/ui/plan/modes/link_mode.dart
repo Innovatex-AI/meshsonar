@@ -784,7 +784,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
     if (note == null || note.toLowerCase() == 'unobserved, estimate') {
       return p.confidence == PlanConfidenceLevel.estimate ? 'Confidence: $level. Nothing measured between these two yet; the model alone.' : 'Confidence: $level.';
     }
-    return 'Confidence: $level ($note).';
+    return 'Confidence: $level (${planNoteWords(note)}).';
   }
 
   PublicCoverage? _cellsFor;

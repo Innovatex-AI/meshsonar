@@ -23,7 +23,7 @@ import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/plan/plan_api.dart';
 import '../../core/plan/plan_controller.dart';
 import '../../core/plan_contract.dart';
-import '../../core/time_format.dart' show shortDateTime;
+import '../../core/time_format.dart' show dateOnly, shortDateTime;
 import '../../core/units.dart' show Units;
 import '../app.dart';
 import '../design/app_symbols.dart';
@@ -373,3 +373,8 @@ class _WhereToDriveBodyState extends State<_WhereToDriveBody> {
     ]);
   }
 }
+
+/// Server notes on a plan result (confidence, provenance) carry ISO days ("last 2026-11-27"); the app says dates one way
+/// (build 77, round 2 N-U8): "Nov 27, 2026". Noon UTC keeps the same calendar day in either time setting.
+String planNoteWords(String note) => note.replaceAllMapped(RegExp(r'\b(\d{4})-(\d{2})-(\d{2})\b'),
+    (m) => dateOnly(DateTime.utc(int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!), 12)));

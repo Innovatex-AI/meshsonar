@@ -733,7 +733,7 @@ class CoverageBodyState extends State<CoverageBody> {
         if (fp == null) const PlanLine(AppSymbols.map, 'This answer had no footprint to draw: numbers only.')
         else if (fp.fromBands) const PlanLine(AppSymbols.map, 'Drawn from the signal bands (the server did not send the fine grid): each band at its middle value.'),
         if (calib != null) PlanLine(AppSymbols.chartBar, 'Our drives near it: ${calib.text}.'),
-        if (d.confidence.isNotEmpty) PlanLine(AppSymbols.infoCircle, 'Confidence: ${d.confidence}.'),
+        if (d.confidence.isNotEmpty) PlanLine(AppSymbols.infoCircle, 'Confidence: ${planNoteWords(d.confidence)}.'),
         ...resultNotes(context, run.result),
         if (d.note.isNotEmpty) Text('Estimate, not a measurement. ${d.note}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         Align(

@@ -1597,12 +1597,15 @@ final List<ScreenStep> screens = [
     } else {
       await t.ensureVisible(bubble.first);
       await pumpFor(t, const Duration(milliseconds: 400));
-      await t.tap(bubble.first, warnIfMissed: false);
+      // Tap the bubble itself (its Key 'bubble-<id>'), not the text inside it.
+      final box = find.ancestor(of: bubble.first, matching: find.byWidgetPredicate((w) => w.key is Key && '${w.key}'.contains('bubble-')));
+      await t.tap(box.evaluate().isNotEmpty ? box.first : bubble.first, warnIfMissed: false);
       if (await waitFor(t, find.byKey(const Key('info-strip')), timeout: const Duration(seconds: 4))) {
         await shot(t, 'chat-message-info-strip');
         await t.tap(bubble.first, warnIfMissed: false); // a second tap folds it away
         await pumpFor(t, const Duration(milliseconds: 600));
       } else {
+        await shot(t, 'chat-info-strip-miss'); // what the screen showed instead
         misses.add('a tap on a received message showed no info strip');
       }
 
@@ -1918,6 +1921,7 @@ final List<ScreenStep> screens = [
         if (find.byKey(const Key('confirm-delete')).evaluate().isNotEmpty) await _closeRouteOf(t, 'confirm-delete');
         await pumpFor(t, const Duration(seconds: 2)); // let the sheet finish closing before the next card's menu
       } else {
+        await shot(t, 'drive-delete-miss-$name'); // what the screen showed instead
         misses.add('Delete on the $name drive asked nothing');
       }
       await app.refreshSessions();

@@ -168,7 +168,7 @@ String confidenceWords(PlanProvenance p) {
     PlanConfidenceLevel.calibrated => 'calibrated on measured data',
     PlanConfidenceLevel.estimate => 'estimate only, not observed here',
   };
-  return 'Confidence: $level${p.confidenceNote == null ? '' : ' (${p.confidenceNote})'}.';
+  return 'Confidence: $level${p.confidenceNote == null ? '' : ' (${planNoteWords(p.confidenceNote!)})'}.';
 }
 
 /// What the real model said about one site (plan-verify, or the coverage painter when plan-verify is not on the server).
