@@ -9,10 +9,9 @@ String signalWord(double snr) => snr >= 5 ? 'Strong' : (snr >= 0 ? 'Good' : (snr
 /// Filled bars of the 3-bar signal glyph for [snr] (3 strong, 2 good, 1 fair, 0 weak).
 int signalBars(double snr) => snr >= 5 ? 3 : (snr >= 0 ? 2 : (snr >= -5 ? 1 : 0));
 
-/// "Direct" / "Via N repeaters" / "Searching" / "No route yet" for a direct-message contact (the conversation subtitle).
+/// "Direct" / "Via N repeaters" / "No route yet" for a direct-message contact (the conversation subtitle).
 String dmRouteText(Contact? c) {
   if (c == null) return 'No route yet';
-  if (c.forceFlood) return 'Searching';
   if (!c.hasPath) return 'No route yet';
   final n = c.pathHops ?? 0;
   if (n == 0) return 'Direct';

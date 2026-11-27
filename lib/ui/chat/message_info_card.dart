@@ -10,6 +10,7 @@ import 'package:latlong2/latlong.dart';
 import '../../chat/hop_resolver.dart';
 import '../../chat/message_info.dart';
 import '../../chat/models.dart';
+import '../../core/time_format.dart' as tf;
 import '../design/app_type.dart';
 import '../design/tokens.dart';
 import '../theme.dart' show MeshSonarColors;
@@ -17,11 +18,9 @@ import '../map/node_symbol.dart';
 import '../map/still/path_layer.dart';
 import '../map/still/path_map.dart';
 
-String _clock(int ms) {
-  final d = DateTime.fromMillisecondsSinceEpoch(ms);
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
-}
+/// A time with seconds through the one app time formatter (the phone's time by default, UTC when the setting says so;
+/// 12 or 24 hour as the phone is set). Build 76 hard-coded 24-hour local time here (round 3 C-V3).
+String _clock(int ms) => tf.timeOfDay(DateTime.fromMillisecondsSinceEpoch(ms), seconds: true);
 
 String _secs(int ms) {
   if (ms < 950) return '$ms ms';
@@ -34,50 +33,74 @@ String messageTimesLine(ChatMessage m) {
   if (m.isOutgoing) {
     final parts = ['Sent ${_clock(m.tsLocalMs)}'];
     if (m.state == MessageState.acked) parts.add(m.ackMs == null ? 'Delivered' : 'Delivered (round trip ${_secs(m.ackMs!)})');
-    if (m.state == MessageState.likelyDelivered) parts.add('Probably delivered (they replied)');
     return parts.join(' · ');
   }
   return 'Received ${_clock(m.tsLocalMs)} · their clock ${_clock(m.tsSender * 1000)}';
 }
 
 /// The chain "You › Ridge › Hill › Maya" with ambiguous or unknown hops marked. [ends] are the first and last labels.
+///
+/// With [onHop], a hop that [canOpen] says has a page (a named repeater) is a button that opens it (round 3 C-U8): its
+/// name is in the link colour and it has a full-size touch target. Without it the chain is read-only, as before.
+/// Colours (build 77): a hop's border is the neutral repeater colour; amber is only the "2 possible" warning.
 class HopChain extends StatelessWidget {
   final String first;
   final List<HopNode> nodes;
   final String last;
-  const HopChain({super.key, required this.first, required this.nodes, required this.last});
+  final void Function(HopNode node)? onHop;
+  final bool Function(HopNode node)? canOpen;
+  const HopChain({super.key, required this.first, required this.nodes, required this.last, this.onHop, this.canOpen});
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
-    Widget chip(String text, {bool hop = false, bool warn = false, bool unknown = false}) => Container(
+    Widget chip(String text, {bool hop = false, bool warn = false, bool unknown = false, bool link = false}) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: c.surfaceHigh,
             borderRadius: BorderRadius.circular(Corners.chip),
-            border: Border.all(color: warn ? c.warning : (hop ? c.beacon : c.outline.withValues(alpha: 0.4))),
+            border: Border.all(color: warn ? c.warning : (hop ? c.repeater : c.outline.withValues(alpha: 0.4))),
           ),
-          child: Text(text, style: AppType.footnote.copyWith(color: warn ? c.warning : (unknown ? c.textMuted : c.textPrimary))),
+          child: Text(text, style: AppType.footnote.copyWith(color: warn ? c.warning : (unknown ? c.textMuted : (link ? c.accent : c.textPrimary)), fontWeight: link ? FontWeight.w600 : null)),
         );
+    Widget hopChip(int i, HopNode n) {
+      final text = n.ambiguous ? '${n.label} · ${n.candidates.length} possible' : n.label;
+      final open = onHop != null && (canOpen?.call(n) ?? (n.known && !n.ambiguous));
+      if (!open) return ExcludeSemantics(child: chip(text, hop: true, warn: n.ambiguous, unknown: !n.known));
+      return Semantics(
+        button: true,
+        label: '${n.label}. Opens this repeater',
+        excludeSemantics: true,
+        onTap: () => onHop!(n),
+        child: GestureDetector(
+          key: Key('hop-open-$i'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onHop!(n),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: Hit.of(context), minWidth: Hit.of(context)),
+            child: Center(widthFactor: 1, child: chip(text, hop: true, link: true)),
+          ),
+        ),
+      );
+    }
+
     final spoken = [first, for (final n in nodes) n.description, last].join(', then ');
+    final arrow = ExcludeSemantics(child: Text('›', style: AppType.footnote.copyWith(color: c.textMuted)));
     return Semantics(
       label: 'Route: $spoken',
-      child: ExcludeSemantics(
-        child: Wrap(
-          key: const Key('hop-chain'),
-          spacing: 4,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            chip(first),
-            for (final n in nodes) ...[
-              Text('›', style: AppType.footnote.copyWith(color: c.textMuted)),
-              chip(n.ambiguous ? '${n.label} · ${n.candidates.length} possible' : n.label, hop: true, warn: n.ambiguous, unknown: !n.known),
-            ],
-            Text('›', style: AppType.footnote.copyWith(color: c.textMuted)),
-            chip(last),
-          ],
-        ),
+      container: true,
+      explicitChildNodes: onHop != null,
+      child: Wrap(
+        key: const Key('hop-chain'),
+        spacing: 4,
+        runSpacing: onHop == null ? 4 : 0,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          ExcludeSemantics(child: chip(first)),
+          for (var i = 0; i < nodes.length; i++) ...[arrow, hopChip(i, nodes[i])],
+          arrow,
+          ExcludeSemantics(child: chip(last)),
+        ],
       ),
     );
   }
@@ -272,7 +295,8 @@ class MessagePathMapScreen extends StatelessWidget {
         interaction: MapPreviewInteraction.edit,
         coverage: kPreviewCoverage,
         overlays: [
-          if (connect && pts.length > 1) PolylineLayer(polylines: [Polyline(points: pts, strokeWidth: 3, color: m.beacon)]),
+          // Neutral, not amber (build 77 colour language: amber is for warnings only).
+          if (connect && pts.length > 1) PolylineLayer(polylines: [Polyline(points: pts, strokeWidth: 3, color: m.repeater)]),
           MarkerLayer(markers: [
             for (var i = 0; i < placed.length; i++)
               Marker(

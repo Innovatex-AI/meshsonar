@@ -361,6 +361,30 @@ class MeshTrackState {
   MtGroupView? group(int channelId) => groups.where((g) => g.channelId == channelId).firstOrNull;
 }
 
+/// At most this many friends are remembered per channel that is not a group (see [MeshTrackService.strayShares]).
+const int kMtMaxStraySenders = 40;
+
+/// One friend's position updates heard in a channel that is not a MeshTrack group on this phone. Memory only.
+class MtStrayShare {
+  final String name;
+
+  /// How many different updates were heard from them.
+  final int updates;
+
+  /// When the newest was received.
+  final DateTime lastAt;
+
+  /// The newest update as it came (wire text), kept so the friend appears at once if the channel becomes a group.
+  final String lastBody;
+  final DateTime? lastSenderTs;
+  final double? snr;
+  final int? pathLen;
+  const MtStrayShare({required this.name, required this.updates, required this.lastAt, required this.lastBody, this.lastSenderTs, this.snr, this.pathLen});
+
+  @override
+  String toString() => 'MtStrayShare($updates updates)'; // never the name or the position
+}
+
 /// One inbound channel message, as the chat layer received it (before it is stored).
 class MtInboundText {
   final int channelId;
@@ -670,6 +694,7 @@ class MeshTrackService {
     if (_groups.containsKey(channelId)) return;
     _groups[channelId] = _Group(MtGroupConfig(channelId: channelId, name: name));
     _groupsChanged();
+    _adoptStray(channelId);
     _changed();
   }
 
@@ -1002,6 +1027,31 @@ class MeshTrackService {
     return MtResult.ok;
   }
 
+  /// Round 3 decision D4, "Share my position" in a direct message: the text to send, or why not. The same rules as every
+  /// position that leaves this phone: nothing without a good, fresh fix, nothing while the privacy zones are not loaded,
+  /// nothing inside a zone or its buffer; and the Exact / Approximate setting decides how fine the place is (Approximate
+  /// = the middle of the 8-digit Plus Code cell, about 275 m, never the fix itself). [fix] is the phone's newest fix when
+  /// the service has none of its own (it only gets fixes while a group shares or a drive runs). The text is plain
+  /// "lat, lon", so any MeshCore app can read it and MeshSonar shows "Open on map" under it.
+  ({MtResult result, String? text}) positionMessageText({MtFix? fix}) {
+    final mine = _lastFix;
+    final f = fix == null ? mine : (mine == null || fix.at.isAfter(mine.at) ? fix : mine);
+    final gate = _fixGate(f);
+    if (gate != null) return (result: _resultOf(gate), text: null);
+    if (_mode == MtPositionMode.exact) {
+      return (result: MtResult.ok, text: 'My position: ${f!.lat.toStringAsFixed(5)}, ${f.lon.toStringAsFixed(5)}');
+    }
+    final cell = PlusCode.tryDecode(PlusCode.encode(f!.lat, f.lon, codeLength: kPlusCodeApproxDigits));
+    if (cell == null) return (result: MtResult.waitingForGps, text: null);
+    // The cell's middle may itself be inside a zone's buffer even when the fix is not: checked again.
+    final again = _zoneGate(cell.lat, cell.lon, 0);
+    if (again != null) return (result: _resultOf(again), text: null);
+    return (result: MtResult.ok, text: 'My position (approximate): ${cell.lat.toStringAsFixed(4)}, ${cell.lon.toStringAsFixed(4)}');
+  }
+
+  /// "Exact" or "Approximate": what [positionMessageText] would send (the confirmation says which).
+  MtPositionMode get positionMode => _mode;
+
   static MtResult _resultOf(MtShareReason r) => switch (r) {
         MtShareReason.privacyZone => MtResult.privacyZone,
         MtShareReason.zonesNotLoaded => MtResult.zonesNotLoaded,
@@ -1195,6 +1245,55 @@ class MeshTrackService {
   late final ChannelTextTap channelTextTap =
       ChannelTextTap.of((e) => onChannelText(MtInboundText.fromTapEvent(e)) ? TapVerdict.consume : TapVerdict.pass);
 
+  // ---------------------------------------------------------------- positions in a channel that is not a group (C-U2)
+
+  final Map<int, Map<String, MtStrayShare>> _stray = {};
+
+  /// Friends whose position updates were heard in channel [channelId] while it is NOT a MeshTrack group on this phone,
+  /// newest first. Round 3 C-U2: such an update is never chat (no bubble per update, no unread, no notification, not in
+  /// backup or search); the thread shows ONE line for them ("Jo shared their position · 6 updates") and offers "Use for
+  /// MeshTrack". Memory only, like every friend position; gone when the app closes or the channel becomes a group.
+  List<MtStrayShare> strayShares(int channelId) {
+    final m = _stray[channelId];
+    if (m == null || m.isEmpty || _groups.containsKey(channelId)) return const [];
+    return m.values.toList()..sort((a, b) => b.lastAt.compareTo(a.lastAt));
+  }
+
+  /// Forgets [strayShares] of one channel (its thread's line goes away).
+  void clearStrayShares(int channelId) {
+    if (_stray.remove(channelId) != null) _changed(save: false);
+  }
+
+  /// A channel text for a channel that is not a group. Only a POSITION update is taken out of chat; a request, a meet-up
+  /// pin or a stop stays a readable chat line (they are rare and say something a person may want to read).
+  bool _onStrayText(MtInboundText e) {
+    final s = e.split;
+    final (name, body) = s != null ? (s.name, s.body) : splitMtSender(e.text);
+    if (parseMeshTrack(body) is! MtPosition) return false;
+    if (name == null) return false; // no sender: nothing to say about it, leave it to chat as today
+    final self = _selfNameOf();
+    if (self != null && name == self) return true; // my own update echoed back: never chat
+    final m = _stray.putIfAbsent(e.channelId, () => {});
+    final old = m[name];
+    final sender = e.senderTs;
+    // The same update heard again through another repeater is not a new update.
+    if (old != null && old.lastBody == body && old.lastSenderTs == sender) return true;
+    if (old == null && m.length >= kMtMaxStraySenders) return true;
+    m[name] = MtStrayShare(name: name, updates: (old?.updates ?? 0) + 1, lastAt: e.receivedAt, lastBody: body, lastSenderTs: sender, snr: e.snr, pathLen: e.pathLen);
+    _changed(save: false);
+    return true;
+  }
+
+  /// The channel became a group: what was heard there before goes on the map now (each friend's newest update).
+  void _adoptStray(int channelId) {
+    final m = _stray.remove(channelId);
+    if (m == null) return;
+    for (final x in m.values) {
+      onChannelText(MtInboundText(
+          channelId: channelId, text: '${x.name}: ${x.lastBody}', receivedAt: x.lastAt, senderTs: x.lastSenderTs, snr: x.snr, pathLen: x.pathLen));
+    }
+  }
+
   bool onChannelText(MtInboundText e) {
     try {
       return _onText(e);
@@ -1205,7 +1304,7 @@ class MeshTrackService {
 
   bool _onText(MtInboundText e) {
     final g = _groups[e.channelId];
-    if (g == null) return false;
+    if (g == null) return _onStrayText(e);
     final s = e.split;
     final (name, body) = s != null ? (s.name, s.body) : splitMtSender(e.text);
     final msg = parseMeshTrack(body);

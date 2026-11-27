@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../app/chat_controller.dart';
 import '../../chat/channel_admin.dart';
 import '../../chat/models.dart';
@@ -268,13 +269,12 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   static const String _regionHelp =
       'Only repeaters set up for this region pass your messages on. Leave it empty unless your local network gives you a name, and type it exactly.';
 
-  /// Messages heard in this channel since local midnight.
+  /// Messages heard in this channel today, "today" in the zone the app shows (the one app time formatter).
   int _heardToday(Channel ch) {
     final now = c.now();
-    final midnight = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
     var n = 0;
     for (final m in c.store.messages.page(ch.convKey, limit: 300).messages) {
-      if (m.tsLocalMs < midnight) break;
+      if (!tf.sameDay(DateTime.fromMillisecondsSinceEpoch(m.tsLocalMs), now)) break;
       if (!m.isOutgoing) n++;
     }
     return n;

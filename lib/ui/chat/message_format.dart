@@ -4,52 +4,57 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../core/photo_api.dart';
+import '../../core/time_format.dart' as tf;
 import '../../core/private_photo.dart';
 
 
 String two(int n) => n.toString().padLeft(2, '0');
 
+// Every time the chat screens show goes through the one app time formatter (lib/core/time_format.dart, round 3 C-V3):
+// the phone's own time by default, UTC (and labelled) when Settings > Map & display > Time zone says so, 12 or 24 hour
+// as the phone is set. [context] stays in the signatures for the callers; nothing is read from it any more.
+
+DateTime _at(int ms) => DateTime.fromMillisecondsSinceEpoch(ms);
+
+/// The calendar day of [ms] in the zone the app is showing (only the date fields mean anything).
 DateTime dayOf(int ms) {
-  final d = DateTime.fromMillisecondsSinceEpoch(ms);
-  return DateTime(d.year, d.month, d.day);
+  final w = tf.wallClock(_at(ms));
+  return DateTime.utc(w.year, w.month, w.day);
 }
 
-String dayLabel(BuildContext context, int ms, {DateTime? now}) {
-  final today = dayOf((now ?? DateTime.now()).millisecondsSinceEpoch);
-  final d = dayOf(ms);
-  final diff = today.difference(d).inDays;
-  if (diff == 0) return 'Today';
-  if (diff == 1) return 'Yesterday';
-  return MaterialLocalizations.of(context).formatMediumDate(d);
-}
+/// "Today", "Yesterday", "Nov 10" (with the year once it is not this year).
+String dayLabel(BuildContext context, int ms, {DateTime? now}) => tf.calendarDay(_at(ms), now: now);
 
-String timeLabel(BuildContext context, int ms) {
-  final d = DateTime.fromMillisecondsSinceEpoch(ms);
-  return MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(d), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context));
-}
+/// "6:14 PM" ("18:14" on a 24-hour phone; " UTC" added in UTC mode).
+String timeLabel(BuildContext context, int ms) => tf.timeOfDay(_at(ms));
 
-/// The centred separator above a group: "Today 9:38", "Yesterday 21:02", "Mon 9:38" within a week, else "Oct 28, 9:38".
+const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// The centred separator above a group: "Today 9:38 AM", "Yesterday 9:02 PM", "Mon 9:38 AM" within a week, else
+/// "Oct 28, 9:38 AM".
 String separatorLabel(BuildContext context, int ms, {DateTime? now}) {
   final n = now ?? DateTime.now();
   final diff = dayOf(n.millisecondsSinceEpoch).difference(dayOf(ms)).inDays;
   final t = timeLabel(context, ms);
   if (diff <= 0) return 'Today $t';
   if (diff == 1) return 'Yesterday $t';
-  if (diff < 7) return '${const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][DateTime.fromMillisecondsSinceEpoch(ms).weekday - 1]} $t';
-  return '${MaterialLocalizations.of(context).formatShortDate(DateTime.fromMillisecondsSinceEpoch(ms))}, $t';
+  if (diff < 7) return '${_weekdays[tf.wallClock(_at(ms)).weekday - 1]} $t';
+  return '${tf.calendarDay(_at(ms), now: n)}, $t';
 }
 
 /// Short stamp for list rows: time today, "Yesterday", weekday this week, else a date.
 String listStamp(BuildContext context, int? ms, {DateTime? now}) {
   if (ms == null) return '';
   final n = now ?? DateTime.now();
-  final d = DateTime.fromMillisecondsSinceEpoch(ms);
   final diff = dayOf(n.millisecondsSinceEpoch).difference(dayOf(ms)).inDays;
   if (diff <= 0) return timeLabel(context, ms);
   if (diff == 1) return 'Yesterday';
-  if (diff < 7) return const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d.weekday - 1];
-  return MaterialLocalizations.of(context).formatShortDate(d);
+  if (diff < 7) return _weekdays[tf.wallClock(_at(ms)).weekday - 1];
+  return tf.calendarDay(_at(ms), now: n);
 }
+
+/// A message's own time for the info strip and the search results: the time alone today, else "Nov 10, 6:14 PM".
+String messageStamp(int ms, {DateTime? now}) => tf.timeOrShortDateTime(_at(ms), now: now);
 
 int utf8Len(String s) => utf8.encode(s).length;
 

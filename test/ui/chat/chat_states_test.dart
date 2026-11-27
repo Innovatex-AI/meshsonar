@@ -101,6 +101,8 @@ void main() {
         setSize(tester, w: w, h: h, scale: scale);
         await seed();
         final ch = kit.store.channels.bySlot(radioA, 1)!;
+        // Read, so the thread opens at the newest message (with unread it opens at the first unread, C-U4).
+        kit.service.markRead(ch.convKey);
         await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ch.convKey), brightness: b));
         await tester.pump();
         expect(tester.takeException(), isNull);

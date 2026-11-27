@@ -8,6 +8,8 @@ import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/ui/chat/qr_widgets.dart' show QrView;
 import 'package:meshsonar/ui/contacts/contact_profile_screen.dart';
 import 'package:meshsonar/ui/contacts/contacts_controller.dart';
+import 'package:meshsonar/ui/map/main_map_focus.dart';
+import 'package:meshsonar/ui/shell/shell_controller.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import '../../chat/contact_support.dart';
@@ -21,8 +23,8 @@ final shared = <String>[];
 final files = <String>[];
 
 Future<void> pumpProfile(WidgetTester tester, ContactsRig rig, String key,
-    {Brightness b = Brightness.light, Widget Function(BuildContext, Contact)? claim}) async {
-  await tester.pumpWidget(MaterialApp(
+    {Brightness b = Brightness.light, Widget Function(BuildContext, Contact)? claim, ShellController? shell}) async {
+  final app = (MaterialApp(
     key: UniqueKey(),
     theme: meshSonarTheme(b),
     home: Builder(
@@ -46,6 +48,7 @@ Future<void> pumpProfile(WidgetTester tester, ContactsRig rig, String key,
       ),
     ),
   ));
+  await tester.pumpWidget(shell == null ? app : ShellScope(controller: shell, child: app));
   await tester.tap(find.byKey(const Key('open')));
   await tester.pumpAndSettle();
 }
@@ -118,12 +121,17 @@ void main() {
       expect(find.byKey(const Key('contact-last-delivery')), findsNothing);
     });
 
-    tw('flood-only contact reads Searching', (tester) async {
+    tw('a contact build 76 kept on "Always search" reads its real route; the route is said once (C-V5)', (tester) async {
       setScreen(tester);
       await rig.withContacts(1);
-      rig.chat.contacts.setForceFlood(keyN(1), true);
+      rig.store.db.raw.execute("UPDATE contacts SET path_mode = 'flood', force_flood = 1");
       await pumpProfile(tester, rig, keyN(1));
-      expect(find.text('Person · Searching'), findsOneWidget);
+      expect(find.text('Person · No route yet'), findsOneWidget);
+      expect(find.textContaining('Searching'), findsNothing);
+      expect(find.byKey(const Key('contact-route-row')), findsNothing, reason: 'the header says it; the Route tile opens it');
+      await scrollTo(tester, find.byKey(const Key('contact-key-row')));
+      expect(find.byKey(const Key('contact-share')), findsNothing, reason: 'Share is the button in the bar');
+      expect(find.byKey(const Key('contact-share-nav')), findsOneWidget);
     });
 
     tw('last delivery comes from the newest acknowledged message', (tester) async {
@@ -229,6 +237,22 @@ void main() {
       expect(c(keyN(1)).blocked, isFalse);
     });
 
+    tw('C-U3: tapping the location opens the map AT the contact, with a target named after them', (tester) async {
+      setScreen(tester);
+      await rig.withContacts(1);
+      final shell = ShellController(initial: AppTab.chat);
+      await pumpProfile(tester, rig, keyN(1), shell: shell);
+      await scrollTo(tester, find.byKey(const Key('fake-map')));
+      await tester.tap(find.byKey(const Key('contact-location')));
+      await tester.pumpAndSettle();
+      final r = MainMapFocus.notifier.value!;
+      expect(r.at.latitude, c(keyN(1)).lat);
+      expect(r.at.longitude, c(keyN(1)).lon);
+      expect(r.targets.single.label, c(keyN(1)).displayName);
+      expect(shell.tab, AppTab.drive);
+      expect(find.byKey(const Key('contact-profile')), findsNothing, reason: 'back to the shell');
+    });
+
     tw('position: static map when advertised, "Not shared" when not; hold copies coordinates', (tester) async {
       setScreen(tester);
       await rig.withContacts(1);
@@ -290,7 +314,7 @@ void main() {
       setScreen(tester);
       await add(radioContact(5, type: ContactType.repeater, name: 'Hilltop \u{1F6AB}'));
       await pumpProfile(tester, rig, keyN(5));
-      await scrollTo(tester, find.byKey(const Key('contact-share')));
+      await scrollTo(tester, find.byKey(const Key('contact-key-row')));
       for (final k in ['node-action-planFrom', 'node-action-addToPlan', 'node-action-linkTo']) {
         expect(find.byKey(Key(k)), findsNothing, reason: k);
       }
@@ -324,17 +348,16 @@ void main() {
   });
 
   group('route, share, mute, copy', () {
-    tw('Route screen: Always search is a checkmark row; Reset route asks first', (tester) async {
+    tw('Route screen: no route modes (build 77); Reset route asks first', (tester) async {
       setScreen(tester);
       rig.port.radioAdd(radioContact(1, path: true));
       rig.chat.contacts.attach(rig.port);
       await rig.chat.contacts.syncNow();
       await pumpProfile(tester, rig, keyN(1));
-      await tester.tap(find.byKey(const Key('contact-route-row')));
+      await tester.tap(find.byKey(const Key('tile-route')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('mode-flood')));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).forceFlood, isTrue);
+      expect(find.byKey(const Key('mode-flood')), findsNothing);
+      expect(find.text('Always search'), findsNothing);
       await tester.tap(find.byKey(const Key('route-reset')));
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
@@ -411,12 +434,11 @@ void main() {
       expect(files.single, endsWith('.meshcore.txt'));
     });
 
-    tw('"Share contact" row opens the same sheet; Send to radios nearby tells both honest outcomes and is absent when the radio is away', (tester) async {
+    tw('Share in the bar opens the share sheet; Send to radios nearby tells both honest outcomes and is absent when the radio is away', (tester) async {
       setScreen(tester, h: 1000);
       await rig.withContacts(1);
       await pumpProfile(tester, rig, keyN(1));
-      await scrollTo(tester, find.byKey(const Key('contact-share')));
-      await tester.tap(find.byKey(const Key('contact-share')));
+      await tester.tap(find.byKey(const Key('contact-share-nav')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('contact-share-nearby')));
       await tester.pumpAndSettle();
@@ -640,7 +662,7 @@ void main() {
         expectHeader(tester);
         sem.dispose();
         await expectAccessible(tester);
-        await scrollTo(tester, find.byKey(const Key('contact-share')));
+        await scrollTo(tester, find.byKey(const Key('contact-key-row')));
         expect(tester.takeException(), isNull);
         await expectAccessible(tester);
       });

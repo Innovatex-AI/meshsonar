@@ -62,6 +62,10 @@ class ChatsListView extends StatefulWidget {
 
   /// Called after the person opens a conversation (the shell clears its search).
   final VoidCallback? onOpened;
+
+  /// C-U5: only chats with something unread (the "Unread" chip beside search). [onShowAll] turns it off again.
+  final bool unreadOnly;
+  final VoidCallback? onShowAll;
   const ChatsListView({
     super.key,
     required this.controller,
@@ -72,6 +76,8 @@ class ChatsListView extends StatefulWidget {
     this.onConnect,
     this.onNew,
     this.onOpened,
+    this.unreadOnly = false,
+    this.onShowAll,
   });
 
   @override
@@ -124,6 +130,11 @@ class _ChatsListViewState extends State<ChatsListView> {
         final rows = q.isEmpty ? all : all.where((r) => _matches(r, q)).toList();
         if (all.isEmpty) return _emptyState();
         if (q.isNotEmpty) return _searchResults(rows, all, q);
+        if (widget.unreadOnly) {
+          final unread = rows.where((r) => r.unread > 0).toList();
+          if (unread.isEmpty) return _noUnread();
+          return _list(unread);
+        }
         return _list(rows);
       },
     );
@@ -155,6 +166,18 @@ class _ChatsListViewState extends State<ChatsListView> {
       child: _NothingYet(controller: _c, connected: connected, onNew: widget.onNew, onConnect: widget.onConnect),
     );
   }
+
+  Widget _noUnread() => SliverFillRemaining(
+        hasScrollBody: false,
+        child: AppEmptyView(
+          key: const Key('chats-no-unread'),
+          symbol: AppSymbols.checkmarkBubble,
+          title: 'Nothing unread',
+          message: 'Every chat is read.',
+          actionLabel: 'Show all chats',
+          onAction: widget.onShowAll,
+        ),
+      );
 
   Widget _searchResults(List<ConversationRow> rows, List<ConversationRow> all, String q) {
     final hits = q.length >= 2 ? _c.service.search(widget.query.trim(), limit: 20) : const <ChatMessage>[];

@@ -93,11 +93,12 @@ void main() {
     expect(find.text('Radio not connected. Sends when it connects.'), findsOneWidget);
   });
 
-  testWidgets('"always search" is said in the subtitle', (tester) async {
+  testWidgets('the subtitle says the route the radio holds; build 76 "always search" left in storage is never said', (tester) async {
     await boot(tester);
-    kit.service.contacts.setForceFlood(keyN(1), true);
+    kit.store.db.raw.execute("UPDATE contacts SET path_mode = 'flood', force_flood = 1");
     await openChat(tester, 'Ann', 1);
-    expect(find.text('Searching'), findsOneWidget);
+    expect(find.text('Searching'), findsNothing);
+    expect(find.text('No route yet'), findsOneWidget);
   });
 
   testWidgets('repeaters and rooms are not in Contacts (they live under Radio)', (tester) async {
@@ -168,7 +169,8 @@ void main() {
       await tester.dragUntilVisible(find.text('Ann'), find.byKey(const Key('contacts-list')), const Offset(0, -120));
       await tester.pump();
       await openChat(tester, 'Ann', 1);
-      expect(tester.takeException(), isNull);
+      final ex = tester.takeException();
+      expect(ex, isNull, reason: ex is FlutterError ? ex.diagnostics.map((n) => n.toStringDeep()).join('\n') : '$ex');
       await expectAccessibleIos(tester);
     });
   }

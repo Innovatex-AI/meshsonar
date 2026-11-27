@@ -13,6 +13,10 @@
 //    groups by thread (threadIdentifier = conversation key), Android by group key.
 //  * Reading a conversation removes its notification and refreshes the badge.
 //  * Never time-sensitive: Focus and Do Not Disturb hold alerts back as the person configured them.
+//  * What it says is a preview, never the raw text ([alertPreviewText], round 3 C-U1 / round 5 A1): a photo message
+//    reads "Photo" or "Photo: caption" (a private photo's address and key never reach the lock screen), a MeshTrack
+//    message reads as words.
+//  * A friend's position update never alerts (round 3 C-U2 / round 5 A2), in any channel: [isPositionUpdate].
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -20,9 +24,44 @@ import 'package:flutter/foundation.dart';
 import '../chat/chat_service.dart';
 import '../chat/events.dart';
 import '../chat/models.dart';
-import '../core/private_photo.dart' show hidePrivatePhotoLinks;
+import '../core/meshtrack/mt_wire.dart' show MtPosition, mtReadable, parseMeshTrack;
+import '../core/photo_api.dart' show photoIdOf;
+import '../core/private_photo.dart' show hidePrivatePhotoLinks, parsePrivatePhotoLink;
 import '../platform/local_notifications.dart';
 import 'alert_prefs.dart';
+
+final RegExp _linkRe = RegExp(r'https?://[^\s<>"]+', caseSensitive: false);
+final RegExp _linkTail = RegExp(r'[.,;:!?)\]]+$');
+
+/// What a notification or an in-app banner says for message text [raw] instead of the raw text (round 3 C-U1, round 5
+/// A1). A MeshSonar photo link reads "Photo" ("2 photos"), with the rest of the text after it as the caption: "Photo:
+/// at the trailhead"; so a private photo's address and key are never shown. A MeshTrack machine message ("MT1 @86GV…
+/// s40 c46") reads as words: "Shared their position". Anything else is the text itself.
+String alertPreviewText(String raw) {
+  final mt = mtReadable(raw);
+  if (mt != null) {
+    const tail = ' (MeshTrack)';
+    return mt.endsWith(tail) ? mt.substring(0, mt.length - tail.length) : mt;
+  }
+  var photos = 0;
+  final rest = raw.replaceAllMapped(_linkRe, (m) {
+    final all = m.group(0)!;
+    final tail = _linkTail.firstMatch(all)?.group(0) ?? '';
+    final link = all.substring(0, all.length - tail.length);
+    if (photoIdOf(link) == null && parsePrivatePhotoLink(link) == null) return all;
+    photos++;
+    return tail;
+  });
+  if (photos == 0) return hidePrivatePhotoLinks(raw);
+  final caption = hidePrivatePhotoLinks(rest).replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
+  final label = photos == 1 ? 'Photo' : '$photos photos';
+  return caption.isEmpty || RegExp(r'^[.,;:!?)\]]+$').hasMatch(caption) ? label : '$label: $caption';
+}
+
+/// True when [text] is a friend's MeshTrack position update. Such a message never raises a notification or a banner
+/// (round 3 C-U2, round 5 A2): in a MeshTrack group it is not chat at all, and anywhere else it would alert every few
+/// minutes for as long as the friend drives.
+bool isPositionUpdate(String text) => parseMeshTrack(text) is MtPosition;
 
 /// A banner shown inside the app while it is in front.
 class InAppBanner {
@@ -176,6 +215,10 @@ class AlertCoordinator extends ChangeNotifier {
       suppressed++;
       return;
     }
+    if (isPositionUpdate(m.text)) {
+      suppressed++;
+      return;
+    }
     final title = cv?.title ?? m.senderName ?? 'MeshSonar';
     final sender = m.senderName;
     if (_foreground) {
@@ -256,7 +299,7 @@ class AlertCoordinator extends ChangeNotifier {
   }
 
   static String _clip(String raw) {
-    final t = hidePrivatePhotoLinks(raw); // a private photo's key stays out of notifications
+    final t = alertPreviewText(raw); // never the raw text: no photo address or key, no MeshTrack wire text
     return t.length <= previewChars ? t : '${t.substring(0, previewChars)}…';
   }
 
