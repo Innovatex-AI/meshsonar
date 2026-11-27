@@ -276,7 +276,7 @@ class _LegendCardState extends State<LegendCard> {
       if (!onPage) return false;
       return switch (e.section) {
         'repeaters' => visible.any((l) => layerSectionOf(l) == 'repeaters'),
-        'people' => widget.on.contains('friends') || e.id == 'friend' && widget.page == MapLegendPage.drive,
+        'people' => widget.on.contains('friends'),
         _ => true,
       };
     }

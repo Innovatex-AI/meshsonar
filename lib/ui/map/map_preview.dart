@@ -172,6 +172,8 @@ class MapPreview extends StatelessWidget {
   static double stillHeight(BuildContext context, String? id, {required double fallback}) {
     final preset = presetOf(id);
     final word = preset?.height;
+    // Two standard heights (Round 1 N6): a caller's own number snaps to the nearer one.
+    fallback = fallback <= (compactHeight + tallHeight) / 2 ? compactHeight : tallHeight;
     if (word == null) return fallback;
     final d = ActiveMapDefinition.current;
     if (word == 'tall') {

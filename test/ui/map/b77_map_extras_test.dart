@@ -7,13 +7,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/colour_palette.dart';
+import 'package:meshsonar/core/map_definition_v2.dart';
 import 'package:meshsonar/core/map_prefs.dart';
 import 'package:meshsonar/core/map_styles.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/core/repeater_points.dart';
 import 'package:meshsonar/core/time_format.dart' as tf;
 import 'package:meshsonar/ui/app.dart' show AppScope;
+import 'package:meshsonar/ui/map/active_map_definition.dart';
 import 'package:meshsonar/ui/map/coverage_bands.dart';
+import 'package:meshsonar/ui/map/layers/repeater_name_labels.dart' show labelToneFor;
 import 'package:meshsonar/ui/map/coverage_map.dart';
 import 'package:meshsonar/ui/map/core/map_view_controller.dart';
 import 'package:meshsonar/ui/map/coverage_tiles_layer.dart' show CoverageViewStatus;
@@ -189,6 +192,17 @@ void main() {
       await t.pump();
       expect(t.widget<MapControlButton>(find.byKey(const Key('map-compass'))).visible, isTrue);
     });
+  });
+
+  test('F13: on a light map repeater names are dark ink on a light halo (never white with a thin outline)', () {
+    final spec = ActiveMapDefinition.current.labelSpec;
+    for (final style in [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.topo]) {
+      final tone = labelToneFor(style, Brightness.light);
+      expect(tone.dark, isFalse, reason: style.id);
+      expect(Color(spec.inkFor(tone.dark)).computeLuminance(), lessThan(0.1));
+      expect(Color(spec.haloFor(tone.dark)).computeLuminance(), greaterThan(0.8));
+    }
+    expect(labelToneFor(BaseMapStyle.street, Brightness.dark).dark, isFalse, reason: 'Light is the light map in a dark-theme app too');
   });
 
   test('W1-B: the repeater sheet\'s advert line uses the one time formatter', () {
