@@ -22,7 +22,6 @@ ByteData _font(String n) => ByteData.sublistView(File('assets/fonts/$n').readAsB
 final fonts = ReportFonts(regular: _font('Barlow-Regular.ttf'), bold: _font('Barlow-SemiBold.ttf'));
 
 final t0 = DateTime.utc(2026, 10, 16, 18);
-DateTime wall(DateTime t) => t.subtract(const Duration(hours: 4)); // EDT
 
 DriveReport report() {
   const mPerDegLat = 111195.0802;
@@ -58,7 +57,7 @@ Map<String, dynamic> regionBody() =>
 void main() {
   group('drive report PDF', () {
     test('a real PDF with Barlow embedded and the report text in it', () async {
-      final doc = driveReportPdf(report(), title: 'Morning loop', units: Units.metric, wall: wall, zone: 'EDT');
+      final doc = driveReportPdf(report(), title: 'Morning loop', units: Units.metric);
       final bytes = await renderReportPdf(doc, fonts: fonts, compress: false);
       expect(latin1.decode(bytes.sublist(0, 5)), '%PDF-');
       final raw = latin1.decode(bytes);
@@ -68,14 +67,16 @@ void main() {
       final text = pdfText(bytes);
       for (final s in [
         'MeshSonar drive report: Morning loop',
-        'Started Fri 16 Oct 2026, 14:00 (EDT)',
+        'Started 2026-10-16 18:00 UTC. Times in this report are UTC.',
         'Units: metric',
         'Grid cells',
-        'SNR of the strongest reply',
+        'Signal of the strongest reply (SNR)',
+        'Patchy: heard on 3 of 4 pings, mostly strong',
         '4 pings, 3 heard, 1 heard nothing.',
         'Noise floor (dBm), lower is quieter',
         'Median -103.5 dBm',
-        'TX power 22.0 dBm throughout.',
+        'Transmit power: 22 dBm, unchanged.',
+        'Best signal Strong (9.0 dB)',
         'Signal by distance to the repeater',
         'Heard % by speed',
         'Repeaters heard (1)',
@@ -90,8 +91,22 @@ void main() {
       expect(text, isNot(contains(' mi ')));
     });
 
+    test('exports stay UTC; distance bars take their own signal colour; the noise line is neutral unless high', () {
+      final r = report();
+      final doc = driveReportPdf(r, title: 'Loop', units: Units.metric);
+      final all = doc.texts.join('\n');
+      expect(all, contains('Times in this report are UTC.'));
+      expect(all, isNot(contains('local time')));
+      final bars = doc.blocks.whereType<PdfBars>().firstWhere((b) => b.title.startsWith('Signal by distance'));
+      final std = DrivePdfColors.standard;
+      expect(bars.barColors, [for (final v in bars.values) std.signal(v!)]);
+      final noise = doc.blocks.whereType<PdfLine>().firstWhere((b) => b.title.startsWith('Noise floor'));
+      // Median -103.5 dBm: below the -100 dBm line, so the line is neutral, not the warning colour.
+      expect(noise.lineColor, std.neutral);
+    });
+
     test('imperial units throughout, no km', () async {
-      final doc = driveReportPdf(report(), title: 'Loop', units: Units.imperial, wall: wall, zone: 'EDT');
+      final doc = driveReportPdf(report(), title: 'Loop', units: Units.imperial);
       final all = doc.texts.join('\n');
       expect(all, contains('Units: imperial'));
       expect(all, contains(' mi'));
@@ -100,7 +115,7 @@ void main() {
     });
 
     test('compressed output (what the app shares) is smaller and still a PDF', () async {
-      final doc = driveReportPdf(report(), title: 'Loop', units: Units.metric, wall: wall, zone: 'EDT');
+      final doc = driveReportPdf(report(), title: 'Loop', units: Units.metric);
       final small = await renderReportPdf(doc, fonts: fonts);
       final big = await renderReportPdf(doc, fonts: fonts, compress: false);
       expect(latin1.decode(small.sublist(0, 5)), '%PDF-');
@@ -114,7 +129,7 @@ void main() {
         session: DriveSession(id: 'x', startedAt: t0),
         pings: [DrivePing(id: 'a', ts: t0, lat: 40, lon: -83)],
       );
-      final doc = driveReportPdf(r, title: 'Quiet', units: Units.metric, wall: wall, zone: 'EDT');
+      final doc = driveReportPdf(r, title: 'Quiet', units: Units.metric);
       expect(doc.texts, contains('Your radio did not report a noise floor for this drive.'));
       expect(doc.blocks.whereType<PdfLine>().map((b) => b.title), isNot(contains('Noise floor (dBm), lower is quieter')));
     });

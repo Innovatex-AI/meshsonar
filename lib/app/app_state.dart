@@ -3250,7 +3250,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   bool get lastSyncFailed => _lastSyncFailed;
   // Screenshot tour only: show the "Sync failed" state without running a sync (no key, no request).
   @visibleForTesting
-  void debugShowSyncFailed() => _syncFailed(friendlyError(TimeoutException('upload timed out'), action: 'Sync'), null);
+  void debugShowSyncFailed() => _syncFailed(friendlyError(TimeoutException('upload timed out'), action: 'Upload'), null);
 
   // The server said "slow down" (429 / 503): no automatic upload until this time. A person pressing Sync still can.
   DateTime? _syncBackoffUntil;
@@ -3310,12 +3310,12 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     if (!hasKey) {
       unawaited(ensureKey()); // normally already done at launch; this catches a phone that was offline then
       _say(_settings.autoKey
-          ? 'Setting up your driver key. Your drives are saved on this phone; try Sync again in a moment.'
-          : 'This phone has no driver key. Create one in Settings before syncing. Your drives are saved on this phone.');
+          ? 'Setting up your driver key. Your drives are saved on this phone; tap Upload again in a moment.'
+          : 'This phone has no driver key. Create one in Settings before uploading. Your drives are saved on this phone.');
       return false;
     }
     if (_settings.keyStatus != DriverKeyStatus.approved) {
-      _say('The server hasn\'t accepted your driver key yet Drives upload once it does; tap Refresh in Settings.');
+      _say('The server hasn\'t accepted your driver key yet. Drives upload once it does; tap Refresh in Settings.');
       return false;
     }
     return true;
@@ -3335,7 +3335,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       return r;
     } catch (e) {
       _logError('Upload of one drive failed', e);
-      _syncFailed(friendlyError(e, action: 'Sync'), e);
+      _syncFailed(friendlyError(e, action: 'Upload'), e);
       return null;
     } finally {
       _syncing.remove(sessionId);
@@ -3354,7 +3354,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       return r;
     } catch (e) {
       _logError('Upload of all drives failed', e);
-      _syncFailed(friendlyError(e, action: 'Sync'), e);
+      _syncFailed(friendlyError(e, action: 'Upload'), e);
       return null;
     } finally {
       _syncing.remove('*');
@@ -3880,7 +3880,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   }
 
   /// Name if known, else the hex prefix.
-  String repeaterLabel(String prefix) => repeaterName(prefix) ?? prefix.toLowerCase();
+  String repeaterLabel(String prefix) => repeaterName(prefix) ?? prefix.toUpperCase();
 
   Future<void> refreshRepeaters({bool quiet = false}) async {
     if (!quiet) unawaited(refreshDirectory(force: true)); // a manual refresh also refetches the public node map

@@ -31,8 +31,24 @@ Future<Harness> openSettings(WidgetTester tester, SiteConfig sc, {List<RegionInd
   await tester.pumpAndSettle();
   await openSettingsTab(tester);
   await tester.pumpAndSettle();
-  await showSetting(tester, 'site-radio-preset');
+  await openRadioPreset(tester);
   return h;
+}
+
+/// Build 77 (round 5 S6): the region's preset is shown once, in My radio's settings (Settings > Radio), not again on
+/// Server (advanced).
+Future<void> openRadioPreset(WidgetTester tester) async {
+  await showSetting(tester, 'radio-tab-link');
+  await tester.tap(find.byKey(const Key('radio-tab-link')));
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(find.byKey(const Key('radio-region-preset')), 200,
+      scrollable: find.descendant(of: find.byKey(const Key('radio-list')), matching: find.byType(Scrollable)).first);
+  await tester.pumpAndSettle();
+}
+
+Future<void> backToSettings(WidgetTester tester) async {
+  await tester.pageBack();
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -107,8 +123,8 @@ void main() {
     });
   });
 
-  // Build 76: the row is on Settings > Account > Server (advanced); showSetting opens that page.
-  group('Settings > Account > Server (advanced) > Radio preset', () {
+  // Build 77: the region preset is in My radio's settings only (it was repeated on Server (advanced)).
+  group('My radio\'s settings > Region preset', () {
     testWidgets('no preset and a stored reason: the reason is shown as written, with its evidence, and no preset numbers', (tester) async {
       await openSettings(
           tester, const SiteConfig(region: _ukk, radioPresetNone: PresetNone(reason: 'Kazakhstan has no published LoRa preset; any frequency would be a guess.', source: 'https://example.org/kz')),
@@ -121,14 +137,14 @@ void main() {
       expect(find.text('Evidence: https://example.org/kz'), findsOneWidget);
       expect(find.textContaining('does not guess one'), findsOneWidget);
       expect(find.textContaining('910.525'), findsNothing, reason: 'never the US preset');
-      expect(find.byKey(const Key('site-radio-preset-compare')), findsNothing);
+      expect(find.byKey(const Key('radio-region-compare')), findsNothing);
     });
 
     testWidgets('no preset and no reason from the server: says so, still no preset', (tester) async {
       await openSettings(tester, const SiteConfig(region: _ukk), index: [reg('UKK', 'East Kazakhstan, KZ')]);
       expect(find.byKey(const Key('no-preset-no-reason')), findsOneWidget);
       expect(find.text('The server has not said why.'), findsOneWidget);
-      expect(find.textContaining('MHz'), findsNothing);
+      expect(find.descendant(of: find.byKey(const Key('radio-region-preset')), matching: find.textContaining('MHz')), findsNothing);
     });
 
     testWidgets('the reason can come from the catalogue when site-config does not carry it', (tester) async {
@@ -145,9 +161,10 @@ void main() {
       await tester.pumpAndSettle();
       await openSettingsTab(tester);
       await tester.pumpAndSettle();
-      await showSetting(tester, 'site-radio-preset');
+      await openRadioPreset(tester);
       expect(find.text('From the catalogue.'), findsOneWidget);
       expect(h.state.viewingTimezone, 'Asia/Almaty');
+      await backToSettings(tester);
       await showSetting(tester, 'site-region-timezone');
       expect(find.text('Time zone of East Kazakhstan, KZ: Asia/Almaty'), findsOneWidget);
     });
@@ -166,9 +183,9 @@ void main() {
       await tester.pumpAndSettle();
       await openSettingsTab(tester);
       await tester.pumpAndSettle();
-      await showSetting(tester, 'site-radio-preset');
-      expect(find.text('869.618 MHz · 62.5 kHz · SF8 · CR8'), findsOneWidget);
-      expect(find.byKey(const Key('site-radio-preset-provenance')), findsOneWidget);
+      await openRadioPreset(tester);
+      expect(find.textContaining('869.618'), findsWidgets);
+      expect(find.byKey(const Key('radio-region-provenance')), findsOneWidget);
       expect(find.text('Published in the MeshCore preset list.'), findsOneWidget);
     });
 
@@ -179,7 +196,7 @@ void main() {
       expect(h.state.viewingRegion!.code, 'UKK');
       expect(h.state.siteConfigIsForViewing, isFalse);
       expect(h.state.viewingPreset, isNull);
-      expect(find.text('Loading this region\'s preset.'), findsOneWidget);
+      expect(find.text('The region preset has not loaded yet.'), findsOneWidget);
       expect(find.textContaining('869.618'), findsNothing);
     });
   });

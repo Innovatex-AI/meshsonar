@@ -13,7 +13,7 @@ const _region = RegionInfo(slug: 'cmh', url: 'https://cmh.meshsonar.com');
 const _on = SiteConfig(region: _region, capabilities: {'nodeClaims', 'radioProof'});
 
 void main() {
-  testWidgets('with radio proof on, More has an Observers row under Devices and keys, and it opens the Observers screen', (tester) async {
+  testWidgets('with radio proof on, More has an Observers row under Settings, and it opens the Observers screen', (tester) async {
     useTallScreen(tester);
     final h = await rp.open(tester, caps: _on, connect: false);
     expect(h.state.radioProofCapable, isTrue);
@@ -21,7 +21,8 @@ void main() {
     await rp.settle(tester, () => find.byKey(const Key('more-observers')).evaluate().isNotEmpty);
     final row = find.byKey(const Key('more-observers'));
     expect(row, findsOneWidget);
-    expect(tester.getTopLeft(row).dy, greaterThan(tester.getTopLeft(find.byKey(const Key('more-devices'))).dy));
+    // Build 77: Devices and keys is in Settings > Account only, so the row follows Settings.
+    expect(tester.getTopLeft(row).dy, greaterThan(tester.getTopLeft(find.byKey(const Key('more-settings'))).dy));
     await tester.tap(row);
     await rp.settle(tester, () => find.byType(PersonObserversScreen).evaluate().isNotEmpty);
     expect(find.byType(PersonObserversScreen), findsOneWidget);

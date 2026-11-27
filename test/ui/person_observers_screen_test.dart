@@ -63,14 +63,14 @@ void main() {
       expect(find.text('Needs your answer'), findsOneWidget);
       expect(
           find.text('Is Barn Observer (CMH) yours?'), findsOneWidget, reason: 'the question comes first, alone on its line');
-      expect(find.textContaining('Its login names your radio Hilltop as its owner, since Tue 10 Nov 2026'), findsOneWidget);
+      expect(find.textContaining('Its login names your radio Hilltop as its owner, since Nov 10, 2026'), findsOneWidget);
       expect(find.byKey(Key('offer-accept-$_offerKey')), findsOneWidget);
       expect(find.byKey(Key('offer-decline-$_offerKey')), findsOneWidget);
 
       expect(find.text('Hilltop North'), findsOneWidget);
       expect(find.textContaining("Proof: Proved with the radio's own key"), findsOneWidget);
       expect(find.text('Area CMH'), findsOneWidget);
-      expect(find.textContaining('Last heard Sun 22 Nov 2026'), findsNWidgets(2));
+      expect(find.textContaining('Last heard Nov 22, 2026'), findsNWidgets(2));
       expect(find.text('It calls itself "HT1".'), findsOneWidget);
       expect(find.textContaining('Deaf'), findsOneWidget);
       expect(find.textContaining('Battery 3.63 V (low), falling'), findsOneWidget);

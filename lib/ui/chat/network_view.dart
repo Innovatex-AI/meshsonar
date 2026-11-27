@@ -15,10 +15,8 @@ import '../../chat/conversation_row.dart';
 import '../../chat/models.dart';
 import '../../chat/network_model.dart';
 import '../app.dart';
-import '../contacts/contact_widgets.dart' show contactTypeLabel;
-import '../contacts/contacts_grouping.dart';
-import '../contacts/contacts_view.dart' show HeardBars, NearbyAdvertRow, NearbyList;
-import '../contacts/path_manager_screen.dart' show offerUseRoute;
+import '../contacts/contact_widgets.dart' show contactTypeLabel, heardText;
+import '../contacts/contacts_view.dart' show NearbyAdvertRow, NearbyList;
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import '../design/app_type.dart';
@@ -234,7 +232,7 @@ class _NetworkViewState extends State<NetworkView> with WidgetsBindingObserver {
       return;
     }
     final m = widget.navigator.contacts.manager;
-    await showPingSheet(context, contact: c, manager: m, onUseRoute: (r) => offerUseRoute(context, m, c, r));
+    await showPingSheet(context, contact: c, manager: m);
   }
 
   // ------------------------------------------------------------------ build
@@ -596,14 +594,8 @@ class _Header extends StatelessWidget {
       );
 }
 
-String agoText(int? ms, DateTime now) {
-  if (ms == null) return 'Not heard yet';
-  final s = (now.millisecondsSinceEpoch - ms) ~/ 1000;
-  if (s < 90) return 'Heard just now';
-  if (s < 5400) return 'Heard ${(s / 60).round()} min ago';
-  if (s < 129600) return 'Heard ${(s / 3600).round()} h ago';
-  return 'Heard ${(s / 86400).round()} d ago';
-}
+/// "Heard 5 min ago" / "Not heard yet", through the one app time formatter.
+String agoText(int? ms, DateTime now) => heardText(ms, now.millisecondsSinceEpoch);
 
 class _NodeRow extends StatelessWidget {
   final Contact contact;
@@ -654,8 +646,6 @@ class _NodeRow extends StatelessWidget {
                   Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.subhead.copyWith(color: c.textMuted)),
                 ]),
               ),
-              HeardBars(bars: heardBars(contact, now.millisecondsSinceEpoch)),
-              const SizedBox(width: Gap.s),
               AppSymbolIcon(AppSymbols.chevronRight, size: 14, color: c.textMuted),
             ]),
           ),

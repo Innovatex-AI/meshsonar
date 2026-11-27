@@ -1,6 +1,7 @@
 // Every MeshTrack sentence the screens show, as pure functions (meshtrack plan sections 5-8), so the copy is tested in one
 // place. Plain words only: MeshTrack, group, share / sharing, position, last heard, meet-up point, Where are you?. Distances
 // and speeds go through Units.
+import '../../core/time_format.dart' as tf;
 import '../../core/heard.dart' show compass;
 import '../../core/meshtrack/meshtrack_service.dart';
 import '../../core/meshtrack/mt_wire.dart';
@@ -208,12 +209,7 @@ String mtShareDetail(MtGroupView g, DateTime now) {
 // ------------------------------------------------------------------------------------------------ people rows
 
 /// "just now", "4 min ago", "2 h ago".
-String mtAgo(DateTime then, DateTime now) {
-  final d = now.difference(then);
-  if (d.inSeconds < 60) return 'just now';
-  if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-  return '${d.inHours} h ago';
-}
+String mtAgo(DateTime then, DateTime now) => tf.relativeTime(then, now: now);
 
 /// "3.4 km NE" from me to them, or null when my position is unknown.
 String? mtDistanceAndPoint(MtLatLon? me, double lat, double lon, Units units) {
@@ -364,12 +360,7 @@ String askNotOnRadio(String name) => '$name is not on your radio yet. Put them o
 String askAgainIn(Duration left) => 'Ask again in ${(left.inMilliseconds / 1000).ceil()} s';
 
 /// "Answered just now" / "Answered 3 min ago".
-String askAnsweredAgo(DateTime at, DateTime now) {
-  final d = now.difference(at);
-  if (d.inMinutes < 1) return 'Answered just now';
-  if (d.inHours < 1) return 'Answered ${d.inMinutes} min ago';
-  return 'Answered ${d.inHours} h ago';
-}
+String askAnsweredAgo(DateTime at, DateTime now) => 'Answered ${tf.relativeTime(at, now: now)}';
 
 /// The headline of an answered position: "2.4 km NE of you", or "Position received" when my own position is unknown.
 String askWhere(MtLatLon? me, double lat, double lon, Units units) {

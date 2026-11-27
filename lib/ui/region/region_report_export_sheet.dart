@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/region_cache.dart' show asOfLabel;
+import '../../core/time_format.dart' show relativeDuration;
 import '../../core/region_dataset_fetch.dart';
 import '../../core/region_report_export.dart';
 import '../../core/region_report_pdf.dart';
@@ -225,10 +226,6 @@ class _RegionReportExportSheetState extends State<RegionReportExportSheet> {
   }
 }
 
-/// "5 min" / "3 h" / "2 days".
-String agoWords(Duration d) {
-  if (d.inMinutes < 1) return 'under a minute';
-  if (d.inMinutes < 60) return '${d.inMinutes} min';
-  if (d.inHours < 48) return '${d.inHours} h';
-  return '${d.inDays} days';
-}
+/// "5 min" / "3 h" / "2 d": the app's one wording for an age (lib/core/time_format.dart relativeDuration), without
+/// "ago" for "made 5 min ago".
+String agoWords(Duration d) => d.inSeconds < 90 ? 'under a minute' : relativeDuration(d).replaceFirst(RegExp(r' ago$'), '');

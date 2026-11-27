@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../core/heard.dart';
 import '../core/model.dart';
+import '../core/time_format.dart' as tf;
 import '../core/units.dart';
 import 'app.dart' show AppScope;
 import 'repeater_widgets.dart';
@@ -39,7 +40,7 @@ String _result(DrivePing p) {
 /// Plain-text version of a ping (for "Copy as text"). Unmeasured values are left out, never guessed.
 String pingAsText(DrivePing p, RepeaterLookup lookup, [Units units = Units.metric]) {
   final b = StringBuffer()
-    ..writeln('MeshSonar ping ${formatDateTime(p.ts)} (${formatTime(p.ts)})')
+    ..writeln('MeshSonar ping ${tf.dateTime(p.ts, seconds: true, weekday: true)}')
     ..writeln('Result: ${_result(p)}')
     ..writeln('Position: ${_ll(p.lat)}, ${_ll(p.lon)}${p.gpsAccuracyM == null ? '' : ' ±${units.shortLength(p.gpsAccuracyM!)}'}');
   if (p.speedMps != null) b.writeln('Speed: ${units.speed(p.speedMps!)}');
@@ -113,7 +114,7 @@ class PingDetailSheet extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(_result(p), style: t.textTheme.titleLarge),
                 const SizedBox(height: 2),
-                Text(formatDateTime(p.ts).replaceFirst(RegExp(r'\d\d:\d\d$'), formatTime(p.ts)), style: t.textTheme.bodySmall),
+                Text(tf.dateTime(p.ts, seconds: true, weekday: true), style: t.textTheme.bodySmall),
               ]),
             ),
             if (snr != null) SnrPill(snr),

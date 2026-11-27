@@ -1,25 +1,33 @@
-// Settings > Notifications. Honest about what is and is not possible:
+// Settings > Messages, the alert rows (the section was "Notifications" until build 77; its first rows, delivery and the chat
+// rows, are messages_section.dart). Honest about what is and is not possible:
 //  * Alerts are LOCAL: the app builds them from messages its radio handed over. No server, no remote push.
 //  * They only come while the radio is connected and the phone lets MeshSonar run. iOS may pause the app in the
 //    background; whether the link survives that is still being measured (docs/BACKGROUND_BLE_SPIKE.md), so the words
 //    here promise nothing beyond "open the app to catch up".
 //  * Previews: message text is hidden on the lock screen by default (a lock screen is public). The setting turns it on.
+//  * Build 77 (round 5): on iPhone there are no Sound or Quiet hours rows, the phone has them (per-app Sounds, Focus);
+//    until notifications are allowed the switches that only shape an alert are greyed with "Allow notifications first".
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../alerts/alert_prefs.dart';
 import '../../alerts/alerts_runtime.dart';
 import '../../chat/models.dart';
+import '../../core/time_format.dart' as tf;
 import '../../platform/local_notifications.dart';
 import '../alerts/permission_prompt.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import 'app_time_pick.dart';
+import 'messages_section.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
 const String notificationsHelp = 'Alerts for new messages, made on this phone. Nothing goes through a server.';
+
+/// Under a switch that only shapes an alert, while the phone does not allow alerts yet.
+const String allowNotificationsFirst = 'Allow notifications first.';
 
 /// How the state is worded. Pure, so the copy is tested.
 class AlertsStatus {
@@ -72,14 +80,18 @@ AlertsStatus describeAlertsStatus({
   }
 }
 
-/// Wording for the conversation's current notify mode.
+/// Wording for the conversation's current notify mode. The end of a mute is said in the app's own time: "Muted until
+/// 6:14 PM" today, "tomorrow 6:14 PM" the next day, the date after that (build 76 compared the day of the month only, so
+/// a mute ending on the same date of another month read as today).
 String notifyModeLabel(ConversationSummary c, DateTime now) {
   if (c.isMutedAt(now.millisecondsSinceEpoch)) {
     final until = c.mutedUntilMs;
     if (until == null) return 'Muted until you turn it back on';
-    final t = TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(until));
-    final sameDay = DateTime.fromMillisecondsSinceEpoch(until).day == now.day;
-    return 'Muted until ${sameDay ? '' : 'tomorrow '}${_hm(t)}';
+    final end = DateTime.fromMillisecondsSinceEpoch(until);
+    final clock = tf.timeOfDay(end);
+    if (tf.sameDay(end, now)) return 'Muted until $clock';
+    if (tf.sameDay(end, now.add(const Duration(days: 1)))) return 'Muted until tomorrow $clock';
+    return 'Muted until ${tf.dateOnly(end, year: false)}, $clock';
   }
   return switch (c.notifyMode) {
     NotifyMode.all => 'All messages',
@@ -88,13 +100,17 @@ String notifyModeLabel(ConversationSummary c, DateTime now) {
   };
 }
 
+/// Quiet hours are a wall-clock window ("from 10:00 PM"), in the phone's own time whatever the Time zone setting.
 String _hm(TimeOfDay t) {
+  if (tf.use24HourClock) return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
   return '$h:${t.minute.toString().padLeft(2, '0')} ${t.period == DayPeriod.am ? 'AM' : 'PM'}';
 }
 
+/// The rows of Settings > Messages: delivery and the chat rows first, then the alerts.
 List<Widget> notificationsSectionRows(BuildContext context) {
   return [
+    ...messagesChatRows(context),
     ValueListenableBuilder<AlertsRuntime?>(
       valueListenable: AlertsHost.runtime,
       builder: (context, rt, _) {
@@ -129,6 +145,8 @@ class _NotificationRows extends StatelessWidget {
           radioConnected: s.connected,
           ios: (defaultTargetPlatform == TargetPlatform.iOS),
         );
+        // Sound, vibration, text and quiet hours only shape an alert the phone shows: live once it allows them.
+        final allowed = c.permission == NotificationPermission.granted;
         return Column(
           children: [
             ListTile(
@@ -178,17 +196,18 @@ class _NotificationRows extends StatelessWidget {
                 },
               ),
             ),
-            SettingsAnchor(
-              id: 'notif-sound',
-              child: SwitchListTile(
-                key: const Key('notif-sound'),
-                secondary: const Icon(Icons.volume_up_outlined),
-                title: Text(settingsEntry('notif-sound').title),
-                subtitle: const Text('The system sound with an alert.'),
-                value: prefs.sound,
-                onChanged: prefs.setSound,
+            if (!prefs.systemSoundAndQuiet)
+              SettingsAnchor(
+                id: 'notif-sound',
+                child: SwitchListTile(
+                  key: const Key('notif-sound'),
+                  secondary: const Icon(Icons.volume_up_outlined),
+                  title: Text(settingsEntry('notif-sound').title),
+                  subtitle: allowed ? const Text('The system sound with an alert.') : const SettingsWhyNot(allowNotificationsFirst),
+                  value: prefs.sound,
+                  onChanged: allowed ? prefs.setSound : null,
+                ),
               ),
-            ),
             if ((defaultTargetPlatform == TargetPlatform.android))
               SettingsAnchor(
                 id: 'notif-vibrate',
@@ -196,9 +215,9 @@ class _NotificationRows extends StatelessWidget {
                   key: const Key('notif-vibrate'),
                   secondary: const Icon(Icons.vibration),
                   title: Text(settingsEntry('notif-vibrate').title),
-                  subtitle: const Text('Vibrate with an alert. iPhone haptics follow the system.'),
+                  subtitle: allowed ? const Text('Vibrate with an alert. iPhone haptics follow the system.') : const SettingsWhyNot(allowNotificationsFirst),
                   value: prefs.vibrate,
-                  onChanged: prefs.setVibrate,
+                  onChanged: allowed ? prefs.setVibrate : null,
                 ),
               ),
             SettingsAnchor(
@@ -207,14 +226,16 @@ class _NotificationRows extends StatelessWidget {
                 key: const Key('notif-previews'),
                 secondary: const Icon(Icons.visibility_outlined),
                 title: Text(settingsEntry('notif-previews').title),
-                subtitle: Text(prefs.showText
-                    ? 'On: alerts show who wrote and what, also on a locked screen.'
-                    : 'Off: alerts say "New message", so a locked screen shows no words.'),
+                subtitle: !allowed
+                    ? const SettingsWhyNot(allowNotificationsFirst)
+                    : Text(prefs.showText
+                        ? 'On: alerts show who wrote and what, also on a locked screen.'
+                        : 'Off: alerts say "New message", so a locked screen shows no words.'),
                 value: prefs.showText,
-                onChanged: prefs.setShowText,
+                onChanged: allowed ? prefs.setShowText : null,
               ),
             ),
-            SettingsAnchor(id: 'notif-quiet', child: _QuietHoursTile(prefs)),
+            if (!prefs.systemSoundAndQuiet) SettingsAnchor(id: 'notif-quiet', child: _QuietHoursTile(prefs, allowed: allowed)),
             SettingsAnchor(
               id: 'notif-conversations',
               child: ListTile(
@@ -257,7 +278,8 @@ class _NotificationRows extends StatelessWidget {
 
 class _QuietHoursTile extends StatelessWidget {
   final AlertPrefs prefs;
-  const _QuietHoursTile(this.prefs);
+  final bool allowed;
+  const _QuietHoursTile(this.prefs, {required this.allowed});
 
   Future<void> _pick(BuildContext context, bool start) async {
     final q = prefs.quiet;
@@ -278,13 +300,15 @@ class _QuietHoursTile extends StatelessWidget {
           key: const Key('notif-quiet'),
           secondary: const Icon(Icons.bedtime_outlined),
           title: Text(settingsEntry('notif-quiet').title),
-          subtitle: Text(q.enabled
-              ? 'From ${fmt(q.startMinute)} to ${fmt(q.endMinute)} alerts arrive without sound.'
-              : 'Alerts arrive without sound between the hours you pick.'),
+          subtitle: !allowed
+              ? const SettingsWhyNot(allowNotificationsFirst)
+              : Text(q.enabled
+                  ? 'From ${fmt(q.startMinute)} to ${fmt(q.endMinute)} alerts arrive without sound.'
+                  : 'Alerts arrive without sound between the hours you pick.'),
           value: q.enabled,
-          onChanged: (v) => prefs.setQuiet(q.copyWith(enabled: v)),
+          onChanged: allowed ? (v) => prefs.setQuiet(q.copyWith(enabled: v)) : null,
         ),
-        if (q.enabled)
+        if (q.enabled && allowed)
           Padding(
             padding: const EdgeInsets.only(left: Gap.l, right: Gap.l, bottom: Gap.s),
             child: Wrap(

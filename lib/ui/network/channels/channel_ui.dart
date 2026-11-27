@@ -8,16 +8,11 @@ import '../../design/app_surfaces.dart' show AppAction, showAppActionSheet, show
 import '../../theme.dart';
 import '../packets/packet_detail_screen.dart' show openNetworkPacket;
 import '../packets/packet_ui.dart' show snrText;
+import '../../../core/time_format.dart' show timeOrShortDateTime;
 
-/// "11:20" today, "Nov 20, 11:20" on another day (the phone's own time zone).
-String messageTimeText(BuildContext context, DateTime at, {DateTime? now}) {
-  final l = at.toLocal();
-  final n = (now ?? DateTime.now()).toLocal();
-  final clock = TimeOfDay.fromDateTime(l).format(context);
-  if (l.year == n.year && l.month == n.month && l.day == n.day) return clock;
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return '${months[l.month - 1]} ${l.day}, $clock';
-}
+/// "11:20 AM" today, "Nov 20, 11:20 AM" on another day, in the zone the app shows (Settings > Map & display > Time
+/// zone, Round 2 N-U8).
+String messageTimeText(BuildContext context, DateTime at, {DateTime? now}) => timeOrShortDateTime(at, now: now);
 
 /// One message. Tap opens its packet; the trailing button (44 pt) opens the actions (report, packet, copy).
 class ChannelMessageTile extends StatelessWidget {

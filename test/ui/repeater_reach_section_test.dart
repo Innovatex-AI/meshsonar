@@ -177,7 +177,7 @@ void main() {
         builder: (_) => Scaffold(body: ListView(children: [RepeaterReachSection(repeaterKey: key, lat: 40.101, lon: -82.931, mapTiles: false)]))));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('reach-offline')), findsOneWidget);
-    expect(find.textContaining('as of 30m ago'), findsOneWidget);
+    expect(find.textContaining('as of 30 min ago'), findsOneWidget);
     expect(find.byKey(const Key('reach-map')), findsOneWidget, reason: 'the stored numbers are still shown');
     expect(h.rc.calls, hasLength(2));
     fail = false;

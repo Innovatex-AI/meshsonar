@@ -20,6 +20,11 @@ import '../../chat/quick_replies.dart';
 import '../design/app_surfaces.dart';
 import '../../chat/send_budget.dart';
 import '../alerts/permission_prompt.dart';
+import '../app.dart' show AppScope;
+import '../../app/meshtrack_wiring.dart' show MeshTrackWiring;
+import '../drive/drive_controls.dart' show openConnect;
+import '../meshtrack/meshtrack_binding.dart';
+import '../meshtrack/meshtrack_copy.dart' show mtResultText;
 import '../design/app_haptics.dart';
 import '../design/app_symbols.dart';
 import '../design/app_type.dart';
@@ -62,7 +67,28 @@ class Composer extends StatefulWidget {
   /// Photo messages: the photo button, the upload strip and the link insertion. Null = no photo button.
   final PhotoController? photos;
 
-  const Composer({super.key, required this.controller, required this.convKey, this.hint = 'Message', this.mentionNames = const [], this.onSent, this.onChannelInfoWhenOffRadio, this.photos});
+  /// "Connect" on the "Radio not connected" note (C-U6). Null = the app's connect sheet.
+  final void Function(BuildContext context)? onConnect;
+
+  /// The radio is being connected or reconnected right now (the note then says so and has no button). Null = read from
+  /// the app state; tests pass it.
+  final bool? connecting;
+
+  /// The other person's name, for the "Share my position" confirmation (D4).
+  final String? peerName;
+
+  const Composer(
+      {super.key,
+      required this.controller,
+      required this.convKey,
+      this.hint = 'Message',
+      this.mentionNames = const [],
+      this.onSent,
+      this.onChannelInfoWhenOffRadio,
+      this.photos,
+      this.onConnect,
+      this.connecting,
+      this.peerName});
 
   @override
   State<Composer> createState() => _ComposerState();
@@ -162,25 +188,66 @@ class _ComposerState extends State<Composer> {
     });
   }
 
-  /// A direct message (person or room): long-press Send offers the choice of route (CR2).
+  /// A direct message (person or room): long-press Send offers direct or flood for this one message.
   bool get _direct => ConvKey.kindOf(widget.convKey) != ConvKind.channel;
 
-  /// Long-press Send on a direct message: send normally (the saved route, searching on the last try) or flood every try
-  /// (searches for a new route, like the official app's long-press Send).
+  /// Long-press Send on a direct message, as in the official app: direct (the normal send: your radio uses the route it
+  /// has) or flood (one reset of the route, then the normal send, so your radio sends it to everyone nearby and learns a
+  /// new route from the reply). Nothing else is different about the message.
   Future<void> _chooseRoute() async {
     AppHaptics.selection();
     final flood = await showAppActionSheet<bool>(
       context,
       sheetKey: const Key('send-route-sheet'),
       title: 'How should this message go?',
-      message: 'Searching asks every repeater to pass it on. It finds a new route when the saved one stopped working, '
-          'but uses more of the mesh.',
+      message: 'The known route uses the way your radio already reaches them. Everyone nearby clears that route first, so the '
+          'message goes to everyone in range and your radio learns a new way to them. It uses more airtime.',
       actions: const [
-        AppAction('Send', false, isDefault: true, key: Key('send-normal')),
-        AppAction('Send and search for a new route', true, key: Key('send-flood')),
+        AppAction('By the known route', false, isDefault: true, key: Key('send-normal')),
+        AppAction('To everyone nearby', true, key: Key('send-flood')),
       ],
     );
     if (flood != null && mounted) _send(forceFlood: flood);
+  }
+
+  /// D4: "Share my position" is offered in a direct message with a person, when MeshTrack (which holds the privacy zones
+  /// and the Exact / Approximate setting) is in this build.
+  bool _canSharePosition(BuildContext context) => ConvKey.kindOf(widget.convKey) == ConvKind.dm && MeshTrackUi.of(context) != null;
+
+  /// D4: one tap, one confirmation that says who gets it and how fine it is, then an ordinary message with the place in
+  /// it. The privacy zones and the Exact / Approximate setting are applied by the MeshTrack service
+  /// ([MeshTrackService.positionMessageText]); nothing is sent from inside a zone.
+  Future<void> _sharePosition() async {
+    final mt = MeshTrackUi.read(context);
+    if (mt == null) return;
+    AppHaptics.selection();
+    final app = AppScope.maybeOf(context);
+    final phone = app?.phoneFix?.fix;
+    final r = mt.service.positionMessageText(fix: phone == null ? null : MeshTrackWiring.mtFixOf(phone));
+    final text = r.text;
+    if (text == null) {
+      showAppToast(context, mtResultText(r.result) ?? 'Your position could not be read. Try again in a moment.');
+      return;
+    }
+    final exact = mt.service.positionMode == MtPositionMode.exact;
+    final who = widget.peerName;
+    final go = await showAppActionSheet<bool>(
+      context,
+      sheetKey: const Key('share-position-sheet'),
+      title: who == null ? 'Share my position?' : 'Share my position with $who?',
+      message: '${exact ? 'Sends where you are now, to about ${mt.units.distance(3)}.' : 'Sends where you are now, to about ${mt.units.distance(275, approx: true)} (Approximate).'} '
+          'It goes as one message; it does not keep updating. Exact or Approximate is set in Settings, under MeshTrack.',
+      actions: const [AppAction('Share my position', true, isDefault: true, symbol: AppSymbols.location, key: Key('share-position-confirm'))],
+    );
+    if (go != true || !mounted) return;
+    final res = c.send(widget.convKey, text);
+    if (res.ok) {
+      AppHaptics.light();
+      setState(() => _error = null);
+      widget.onSent?.call();
+    } else {
+      setState(() => _error = res.error);
+    }
   }
 
   void _send({bool forceFlood = false}) {
@@ -347,7 +414,7 @@ class _ComposerState extends State<Composer> {
         text = j.progress >= 1 ? 'Processing…' : 'Uploading photo ${(j.progress * 100).round()}%';
       case _PhotoStage.waitingForRoom:
         final n = _bytesToCut(j.result!.url);
-        text = 'Photo ready. Shorten your message by $n ${n == 1 ? 'character' : 'characters'} to add it.';
+        text = 'Photo ready. Shorten your message by $n ${n == 1 ? 'byte' : 'bytes'} to add it.';
         tone = colors.warning;
       case _PhotoStage.failed:
         text = j.error ?? 'Could not send the photo.';
@@ -438,6 +505,10 @@ class _ComposerState extends State<Composer> {
     final mentionHits = mention == null ? const <String>[] : [for (final n in widget.mentionNames) if (n.toLowerCase().startsWith(mention.toLowerCase())) n].take(8).toList();
 
     // The strip slot: mention names while typing "@", else the quick replies when switched on. One line, 44 pt chips.
+    // D4: "Share my position" is a round button beside the field; at the largest text sizes, where the row has no room for
+    // another button, it is the first chip of the quick replies instead.
+    final canShare = !offAir && _canSharePosition(context);
+    final roomy = MediaQuery.textScalerOf(context).scale(17) <= 17 * 1.5;
     Widget? strip;
     if (mention != null && mentionHits.isNotEmpty) {
       strip = _Strip(key: const Key('mention-strip'), children: [
@@ -445,14 +516,27 @@ class _ComposerState extends State<Composer> {
       ]);
     } else if (_chips) {
       strip = _Strip(key: const Key('quick-strip'), children: [
+        if (canShare && !roomy) _Chip(key: const Key('quick-position'), label: 'Share my position', onTap: _sharePosition),
         for (final r in _replies) _Chip(key: Key('quick-$r'), label: r, onTap: () => _insert(r)),
         _Chip(key: const Key('quick-edit'), label: 'Edit', muted: true, onTap: _editReplies),
       ]);
     }
 
+    // C-U6: the note says when the radio is being reconnected, and otherwise has a Connect button (before, the only way
+    // to connect from a thread was to leave it).
+    final app = AppScope.maybeOf(context);
+    final trying = !c.radioConnected && (widget.connecting ?? ((app?.connecting ?? false) || (app?.reconnecting ?? false)));
+    final offline = !offAir && !c.radioConnected;
     final note = offAir
         ? 'This channel is not on your radio.'
-        : (!c.hasRadioIdentity ? 'Connect your radio once to start chatting.' : (!c.radioConnected ? 'Radio not connected. Sends when it connects.' : null));
+        : (trying
+            ? 'Reconnecting to your radio…'
+            : (!c.hasRadioIdentity
+                ? 'Connect your radio once to start chatting.'
+                // At the largest text sizes the short wording keeps the composer from filling the screen (as the Chat tab's
+                // banner does); the Connect button beside it says the rest.
+                : (!c.radioConnected ? (roomy ? 'Radio not connected. Sends when it connects.' : 'Radio not connected.') : null)));
+    final sharePosition = canShare && roomy;
 
     final bar = Container(
       decoration: BoxDecoration(
@@ -487,6 +571,14 @@ class _ComposerState extends State<Composer> {
                         onPressed: widget.onChannelInfoWhenOffRadio,
                         child: Text('Put it back', style: AppType.footnote.copyWith(color: colors.accent, fontWeight: FontWeight.w600)),
                       ),
+                    if (offline && !trying)
+                      CupertinoButton(
+                        key: const Key('composer-connect'),
+                        padding: const EdgeInsets.symmetric(horizontal: Gap.s),
+                        minimumSize: Size.square(Hit.of(context)),
+                        onPressed: () => (widget.onConnect ?? openConnect)(context),
+                        child: Text('Connect', style: AppType.footnote.copyWith(color: colors.accent, fontWeight: FontWeight.w600)),
+                      ),
                   ]),
                 ),
               CallbackShortcuts(
@@ -511,6 +603,13 @@ class _ComposerState extends State<Composer> {
                         symbol: AppSymbols.camera,
                         label: 'Send a photo',
                         onTap: _photoTapped,
+                      ),
+                    if (sharePosition)
+                      _RoundButton(
+                        key: const Key('composer-position'),
+                        symbol: AppSymbols.location,
+                        label: 'Share my position',
+                        onTap: _sharePosition,
                       ),
                     Expanded(
                       child: Container(

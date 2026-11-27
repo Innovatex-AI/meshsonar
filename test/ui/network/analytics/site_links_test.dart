@@ -66,6 +66,19 @@ void main() {
     expect(sitePageUri('http://cmh.meshsonar.com', '/status'), isNull);
   });
 
+  test('build 77 (Round 2 W2): the app look rides with embed as theme= and tz=, and comes off again for the browser', () {
+    const light = SiteLook(dark: false, utc: false), utcDark = SiteLook(dark: true, utc: true);
+    final u = sitePageUri('https://cmh.meshsonar.com', '/analytics/rf-signal?window=7d', light)!;
+    expect(u.toString(), 'https://cmh.meshsonar.com/analytics/rf-signal?window=7d&embed=1&theme=light&tz=local');
+    expect(hasEmbed(u, light), isTrue);
+    expect(hasEmbed(u, utcDark), isFalse, reason: 'another look is not this page');
+    expect(withEmbed(u, light), u);
+    // A new look replaces the old keys once the address is rebuilt from scratch.
+    expect(withEmbed(withoutEmbed(u), utcDark).toString(), 'https://cmh.meshsonar.com/analytics/rf-signal?window=7d&embed=1&theme=dark&tz=utc');
+    expect(withoutEmbed(u).toString(), 'https://cmh.meshsonar.com/analytics/rf-signal?window=7d');
+    expect(siteEmbedKeys, {'embed', 'theme', 'tz'});
+  });
+
   test('region slug of a base address', () {
     expect(regionSlugOfBase('https://cmh.meshsonar.com'), 'cmh');
     expect(regionSlugOfBase('https://cmh.meshsonar.com/'), 'cmh');

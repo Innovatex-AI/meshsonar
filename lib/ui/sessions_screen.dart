@@ -1,11 +1,14 @@
-// Saved drives, newest first. Each card: name/date, duration, distance, pings, heard %, a heard/not strip and the
-// sync state. Tap for the drive's map and details; Sync, Export & share, Rename and Delete from the card.
+// Saved drives, newest first. Each card: name/date, the verdict ("Good: heard on 3 of 3 pings, mostly strong"),
+// duration, distance, pings, heard %, a heard/not strip, the upload state and a Report button. Tap for the drive's map
+// and details; the menu has Report, Share, Rename, Report a problem, Diagnostic files and Delete (the same menu as the
+// detail screen). Build 77 says "Upload" everywhere (decision 9; build 76 mixed "Sync" and "Upload").
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../app/app_state.dart';
 import '../core/api.dart';
+import '../core/time_format.dart' as tf;
 import 'app.dart';
 import 'design/app_surfaces.dart';
 import 'design/app_symbols.dart';
@@ -15,7 +18,10 @@ import 'drive_detail_screen.dart';
 import 'drive_stats.dart';
 import 'onboarding/ui_prefs.dart';
 import 'report/drive_report_screen.dart';
+import 'report/drive_share.dart' show showDriveShareSheet;
 import 'report/progress_screen.dart' show ProgressCard;
+import 'report_problem_screen.dart' show openReportProblem;
+import 'settings_screen.dart' show SettingsScreen;
 import 'widgets.dart';
 
 export 'charts/heard_strip.dart' show HeardStrip;
@@ -51,100 +57,135 @@ class DriveStatsCache {
 final Expando<DriveStatsCache> _statsCaches = Expando('driveStats');
 DriveStatsCache driveStatsCache(AppState s) => _statsCaches[s] ??= DriveStatsCache();
 
-/// Sync state of one drive, as shown on badges.
-enum SyncBadgeKind { empty, synced, waiting, failed, syncing }
+/// Upload state of one drive, as the badge and the detail screen's upload line show it.
+enum UploadBadgeKind {
+  /// No pings and nothing else to send.
+  empty,
 
-SyncBadgeKind syncBadgeKind(AppState s, SessionSummary x) {
-  final id = x.session.id;
-  if (s.isSyncing(id) || (s.isSyncing('*') && x.hasSomethingToSync)) return SyncBadgeKind.syncing;
-  if (x.pingCount == 0 && !x.sessionResendPending) return SyncBadgeKind.empty;
-  // Rejected pings are never re-sent, so they don't count as waiting.
-  if (!x.hasSomethingToSync) return SyncBadgeKind.synced;
-  if (s.lastSyncFailed) return SyncBadgeKind.failed;
-  return SyncBadgeKind.waiting;
+  /// Everything that can go up is on the server.
+  uploaded,
+
+  /// Something waits and the next upload will send it.
+  waiting,
+
+  /// Something waits and the last upload failed.
+  failed,
+
+  /// Uploading now.
+  uploading,
+
+  /// Something waits but this phone has no approved driver key yet, so nothing can go up (Round 5 D-3).
+  phoneOnly,
 }
 
-class SyncBadge extends StatelessWidget {
+UploadBadgeKind uploadBadgeKind(AppState s, SessionSummary x) {
+  final id = x.session.id;
+  if (s.isSyncing(id) || (s.isSyncing('*') && x.hasSomethingToSync)) return UploadBadgeKind.uploading;
+  if (x.pingCount == 0 && !x.sessionResendPending) return UploadBadgeKind.empty;
+  // Rejected pings are never re-sent, so they don't count as waiting.
+  if (!x.hasSomethingToSync) return UploadBadgeKind.uploaded;
+  if (!s.keyApproved) return UploadBadgeKind.phoneOnly;
+  if (s.lastSyncFailed) return UploadBadgeKind.failed;
+  return UploadBadgeKind.waiting;
+}
+
+/// Pings that can go up at all: rejected pings and pings in a privacy zone never do.
+int uploadablePings(SessionSummary x) {
+  final n = x.pingCount - x.rejectedCount - x.zoneHeldCount;
+  return n < 0 ? 0 : n;
+}
+
+/// The badge words: "12 of 40 uploaded", "Not uploaded yet", "Uploaded", "On this phone only" (Round 5 D-3, D-4).
+String uploadBadgeText(UploadBadgeKind kind, SessionSummary x) {
+  final n = x.unsyncedCount;
+  final total = uploadablePings(x);
+  final done = total - n;
+  // Only the name (or other drive details) is waiting: say so rather than "0 of 0".
+  final waiting = n == 0 ? 'Name not uploaded yet' : (done > 0 ? '$done of $total uploaded' : 'Not uploaded yet');
+  return switch (kind) {
+    UploadBadgeKind.empty => 'Nothing to upload',
+    UploadBadgeKind.uploaded => 'Uploaded',
+    UploadBadgeKind.waiting || UploadBadgeKind.failed => waiting,
+    UploadBadgeKind.uploading => 'Uploading…',
+    UploadBadgeKind.phoneOnly => 'On this phone only',
+  };
+}
+
+/// Opens Settings at the driver key (Settings > Account > Driver key).
+void openDriverKeySettings(BuildContext context) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen(initialSection: 'driver-key')));
+
+/// One drive's upload state as a plain icon and words (no pill: build 76's grey bordered pill read as a disabled
+/// button). Notes for rejected pings, privacy-zone pings and a failed upload follow it.
+class UploadBadge extends StatelessWidget {
   final SessionSummary summary;
-  const SyncBadge({super.key, required this.summary});
+  const UploadBadge({super.key, required this.summary});
 
   @override
   Widget build(BuildContext context) {
     final s = AppScope.of(context);
     final c = Theme.of(context).colorScheme;
-    final m = MeshSonarColors.of(context);
-    final green = m.snrStrong;
-    final amber = c.onSurface;
-    final kind = syncBadgeKind(s, summary);
-    final n = summary.unsyncedCount;
+    final kind = uploadBadgeKind(s, summary);
     final rejected = summary.rejectedCount;
     final held = summary.zoneHeldCount;
-    // Only the name (or other drive details) is waiting: say so rather than "0 not synced".
-    final waitingText = n > 0 ? '$n not synced' : 'Name not synced';
-    final (IconData icon, String text, Color color) = switch (kind) {
-      SyncBadgeKind.empty => (Icons.remove_circle_outline, 'Nothing to sync', c.outline),
-      SyncBadgeKind.synced => (Icons.cloud_done, rejected > 0 ? 'Synced' : 'All synced', green),
-      SyncBadgeKind.waiting => (Icons.cloud_upload_outlined, waitingText, amber.withValues(alpha: 0.8)),
-      SyncBadgeKind.failed => (Icons.cloud_off, waitingText, c.error),
-      SyncBadgeKind.syncing => (Icons.sync, 'Syncing…', c.primary),
+    final (IconData icon, Color color) = switch (kind) {
+      UploadBadgeKind.empty => (Icons.remove_circle_outline, c.outline),
+      UploadBadgeKind.uploaded => (Icons.cloud_done_outlined, c.onSurfaceVariant),
+      UploadBadgeKind.waiting => (Icons.cloud_upload_outlined, c.onSurfaceVariant),
+      UploadBadgeKind.failed => (Icons.cloud_off, c.error),
+      UploadBadgeKind.uploading => (Icons.cloud_sync_outlined, c.primary),
+      UploadBadgeKind.phoneOnly => (Icons.smartphone, c.onSurfaceVariant),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+    const style = TextStyle(fontWeight: FontWeight.w600, fontSize: 14);
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 18, color: color),
+      const SizedBox(width: 6),
+      Flexible(
+        child: Text(uploadBadgeText(kind, summary),
+            key: ValueKey('unsynced-${summary.session.id}'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style.copyWith(color: color)),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 5),
+      if (held > 0 && kind != UploadBadgeKind.empty) ...[
+        const SizedBox(width: 4),
         Flexible(
-          child: Text(text,
-              key: ValueKey('unsynced-${summary.session.id}'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
-        ),
-        if (held > 0 && kind != SyncBadgeKind.empty) ...[
-          const SizedBox(width: 4),
-          Flexible(
-            child: Tooltip(
-              message: 'These pings are inside one of your privacy zones. They are in your own drive log and stats on this '
-                  'phone, and are never uploaded.',
-              child: Text('· $held kept on this phone (privacy zone)',
-                  key: ValueKey('zone-held-${summary.session.id}'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.outline, fontWeight: FontWeight.w700, fontSize: 13)),
-            ),
-          ),
-        ],
-        if (rejected > 0 && kind != SyncBadgeKind.empty) ...[
-          const SizedBox(width: 4),
-          Flexible(
-            child: Tooltip(
-              message: 'The server refused these pings (for example, bad GPS). They stay on this phone and in exports '
-                  'but are not sent again.',
-              child: Text('· $rejected rejected',
-                  key: ValueKey('rejected-${summary.session.id}'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: c.error, fontWeight: FontWeight.w700, fontSize: 13)),
-            ),
-          ),
-        ],
-        if (kind == SyncBadgeKind.failed) ...[
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text('· Sync failed',
-                key: ValueKey('sync-failed-${summary.session.id}'),
+          child: Tooltip(
+            message: 'These pings are inside one of your privacy zones. They are in your own drive log and stats on this '
+                'phone, and are never uploaded.',
+            child: Text('· $held kept on this phone (privacy zone)',
+                key: ValueKey('zone-held-${summary.session.id}'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
+                style: style.copyWith(color: c.outline)),
           ),
-        ],
-      ]),
-    );
+        ),
+      ],
+      if (rejected > 0 && kind != UploadBadgeKind.empty) ...[
+        const SizedBox(width: 4),
+        Flexible(
+          child: Tooltip(
+            message: 'The server refused these pings (for example, bad GPS). They stay on this phone and in exports '
+                'but are not sent again.',
+            child: Text('· $rejected rejected',
+                key: ValueKey('rejected-${summary.session.id}'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style.copyWith(color: c.error)),
+          ),
+        ),
+      ],
+      if (kind == UploadBadgeKind.failed) ...[
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text('· Upload failed',
+              key: ValueKey('sync-failed-${summary.session.id}'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style.copyWith(color: color)),
+        ),
+      ],
+    ]);
   }
 }
 
@@ -197,6 +238,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     unsynced: unsyncedTotal,
                     namesPending: namesPending,
                     syncing: s.anySyncing,
+                    keyApproved: s.keyApproved,
                     onSyncAll: () => s.syncAll(),
                   ),
                 if (list.isNotEmpty) ProgressCard(sessions: list, now: s.services.clock()),
@@ -252,6 +294,9 @@ class _Overview extends StatelessWidget {
   /// Drives whose only change waiting to upload is their name.
   final int namesPending;
   final bool syncing;
+
+  /// False: no approved driver key yet, so nothing can upload; the card says so and offers "Check key" (D-3).
+  final bool keyApproved;
   final VoidCallback onSyncAll;
   const _Overview(
       {required this.drives,
@@ -259,12 +304,45 @@ class _Overview extends StatelessWidget {
       required this.unsynced,
       this.namesPending = 0,
       required this.syncing,
+      this.keyApproved = true,
       required this.onSyncAll});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final c = t.colorScheme;
+    final waiting = unsynced > 0 || namesPending > 0;
+    final String line;
+    if (!waiting) {
+      line = 'Everything is uploaded.';
+    } else if (!keyApproved) {
+      line = unsynced > 0
+          ? '$unsynced ping${unsynced == 1 ? '' : 's'} saved on this phone. Uploads start when your driver key is approved.'
+          : '$namesPending drive name${namesPending == 1 ? '' : 's'} saved on this phone. Uploads start when your driver key is approved.';
+    } else {
+      line = unsynced > 0
+          ? '$unsynced ping${unsynced == 1 ? '' : 's'} waiting to upload'
+          : '$namesPending drive name${namesPending == 1 ? '' : 's'} waiting to upload';
+    }
+    final Widget? button = !waiting
+        ? null
+        : !keyApproved
+            ? FilledButton.tonalIcon(
+                key: const Key('check-key'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 16)),
+                onPressed: () => openDriverKeySettings(context),
+                icon: const Icon(Icons.key_outlined),
+                label: const Text('Check key'),
+              )
+            : FilledButton.icon(
+                key: const Key('sync-all'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 16)),
+                onPressed: syncing ? null : onSyncAll,
+                icon: syncing
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.cloud_upload),
+                label: const Text('Upload all'),
+              );
     return Card(
       margin: const EdgeInsets.fromLTRB(4, 6, 4, 10),
       color: c.primaryContainer.withValues(alpha: 0.55),
@@ -277,27 +355,12 @@ class _Overview extends StatelessWidget {
               Text('$drives drive${drives == 1 ? '' : 's'} · $pings pings',
                   style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: c.onPrimaryContainer)),
               const SizedBox(height: 2),
-              Text(
-                unsynced > 0
-                    ? '$unsynced ping${unsynced == 1 ? '' : 's'} waiting to upload'
-                    : namesPending > 0
-                        ? '$namesPending drive name${namesPending == 1 ? '' : 's'} waiting to upload'
-                        : 'Everything is uploaded.',
-                key: const Key('overview-unsynced'),
-                style: t.textTheme.bodyMedium?.copyWith(color: c.onPrimaryContainer.withValues(alpha: 0.8)),
-              ),
+              Text(line,
+                  key: const Key('overview-unsynced'),
+                  style: t.textTheme.bodyMedium?.copyWith(color: c.onPrimaryContainer.withValues(alpha: 0.8))),
             ]),
           ),
-          if (unsynced > 0 || namesPending > 0)
-            FilledButton.icon(
-              key: const Key('sync-all'),
-              style: FilledButton.styleFrom(minimumSize: const Size(0, 48), textStyle: const TextStyle(fontSize: 16)),
-              onPressed: syncing ? null : onSyncAll,
-              icon: syncing
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.cloud_upload),
-              label: const Text('Sync all'),
-            ),
+          if (button != null) ...[const SizedBox(width: 8), button],
         ]),
       ),
     );
@@ -317,9 +380,8 @@ class _SessionCard extends StatelessWidget {
     final ses = summary.session;
     final id = ses.id;
     final active = s.currentSession?.id == id;
-    // tx-aware guard (lib/ui/drive_stats.dart's DriveStats.heardPercent does the same): an all-rx (discovery/
-    // listen-only) drive has no tx pings at all, so "0% heard" would misread as a failed drive, not a successful
-    // listen session.
+    // tx-aware guard (DriveStats.heardPercent does the same): an all-rx (discovery/listen-only) drive has no tx pings
+    // at all, so "0% heard" would misread as a failed drive, not a successful listen session.
     final pct = summary.txCount == 0 ? null : (100 * summary.heardCount / summary.txCount).round();
     final syncing = s.isSyncing(id) || s.isSyncing('*');
     final label = driveLabel(s, id, ses.label);
@@ -334,93 +396,96 @@ class _SessionCard extends StatelessWidget {
         onTap: () => openDriveDetail(context, id),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(
-                      label ?? formatDateTime(ses.startedAt),
-                      key: ValueKey('title-$id'),
-                      style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    // Build 76: the second line is the date of a named drive, nothing else. The channel ("#wardriving" on every
-                    // card) is on the drive's own page, so an unnamed drive's card is one line shorter.
-                    if (label != null) ...[
-                      const SizedBox(height: 2),
-                      Text(formatDateTime(ses.startedAt), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    ],
-                  ]),
-                ),
-                if (active)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: Chip(
-                      avatar: Icon(Icons.fiber_manual_record, color: c.error, size: 14),
-                      label: const Text('Recording'),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                _CardMenu(summary: summary, active: active),
-              ]),
-              const SizedBox(height: 10),
-              FutureBuilder<DriveStats>(
-                future: cache.load(s, summary),
-                initialData: cache.peek(summary),
-                builder: (context, snap) {
-                  final st = snap.data;
-                  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Wrap(spacing: 18, runSpacing: 6, children: [
-                      _Fact(Icons.timer_outlined, formatDuration(st?.duration), key: ValueKey('duration-$id')),
-                      _Fact(Icons.route, st == null ? '—' : s.units.distance(st.distanceM), key: ValueKey('distance-$id')),
-                      _Fact(Icons.podcasts, '${summary.pingCount} pings'),
-                      _Fact(Icons.cell_tower, pct == null ? 'Heard —' : 'Heard $pct%', strong: true),
+          child: FutureBuilder<DriveStats>(
+            future: cache.load(s, summary),
+            initialData: cache.peek(summary),
+            builder: (context, snap) {
+              final st = snap.data;
+              // The verdict (Round 5 D-1): the same line as the detail header and the report headline. Before the
+              // pings are read it is worked out from the counts, without the strength word.
+              final verdict = st == null
+                  ? DriveVerdict.of(pings: summary.pingCount, txPings: summary.txCount, heard: summary.heardCount)
+                  : DriveVerdict.ofStats(st);
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(
+                        label ?? tf.dateTime(ses.startedAt, weekday: true),
+                        key: ValueKey('title-$id'),
+                        style: t.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // Build 76: the second line is the date of a named drive, nothing else. The channel is on the
+                      // drive's own page.
+                      if (label != null) ...[
+                        const SizedBox(height: 2),
+                        Text(tf.dateTime(ses.startedAt, weekday: true),
+                            style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(verdict.line, key: ValueKey('verdict-$id'), style: t.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
                     ]),
-                    const SizedBox(height: 10),
+                  ),
+                  if (active)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: HeardStrip(
-                        key: ValueKey('strip-$id'),
-                        timeline: st?.timeline ?? const [],
-                        snr: st?.timelineSnr ?? const [],
-                        summary: st == null ? null : 'Heard on ${st.heard} of ${st.txPings} pings, ping by ping.',
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Chip(
+                        avatar: Icon(Icons.fiber_manual_record, color: c.error, size: 14),
+                        label: const Text('Recording'),
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
-                  ]);
-                },
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(child: Align(alignment: Alignment.centerLeft, child: SyncBadge(summary: summary))),
+                  _CardMenu(summary: summary, active: active),
+                ]),
+                const SizedBox(height: 10),
+                Wrap(spacing: 18, runSpacing: 6, children: [
+                  _Fact(Icons.timer_outlined, formatDuration(st?.duration), key: ValueKey('duration-$id')),
+                  _Fact(Icons.route, st == null ? '—' : s.units.distance(st.distanceM), key: ValueKey('distance-$id')),
+                  _Fact(Icons.podcasts, '${summary.pingCount} pings'),
+                  _Fact(Icons.cell_tower, pct == null ? 'Heard —' : 'Heard $pct%', strong: true),
+                ]),
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: HeardStrip(
+                    key: ValueKey('strip-$id'),
+                    timeline: st?.timeline ?? const [],
+                    snr: st?.timelineSnr ?? const [],
+                    summary: st == null ? null : 'Heard on ${st.heard} of ${st.txPings} pings, ping by ping.',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Expanded(child: Align(alignment: Alignment.centerLeft, child: UploadBadge(summary: summary))),
                   if (syncing)
                     const Padding(
                       padding: EdgeInsets.all(12),
                       child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                     )
-                  // Build 76: the two buttons say what they do ("Sync", "Share"; they were two bare icons), and Sync is
-                  // only there when something waits to upload (it used to sit greyed out on every synced drive).
-                  else if (summary.hasSomethingToSync)
+                  // Upload only when something waits and the key can upload it (without an approved key it would only
+                  // show a toast; the overview card above says why and offers Check key).
+                  else if (summary.hasSomethingToSync && s.keyApproved)
                     TextButton.icon(
                       key: ValueKey('sync-$id'),
                       style: TextButton.styleFrom(minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 10)),
                       onPressed: () => s.syncSession(id),
                       icon: const Icon(Icons.cloud_upload_outlined, size: 20),
-                      label: const Text('Sync'),
+                      label: const Text('Upload'),
                     ),
-                  TextButton.icon(
-                    key: ValueKey('export-$id'),
-                    style: TextButton.styleFrom(minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 10)),
-                    onPressed: () => s.exportAndShare(id),
-                    icon: const Icon(Icons.ios_share, size: 20),
-                    label: const Text('Share'),
-                  ),
-                ],
-              ),
-            ],
+                  // Round 5 D-5: the report is one tap from the list (Share moved into the menu).
+                  if (summary.pingCount > 0)
+                    TextButton.icon(
+                      key: ValueKey('card-report-$id'),
+                      style: TextButton.styleFrom(minimumSize: const Size(0, 44), padding: const EdgeInsets.symmetric(horizontal: 10)),
+                      onPressed: () => openDriveReport(context, id),
+                      icon: const Icon(Icons.insights, size: 20),
+                      label: const Text('Report'),
+                    ),
+                ]),
+              ]);
+            },
           ),
         ),
       ),
@@ -469,30 +534,34 @@ class _CardMenu extends StatelessWidget {
   const _CardMenu({required this.summary, required this.active});
 
   @override
-  Widget build(BuildContext context) {
-    final id = summary.session.id;
-    return IconButton(
-      key: ValueKey('menu-$id'),
-      tooltip: 'More',
-      icon: const AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24),
-      onPressed: () async {
-        final v = await showAppActionSheet<String>(
-          context,
-          title: 'Drive',
-          actions: [
-            if (summary.hasSomethingToSync) AppAction('Sync now', 'sync', key: ValueKey('menu-sync-$id')),
-            if (summary.pingCount > 0) AppAction('Drive report', 'report', key: ValueKey('menu-report-$id')),
-            AppAction('Export & share', 'export', key: ValueKey('menu-export-$id')),
-            AppAction('Share ping trace', 'trace', key: ValueKey('menu-trace-$id')),
-            AppAction('Share map health', 'map-health', key: ValueKey('menu-map-health-$id')),
-            AppAction('Rename', 'rename', key: ValueKey('rename-$id')),
-            if (!active) AppAction('Delete', 'delete', destructive: true, key: ValueKey('delete-$id')),
-          ],
-        );
-        if (v != null && context.mounted) await runDriveAction(context, v, summary);
-      },
-    );
-  }
+  Widget build(BuildContext context) => IconButton(
+        key: ValueKey('menu-${summary.session.id}'),
+        tooltip: 'More',
+        icon: const AppSymbolIcon(AppSymbols.ellipsisCircle, size: 24),
+        onPressed: () => showDriveMenu(context, summary, active: active),
+      );
+}
+
+/// The one drive menu (Round 5 D-7), the same on the drive card and the drive detail screen: Report, Share, Rename,
+/// Report a problem, Diagnostic files (the ping trace and the map health file, for testers), Delete. [onDetail] gives
+/// the rows the detail screen's keys. Returns true if the drive was deleted.
+Future<bool> showDriveMenu(BuildContext context, SessionSummary summary, {required bool active, bool onDetail = false}) async {
+  final id = summary.session.id;
+  Key k(String card, String detail) => onDetail ? Key(detail) : ValueKey('$card$id');
+  final v = await showAppActionSheet<String>(
+    context,
+    title: 'Drive',
+    actions: [
+      if (summary.pingCount > 0) AppAction('Report', 'report', key: k('menu-report-', 'detail-menu-report')),
+      AppAction('Share…', 'share', key: k('menu-share-', 'detail-menu-share')),
+      AppAction('Rename', 'rename', key: k('rename-', 'detail-rename')),
+      AppAction('Report a problem', 'problem', key: k('menu-problem-', 'detail-more-report')),
+      AppAction('Diagnostic files…', 'diagnostics', key: k('menu-diagnostics-', 'detail-diagnostics')),
+      if (!active) AppAction('Delete', 'delete', destructive: true, key: k('delete-', 'detail-delete')),
+    ],
+  );
+  if (v == null || !context.mounted) return false;
+  return runDriveAction(context, v, summary);
 }
 
 /// Shared by the list and the detail screen. Returns true if the drive was deleted.
@@ -503,15 +572,29 @@ Future<bool> runDriveAction(BuildContext context, String action, SessionSummary 
     case 'sync':
       await s.syncSession(id);
     case 'report':
-      openDriveReport(context, id);
+      await openDriveReport(context, id);
+    case 'share':
     case 'export':
-      await s.exportAndShare(id);
+      await showDriveShareSheet(context, id);
+    case 'diagnostics':
+      final d = await showAppActionSheet<String>(
+        context,
+        title: 'Diagnostic files',
+        message: 'For testers: files that help find a problem with pings or the map.',
+        actions: [
+          AppAction('Ping trace', 'trace', key: ValueKey('menu-trace-$id')),
+          AppAction('Map health', 'map-health', key: ValueKey('menu-map-health-$id')),
+        ],
+      );
+      if (d != null && context.mounted) return runDriveAction(context, d, x);
     case 'trace':
       await s.shareTrace(id);
     case 'map-health':
       await shareMapHealth(context, s, id);
     case 'rename':
       await renameDrive(context, x);
+    case 'problem':
+      openReportProblem(context, driveId: id);
     case 'delete':
       if (await confirmDeleteDrive(context, x)) {
         final ok = await s.deleteSession(id);
@@ -528,10 +611,10 @@ Future<void> renameDrive(BuildContext context, SessionSummary x) async {
   final v = await showAppSheet<String>(
     context,
     detents: const [0.45],
-    builder: (ctx, controller) => _RenameSheet(initial: current, hint: formatDateTime(x.session.startedAt), controller: controller),
+    builder: (ctx, controller) => _RenameSheet(initial: current, hint: tf.dateTime(x.session.startedAt, weekday: true), controller: controller),
   );
   if (v == null) return;
-  // Saved in the drive itself (exports carry it) and marked so the next sync uploads it. Empty clears the name.
+  // Saved in the drive itself (exports carry it) and marked so the next upload sends it. Empty clears the name.
   await renameDriveTo(s, x.session.id, v);
 }
 
@@ -549,7 +632,7 @@ Future<bool> confirmDeleteDrive(BuildContext context, SessionSummary x) async {
     title: 'Delete this drive?',
     message: unsynced > 0
         ? '$unsynced of ${x.pingCount} pings have NOT been uploaded and will be lost. '
-            'Export or sync first if you want to keep them.'
+            'Share or upload them first if you want to keep them.'
         : 'This removes the drive from this phone. Pings already uploaded stay on the server.',
     confirmLabel: 'Delete',
     destructive: true,
@@ -591,7 +674,7 @@ class _RenameSheetState extends State<_RenameSheet> {
             onSubmitted: (v) => Navigator.pop(context, v),
           ),
           const SizedBox(height: 8),
-          Text('Saved with the drive and sent to the server on the next sync. Leave empty to use the date.',
+          Text('Saved with the drive and sent to the server on the next upload. Leave empty to use the date.',
               style: Theme.of(context).textTheme.bodySmall),
         ],
       );

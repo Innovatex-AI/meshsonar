@@ -27,11 +27,10 @@ class HoldingSink extends FakeSink {
     required String text,
     required int timestamp,
     required int attempt,
-    required bool forceFlood,
   }) async {
     final h = hold;
     if (h != null) await h.future;
-    return super.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt, forceFlood: forceFlood);
+    return super.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt);
   }
 }
 
@@ -273,10 +272,10 @@ void main() {
       final tries = h.service.deliveryTries(m.id);
       final lines = [for (var i = 0; i < tries.length; i++) describeAttempt(tries[i], i + 1, get(m.id), last: i == tries.length - 1, formatTime: (_) => 'T').text];
       expect(lines.first, 'Try 1 · direct · T · no confirmation');
-      expect(lines[4], 'Try 5 · flood · after reset path · T · no confirmation');
+      expect(lines[4], 'Try 5 · flood · after clearing the route · T · no confirmation');
       expect(lines.last, 'Try 8 · flood · T · no confirmation');
       expect(describeFailure(get(m.id), tries),
-          startsWith('No confirmation came back after 8 tries: 4 direct along the route your radio had, then 4 by flood to everyone nearby.'));
+          startsWith('No confirmation came back after 8 tries: 4 along the route your radio had, then 4 to everyone nearby.'));
       h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1005, tripMs: 2100));
       final after = h.service.deliveryTries(m.id);
       final hit = describeAttempt(after[5], 6, get(m.id), last: false, formatTime: (_) => 'T');

@@ -5,6 +5,9 @@
 // drive-context categories is collected before it has been seen (AppState.collectionOn).
 // Every word comes from lib/ui/settings/data_sharing.dart (and its core list, lib/core/data_categories.dart), the same
 // source Settings > Privacy & data sharing uses.
+// Build 77 (round 5 O1): on a first run it is the last page of the intro ([CollectionDisclosure] with onDone), answered
+// before the intro closes, so Connect radio no longer opens it, the Connect screen and the Bluetooth question at once.
+// The sheet stays for a phone that saw the intro in an older build and never answered it.
 import 'package:flutter/material.dart';
 
 import '../core/data_categories.dart' show savedWithDriveNote;
@@ -32,18 +35,21 @@ Future<void> showTelemetryDisclosure(BuildContext context) {
     dismissible: false,
     grabber: false,
     userInitiated: false,
-    builder: (_, _) => const _CollectionSheet(),
+    builder: (_, _) => const CollectionDisclosure(),
   );
 }
 
-class _CollectionSheet extends StatefulWidget {
-  const _CollectionSheet();
+/// The disclosure itself: the categories with their switches and the two choices. In the sheet ([onDone] null) a choice
+/// closes the sheet; as the intro's last page, [onDone] runs once the choice is saved.
+class CollectionDisclosure extends StatefulWidget {
+  final VoidCallback? onDone;
+  const CollectionDisclosure({super.key, this.onDone});
 
   @override
-  State<_CollectionSheet> createState() => _CollectionSheetState();
+  State<CollectionDisclosure> createState() => _CollectionDisclosureState();
 }
 
-class _CollectionSheetState extends State<_CollectionSheet> {
+class _CollectionDisclosureState extends State<CollectionDisclosure> {
   Map<String, bool>? _on;
   final ScrollController _scroll = ScrollController();
 
@@ -62,7 +68,8 @@ class _CollectionSheetState extends State<_CollectionSheet> {
     final s = AppScope.read(context);
     final prefs = uiPrefsFor(s);
     final chosen = _state(context);
-    Navigator.of(context).pop();
+    final done = widget.onDone;
+    if (done == null) Navigator.of(context).pop();
     var next = s.settings;
     for (final c in dataCategories) {
       final want = allOff ? false : (chosen[c.id] ?? true);
@@ -71,6 +78,7 @@ class _CollectionSheetState extends State<_CollectionSheet> {
     if (!identical(next, s.settings)) await s.updateSettings(next);
     await prefs.markTelemetryDisclosed();
     s.noteCollectionDisclosed();
+    done?.call();
   }
 
   @override

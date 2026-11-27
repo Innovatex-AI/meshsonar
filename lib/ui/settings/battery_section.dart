@@ -13,7 +13,9 @@ import '../../core/observer_engine.dart' show ObserverFeedState;
 import '../../core/power_profile.dart';
 import '../app.dart';
 import '../design/app_surfaces.dart';
+import 'drives_section.dart' show UploadWhen;
 import 'settings_index.dart';
+import 'settings_pages.dart' show openSettingsPage;
 import 'settings_kit.dart';
 
 const String batteryHelp = 'Each power setting on its own. Changing one makes the mode Custom.';
@@ -28,8 +30,8 @@ const List<SettingsEntry> batterySettingsEntries = [
   SettingsEntry('battery-mode', 'wardriving', 'Battery mode',
       'Max data, Balanced or Saver: sets every setting below at once. Changing one of them shows Custom.',
       was: 'Battery', keywords: [..._kw, 'mode', 'max data', 'balanced', 'custom', 'preset', 'battery life', 'low power']),
-  SettingsEntry('battery-low-power', 'wardriving', 'Use Saver when iPhone Low Power Mode is on',
-      'While Low Power Mode is on, MeshSonar uses Saver; your own choice comes back when it is off.',
+  SettingsEntry('battery-low-power', 'wardriving', 'Follow Low Power Mode',
+      'While iPhone Low Power Mode is on, MeshSonar uses Saver; your own choice comes back when it is off.',
       page: 'battery', was: 'Battery', keywords: [..._kw, 'low power', 'low power mode', 'iphone', 'ios', 'follow', 'automatic']),
   SettingsEntry('battery-screen-on', 'wardriving', 'Keep screen on during a drive',
       'Never lets the phone lock normally; the map and the drive keep running.',
@@ -56,7 +58,7 @@ const List<SettingsEntry> batterySettingsEntries = [
       'How often heard packets upload while the phone is locked. Nothing is lost; they wait in a queue.',
       page: 'battery', was: 'Battery', keywords: [..._kw, 'observer', 'upload', 'telemetry', 'packets', 'locked', 'background', 'queue']),
   SettingsEntry('battery-drive-upload', 'wardriving', 'Drive data upload',
-      'Off waits until the drive ends to upload its pings, so the phone radio stays quiet while you drive.',
+      'Whether pings upload while you drive or wait for the drive to end. Shown here; changed in Uploads.',
       page: 'battery', was: 'Battery', keywords: [..._kw, 'upload', 'sync', 'during', 'while driving', 'cellular', 'data']),
   SettingsEntry('battery-stats', 'wardriving', 'Radio and phone stats',
       'How often the drive report records radio and phone readings (battery, temperature, pressure).',
@@ -327,7 +329,7 @@ List<Widget> batterySectionRows(BuildContext context) => [
             key: const Key('battery-low-power'),
             secondary: const Icon(Icons.battery_saver_outlined),
             title: Text(settingsEntry('battery-low-power').title),
-            subtitle: const Text('Your own choice comes back when it is off.'),
+            subtitle: const Text('Saver while iPhone Low Power Mode is on. Your own choice comes back when it is off.'),
             value: PowerProfile.chosen.followLowPower,
             onChanged: (v) => unawaited(PowerProfile.set(PowerProfile.chosen.copyWith(followLowPower: v))),
           ),
@@ -341,17 +343,9 @@ List<Widget> batterySectionRows(BuildContext context) => [
       SettingsAnchor(id: 'battery-compass', child: KnobTile(knob: compassKnob)),
       SettingsAnchor(id: 'battery-radio-checks', child: _KnobPair(id: 'battery-radio-checks', icon: Icons.mark_chat_unread_outlined, a: radioFrontKnob, b: radioBackKnob)),
       SettingsAnchor(id: 'battery-observer-uploads', child: KnobTile(knob: observerUploadKnob)),
-      SettingsAnchor(
-        id: 'battery-drive-upload',
-        child: _KnobSwitch(
-          id: 'battery-drive-upload',
-          icon: Icons.cloud_sync_outlined,
-          label: 'Upload during a drive',
-          read: (s) => s.uploadDuringDrive,
-          write: (s, v) => s.copyWith(uploadDuringDrive: v),
-          extra: 'Uploads (Driving > Uploads) must also be on.',
-        ),
-      ),
+      // Build 77 (round 5 S6): one control for one thing. The Upload choice in Uploads decides; this row says what
+      // happens and opens it (it was a second switch for the same thing).
+      const SettingsAnchor(id: 'battery-drive-upload', child: _DriveUploadRow()),
       SettingsAnchor(id: 'battery-stats', child: KnobTile(knob: statsKnob)),
     ];
 
@@ -400,7 +394,7 @@ class BatteryModePicker extends StatelessWidget {
                 key: const Key('battery-low-power-active'),
                 padding: const EdgeInsets.only(top: 6),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Icon(Icons.battery_alert, size: 18, color: t.colorScheme.tertiary),
+                  Icon(Icons.battery_alert, size: 18, color: MeshSonarColors.of(context).warning),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text('iPhone Low Power Mode is on, so MeshSonar is using Saver for now.', style: t.textTheme.bodySmall),
@@ -408,6 +402,32 @@ class BatteryModePicker extends StatelessWidget {
                 ]),
               ),
           ]),
+        );
+      });
+}
+
+/// Battery details > Drive data upload, read-only: what happens to pings during a drive, with this mode and the Upload
+/// choice together; tapping opens Driving > Uploads.
+class _DriveUploadRow extends StatelessWidget {
+  const _DriveUploadRow();
+
+  @override
+  Widget build(BuildContext context) => PowerProfileBuilder(builder: (context) {
+        final s = AppScope.of(context);
+        final st = s.settings;
+        final e = settingsEntry('battery-drive-upload');
+        final now = switch (UploadWhen.of(st)) {
+          UploadWhen.manual => 'Only when you tap Upload',
+          UploadWhen.atEnd => 'When the drive ends',
+          UploadWhen.whileDriving => PowerProfile.chosen.uploadDuringDrive ? 'While driving' : 'Held by this mode until the drive ends',
+        };
+        return ListTile(
+          key: const Key('battery-drive-upload'),
+          leading: const Icon(Icons.cloud_sync_outlined),
+          title: Text('${e.title}: $now'),
+          subtitle: const Text('Change in Uploads.', key: Key('battery-drive-upload-value')),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => openSettingsPage(context, 'uploads', highlight: 'auto-sync'),
         );
       });
 }
@@ -456,30 +476,6 @@ class _KnobPair extends StatelessWidget {
           sub(a),
           sub(b),
         ]);
-      });
-}
-
-/// An on/off knob.
-class _KnobSwitch extends StatelessWidget {
-  final String id;
-  final IconData icon;
-  final String? label;
-  final String? extra;
-  final bool Function(PowerSettings s) read;
-  final PowerSettings Function(PowerSettings s, bool v) write;
-  const _KnobSwitch({required this.id, required this.icon, required this.read, required this.write, this.label, this.extra});
-
-  @override
-  Widget build(BuildContext context) => PowerProfileBuilder(builder: (context) {
-        final e = settingsEntry(id);
-        return SwitchListTile(
-          key: Key(id),
-          secondary: Icon(icon),
-          title: Text(label == null ? e.title : '${e.title}: $label'),
-          subtitle: Text([e.summary, ?extra].join(' ')),
-          value: read(PowerProfile.chosen),
-          onChanged: (v) => unawaited(PowerProfile.set(PowerProfile.chosen.tweak((s) => write(s, v)))),
-        );
       });
 }
 

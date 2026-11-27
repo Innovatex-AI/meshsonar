@@ -55,11 +55,11 @@ String describeFailure(ChatMessage m, List<DeliveryAttempt> attempts) {
   final flood = mine.where((a) => a.routeKnown && a.route == Route.flood).length;
   final String how;
   if (direct > 0 && flood > 0) {
-    how = '$direct direct along the route your radio had, then $flood by flood to everyone nearby';
+    how = '$direct along the route your radio had, then $flood to everyone nearby';
   } else if (direct > 0) {
     how = 'all direct along the route your radio had';
   } else if (flood > 0) {
-    how = 'all by flood to everyone nearby (your radio has no route to them)';
+    how = 'all to everyone nearby (your radio has no route to them)';
   } else {
     how = 'your radio did not say how they went';
   }
@@ -122,6 +122,6 @@ String describeTryOutcome(DeliveryAttempt a, ChatMessage m, {required bool last}
   final outcome = describeTryOutcome(a, m, last: last);
   final acked = a.outcome == TryOutcome.confirmed || (a.outcome == null && outcome.startsWith('confirmed'));
   final num = a.outcome == null ? n : a.attempt;
-  final reset = a.resetBefore ? ' · after reset path' : '';
+  final reset = a.resetBefore ? ' · after clearing the route' : '';
   return (text: 'Try $num · ${describeTryRoute(a)}$reset · ${(formatTime ?? _clock)(a.sentAtMs)} · $outcome', acked: acked);
 }

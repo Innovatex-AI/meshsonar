@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/analyze_api.dart';
 import '../../core/analyze_model.dart';
-import '../../core/zone_time.dart';
+import '../../core/time_format.dart' show dateTime, zoneLabel;
 import '../network/network_header.dart' show WhatChangedCard;
 import '../theme.dart';
 import '../network/nodes/node_routes.dart' show openNetworkNode;
@@ -311,7 +311,7 @@ class _SectionState<T extends Object> extends State<_Section<T>> {
                         context,
                         'stale-banner',
                         'Out of date: not shown as current',
-                        'Last built ${v.builtAt == null ? 'a long time ago' : formatInZone(v.builtAt, tz)}, more than 36 hours ago. What follows is that older result, not the network as it is now.',
+                        'Last built ${v.builtAt == null ? 'a long time ago' : dateTime(v.builtAt)}, more than 36 hours ago. What follows is that older result, not the network as it is now.',
                       ),
                       const SizedBox(height: Gap.m),
                       Opacity(opacity: .55, child: body(context, data!)),
@@ -351,7 +351,7 @@ class _SectionState<T extends Object> extends State<_Section<T>> {
         color: isErr
             ? c.errorContainer
             : isStale
-            ? MeshSonarColors.of(context).beacon.withValues(alpha: .18)
+            ? c.surfaceContainerHigh
             : c.surfaceContainerLow,
         borderRadius: BorderRadius.circular(Corners.chip),
         border: Border.all(color: isErr ? c.error : c.outlineVariant),
@@ -377,7 +377,7 @@ Widget _updated(BuildContext context, DateTime at, String? tz) {
   return Padding(
     padding: const EdgeInsets.only(top: Gap.m),
     child: Text(
-      'Updated ${formatInZone(at, tz)}',
+      'Updated ${dateTime(at)}',
       key: const Key('updated'),
       style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
     ),
@@ -600,7 +600,7 @@ class _FindingsBody extends StatelessWidget {
     final m = MeshSonarColors.of(context);
     Color tone(String s) => switch (s) {
       'alert' => t.colorScheme.error,
-      'warn' => m.beacon,
+      'warn' => m.warning,
       _ => t.colorScheme.outline,
     };
     return Column(
@@ -737,7 +737,7 @@ class _HealthBody extends StatelessWidget {
                 ),
                 Flexible(
                   child: Text(
-                    '${heardPctText('7 d', r.uptime7d)} · last heard ${formatInZone(r.lastHeardAt, tz)}',
+                    '${heardPctText('7 d', r.uptime7d)} · last heard ${dateTime(r.lastHeardAt)}',
                     style: t.textTheme.bodySmall,
                     textAlign: TextAlign.end,
                   ),
@@ -790,7 +790,7 @@ class _HealthBody extends StatelessWidget {
                           ),
                           TextSpan(text: ': ${e.detail} '),
                           TextSpan(
-                            text: formatInZone(e.at, tz),
+                            text: dateTime(e.at),
                             style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
                           ),
                         ],
@@ -823,7 +823,7 @@ class _TrafficBody extends StatelessWidget {
     final typeMax = types.values.fold<int>(0, (a, b) => b > a ? b : a);
     final hopMax = hops.fold<int>(0, (a, b) => b.n > a ? b.n : a);
     final series = allRows(d.rows).where((r) => r.at != null).toList()..sort((a, b) => a.at!.compareTo(b.at!));
-    final abbr = series.isEmpty ? zoneAbbr(tz, DateTime.now()) : zoneAbbr(tz, series.first.at!);
+    final abbr = series.isEmpty ? zoneLabel() : zoneLabel(at: series.first.at!);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -848,8 +848,8 @@ class _TrafficBody extends StatelessWidget {
           _MiniBars(
             key: const Key('traffic-series'),
             values: [for (final r in series) r.packets.toDouble()],
-            first: formatInZone(series.first.at, tz),
-            last: formatInZone(series.last.at, tz),
+            first: dateTime(series.first.at),
+            last: dateTime(series.last.at),
             semantics: 'Packets per ${d.bucket}, time axis in $abbr',
           ),
           Text('Time axis in $abbr.', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),

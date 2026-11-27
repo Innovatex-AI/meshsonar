@@ -100,6 +100,45 @@ void main() {
       expect(searchSettings('bug').map((e) => e.id), contains('report-problem'));
     });
 
+    test('build 77: old words still find the renamed, moved and removed rows', () {
+      List<String> ids(String q) => searchSettings(q).map((e) => e.id).toList();
+      expect(ids('radio details'), contains('radio-tab'));
+      expect(ids('check my radio'), contains('radio-tab'));
+      expect(settingsEntry('radio-tab').title, 'My radio\'s settings');
+      expect(ids('radio preset'), contains('radio-tab'), reason: 'Server (advanced) no longer repeats it');
+      expect(resolveSettingsTarget('site-radio-preset')!.section, 'radio');
+      expect(ids('heard list hold'), contains('heard-hold'));
+      expect(settingsEntry('heard-hold').title, 'Keep repeaters lit');
+      expect(settingsEntry('heard-hold').page, 'driving-advanced');
+      expect(settingsEntry('channel').page, 'driving-advanced');
+      expect(ids('advanced'), containsAll(['listen-window', 'map-health-overlay']), reason: 'the pages were both "Advanced"');
+      expect(settingsPage('driving-advanced').title, 'Ping details');
+      expect(settingsPage('diagnostics-advanced').title, 'Tester tools');
+      expect(ids('observer and mqtt feeds'), contains('observer-status'));
+      expect(ids('show message text'), contains('notif-previews'));
+      expect(ids('low power mode'), contains('battery-low-power'));
+      expect(settingsEntry('battery-low-power').title, 'Follow Low Power Mode');
+      expect(settingsEntry('map-health-overlay').title, 'Map health overlay');
+      expect(ids('upload during the drive'), contains('auto-sync'));
+      expect(ids('upload at end of drive'), contains('auto-sync'));
+      expect(settingsEntry('sync-during-drive').id, 'auto-sync');
+      expect(ids('chat settings'), containsAll(['chat-quick-replies', 'chat-return-sends', 'chat-photos-autoload']));
+      expect(ids('quick replies').first, 'chat-quick-replies');
+      expect(ids('vibrate on taps'), contains('ui-haptics'), reason: 'it was the Haptics switch: one row');
+      expect(settingsEntry('chat-haptics').id, 'ui-haptics');
+      expect(ids('retries'), containsAll(['delivery-direct', 'delivery-flood']));
+      expect(ids('flood fallback').first, 'delivery-fallback');
+      expect(ids('message log').first, 'message-log');
+      expect(ids('devices and keys'), contains('driver-key'));
+      expect(sectionInfo('notifications').title, 'Messages');
+      expect(ids('notifications'), contains('notif-enabled'), reason: 'the old section name');
+      // The welcome tour row is gone from Settings; search still finds it, and it says where it is now.
+      final tour = searchSettings('welcome tour');
+      expect(tour.map((e) => e.id), contains('show-intro'));
+      expect(settingsEntry('show-intro').where, 'More > Help');
+      expect(settingsEntry('show-intro').title, 'Show the intro again');
+    });
+
     testWidgets('rows that are not on screen are never offered', (tester) async {
       final h = await openSettings(tester, key: false, site: false);
       final ids = searchSettings('erase', state: h.state).map((e) => e.id);
@@ -114,10 +153,10 @@ void main() {
     final h = await openSettings(tester);
     final avail = settingsEntries.where((e) => e.isAvailable(h.state)).toList();
     final a = anchors(tester);
-    for (final e in avail.where((e) => e.page == null)) {
+    for (final e in avail.where((e) => e.page == null && e.elsewhere == null)) {
       expect(a.keys[e.id]?.currentContext, isNotNull, reason: '${e.id} has no SettingsAnchor on the first level');
     }
-    for (final alias in settingsEntryAliases.keys) {
+    for (final alias in settingsEntryAliases.keys.where((k) => settingsEntry(k).page == null)) {
       expect(a.keys[alias]?.currentContext, isNotNull, reason: 'the merged row $alias keeps its anchor');
     }
     for (final s in settingsSections) {
@@ -227,14 +266,14 @@ void main() {
     final handle = tester.ensureSemantics();
     await openSettings(tester);
     await showSetting(tester, 'section-toggle-wardriving');
-    expect(find.byKey(const Key('channel')), findsOneWidget);
+    expect(find.byKey(const Key('send-pings')), findsOneWidget);
     expect(tester.getSemantics(find.byKey(const Key('section-toggle-wardriving'))), isSemantics(isButton: true, isExpanded: true, hasExpandedState: true, isHeader: true, hasTapAction: true, isFocusable: true, label: 'DRIVING'));
     await tester.tap(find.byKey(const Key('section-toggle-wardriving')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('channel')), findsNothing);
+    expect(find.byKey(const Key('send-pings')), findsNothing);
     await tester.tap(find.byKey(const Key('section-toggle-wardriving')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('channel')), findsOneWidget);
+    expect(find.byKey(const Key('send-pings')), findsOneWidget);
     handle.dispose();
   });
 
@@ -253,7 +292,7 @@ void main() {
         expect(tester.takeException(), isNull, reason: s.id);
       }
       // Walk to the very end so every row has been laid out on screen.
-      await tester.scrollUntilVisible(find.byKey(const Key('show-intro')), 300, scrollable: settingsList);
+      await tester.scrollUntilVisible(find.byKey(const Key('terms-of-service-link')), 300, scrollable: settingsList);
       expect(tester.takeException(), isNull);
       // Every page one level down, top to bottom, at the same text size.
       for (final p in settingsPages.where((p) => find.byKey(Key('page-${p.id}')).evaluate().isNotEmpty)) {

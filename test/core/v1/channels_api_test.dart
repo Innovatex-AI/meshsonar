@@ -76,7 +76,8 @@ void main() {
     expect(p.rows[0].regions, ['yvr', 'san']);
     expect(p.rows[0].lastMessageAt, DateTime.utc(2026, 11, 21, 10, 45, 8));
     expect(p.rows[1].private, isTrue);
-    expect(p.rows[1].label, 'Private channel fc');
+    expect(p.rows[1].label, 'Private channel');
+    expect(p.rows[1].privateId, 'fc');
     expect(p.rows[1].senders24h, isNull);
     expect(p.scopeName, 'Columbus, US');
   });

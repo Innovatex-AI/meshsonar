@@ -5,17 +5,12 @@ import '../../../radio/repeater_health.dart';
 import '../../../radio/repeater_settings.dart';
 import '../../design/app_surfaces.dart';
 import '../../design/tokens.dart' show AppColors;
+import '../../../core/time_format.dart' as tf;
 import '../../theme.dart';
 import 'admin_controller.dart';
 
-/// "5 min ago", "2 h ago", "3 days ago" for [secs] seconds.
-String agoText(int secs) {
-  if (secs < 0) secs = 0;
-  if (secs < 90) return '${secs}s ago';
-  if (secs < 5400) return '${(secs / 60).round()} min ago';
-  if (secs < 172800) return '${(secs / 3600).round()} h ago';
-  return '${(secs / 86400).round()} days ago';
-}
+/// "just now", "5 min ago", "2 h ago", "3 d ago" for [secs] seconds: the app's one wording (lib/core/time_format.dart).
+String agoText(int secs) => tf.relativeDuration(Duration(seconds: secs < 0 ? 0 : secs));
 
 /// 149365 -> "1 d 17 h", 3600 -> "1 h 0 min".
 String uptimeText(int secs) {
@@ -163,7 +158,7 @@ class NoticeBanner extends StatelessWidget {
   return switch (s) {
     Severity.ok => (icon: Icons.check_circle_outline, color: c.primary, word: 'Fine'),
     Severity.info => (icon: Icons.info_outline, color: c.onSurfaceVariant, word: 'Note'),
-    Severity.warn => (icon: Icons.warning_amber_rounded, color: const Color(0xFFB26A00), word: 'Warning'),
+    Severity.warn => (icon: Icons.warning_amber_rounded, color: MeshSonarColors.of(context).warning, word: 'Warning'),
     Severity.fail => (icon: Icons.error_outline, color: c.error, word: 'Problem'),
   };
 }

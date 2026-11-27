@@ -23,6 +23,11 @@ import '../../design/app_symbols.dart';
 import '../../region/region_common.dart' show RegionOfflineEmpty;
 import '../../shell/shell_controller.dart' show ShellController;
 import 'packet_context.dart';
+import '../analytics/site_page_view.dart';
+import '../tools/path_inspector_screen.dart';
+import '../tools/prefix_tool_screen.dart';
+import '../tools/tools_section.dart' show sitePathOfTool;
+import '../tools/trace_viewer_screen.dart';
 import 'packet_detail_body.dart';
 
 /// Test seam for the share sheet.
@@ -123,6 +128,22 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
     }
   }
 
+  /// Every time one observer heard this packet (the detail inlines the first 50 receptions of all observers only).
+  Future<List<PacketObservation>> _copiesOf(String observerId) async => (await _api.observations(widget.hash, observer: observerId)).rows;
+
+  void _push(Widget page, String name) => Navigator.of(context).push(MaterialPageRoute<void>(settings: RouteSettings(name: name), builder: (_) => page));
+
+  /// The page's links to the tools that answer its questions (Round 2 N-U3) and to the Live replay (N-U1).
+  PacketLinks _links(PacketDetail d) => PacketLinks(
+        fetchObserver: _copiesOf,
+        onReplay: (o) => replayCopyOnLiveMap(context, hash: d.hash, observationId: o.id, regionSlug: widget.regionSlug, at: o.at ?? d.firstSeen),
+        onInspectRoute: (o) => _push(
+            PathInspectorScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHops: o.path.join(' '), initialObserver: o.observer.id), '/tools/path'),
+        onSharedId: (prefix) => _push(PrefixToolScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialPrefix: prefix), '/tools/prefix'),
+        onTraceViewer: d.type == 9 ? () => _push(TraceViewerScreen(baseUrl: widget.baseUrl, regionSlug: widget.regionSlug, initialHash: d.hash), '/tools/trace') : null,
+        onScopeAudit: (scope) => _push(SitePageView(baseUrl: widget.baseUrl, path: sitePathOfTool('scope-audit', scopeAuditArg(scope)), title: 'Scope Audit'), '/tools/scope-audit'),
+      );
+
   NetworkRequest get _request => NetworkRequest.packet(widget.hash, region: widget.regionSlug);
 
   Future<void> _share() async {
@@ -220,6 +241,7 @@ class _NetworkPacketScreenState extends State<NetworkPacketScreen> {
         nodeListReason: r.nodeListReason,
         bytesFrom: r.detail.hasBytes || _radio.isEmpty ? null : _radio.first.detail,
         cross: PacketCrossSource(radio: heardByRadio),
+        links: _links(r.detail),
         onLoadMoreObservations: _more,
         loadingMore: _loadingMore,
         onRetry: _load,
@@ -238,4 +260,28 @@ void showPacketOnLiveMap(BuildContext context, {required String hash, String? re
   if (shell == null) return;
   Navigator.of(context).popUntil((r) => r.isFirst);
   shell.openNetwork(NetworkRequest.mapPacket(hash, region: regionSlug, at: at));
+}
+
+/// Set by the Live map (W2-A's `openLiveReplay`) at start-up: opens Network > Live with only reception
+/// [observationId] of [packetHash] drawn and played from the sender through each hop to its observer. While it is
+/// null, [replayCopyOnLiveMap] opens Live through the ordinary request, which carries the same observation id.
+void Function(BuildContext context, {required String packetHash, required String observationId})? liveReplayOpener;
+
+/// "Replay on map" on one copy of a packet (Round 2 N-U1).
+void replayCopyOnLiveMap(BuildContext context, {required String hash, required String observationId, String? regionSlug, DateTime? at}) {
+  final open = liveReplayOpener;
+  if (open != null) return open(context, packetHash: hash, observationId: observationId);
+  final shell = ShellController.of(context);
+  if (shell == null) return;
+  Navigator.of(context).popUntil((r) => r.isFirst);
+  shell.openNetwork(NetworkRequest.mapPacket(hash, region: regionSlug, at: at, observation: observationId));
+}
+
+final RegExp _scopeTag = RegExp(r'^#[a-z0-9-]{1,32}$');
+
+/// The Scope Audit page's `scope=` for a region tag, as the site reads it (`#cmh`); null when the tag has no name the
+/// site would accept (the page then opens on every tag).
+String? scopeAuditArg(PacketScope scope) {
+  final n = (scope.name ?? '').trim().toLowerCase();
+  return _scopeTag.hasMatch(n) ? 'scope=${Uri.encodeQueryComponent(n)}' : null;
 }

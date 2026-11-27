@@ -1,5 +1,6 @@
 // CR2 (chat + radio round): "No repeater heard it" with Resend for a channel message nobody relayed, the clock that wakes a
-// quiet conversation when a status changes by time alone, and long-press Send to search for a new route on a direct message.
+// quiet conversation when a status changes by time alone, and long-press Send to send one direct message direct or by flood
+// (build 77: the official way, one reset path and then the normal send).
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/db/migrations.dart';
@@ -68,14 +69,15 @@ void main() {
       expect(h.service.resendChannel(m.id), isFalse);
     });
 
-    test('Send and search: every try of that one message searches, even with a saved route', () async {
+    test('Send by flood: one reset path, then the normal send, which the radio then floods (official app v1.21.0)', () async {
       final h = svc.Harness();
       h.bob(path: true);
       h.service.send(radioId: svc.radioA, convKey: h.bobConv, text: 'normal');
       await h.service.pump();
-      h.service.send(radioId: svc.radioA, convKey: h.bobConv, text: 'search', forceFlood: true);
+      h.service.send(radioId: svc.radioA, convKey: h.bobConv, text: 'by flood', forceFlood: true);
       await h.service.pump();
-      expect(h.sink.directs.map((d) => (d.text, d.forceFlood)), [('normal', false), ('search', true)]);
+      expect(h.sink.log, ['send', 'reset', 'send']);
+      expect(h.sink.directs.map((d) => (d.text, d.flood)), [('normal', false), ('by flood', true)], reason: 'direct or flood is what the radio reported');
     });
   });
 
@@ -109,7 +111,7 @@ void main() {
       expect(kit.sink.channels, hasLength(2));
     });
 
-    testWidgets('long-press Send on a direct message offers Send or Send and search; a channel has no such choice', (tester) async {
+    testWidgets('long-press Send on a direct message offers Send direct or Send by flood; a channel has no such choice', (tester) async {
       setSize(tester);
       kit.bob();
       await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ConvKey.dm(bobKey))));
@@ -119,10 +121,15 @@ void main() {
       await tester.longPress(find.byKey(const Key('composer-send')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('send-route-sheet')), findsOneWidget);
+      expect(find.text('By the known route'), findsOneWidget);
+      expect(find.text('To everyone nearby'), findsOneWidget);
+      expect(find.textContaining('search for a new route'), findsNothing, reason: 'build 76 wording');
       await tester.tap(find.byKey(const Key('send-flood')));
       await tester.pumpAndSettle();
+      final id = kit.store.messages.page(ConvKey.dm(bobKey)).messages.single.id;
+      expect(kit.service.log.forMessage(id).any((l) => l.text.contains('flood chosen')), isTrue, reason: 'queued as one flood message');
       await kit.service.pump();
-      expect(kit.sink.directs.single.forceFlood, isTrue);
+      expect(kit.sink.directs.single.text, 'where are you');
 
       final ch = await kit.channel(1, 'Ohio');
       await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ch.convKey)));

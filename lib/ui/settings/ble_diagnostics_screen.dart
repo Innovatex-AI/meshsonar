@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../alerts/alerts_runtime.dart';
+import '../../core/time_format.dart' as tf;
 import '../../radio/ble_transport_universal.dart' show BleEngineChoice;
 import '../app.dart';
 import '../design/app_surfaces.dart';
@@ -53,7 +54,7 @@ class _BleDiagnosticsScreenState extends State<BleDiagnosticsScreen> {
     return [
       'MeshSonar BLE background test',
       'app $version, ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
-      'exported ${DateTime.now().toIso8601String()}',
+      'exported ${tf.utcStamp(DateTime.now(), seconds: true)}',
       'auto-connect: ${rt.prefs.autoConnect.label}; starred radio: ${radio?.name ?? 'none'}'
           '${rt.savedRadios.autoConnectHeld ? ' (held: released on purpose)' : ''}; saved radios: ${rt.savedRadios.radios.length}',
       'bluetooth engine: ${BleEngineChoice.universal ? 'universal_ble (experiment)' : 'flutter_reactive_ble'}',

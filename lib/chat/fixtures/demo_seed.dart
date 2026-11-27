@@ -171,7 +171,7 @@ class _SeedSink implements OutboundMessageSink {
   @override
   bool get canSend => false;
   @override
-  Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) =>
+  Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt}) =>
       throw const RadioNotConnected();
   @override
   Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) => throw const RadioNotConnected();

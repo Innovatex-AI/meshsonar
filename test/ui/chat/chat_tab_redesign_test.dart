@@ -11,6 +11,7 @@ import 'package:meshsonar/ui/chat/chats_list_view.dart' show ChatsSkeleton;
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/design/app_surfaces.dart';
 import 'package:meshsonar/ui/design/app_widgets.dart' show MemoryTipStore, appTipStore;
+import 'package:meshsonar/ui/design/tokens.dart' show AppColors;
 import 'package:meshsonar/ui/shell/chat_tab.dart';
 import 'package:meshsonar/ui/shell/chat_tab_host.dart';
 import 'package:meshsonar/ui/shell/more_radio_screen.dart';
@@ -90,6 +91,39 @@ void main() {
       await tester.tap(find.byKey(Key('conv-${ConvKey.dm(bobKey)}')));
       await tester.pumpAndSettle();
       expect(find.byType(ConversationScreen), findsOneWidget, reason: 'one tap from the list to the conversation');
+    });
+
+    testWidgets('C-V1: the selected segment has the teal selected style in light and dark; the swipe tip has the right words', (tester) async {
+      await seed();
+      for (final b in Brightness.values) {
+        await pumpTab(tester, brightness: b);
+        await tester.pump(const Duration(seconds: 1)); // the theme change animates
+        final ctl = tester.widget<CupertinoSlidingSegmentedControl<ChatShellSegment>>(find.byKey(const Key('chat-segments')));
+        final colors = AppColors.of(tester.element(find.byKey(const Key('chat-segments'))));
+        expect(ctl.thumbColor, colors.selected, reason: '$b');
+        expect(ctl.thumbColor, isNot(colors.surfaceHigh));
+        final label = tester.widget<Text>(find.descendant(of: find.byKey(const Key('segment-chats')), matching: find.byType(Text)));
+        expect(label.style?.color, colors.onSelected);
+      }
+      expect(find.text('Swipe a chat to pin, mute or delete, or press and hold it.'), findsOneWidget);
+      expect(find.textContaining('… menu'), findsNothing);
+    });
+
+    testWidgets('C-U5: "Unread n" beside search only while something is unread; it shows only unread chats', (tester) async {
+      await seed();
+      await pumpTab(tester);
+      expect(find.byKey(const Key('chat-unread-filter')), findsOneWidget);
+      expect(find.text('Unread 1'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('chat-unread-filter')));
+      await tester.pump();
+      expect(find.text('Ohio'), findsOneWidget);
+      expect(find.text('Bob'), findsNothing, reason: 'nothing unread from Bob');
+      await tester.tap(find.byKey(const Key('chat-unread-filter')));
+      await tester.pump();
+      expect(find.text('Bob'), findsOneWidget);
+      kit.service.markAllRead();
+      await tester.pump();
+      expect(find.byKey(const Key('chat-unread-filter')), findsNothing, reason: 'nothing unread: no chip');
     });
 
     testWidgets('segments switch, the choice is kept for the session, a cold launch is Chats again', (tester) async {
@@ -414,6 +448,7 @@ void main() {
       expect(find.text('Ridge 6'), findsOneWidget);
       expect(find.text('Show fewer'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('SENSORS'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('Garage temp'), 200, scrollable: find.byType(Scrollable).first);
       expect(find.text('Garage temp'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('ROOMS'), -300, scrollable: find.byType(Scrollable).first);
       expect(find.text('North room'), findsOneWidget);

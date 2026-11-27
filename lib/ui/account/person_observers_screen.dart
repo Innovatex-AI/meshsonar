@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../app/messages.dart';
 import '../../core/api.dart' show CmatException;
 import '../../core/node_claim.dart';
@@ -240,7 +241,7 @@ class _OfferCard extends StatelessWidget {
               style: t.textTheme.titleSmall,
             ),
             const SizedBox(height: Gap.xs),
-            Text('Its login names your radio ${o.radioLabel} as its owner${o.firstSeenAt == null ? '' : ', since ${formatDateTime(o.firstSeenAt!)}'}.',
+            Text('Its login names your radio ${o.radioLabel} as its owner${o.firstSeenAt == null ? '' : ', since ${tf.dateTime(o.firstSeenAt!)}'}.',
                 key: Key('offer-why-${o.key}'), style: t.textTheme.bodyMedium),
             Text('Yes adds it to your account. It never takes an observer someone else holds.', style: dim),
             const SizedBox(height: Gap.s),
@@ -298,7 +299,7 @@ class _FixedCard extends StatelessWidget {
             if (o.named) Text('It named you as its owner and you agreed', key: Key('observer-proof-${o.key}'), style: dim),
             KeyedSubtree(key: o.named ? null : Key('observer-proof-${o.key}'), child: ClaimProofLabel(o.method, style: ClaimProofStyle.line)),
             Text(o.iata == null ? 'No area yet' : 'Area ${o.iata}', style: dim),
-            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${formatDateTime(o.lastHeardAt!)}', key: Key('observer-heard-${o.key}'), style: dim),
+            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${tf.dateTime(o.lastHeardAt!)}', key: Key('observer-heard-${o.key}'), style: dim),
             if (o.nodeName != null && o.nodeName != o.name) Text('It calls itself "${o.nodeName}".', style: dim),
             if (h != null) ...[
               const SizedBox(height: Gap.xs),
@@ -368,7 +369,7 @@ class _PhoneCard extends StatelessWidget {
             ),
             Text('On ${o.deviceName}', style: dim),
             if (o.mode != null) Text('Mode: ${modeWords(o.mode!)}', key: Key('phone-mode-${o.key}'), style: dim),
-            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${formatDateTime(o.lastHeardAt!)}', style: dim),
+            Text(o.lastHeardAt == null ? 'Not heard yet' : 'Last heard ${tf.dateTime(o.lastHeardAt!)}', style: dim),
             Text('Reports through $feeds', style: dim),
             if (o.countedOnce)
               Text(

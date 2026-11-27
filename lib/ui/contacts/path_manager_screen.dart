@@ -1,22 +1,21 @@
-// The Route screen (chat plan 4.7). User-facing title "Route", never "Path". Shows how messages reach a contact, lets the
-// person pick Automatic / Keep this route / Always search, find a route now, test it, reset it, and (Advanced) choose
-// repeaters themselves. Reading the route, choosing the mode, discovery, testing and reset are live; the radio WRITE of a
-// chosen route is behind AppFlags.routeWriteVerified (see route_picker_page.dart).
-import 'dart:async';
-
+// The Route screen (chat plan 4.7). User-facing title "Route", never "Path". Shows how messages reach a contact (the
+// phone's mirror of the route the radio holds) and lets the person find a route now, test it and reset it.
+//
+// Build 77 (round 3, "Removed"): the radio learns and keeps the route; the app never chooses one. The mode picker
+// (Automatic / Keep this route / Always search), "Use this route", the Undo of a reset and "Choose repeaters yourself"
+// are gone with the features behind them. Reset route stays (the official app has it).
 import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator, CupertinoNavigationBar;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../app/app_flags.dart';
 import '../../chat/contact_manager.dart';
 import '../../chat/models.dart';
+import '../../core/time_format.dart' as tf;
 import '../../radio/path_tools.dart';
 import '../../radio/tools/ping_tool.dart';
 import '../../radio/tools/radio_tools.dart';
 import '../design/app_haptics.dart';
 import '../design/app_surfaces.dart';
-import '../design/app_symbols.dart';
 import '../design/app_type.dart';
 import '../design/hop_chain.dart';
 import '../design/tokens.dart';
@@ -27,42 +26,11 @@ import '../tools/trace_screen.dart';
 import 'contact_widgets.dart' show routeCaption;
 import 'profile_widgets.dart';
 import 'route_nodes.dart';
-import 'route_picker_page.dart';
 
-/// "just now", "2 min ago", "3 h ago", "5 days ago".
-String agoText(int nowMs, int? thenMs) {
-  if (thenMs == null) return '';
-  final d = nowMs - thenMs;
-  if (d < 90 * 1000) return 'just now';
-  final min = d ~/ 60000;
-  if (min < 60) return '$min min ago';
-  final h = d ~/ 3600000;
-  if (h < 24) return '$h h ago';
-  return '${d ~/ 86400000} days ago';
-}
-
-/// One line per mode, in the app-wide words.
-String pathModeTitle(PathMode m) => switch (m) { PathMode.auto => 'Automatic', PathMode.fixed => 'Keep this route', PathMode.flood => 'Always search' };
-String pathModeSentence(PathMode m) => switch (m) {
-      PathMode.auto => 'Learns the best route; searches again if it breaks.',
-      PathMode.fixed => 'Always uses this route, even if it fails.',
-      PathMode.flood => 'Sends to everyone nearby. Slower, uses more airtime.',
-    };
-
-/// "Use this route": Keep this route or Automatic, from an action sheet; says what happened in a toast.
-Future<void> offerUseRoute(BuildContext context, ContactManager m, Contact c, PathRoute route) async {
-  dismissAppToast();
-  final keep = await showAppActionSheet<bool>(
-    context,
-    title: 'Use this route',
-    message: route.isEmpty ? 'Direct, no repeater in between.' : route.text,
-    actions: const [AppAction('Keep this route', true, key: Key('use-keep')), AppAction('Automatic', false, key: Key('use-auto'))],
-  );
-  if (keep == null) return;
-  final err = await m.useDiscoveredRoute(c.publicKey, route, keep: keep);
-  if (err == null) AppHaptics.success(); // route set (plan 2.2)
-  if (context.mounted) showAppToast(context, err ?? (keep ? 'Keeping this route.' : 'Automatic: MeshSonar picks the route.'));
-}
+/// "just now", "2 min ago", "3 h ago", "5 d ago" (the one app time formatter); '' when unknown.
+String agoText(int nowMs, int? thenMs) => thenMs == null
+    ? ''
+    : tf.relativeTime(DateTime.fromMillisecondsSinceEpoch(thenMs), now: DateTime.fromMillisecondsSinceEpoch(nowMs));
 
 class PathManagerScreen extends StatefulWidget {
   final ContactManager manager;
@@ -73,10 +41,7 @@ class PathManagerScreen extends StatefulWidget {
 
   /// Radio tools override (tests); default = the connected radio's.
   final RadioTools? tools;
-
-  /// Whether choosing repeaters (a radio write) is offered. Default AppFlags.routeWriteVerified; tests force it.
-  final bool routeWrite;
-  const PathManagerScreen({super.key, required this.manager, required this.publicKey, required this.changes, this.tools, this.routeWrite = AppFlags.routeWriteVerified});
+  const PathManagerScreen({super.key, required this.manager, required this.publicKey, required this.changes, this.tools});
 
   static Future<void> open(BuildContext context, {required ContactManager manager, required String publicKey, required Listenable changes}) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PathManagerScreen(manager: manager, publicKey: publicKey, changes: changes)));
@@ -98,26 +63,6 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
     if (mounted) showAppToast(context, s);
   }
 
-  Future<void> _pickMode(Contact stale, PathMode mode) async {
-    final c = _contact ?? stale;
-    if (c.pathMode == mode) return;
-    if (mode == PathMode.fixed) {
-      if (!c.hasPath) return;
-      if (!_m.keepCurrentRoute(c.publicKey)) {
-        _say('Could not keep this route.');
-        return;
-      }
-    } else {
-      _m.setRouteMode(c.publicKey, mode);
-    }
-    AppHaptics.selection();
-    _say(switch (mode) {
-      PathMode.auto => 'Automatic: MeshSonar picks the route.',
-      PathMode.fixed => 'Keeping this route.',
-      PathMode.flood => 'Always search.',
-    });
-  }
-
   Future<void> _find(Contact c) async {
     final tools = _tools;
     if (tools == null || !_m.connected) {
@@ -133,14 +78,15 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
       _m.recordPing(c.publicKey,
           kind: 'discovery', ok: r.ok, rttMs: r.rttMs, hops: r.outRoute?.length, out: r.outRoute?.text, back: r.backRoute?.text, failReason: r.failReason);
     }
+    // A found route goes into the route history. Nothing is written to the radio: it learns the route by itself.
+    final out = r.outRoute;
+    if (r.ok && out != null) await _m.useDiscoveredRoute(c.publicKey, out, keep: false);
     if (!mounted) return;
     setState(() {
       _finding = false;
       _found = r;
     });
   }
-
-  Future<void> _useFound(Contact c, PathRoute route) => offerUseRoute(context, _m, c, route);
 
   Future<void> _test(Contact c) async {
     if (!_m.connected) {
@@ -151,11 +97,11 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
   }
 
   Future<void> _reset(Contact c) async {
-    final before = _contact ?? c;
     await _m.resetPath(c.publicKey);
     AppHaptics.success();
     if (!mounted) return;
-    showAppToast(context, 'Route cleared. The next message searches again.', actionLabel: 'Undo', onAction: () => unawaited(_m.restorePath(before)));
+    // No Undo: the app never writes a route to the radio, so a cleared route cannot be put back (build 77).
+    showAppToast(context, 'Route cleared. The next message goes to everyone nearby and your radio learns a new route.');
   }
 
   @override
@@ -198,11 +144,10 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
     final route = decodePath(c.outPathLen, c.outPath ?? const []);
     final nodes = routeNodes(targetName: c.displayName, route: route, repeaters: repeaters);
     final connected = _m.connected;
-    final searching = c.pathMode == PathMode.flood;
     final learned = c.pathLearnedMs;
-    final caption = searching
-        ? 'Messages go to everyone nearby.'
-        : (!c.hasPath ? 'Your first message finds one.' : (learned == null ? routeCaption(c) : 'Learned ${agoText(now, learned)}'));
+    final caption = !c.hasPath
+        ? 'Your next message goes to everyone nearby, and your radio learns the route from the reply.'
+        : (learned == null ? routeCaption(c) : 'Learned ${agoText(now, learned)}');
     return ListView(
       padding: const EdgeInsets.only(bottom: Gap.xl),
       children: [
@@ -211,7 +156,7 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
             key: const Key('route-card'),
             padding: const EdgeInsets.all(Layout.screenMargin),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (c.hasPath || searching)
+              if (c.hasPath)
                 HopChain(key: const Key('route-chain'), nodes: nodes)
               else
                 Text('No route yet', style: AppType.headline.copyWith(color: col.textPrimary)),
@@ -219,18 +164,6 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
               Text(caption, key: const Key('route-caption'), style: AppType.footnote.copyWith(color: col.textMuted)),
             ]),
           ),
-        ]),
-        _sectionLabel(col, 'HOW MESSAGES TRAVEL'),
-        ProfileGroup(rows: [
-          for (final m in PathMode.values)
-            _ChoiceRow(
-              key: Key('mode-${m.name}'),
-              title: pathModeTitle(m),
-              sentence: m == PathMode.fixed && !c.hasPath && c.pathMode != PathMode.fixed ? 'No route learned yet. Find a route first.' : pathModeSentence(m),
-              selected: c.pathMode == m,
-              enabled: m != PathMode.fixed || c.hasPath || c.pathMode == PathMode.fixed,
-              onTap: () => _pickMode(c, m),
-            ),
         ]),
         ProfileGroup(rows: [
           ProfileRow(
@@ -247,10 +180,13 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
             key: const Key('route-reset'),
             label: 'Reset route',
             destructive: c.hasPath,
-            onTap: c.hasPath || c.pathMode == PathMode.fixed ? () => _reset(c) : null,
+            onTap: c.hasPath ? () => _reset(c) : null,
             value: c.hasPath ? null : 'No route saved',
           ),
-        ], footer: connected ? 'Finding or testing uses a little airtime.' : 'Connect your radio to find or test a route.'),
+        ],
+            footer: connected
+                ? 'Your radio picks the route and keeps it up to date. Finding or testing uses a little airtime.'
+                : 'Your radio picks the route and keeps it up to date. Connect it to find or test a route.'),
         if (_found != null) _foundCard(c, col, repeaters),
         ProfileGroup(rows: [
           ProfileRow(
@@ -258,17 +194,12 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
             label: 'Advanced',
             chevron: true,
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => RouteAdvancedPage(manager: _m, publicKey: c.publicKey, changes: widget.changes, tools: widget.tools, routeWrite: widget.routeWrite))),
+                builder: (_) => RouteAdvancedPage(manager: _m, publicKey: c.publicKey, changes: widget.changes, tools: widget.tools))),
           ),
         ]),
       ],
     );
   }
-
-  Widget _sectionLabel(AppColors col, String t) => Padding(
-        padding: const EdgeInsets.fromLTRB(Layout.screenMargin + Gap.l, 0, Layout.screenMargin, Gap.xs),
-        child: Semantics(header: true, child: Text(t, style: AppType.footnote.copyWith(color: col.textMuted))),
-      );
 
   Widget _foundCard(Contact c, AppColors col, List<Contact> repeaters) {
     final r = _found!;
@@ -297,67 +228,23 @@ class _PathManagerScreenState extends State<PathManagerScreen> {
           HopChain(nodes: nodes, semanticsLabel: describeHopChain(nodes, prefix: 'Route out')),
         ]),
       ),
-      ProfileRow(key: const Key('found-use'), label: 'Use this route', chevron: true, onTap: () => _useFound(c, out)),
-    ]);
-  }
-}
-
-/// A checkmark list row: title, one sentence, check on the leading edge when selected.
-class _ChoiceRow extends StatelessWidget {
-  final String title;
-  final String sentence;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _ChoiceRow({super.key, required this.title, required this.sentence, required this.selected, required this.enabled, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppColors.of(context);
-    return Semantics(
-      button: true,
-      selected: selected,
-      enabled: enabled,
-      label: '$title. $sentence',
-      onTap: enabled ? onTap : null,
-      child: ExcludeSemantics(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: enabled ? onTap : null,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: Hit.minAndroid),
-            child: Opacity(
-              opacity: enabled ? 1 : 0.5,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s + 2),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  SizedBox(width: 26, child: selected ? AppSymbolIcon(AppSymbols.checkmark, size: 18, color: c.accent) : null),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(title, style: AppType.body.copyWith(color: c.textPrimary)),
-                      Text(sentence, style: AppType.footnote.copyWith(color: c.textMuted)),
-                    ]),
-                  ),
-                ]),
-              ),
-            ),
-          ),
-        ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, Layout.screenMargin),
+        child: Text('Your radio learns the route by itself: nothing to save.', key: const Key('found-note'), style: AppType.footnote.copyWith(color: col.textMuted)),
       ),
-    );
+    ]);
   }
 }
 
 // ------------------------------------------------------------------ Advanced
 
-/// Advanced: choose repeaters yourself (write; flag), hash size, recent deliveries, route history, copy route.
+/// Advanced: hash size, copy route, trace and discover, recent deliveries, route history.
 class RouteAdvancedPage extends StatelessWidget {
   final ContactManager manager;
   final String publicKey;
   final Listenable changes;
   final RadioTools? tools;
-  final bool routeWrite;
-  const RouteAdvancedPage({super.key, required this.manager, required this.publicKey, required this.changes, this.tools, required this.routeWrite});
+  const RouteAdvancedPage({super.key, required this.manager, required this.publicKey, required this.changes, this.tools});
 
   /// The last [limit] outgoing messages to the contact that ended (acked or failed), newest first.
   static List<ChatMessage> recentDeliveries(ContactManager m, Contact c, {int limit = 5}) {
@@ -383,7 +270,7 @@ class RouteAdvancedPage extends StatelessWidget {
         final now = manager.nowMs();
         final deliveries = recentDeliveries(manager, c);
         final history = manager.store.pathHistory.list(c.publicKey, limit: 5);
-        final size = route?.hashSize ?? c.pinnedHashSize;
+        final size = route?.hashSize;
         return Scaffold(
           backgroundColor: col.bg,
           appBar: CupertinoNavigationBar(backgroundColor: col.bg, border: null, middle: const Text('Advanced')),
@@ -394,14 +281,6 @@ class RouteAdvancedPage extends StatelessWidget {
                 constraints: const BoxConstraints(maxWidth: 560),
                 child: ListView(padding: const EdgeInsets.only(bottom: Gap.xl), children: [
                   ProfileGroup(rows: [
-                    if (routeWrite)
-                      ProfileRow(
-                        key: const Key('adv-choose'),
-                        label: 'Choose repeaters yourself',
-                        chevron: true,
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                            fullscreenDialog: true, builder: (_) => RoutePickerPage(manager: manager, publicKey: c.publicKey, tools: tools))),
-                      ),
                     ProfileRow(key: const Key('adv-hash'), label: 'Hash size', value: size == null ? '1 byte (radio default)' : '$size ${size == 1 ? 'byte' : 'bytes'}'), // copy-ok: Advanced
                     ProfileRow(
                       key: const Key('adv-copy'),

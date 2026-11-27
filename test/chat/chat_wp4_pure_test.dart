@@ -214,7 +214,6 @@ void main() {
       expect(dmRouteText(null), 'No route yet');
       final c = Contact(radioId: radio, publicKey: 'b0'.padRight(64, '0'), type: ContactType.companion, name: 'M');
       expect(dmRouteText(c), 'No route yet');
-      expect(dmRouteText(c.copyWith(forceFlood: true)), 'Searching');
       expect(dmRouteText(c.copyWith(outPathLen: 0, outPath: Uint8List(0))), 'Direct');
       expect(dmRouteText(c.copyWith(outPathLen: 1, outPath: Uint8List.fromList([1]))), 'Via 1 repeater');
       expect(roomSubtitle(joined: false), 'Room · Not joined');

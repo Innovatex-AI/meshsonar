@@ -196,7 +196,7 @@ void main() {
   group('refresh', () {
     adminTest('Updated N s ago and pull to refresh really asks again', (tester) async {
       final d = await openDash(tester);
-      expect(find.textContaining('Updated 0 s ago'), findsOneWidget);
+      expect(find.textContaining('Updated just now'), findsOneWidget);
       expect(find.textContaining('pull to refresh'), findsOneWidget);
       final before = d.history.count(d.c.session.keyHex);
       await tester.drag(find.byKey(const Key('dashboard-scroll')), const Offset(0, 300));

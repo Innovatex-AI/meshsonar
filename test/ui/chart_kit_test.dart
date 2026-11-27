@@ -117,4 +117,33 @@ void main() {
     expect(tickLabel(-100), '-100');
     expect(tickLabel(2.5), '2.5');
   });
+
+  test('Round 5 D-15: dB axes tick in whole steps; other labels print the decimals the step needs', () {
+    // Build 76 drew -113, -113.3, -113.5, -113.8, -114 for a narrow RSSI range.
+    expect(niceTicks(-114, -113, minStep: minTickStepFor('dBm')), [-114, -113]);
+    expect(niceTicks(-114, -110, minStep: minTickStepFor('SNR dB')), [-114, -113, -112, -111, -110]);
+    expect(minTickStepFor('%'), 0);
+    expect(niceTicks(0, 1), [0, 0.25, 0.5, 0.75, 1]);
+    expect(tickLabel(0.25), '0.25');
+    expect(tickLabel(-113.5), '-113.5');
+  });
+
+  testWidgets('the series palette has six different colours, no amber and no signal-ramp colour', (tester) async {
+    late List<Color> pal;
+    late MeshSonarColors m;
+    await tester.pumpWidget(MaterialApp(
+      theme: meshSonarTheme(Brightness.dark),
+      home: Builder(builder: (context) {
+        pal = chartPalette(context);
+        m = MeshSonarColors.of(context);
+        return const SizedBox();
+      }),
+    ));
+    expect(pal.toSet().length, 6);
+    expect(pal, isNot(contains(m.beacon)));
+    expect(pal, isNot(contains(m.warning)));
+    for (final c in m.snrStops) {
+      expect(pal, isNot(contains(c)));
+    }
+  });
 }

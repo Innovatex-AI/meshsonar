@@ -127,22 +127,6 @@ List<Widget> displaySectionRows(BuildContext context) {
         onChanged: (v) => s.updateSettings(st.copyWith(haptics: v)),
       ),
     ),
-    SettingsAnchor(
-      id: 'heard-hold',
-      child: SliderTile(
-        key: const Key('heard-hold'),
-        sliderKey: const Key('heard-hold-slider'),
-        icon: Icons.cell_tower,
-        title: settingsEntry('heard-hold').title,
-        stops: holdStops,
-        value: st.heardHoldPings,
-        label: (v) => '$v ping${v == 1 ? '' : 's'}',
-        caption: 'A repeater stays bright this long after it was last heard, then greys out.',
-        minLabel: '1',
-        maxLabel: '10',
-        onChanged: (v) => s.updateSettings(s.settings.copyWith(heardHoldPings: v)),
-      ),
-    ),
   ];
 }
 

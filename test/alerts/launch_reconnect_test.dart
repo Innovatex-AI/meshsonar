@@ -108,23 +108,6 @@ void main() {
       expect(r.tried, ['uuid-1', 'uuid-1']);
     });
 
-    test('At launch only: launch connects; foreground does nothing, even after it gave up', () async {
-      final r = Rig()..mode = AutoConnectMode.launchOnly;
-      r.results.add(true);
-      await r.lr.run(reason: 'launch');
-      expect(r.tried, ['uuid-1']);
-      r.connected = false;
-      await r.lr.onForeground();
-      await r.lr.run(reason: 'foreground');
-      expect(r.tried, ['uuid-1'], reason: 'no connect on a return to the front');
-      final g = Rig()..mode = AutoConnectMode.launchOnly;
-      await g.lr.run();
-      expect(g.lr.state, LaunchReconnectState.gaveUp);
-      final before = g.tried.length;
-      await g.lr.onForeground();
-      expect(g.tried.length, before);
-    });
-
     test('Off: neither launch nor foreground connects, and nothing is shown', () async {
       final r = Rig()..mode = AutoConnectMode.off;
       r.results.add(true);
@@ -175,12 +158,43 @@ void main() {
       expect(lr.state, LaunchReconnectState.idle);
     });
 
-    test('switching to At launch only or Always leaves a running loop alone', () async {
+    test('switching to On leaves a running loop alone', () async {
       final r = Rig();
       await r.lr.run();
-      r.mode = AutoConnectMode.launchOnly;
+      r.mode = AutoConnectMode.always;
       r.lr.modeChanged();
       expect(r.lr.state, LaunchReconnectState.gaveUp);
+    });
+  });
+
+  group('build 77 (round 5 R1): "Could not reach" goes once a radio is connected, and can be dismissed', () {
+    test('a radio connected by hand after the loop gave up clears the state', () async {
+      final r = Rig();
+      await r.lr.run();
+      expect(r.lr.state, LaunchReconnectState.gaveUp);
+      expect(r.lr.statusText, isNotNull);
+      r.lr.radioConnected();
+      expect(r.lr.state, LaunchReconnectState.idle);
+      expect(r.lr.statusText, isNull);
+      expect(r.log.entries.map((e) => e.detail), contains('cleared: a radio is connected'));
+    });
+
+    test('radioConnected while idle or trying changes nothing', () async {
+      final r = Rig();
+      r.lr.radioConnected();
+      expect(r.lr.state, LaunchReconnectState.idle);
+    });
+
+    test('Dismiss clears the line; the Reconnect button still works after it', () async {
+      final r = Rig();
+      await r.lr.run();
+      expect(r.lr.state, LaunchReconnectState.gaveUp);
+      r.lr.dismiss();
+      expect(r.lr.state, LaunchReconnectState.idle);
+      expect(r.lr.statusText, isNull);
+      r.results.add(true);
+      await r.lr.run(reason: 'button');
+      expect(r.lr.state, LaunchReconnectState.connected);
     });
   });
 
@@ -263,11 +277,11 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('blelog');
       addTearDown(() => dir.delete(recursive: true));
       final f = File('${dir.path}/ble.log');
-      final a = BleLifecycleLog(file: f, clock: () => DateTime(2026, 11, 1, 9, 30, 5));
+      final a = BleLifecycleLog(file: f, clock: () => DateTime.utc(2026, 11, 1, 9, 30, 5));
       a.add('lifecycle', 'paused');
       a.setForeground(false);
       a.add('inbound', 'message persisted');
-      final b = BleLifecycleLog(file: f, clock: () => DateTime(2026, 11, 1, 9, 40));
+      final b = BleLifecycleLog(file: f, clock: () => DateTime.utc(2026, 11, 1, 9, 40));
       await b.load();
       b.add('launch', 'process started');
       expect(b.entries.map((e) => e.kind), ['lifecycle', 'inbound', 'launch']);
@@ -289,13 +303,35 @@ void main() {
       await a.markAsked();
       await a.setIosWakeKeeper(true);
       expect(a.autoConnect, AutoConnectMode.always, reason: 'default: the behaviour before the setting existed');
-      await a.setAutoConnect(AutoConnectMode.launchOnly);
+      await a.setAutoConnect(AutoConnectMode.off);
       final b = AlertPrefs(f);
       await b.load();
       expect(b.showText && b.asked && b.iosWakeKeeper, isTrue);
-      expect(b.autoConnect, AutoConnectMode.launchOnly);
+      expect(b.autoConnect, AutoConnectMode.off);
       expect(b.quiet.enabled, isTrue);
       expect(b.quiet.startMinute, 60);
+    });
+
+    test('build 77: a file saved with "At launch only" reads as On; iPhone ignores the saved sound and quiet hours', () async {
+      final dir = await Directory.systemTemp.createTemp('alertprefs');
+      addTearDown(() => dir.delete(recursive: true));
+      final f = File('${dir.path}/p.json')
+        ..writeAsStringSync('{"autoConnect":"launch","sound":false,"quiet":{"enabled":true,"start":60,"end":120}}');
+      final android = AlertPrefs(f, false);
+      await android.load();
+      expect(android.autoConnect, AutoConnectMode.always);
+      expect(android.sound, isFalse);
+      expect(android.quiet.enabled, isTrue);
+      final iphone = AlertPrefs(f, true);
+      await iphone.load();
+      expect(iphone.systemSoundAndQuiet, isTrue);
+      expect(iphone.sound, isTrue, reason: 'the phone\'s own per-app Sounds decide');
+      expect(iphone.quiet.enabled, isFalse, reason: 'Focus decides');
+      await iphone.setShowText(true);
+      final again = AlertPrefs(f, false);
+      await again.load();
+      expect(again.sound, isFalse, reason: 'the saved values are kept for Android');
+      expect(again.quiet.enabled, isTrue);
     });
 
     test('a damaged file falls back to defaults', () async {
@@ -318,7 +354,7 @@ void main() {
     test('an unknown auto-connect value falls back to Always', () {
       expect(AutoConnectMode.fromId('bogus'), AutoConnectMode.always);
       expect(AutoConnectMode.fromId('off'), AutoConnectMode.off);
-      expect(AutoConnectMode.fromId('launch'), AutoConnectMode.launchOnly);
+      expect(AutoConnectMode.fromId('launch'), AutoConnectMode.always, reason: 'build 76 "At launch only" reads as On (one switch since build 77)');
     });
   });
 }

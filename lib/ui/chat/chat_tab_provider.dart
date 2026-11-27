@@ -5,18 +5,38 @@ import '../../app/chat_controller.dart';
 import '../contacts/add_contact_screen.dart';
 import '../contacts/contacts_tab.dart';
 import '../shell/chat_tab_host.dart';
+import 'chat_list_extras.dart';
 import 'chat_navigation.dart';
 import 'chat_search_screen.dart';
 import 'chats_list_view.dart';
 import 'network_view.dart';
 import 'new_chat_sheet.dart';
 
-class ChatTabProviderImpl implements ChatTabProvider {
+class ChatTabProviderImpl implements ChatTabProvider, ChatListExtras {
   final ChatController controller;
   late final ChatNavigator navigator = ChatNavigator(controller);
   ChatTabProviderImpl(this.controller);
 
-  void dispose() => navigator.dispose();
+  void dispose() {
+    navigator.dispose();
+    unreadOnly.dispose();
+  }
+
+  @override
+  final ValueNotifier<bool> unreadOnly = ValueNotifier<bool>(false);
+
+  @override
+  VoidCallback? markAllReadWithUndo() {
+    final radioId = controller.service.listRadioId;
+    final was = [for (final r in controller.conversationRows()) if (r.unread > 0 && !r.isSystem) r.key];
+    controller.service.markAllRead();
+    if (radioId == null || was.isEmpty) return null;
+    return () {
+      for (final k in was) {
+        controller.service.markUnread(radioId, k);
+      }
+    };
+  }
 
   @override
   Listenable get changes => controller;
@@ -32,14 +52,19 @@ class ChatTabProviderImpl implements ChatTabProvider {
 
   // ---- the tab (Chats | Contacts | Channels | Network)
   @override
-  Widget chatsSliver(BuildContext context, ChatTabArgs args) => ChatsListView(
+  Widget chatsSliver(BuildContext context, ChatTabArgs args) => ValueListenableBuilder<bool>(
+        valueListenable: unreadOnly,
+        builder: (context, only, _) => ChatsListView(
         controller: controller,
+        unreadOnly: only,
+        onShowAll: () => unreadOnly.value = false,
         onNew: args.onNew,
         navigator: navigator,
         query: args.query,
         selectedKey: args.selectedKey,
         onConnect: args.onConnect,
         onOpened: args.onOpened,
+      ),
       );
 
   @override

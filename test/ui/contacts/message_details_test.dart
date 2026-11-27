@@ -33,11 +33,11 @@ void main() {
   final conv = ConvKey.dm(keyN(1).substring(0, 12));
 
   ChatMessage msg(String id,
-          {bool out = true, MessageState state = MessageState.acked, ConvKind kind = ConvKind.dm, String? convKey, int? ackMs, int? ack, FailReason? fail, int repeats = 0, double? snr, int? pathLen, Route? route, String text = 'hello there'}) =>
+          {bool out = true, MessageState state = MessageState.acked, ConvKind kind = ConvKind.dm, String? convKey, int? ackMs, int? ack, FailReason? fail, int repeats = 0, double? snr, int? pathLen, Route? route, String text = 'hello there', String? hashes}) =>
       ChatMessage(
           id: id, radioId: radioA, convKind: kind, convKey: convKey ?? conv, direction: out ? Direction.outgoing : Direction.incoming, senderName: out ? 'Me' : 'Ann KE8ANN',
           tsSender: 1760000000, tsLocalMs: 1760000000000, text: text, state: state, dedupeKey: id, ackMs: ackMs, expectedAck: ack, failReason: fail,
-          repeatsHeard: repeats, snr: snr, pathLen: pathLen, route: route);
+          repeatsHeard: repeats, snr: snr, pathLen: pathLen, route: route, pathHashes: hashes);
 
   Future<void> open(WidgetTester tester, String id, {Brightness b = Brightness.light}) async {
     await tester.pumpWidget(MaterialApp(
@@ -60,7 +60,7 @@ void main() {
     await open(tester, 'in1');
     expect(find.text('From Ann KE8ANN'), findsOneWidget);
     expect(find.text('Via 2 repeaters'), findsOneWidget);
-    expect(find.text('SNR 7.5 dB · Strong'), findsOneWidget);
+    expect(find.text('Strong · SNR 7.5 dB'), findsOneWidget, reason: 'plain word first (D6); the numbers live here');
     expect(find.byKey(const Key('details-Their clock')), findsOneWidget);
     expect(find.text('11 bytes'), findsOneWidget);
     expect(find.byKey(const Key('details-failure')), findsNothing);
@@ -73,7 +73,7 @@ void main() {
     rig.store.messages.insert(msg('in2', out: false, state: MessageState.received, snr: -5, pathLen: null));
     await open(tester, 'in2');
     expect(find.text('Direct'), findsOneWidget);
-    expect(find.text('SNR -5.0 dB · Fair'), findsOneWidget);
+    expect(find.text('Fair · SNR -5.0 dB'), findsOneWidget);
   });
 
   tw('outgoing acked: status, route, every try, which one was acknowledged', (tester) async {
@@ -87,11 +87,13 @@ void main() {
     expect(find.textContaining('Delivered'), findsWidgets);
     expect(find.text('2.4 s'), findsOneWidget);
     expect(find.text('Saved route'), findsOneWidget);
-    expect(find.textContaining('Try 1 · searched'), findsOneWidget);
-    expect(find.textContaining('Try 2 · saved route'), findsOneWidget);
-    expect(find.textContaining('acknowledged after 2.4 s'), findsOneWidget);
-    expect(find.textContaining('Try 1 · searched').evaluate().single.widget.toString().contains('acknowledged'), isFalse);
-    expect(find.textContaining('no reply'), findsOneWidget, reason: 'the first try got no reply');
+    // Each try with the route as the radio reported it and its outcome (build 77).
+    expect(find.textContaining('Try 1 · flood'), findsOneWidget);
+    expect(find.textContaining('Try 2 · direct'), findsOneWidget);
+    expect(find.textContaining('confirmed after 2.4 s'), findsOneWidget);
+    expect(find.textContaining('Try 1 · flood').evaluate().single.widget.toString().contains('confirmed'), isFalse);
+    expect(find.textContaining('no confirmation'), findsOneWidget, reason: 'the first try got no confirmation');
+    expect(find.textContaining('searched'), findsNothing, reason: 'build 76 wording');
   });
 
   tw('outgoing failed after three tries: the explanation, Retry restarts it, Copy text', (tester) async {
@@ -105,8 +107,9 @@ void main() {
     rig.store.outbox.remove(m.id);
     await open(tester, m.id);
     expect(find.text('Not delivered'), findsWidgets);
-    expect(find.textContaining('No acknowledgement after 3 tries'), findsOneWidget);
-    expect(find.textContaining('sent to everyone nearby'), findsOneWidget);
+    expect(find.textContaining('No confirmation came back after 3 tries'), findsOneWidget);
+    expect(find.textContaining('all to everyone nearby'), findsOneWidget);
+    expect(find.textContaining('may not have you as a contact'), findsOneWidget);
     await tester.tap(find.byKey(const Key('details-copy')));
     await tester.pump();
     expect(clip.single, 'ping?');
@@ -118,7 +121,7 @@ void main() {
     expect(find.byKey(const Key('message-details')), findsNothing, reason: 'the sheet closes after Try again');
   });
 
-  tw('failed after a saved route: says the path may have changed', (tester) async {
+  tw('failed after the direct tries and the flood fallback: says how they went, never guesses a route change', (tester) async {
     setScreen(tester, h: 2400);
     await rig.withContacts(1);
     rig.store.messages.insert(msg('f2', state: MessageState.failed, fail: FailReason.noAck));
@@ -126,8 +129,64 @@ void main() {
       rig.store.outbox.addAttempt(DeliveryAttempt(messageId: 'f2', attempt: i, sentAtMs: 1760000000000 + i, route: i < 5 ? Route.direct : Route.flood));
     }
     await open(tester, 'f2');
-    expect(find.textContaining('4 along the saved route'), findsOneWidget);
-    expect(find.textContaining('route to them may have changed'), findsOneWidget);
+    expect(find.textContaining('4 along the route your radio had, then 1 to everyone nearby'), findsOneWidget);
+    expect(find.textContaining('may have changed'), findsNothing, reason: 'build 76 guessed this');
+  });
+
+  tw('a message still being tried: TRIES n of m from the engine, Cancel stops it', (tester) async {
+    setScreen(tester, h: 2400);
+    rig.sink.hasRoute = true;
+    await rig.withContacts(1);
+    final m = rig.chat.send(radioId: radioA, convKey: conv, text: 'on my way');
+    await rig.chat.pump();
+    final p = rig.chat.deliveryProgress(m.id);
+    expect(p.active, isTrue);
+    await open(tester, m.id);
+    expect(find.text('TRIES (1 of ${p.tryCount})'), findsOneWidget);
+    expect(find.textContaining('Try 1 · direct'), findsOneWidget);
+    expect(find.textContaining('waiting for confirmation'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('details-cancel')));
+    await tester.pumpAndSettle();
+    expect(rig.store.messages.get(m.id)!.state, MessageState.failed);
+    expect(rig.store.messages.get(m.id)!.failReason, FailReason.cancelled);
+  });
+
+  tw('a failed message: Message log lists what the phone and radio said, and Export shares it as a file', (tester) async {
+    setScreen(tester, h: 2400);
+    await rig.withContacts(1);
+    final m = rig.chat.send(radioId: radioA, convKey: conv, text: 'secret words');
+    await rig.chat.pump();
+    rig.chat.cancel(m.id);
+    final shared = <(String, String)>[];
+    final was = shareMessageLog;
+    shareMessageLog = (name, text) async => shared.add((name, text));
+    addTearDown(() => shareMessageLog = was);
+    await open(tester, m.id);
+    await tester.ensureVisible(find.byKey(const Key('details-log')));
+    await tester.tap(find.byKey(const Key('details-log')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('message-log-screen')), findsOneWidget);
+    expect(find.byKey(const Key('message-log-line-0')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('message-log-export')));
+    await tester.pumpAndSettle();
+    expect(shared.single.$1, MessageLogScreen.fileNameFor(m.id));
+    expect(shared.single.$2, isNotEmpty);
+    expect(shared.single.$2.contains('secret words'), isFalse, reason: 'the log never holds message text');
+  });
+
+  tw('a hop two known repeaters share: "Work out the likely route" (round 2 N-U3)', (tester) async {
+    setScreen(tester, h: 2400);
+    await rig.withContacts(1);
+    for (final (k, n) in [('a1${'ee' * 31}', 'Ridge'), ('a1${'ff' * 31}', 'Hill')]) {
+      rig.store.contacts.upsert(Contact(radioId: radioA, publicKey: k, type: ContactType.repeater, name: n, onRadio: true));
+    }
+    rig.store.messages.insert(msg('in3', out: false, state: MessageState.received, snr: 3, pathLen: 1, hashes: 'a1'));
+    await open(tester, 'in3');
+    expect(find.textContaining('2 possible'), findsWidgets);
+    expect(find.byKey(const Key('details-likely-route')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('details-likely-route')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Open the Network tab, then Tools'), findsOneWidget, reason: 'no app shell in this test: it says where to find it');
   });
 
   tw('other failure reasons use their own sentence', (tester) async {

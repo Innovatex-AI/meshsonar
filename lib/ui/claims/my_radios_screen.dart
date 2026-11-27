@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../app/app_state.dart';
 import '../../core/api.dart';
 import '../../core/claim_flow.dart';
@@ -186,7 +187,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                         ],
                         const SizedBox(height: Gap.xs),
                         Text(claim.pubkey.substring(0, 16), style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
-                        if (claim.verifiedAt != null) Text('Claimed ${claim.verifiedAt!.toLocal().toIso8601String().substring(0, 10)}', style: t.textTheme.bodySmall),
+                        if (claim.verifiedAt != null) Text('Claimed ${tf.dateOnly(claim.verifiedAt)}', style: t.textTheme.bodySmall),
                         if (claim.notes != null) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(claim.notes!, style: t.textTheme.bodySmall)),
                         const SizedBox(height: Gap.xs),
                         // Build 76: Edit on the left, Give up on the far right, so the two are never side by side.
@@ -223,7 +224,7 @@ class _MyRadiosScreenState extends State<MyRadiosScreen> {
                           leading: const Icon(Icons.history),
                           title: Text(p.label),
                           subtitle: Text((v6 ? claimEndTextWithChange(p.endReason ?? ClaimEndReason.unknown) : claimEndText(p.endReason ?? ClaimEndReason.unknown)) +
-                              (p.releasedAt == null ? '' : ' · ${p.releasedAt!.toIso8601String().substring(0, 10)}')),
+                              (p.releasedAt == null ? '' : ' · ${tf.dateOnly(p.releasedAt)}')),
                         ),
                     ],
                   ),

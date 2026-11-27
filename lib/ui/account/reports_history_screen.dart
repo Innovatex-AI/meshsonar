@@ -2,6 +2,7 @@
 // The admin's notes and logs stay internal and are never shown.
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../app/messages.dart';
 import '../../core/driver_account.dart';
 import '../app.dart';
@@ -101,7 +102,7 @@ class _ReportsHistoryScreenState extends State<ReportsHistoryScreen> {
                         ]),
                         if (r.summary.isNotEmpty) Padding(padding: const EdgeInsets.only(top: Gap.xs), child: Text(r.summary, style: t.textTheme.bodyMedium)),
                         const SizedBox(height: Gap.xs),
-                        Text('Sent ${formatDateTime(r.createdAt)}', style: dim),
+                        Text('Sent ${tf.dateTime(r.createdAt)}', style: dim),
                       ]),
                     ),
                   ),

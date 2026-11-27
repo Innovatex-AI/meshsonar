@@ -1,23 +1,29 @@
 // Drive report v2 sections, each a ChartFrame (chart or table, numbers in the semantics): SNR over the drive (the old
 // _SnrPainter drawing, now on the chart kit), noise floor, reply RSSI, TX power, direct-link SNR by distance, heard by
 // speed, GPS accuracy. Data: lib/core/drive_report.dart + drive_report_rf.dart. Units: every distance, speed and
-// length goes through Units (the Settings choice); dB/dBm/% are unit-free. Times are the phone's local time.
+// length goes through Units (the Settings choice); dB/dBm/% are unit-free. Times follow Settings > Map & display >
+// Time zone (lib/core/time_format.dart) and each caption names the zone (Round 5 D-18). Colours keep one meaning each
+// (D-14): the noise line is neutral and turns to the warning colour only when the noise is high; bars by distance take
+// the colour of their own signal.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../core/drive_report.dart';
+import '../../core/drive_stats.dart' show signalWord, signalWords;
 import '../../core/rf_thresholds.dart';
+import '../../core/time_format.dart' as tf;
 import '../../core/units.dart';
 import '../app.dart';
 import '../charts/bar_chart.dart';
 import '../charts/chart_frame.dart';
 import '../charts/time_line_chart.dart';
 import '../sessions_screen.dart' show HeardStrip;
-import '../widgets.dart';
 
-const _localTime = 'Times are your phone\'s local time.';
-String _hm(DateTime t) => formatTime(t).substring(0, 5);
+/// The caption that names the zone the times are in: "Times are EST." / "Times are UTC.".
+String timesCaption() => 'Times are ${tf.zoneLabel()}.';
+String _hm(DateTime t) => tf.timeOfDay(t, showZone: false);
+String _clock(DateTime t) => tf.timeOfDay(t, seconds: true, showZone: false);
 String _db(double v) => v.toStringAsFixed(1);
 
 /// Readings needed before a line is worth drawing.
@@ -45,11 +51,11 @@ class SnrSection extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       ChartFrame(
         id: 'snr',
-        title: 'SNR of the strongest reply',
+        title: 'Signal of the strongest reply (SNR)',
         summary: summary,
-        caption: _localTime,
+        caption: timesCaption(),
         table: ChartTable(head: const ['Time', 'Heard', 'SNR (dB)'], rows: [
-          for (final p in pts) [formatTime(p.ts), p.heard ? 'yes' : 'no', p.snr == null ? '—' : _db(p.snr!)],
+          for (final p in pts) [_clock(p.ts), p.heard ? 'yes' : 'no', p.snr == null ? '—' : _db(p.snr!)],
         ]),
         chart: TimeLineChart(
           series: [
@@ -108,10 +114,10 @@ class NoiseSection extends StatelessWidget {
       id: 'noise',
       title: 'Noise floor (dBm), lower is quieter',
       summary: summary,
-      caption: '${verdict == null ? '' : '${noiseVerdictText(verdict)} '}Dashed line: ${noiseFloorInterferenceDbm.round()} dBm. $_localTime',
-      table: ChartTable(head: const ['Time', 'Noise floor (dBm)'], rows: [for (final p in pts) [formatTime(p.$1), _db(p.$2)]]),
+      caption: '${verdict == null ? '' : '${noiseVerdictText(verdict)} '}Dashed line: ${noiseFloorInterferenceDbm.round()} dBm. ${timesCaption()}',
+      table: ChartTable(head: const ['Time', 'Noise floor (dBm)'], rows: [for (final p in pts) [_clock(p.$1), _db(p.$2)]]),
       chart: TimeLineChart(
-        series: [ChartSeries(name: 'Noise floor', points: pts, color: t.colorScheme.tertiary)],
+        series: [ChartSeries(name: 'Noise floor', points: pts, color: noiseLineColor(context, rf.noiseMedian))],
         yLabel: 'dBm',
         refLine: noiseFloorInterferenceDbm,
         refLabel: '${noiseFloorInterferenceDbm.round()} dBm',
@@ -133,13 +139,13 @@ class RssiSection extends StatelessWidget {
     final pts = rf.rssiSeries;
     final summary = 'Median ${_db(rf.rssiMedian!)} dBm, strongest ${_db(rf.rssiBest!)} dBm, '
         'weakest ${_db(pts.map((p) => p.$2).reduce(math.min))} dBm, ${pts.length} pings.';
-    if (pts.length < minLinePoints) return Text('Reply RSSI: $summary', key: const Key('report-rssi-few'));
+    if (pts.length < minLinePoints) return Text('Reply strength: $summary', key: const Key('report-rssi-few'));
     return ChartFrame(
       id: 'rssi',
-      title: 'Reply RSSI (dBm), higher is stronger',
+      title: 'Reply strength (RSSI, dBm), higher is stronger',
       summary: summary,
-      caption: _localTime,
-      table: ChartTable(head: const ['Time', 'RSSI (dBm)'], rows: [for (final p in pts) [formatTime(p.$1), _db(p.$2)]]),
+      caption: timesCaption(),
+      table: ChartTable(head: const ['Time', 'RSSI (dBm)'], rows: [for (final p in pts) [_clock(p.$1), _db(p.$2)]]),
       chart: TimeLineChart(
         series: [ChartSeries(name: 'RSSI', points: pts, color: Theme.of(context).colorScheme.primary)],
         yLabel: 'dBm',
@@ -158,9 +164,9 @@ class TxPowerSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = report.rf.txPowerChanges;
     final text = report.rf.txPowerConstant
-        ? 'TX power ${_db(c.first.$2)} dBm throughout.'
-        : 'TX power changed ${c.length - 1} time${c.length == 2 ? '' : 's'}: '
-            '${[for (final x in c) '${_db(x.$2)} dBm from ${_hm(x.$1)}'].join(', ')} (your phone\'s local time).';
+        ? 'Transmit power: ${txPowerText(c.first.$2)}, unchanged.'
+        : 'Transmit power changed ${c.length - 1} time${c.length == 2 ? '' : 's'}: '
+            '${[for (final x in c) '${txPowerText(x.$2)} from ${_hm(x.$1)}'].join(', ')} (times ${tf.zoneLabel()}).';
     return Text(text, key: const Key('report-txpower'), style: Theme.of(context).textTheme.bodyMedium);
   }
 }
@@ -188,7 +194,8 @@ class DistanceSection extends StatelessWidget {
       title: 'Signal by distance to the repeater',
       summary: summary,
       caption: 'Direct replies only (1 hop, or a neighbour reply) from repeaters with a known position. Bars start at '
-          '${base.round()} dB; taller is a stronger signal. Same distance bands as the website\'s repeater reach.',
+          '${base.round()} dB; taller is a stronger signal, and each bar has the colour of its signal. Same distance bands '
+          'as the website\'s repeater reach.',
       table: ChartTable(head: const ['Distance', 'Readings', 'Repeaters', 'Mean SNR (dB)', 'Best SNR (dB)'], rows: [
         for (final b in bands)
           [
@@ -201,7 +208,8 @@ class DistanceSection extends StatelessWidget {
       ]),
       chart: BarChart(
         labels: [for (final b in bands) shortLabel(b, u)],
-        series: [BarSeries(name: 'Mean SNR', values: [for (final b in bands) b.meanSnr], color: MeshSonarColors.of(context).snrStrong)],
+        series: [BarSeries(name: 'Mean SNR', values: [for (final b in bands) b.meanSnr], color: MeshSonarColors.of(context).snrMid)],
+        colorOf: (_, v) => MeshSonarColors.of(context).forPing(heard: true, snr: v),
         base: base,
         yLabel: 'SNR dB',
       ),
@@ -269,3 +277,61 @@ class GpsSection extends StatelessWidget {
     ]);
   }
 }
+
+/// The noise floor line: neutral, and the warning colour only when the noise is high (above the interference line).
+Color noiseLineColor(BuildContext context, double? medianDbm) => noiseVerdict(medianDbm) == NoiseVerdict.interference
+    ? MeshSonarColors.of(context).warning
+    : Theme.of(context).colorScheme.onSurfaceVariant;
+
+// ---------------------------------------------------------------- one-line readings (Radio details, Round 5 D-11)
+
+/// "Noise floor: healthy, -111 dBm".
+String noiseReading(DriveRf rf) {
+  final v = noiseVerdict(rf.noiseMedian);
+  if (v == null) return 'Noise floor: not reported';
+  final word = switch (v) { NoiseVerdict.normal => 'healthy', NoiseVerdict.elevated => 'raised', NoiseVerdict.interference => 'likely interference' };
+  return 'Noise floor: $word, ${rf.noiseMedian!.round()} dBm';
+}
+
+/// "Reply strength: median -95 dBm, strongest -80 dBm".
+String rssiReading(DriveRf rf) => 'Reply strength: median ${rf.rssiMedian!.round()} dBm, strongest ${rf.rssiBest!.round()} dBm';
+
+/// "Transmit power: 22 dBm, unchanged" / "Transmit power: changed 2 times".
+String txPowerReading(DriveRf rf) {
+  final c = rf.txPowerChanges;
+  return rf.txPowerConstant
+      ? 'Transmit power: ${txPowerText(c.first.$2)}, unchanged'
+      : 'Transmit power: changed ${c.length - 1} time${c.length == 2 ? '' : 's'}';
+}
+
+/// "Echoes: 80% direct".
+String hopsReading(Map<int, int> hops) {
+  final total = hops.values.fold<int>(0, (a, b) => a + b);
+  if (total == 0) return 'Echoes: none';
+  return 'Echoes: ${(100 * (hops[1] ?? 0) / total).round()}% direct';
+}
+
+/// "Signal by distance: Strong under 1.0 km, Weak at 10 km and more" (the nearest and the farthest band with replies).
+String distanceReading(DriveRf rf, Units u) {
+  final b = rf.snrByDistance.where((x) => x.n > 0).toList();
+  if (b.isEmpty) return 'Signal by distance: no direct replies';
+  String one(DistanceBand x) => '${signalWord(x.meanSnr!)} ${x.fromM == 0 ? '' : 'at '}${distanceBandLabel(x, u)}';
+  return b.length == 1 ? 'Signal by distance: ${one(b.first)}' : 'Signal by distance: ${one(b.first)}, ${one(b.last).toLowerCase()}';
+}
+
+/// "Heard by speed: 90% under 18 km/h, 60% at 90 km/h and faster".
+String speedReading(DriveRf rf, Units u) {
+  final b = rf.heardBySpeed.where((x) => x.pings > 0).toList();
+  if (b.isEmpty) return 'Heard by speed: no speed recorded';
+  String one(SpeedBand x) => '${x.heardPercent}% ${x.fromMps == 0 ? '' : 'at '}${speedBandLabel(x, u)}';
+  return b.length == 1 ? 'Heard by speed: ${one(b.first)}' : 'Heard by speed: ${one(b.first)}, ${one(b.last)}';
+}
+
+/// "GPS: good, within 19 ft" (the median fix; good within 10 m, fair up to the poor-fix line, poor beyond).
+String gpsReading(GpsQuality g, Units u) {
+  final word = g.medianM <= 10 ? 'good' : (g.medianM <= poorGpsAccuracyM ? 'fair' : 'poor');
+  return 'GPS: $word, within ${u.shortLength(g.medianM)}';
+}
+
+/// "Best signal: Strong (10.5 dB)".
+String bestSignalReading(double? snr) => 'Best signal: ${signalWords(snr)}';

@@ -428,7 +428,8 @@ void main() {
       expect(settingsEntry('observer-share').title, 'Share with MeshSonar');
       expect(settingsEntry('observer-share').page, isNull, reason: 'first level');
       expect(observerSettingsEntries.every((e) => e.page == 'observer' && e.section == 'privacy'), isTrue);
-      expect(settingsPage('observer').title, 'Observer and MQTT feeds');
+      expect(settingsPage('observer').title, 'Sharing status and other sites'); // build 77 (round 5 S9)
+    expect(settingsPage('observer').was, 'Observer and MQTT feeds');
       expect(observerJoinIntro, contains('Settings > '));
       expect(otherDataFlows.map((f) => f.title), contains('MQTT feeds to other sites'));
     });

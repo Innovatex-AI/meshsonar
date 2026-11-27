@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../../core/api.dart' show CmatException;
 import '../../core/driver_summary.dart';
 import '../../core/region_cache.dart' show asOfLabel;
+import '../../core/time_format.dart' as tf;
 import '../../core/units.dart';
 import '../app.dart';
 import '../charts/bar_chart.dart';
@@ -28,12 +29,11 @@ class ServerLoad {
   const ServerLoad(this.result, this.localIds);
 }
 
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-String _day(DateTime d) => '${_months[d.month - 1]} ${d.day}'; // a UTC Monday: read the calendar fields as they are
-String _date(DateTime t) {
-  final l = t.toLocal();
-  return '${l.day} ${_months[l.month - 1]} ${l.year}';
-}
+/// A server week's Monday (a UTC day): "Nov 3"; the captions and table heads say UTC.
+String _day(DateTime d) => tf.utcDayLabel(d, label: false);
+
+/// A drive's date in the zone the app shows: "Nov 10, 2026".
+String _date(DateTime t) => tf.dateOnly(t);
 
 const serverWeeksCaption =
     'Weeks start on Monday (UTC).';
@@ -204,7 +204,7 @@ class _ServerBody extends StatelessWidget {
       final shown = all.length > chartWeeks ? all.sublist(all.length - chartWeeks) : all;
       final labels = [for (final w in shown) _day(w.monday)];
       final every = (shown.length / 6).ceil().clamp(1, 99);
-      String weekName(ServerWeek w) => 'Week of ${_day(w.monday)}';
+      String weekName(ServerWeek w) => 'Week of ${tf.utcDayLabel(w.monday)}';
       final caption = '$serverWeeksCaption${all.length > shown.length ? ' The chart shows the last $chartWeeks weeks; the table has all ${all.length}.' : ''}';
       final last = all.last;
       final km = [for (final w in all) if (w.km != null) w];
@@ -251,7 +251,7 @@ class _ServerBody extends StatelessWidget {
             labels: labels,
             labelEvery: every,
             yLabel: '%',
-            series: [BarSeries(name: 'Heard %', values: [for (final w in shown) w.heardPercent?.toDouble()], color: m.snrStrong)],
+            series: [BarSeries(name: 'Heard %', values: [for (final w in shown) w.heardPercent?.toDouble()], color: m.heardAt(1))],
           ),
         ),
         const SizedBox(height: Gap.l),
@@ -329,9 +329,9 @@ class _DriveRow extends StatelessWidget {
       key: Key('progress-server-drive-${x.id}'),
       contentPadding: EdgeInsets.zero,
       minVerticalPadding: 12,
-      title: Text(x.label ?? formatDateTime(x.startedAt)),
+      title: Text(x.label ?? tf.dateTime(x.startedAt, weekday: true)),
       subtitle: Text([
-        if (x.label != null) formatDateTime(x.startedAt),
+        if (x.label != null) tf.dateTime(x.startedAt, weekday: true),
         [
           if (x.pings != null) '${groupInt(x.pings!)} pings',
           if (x.heardPercent != null) '${x.heardPercent}% heard',
@@ -369,12 +369,12 @@ void _sheet(BuildContext context, ServerDrive x, Units u) {
           key: const Key('progress-server-drive-sheet'),
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(x.label ?? formatDateTime(x.startedAt), style: t.textTheme.titleMedium),
+            Text(x.label ?? tf.dateTime(x.startedAt, weekday: true), style: t.textTheme.titleMedium),
             const SizedBox(height: Gap.xs),
             Text('Uploaded, but not stored on this phone, so there is no map or report for it here.', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
             const SizedBox(height: Gap.s),
-            row('Started', formatDateTime(x.startedAt)),
-            if (x.endedAt != null) row('Ended', formatDateTime(x.endedAt!)),
+            row('Started', tf.dateTime(x.startedAt, weekday: true)),
+            if (x.endedAt != null) row('Ended', tf.dateTime(x.endedAt!, weekday: true)),
             if (x.callsign != null) row('Driver', x.callsign!),
             row('Distance', x.km == null ? '—' : u.distance(x.km! * 1000)),
             row('Pings', x.pings == null ? '—' : groupInt(x.pings!)),

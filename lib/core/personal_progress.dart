@@ -3,7 +3,7 @@
 // in here (the server-wide view needs the `driver-summary` endpoint, requested as P1-a in the stream 5 design doc).
 //
 // Rules:
-//  - Weeks are ISO weeks (Monday start) in the phone's local time: a drive belongs to the week its start falls in.
+//  - Weeks are ISO weeks (Monday start) in the zone the app shows times in (the phone's own by default): a drive belongs to the week its start falls in.
 //    The weeks run without holes from the first drive's week to the week of `now`, so a week with no drive is a 0 bar,
 //    not a missing one.
 //  - "New" grid cells and repeaters are new for this phone: drives are walked oldest first and a cell or repeater
@@ -14,6 +14,7 @@
 //  - Noise floor and TX power come only from what the radio reported per ping (null = not reported, never guessed).
 // Pure Dart (no Flutter imports).
 import 'drive_report.dart' show cellIndexOf;
+import 'time_format.dart' as tf;
 import 'drive_stats.dart';
 import 'model.dart';
 
@@ -50,7 +51,7 @@ class ProgressDrive {
   int? get heardPercent => stats.heardPercent;
 }
 
-/// One ISO week (Monday start, phone local time).
+/// One ISO week (Monday start, in the zone the app shows).
 class ProgressWeek {
   /// The Monday, as a calendar date (UTC midnight of that local date: read year/month/day only).
   final DateTime monday;
@@ -161,13 +162,14 @@ class PersonalProgress {
   List<ProgressDrive> get drivesWithTxPower => [for (final d in drives) if (d.txDbm != null) d];
 
   /// [drives]: every drive on the phone with its pings, any order. [now] closes the week range (default: the newest
-  /// drive). [wall] turns a UTC instant into the phone's wall clock (default `toLocal()`; tests pass a fixed offset).
+  /// drive). [wall] turns a UTC instant into the wall clock of the zone the app shows (default: lib/core/time_format.dart
+  /// `wallClock`, which follows Settings > Map & display > Time zone; tests pass a fixed offset).
   static PersonalProgress compute(
     List<(DriveSession, List<DrivePing>)> drives, {
     DateTime? now,
     DateTime Function(DateTime utc)? wall,
   }) {
-    final local = wall ?? (DateTime t) => t.toLocal();
+    final local = wall ?? (DateTime t) => tf.wallClock(t);
     final sorted = List.of(drives)..sort((a, b) => a.$1.startedAt.compareTo(b.$1.startedAt));
     final seenCells = <(int, int)>{};
     final seenIds = <String>{};

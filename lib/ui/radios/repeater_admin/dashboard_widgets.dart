@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator, CupertinoButton;
 import 'package:flutter/material.dart';
 
+import '../../../core/time_format.dart' as tf;
 import '../../../radio/remote_request_queue.dart';
 import '../../design/app_surfaces.dart';
 import '../../design/app_symbols.dart';
@@ -23,14 +24,8 @@ String groupedInt(int n) {
   return b.toString();
 }
 
-/// "Updated 40 s ago" / "Updated 3 min ago".
-String updatedText(DateTime? at, DateTime now) {
-  if (at == null) return 'Not updated yet';
-  final s = now.difference(at).inSeconds.clamp(0, 1 << 30);
-  if (s < 60) return 'Updated $s s ago';
-  if (s < 3600) return 'Updated ${s ~/ 60} min ago';
-  return 'Updated ${s ~/ 3600} h ago';
-}
+/// "Updated just now" / "Updated 3 min ago" (lib/core/time_format.dart relativeTime).
+String updatedText(DateTime? at, DateTime now) => at == null ? 'Not updated yet' : 'Updated ${tf.relativeTime(at, now: now)}';
 
 /// The big number's uptime: "12 d", "5 h", "7 min".
 String shortUptime(int secs) {

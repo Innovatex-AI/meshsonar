@@ -309,8 +309,10 @@ class PacketsApi {
   }
 
   /// `GET /v1/packets/{hash}/observations` (more rows than the detail inlines). Throws [V1Error] / [V1NotLive].
-  Future<ObservationPage> observations(String hash, {String? cursor, int limit = 200}) async {
-    final env = await v1.getPage('packets/${hash.toLowerCase()}/observations', PacketObservation.tryParse, cursor: cursor, limit: limit);
+  /// [observer] keeps one observer's receptions only (`?observer=`), for the copies past the first 50 the detail inlines.
+  Future<ObservationPage> observations(String hash, {String? cursor, int limit = 200, String? observer}) async {
+    final env = await v1.getPage('packets/${hash.toLowerCase()}/observations', PacketObservation.tryParse,
+        query: {'observer': observer}, cursor: cursor, limit: limit);
     return ObservationPage(env.data, env.page?.next);
   }
 

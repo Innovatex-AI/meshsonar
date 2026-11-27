@@ -140,7 +140,7 @@ void main() {
     clock.advance(const Duration(minutes: 11));
     expect(await s.syncRoster(baseUrl: 'https://cmh.meshsonar.com', slug: 'cmh', trigger: SyncTrigger.resume), isFalse);
     expect(s.roster('cmh')!.data.rows, hasLength(1), reason: 'a failure never wipes the stored roster');
-    expect(s.rosterLabel('cmh'), 'Offline - as of 11m ago');
+    expect(s.rosterLabel('cmh'), 'Offline - as of 11 min ago');
     expect(s.regionSet('cmh').state, SyncState.stale);
     server.offline = false;
     server.rosterStatus = 500;
@@ -223,11 +223,11 @@ void main() {
     expect(s2.network!.data.rows.single.name, 'Global');
     expect(s2.networkCapability, NetworkCapability.available);
     clock.advance(const Duration(days: 2));
-    expect(s2.rosterLabel('cmh'), 'Updated 2d ago');
+    expect(s2.rosterLabel('cmh'), 'Updated 2 d ago');
     await s2.syncRoster(baseUrl: 'https://cmh.meshsonar.com', slug: 'cmh', trigger: SyncTrigger.launch);
-    expect(s2.rosterLabel('cmh'), 'Offline - as of 2d ago');
+    expect(s2.rosterLabel('cmh'), 'Offline - as of 2 d ago');
     clock.advance(const Duration(days: 1));
-    expect(s2.rosterLabel('cmh'), 'Offline - as of 3d ago');
+    expect(s2.rosterLabel('cmh'), 'Offline - as of 3 d ago');
   });
 
   test('store: versioned (another version or a damaged file is ignored), bounded number of rosters', () async {

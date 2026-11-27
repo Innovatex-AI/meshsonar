@@ -26,17 +26,6 @@ enum ContactType {
 /// Where a contact row came from. The phone is the master copy; the radio's table is a cache.
 enum ContactSource { radio, discovered, imported, manual }
 
-/// REMOVED in build 77 (redesign round 3: route modes are not in the official MeshCore flow; the radio alone decides direct
-/// or flood). The enum and [Contact.pathMode] stay only so screens written against build 76 still compile: every contact
-/// reads `auto`, nothing in the delivery engine looks at it, and setting it does nothing. Delete with the route-mode UI.
-enum PathMode {
-  auto,
-  fixed,
-  flood;
-
-  static PathMode parse(String? s) => PathMode.values.firstWhere((m) => m.name == s, orElse: () => PathMode.auto);
-}
-
 class Contact {
   final String radioId;
 
@@ -71,11 +60,6 @@ class Contact {
   /// Local time (ms) this phone last heard the contact: an advert, a message or an acknowledgement.
   final int? lastHeardMs;
 
-  /// Build 76 leftovers, see [PathMode]: always `auto` / null from build 77 on (migration v6 clears them).
-  final PathMode pathMode;
-  final String? pinnedPath;
-  final int? pinnedHashSize;
-
   /// When the radio last told us it learned a route to this contact (PUSH_CODE_PATH_UPDATED).
   final int? pathLearnedMs;
 
@@ -89,9 +73,6 @@ class Contact {
   final int? lastPingMs;
   final int? lastPingRttMs;
   final bool? lastPingOk;
-
-  /// Build 76 leftover (see [PathMode]): always false from build 77 on.
-  bool get forceFlood => pathMode == PathMode.flood;
 
   const Contact({
     required this.radioId,
@@ -112,16 +93,12 @@ class Contact {
     this.onRadio = false,
     this.radioFlags = 0,
     this.lastHeardMs,
-    bool forceFlood = false,
-    PathMode? pathMode,
-    this.pinnedPath,
-    this.pinnedHashSize,
     this.pathLearnedMs,
     this.lastPingMs,
     this.lastPingRttMs,
     this.lastPingOk,
     this.confirmedMs,
-  }) : pathMode = pathMode ?? (forceFlood ? PathMode.flood : PathMode.auto);
+  });
 
   /// First 6 bytes of the key as 12 hex characters: what DM frames carry.
   String get prefix => publicKey.substring(0, 12);
@@ -146,10 +123,6 @@ class Contact {
     bool? onRadio,
     int? radioFlags,
     Object? lastHeardMs = _keep,
-    bool? forceFlood,
-    PathMode? pathMode,
-    Object? pinnedPath = _keep,
-    Object? pinnedHashSize = _keep,
     Object? pathLearnedMs = _keep,
     Object? lastPingMs = _keep,
     Object? lastPingRttMs = _keep,
@@ -174,10 +147,6 @@ class Contact {
         onRadio: onRadio ?? this.onRadio,
         radioFlags: radioFlags ?? this.radioFlags,
         lastHeardMs: identical(lastHeardMs, _keep) ? this.lastHeardMs : lastHeardMs as int?,
-        pathMode: pathMode ??
-            (forceFlood == null ? this.pathMode : (forceFlood ? PathMode.flood : (this.pathMode == PathMode.flood ? PathMode.auto : this.pathMode))),
-        pinnedPath: identical(pinnedPath, _keep) ? this.pinnedPath : pinnedPath as String?,
-        pinnedHashSize: identical(pinnedHashSize, _keep) ? this.pinnedHashSize : pinnedHashSize as int?,
         pathLearnedMs: identical(pathLearnedMs, _keep) ? this.pathLearnedMs : pathLearnedMs as int?,
         lastPingMs: identical(lastPingMs, _keep) ? this.lastPingMs : lastPingMs as int?,
         lastPingRttMs: identical(lastPingRttMs, _keep) ? this.lastPingRttMs : lastPingRttMs as int?,
@@ -185,11 +154,8 @@ class Contact {
         confirmedMs: confirmedMs,
       );
 
-  /// This contact with the phone-only route settings of [o] (a fresh copy from the radio does not know them).
+  /// This contact with the phone-only route facts of [o] (a fresh copy from the radio does not know them).
   Contact withRouteOf(Contact o) => copyWith(
-      pathMode: o.pathMode,
-      pinnedPath: o.pinnedPath,
-      pinnedHashSize: o.pinnedHashSize,
       pathLearnedMs: o.pathLearnedMs,
       lastPingMs: o.lastPingMs,
       lastPingRttMs: o.lastPingRttMs,
