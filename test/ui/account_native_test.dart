@@ -471,6 +471,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(paths.last, '/api/cmh/network-leaderboard?period=all');
     expect(find.byKey(const Key('leaderboard-not-listed')), findsNothing, reason: 'this phone\'s name is on the list');
+    expect(find.byKey(const Key('leaderboard-join')), findsNothing, reason: 'already on it');
     expect(tester.getSize(find.byKey(const Key('leaderboard-period'))).width, greaterThan(380), reason: 'the switches span the page');
     expect(tester.getSize(find.byKey(const Key('leaderboard-period'))).height, greaterThanOrEqualTo(44));
   });
@@ -490,6 +491,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: '375 pt wide at 2x text: no overflow');
     expect(find.byKey(const Key('leaderboard-not-listed')), findsOneWidget);
+    // Round 5 D-9: a way onto the list, with what it needs and shows.
+    expect(find.byKey(const Key('leaderboard-join')), findsOneWidget);
+    expect(find.text('It needs an approved driver key, and it shows your callsign and your distance.'), findsOneWidget);
     expect(find.text('30 days'), findsOneWidget);
     fail = true;
     await tester.tap(find.text('All time'));

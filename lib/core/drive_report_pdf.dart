@@ -95,7 +95,7 @@ ReportDoc driveReportPdf(
     final measured = [for (final p in pts) if (p.snr != null) p.snr!]..sort();
     final silent = pts.where((p) => !p.heard).length;
     blocks.add(PdfLine(
-      title: 'SNR of the strongest reply',
+      title: 'Signal of the strongest reply (SNR)',
       summary: '${pts.length} pings, ${pts.length - silent} heard, $silent heard nothing.'
           '${measured.isEmpty ? '' : ' Best ${_db(measured.last)} dB, median ${_db(measured[measured.length ~/ 2])} dB, worst ${_db(measured.first)} dB.'}',
       points: [for (final p in pts) if (p.snr != null) (p.ts, p.snr!)],

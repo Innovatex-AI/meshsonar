@@ -87,15 +87,15 @@ Future<void> shareDrive(BuildContext context, String sessionId, DriveShareChoice
     await s.exportAndShare(sessionId);
     return;
   }
-  void fail(String what, Object e) {
-    if (context.mounted) showAppToast(context, 'Couldn\'t make the $what. $e', kind: AppToastKind.error);
+  void fail(String message, Object e) {
+    if (context.mounted) showAppToast(context, '$message $e', kind: AppToastKind.error);
   }
 
   DriveReport r;
   try {
     r = report ?? await loadDriveReport(s, sessionId);
   } catch (e) {
-    fail('report', e);
+    fail('Couldn\'t build the report.', e);
     return;
   }
   final line = battery ?? (report == null ? await driveBatteryLine(s, sessionId).catchError((Object _) => null) : null);
@@ -122,7 +122,7 @@ Future<void> shareDrive(BuildContext context, String sessionId, DriveShareChoice
         break;
     }
   } catch (e) {
-    fail(choice == DriveShareChoice.pdf ? 'PDF' : 'file', e);
+    fail(choice == DriveShareChoice.pdf ? 'Couldn\'t make the PDF. The summary and the spreadsheet still work.' : 'Couldn\'t share the report.', e);
   }
 }
 

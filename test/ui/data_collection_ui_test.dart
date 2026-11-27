@@ -357,7 +357,7 @@ void main() {
       expect(tester.widget<Text>(find.byKey(const Key('ctx-packets'))).data, '3 / 30');
       expect(tester.widget<Text>(find.byKey(const Key('ctx-storage'))).data, '120 of 1984 KB');
       expect(tester.widget<Text>(find.byKey(const Key('ctx-airtime'))).data, '5.0%');
-      expect(tester.widget<Text>(find.byKey(const Key('ctx-device'))).data, 'iPhone15,2, ios 18.6');
+      expect(tester.widget<Text>(find.byKey(const Key('ctx-device'))).data, 'iPhone, iOS 18.6');
       expect(find.textContaining('not how busy the channel was'), findsOneWidget);
       await tester.scrollUntilVisible(find.byKey(const Key('chart-ctx-radio-temp')), -300, scrollable: list());
       expect(find.text('Radio chip temperature (°F)'), findsOneWidget);

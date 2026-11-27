@@ -99,8 +99,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('open-d1')));
       await tester.pumpAndSettle();
-      final btn = find.byKey(const Key('detail-ping-log'));
-      await tester.ensureVisible(btn);
+      // Round 5 D-12: "All N pings" on the detail screen opens the Ping log (its own button is gone).
+      final btn = find.byKey(const Key('show-all-pings'));
+      final scroll = find.descendant(of: find.byKey(const Key('detail-scroll')), matching: find.byType(Scrollable)).first;
+      await tester.scrollUntilVisible(btn, 200, scrollable: scroll);
       await tester.tap(btn);
       await tester.pumpAndSettle();
       return h;

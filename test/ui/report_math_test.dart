@@ -160,6 +160,10 @@ void main() {
       final r = DriveReport.compute(session: ses('s'), pings: pings, lookup: lookup, cmatListLoaded: true);
       final txt = r.toText(title: 'Evening loop');
       expect(txt, startsWith('Evening loop'));
+      // Round 5 D-1: the verdict line; Round 2 N-U8: an exported summary is UTC and says so.
+      expect(txt, contains(r.verdict.line));
+      expect(r.verdict.line, startsWith('Good: heard on 4 of 4 pings'));
+      expect(txt, contains('Times in this report are UTC.'));
       expect(txt, contains('4 pings, 100% heard'));
       expect(txt, contains('Westerville North: 2×, best 7.5 dB'));
       expect(txt, contains('Farthest: Public Node'));

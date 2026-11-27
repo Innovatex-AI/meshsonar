@@ -81,6 +81,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('drive-report')), findsOneWidget);
+    // Round 5 D-1: the verdict is the headline; distance is in the stat row.
+    expect(tester.widget<Text>(find.byKey(const Key('report-verdict'))).data, startsWith('Patchy: heard on 2 of 4 pings'));
+    // D-10: the report no longer repeats the Pings and Heard tiles.
+    expect(find.byKey(const Key('report-pings')), findsNothing);
+    expect(find.byKey(const Key('report-heard-count')), findsNothing);
     expect(tester.widget<Text>(find.byKey(const Key('report-grids'))).data, '3');
     expect(find.text('+2 new'), findsOneWidget); // grids
     expect(tester.widget<Text>(find.byKey(const Key('report-heard'))).data, '50%');
@@ -94,7 +99,15 @@ void main() {
 
     final list = find.descendant(of: find.byKey(const Key('report-list')), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.byKey(const Key('report-snr-chart')), 200, scrollable: list);
-    await tester.scrollUntilVisible(find.byKey(const Key('report-hops')), 200, scrollable: list);
+    // D-11: the radio charts are one group of one-line readings; a row opens its chart.
+    await tester.scrollUntilVisible(find.byKey(const Key('radio-row-hops')), 200, scrollable: list);
+    expect(find.byKey(const Key('report-hops')), findsNothing);
+    expect(tester.widget<Text>(find.byKey(const Key('radio-reading-hops'))).data, startsWith('Echoes: '));
+    await tester.ensureVisible(find.byKey(const Key('radio-row-hops')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('radio-row-hops')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('report-hops')), findsOneWidget);
     expect(find.textContaining('Direct'), findsWidgets);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('report-rep-e5f6')), 200, scrollable: list);
     expect(find.text('Westerville North'), findsWidgets);
@@ -105,11 +118,21 @@ void main() {
     expect(find.byKey(const ValueKey('report-unknown-a1b2')), findsNothing);
     await tester.scrollUntilVisible(find.byKey(const Key('report-worst-spot')), 200, scrollable: list);
     expect(find.byKey(const Key('report-best-spot')), findsOneWidget);
+    // D-8: Show on map instead of raw coordinates.
+    expect(find.byKey(const Key('report-best-spot-map')), findsOneWidget);
+    expect(find.byKey(const Key('report-worst-spot-map')), findsOneWidget);
+    expect(find.textContaining('40.10'), findsNothing);
 
     await tester.scrollUntilVisible(find.byKey(const Key('report-share-button')), 200, scrollable: list);
     // The report file is written with real IO, so let it run outside the fake clock.
+    // D-6: the button opens the one Share sheet; Summary (text) is the old Share report.
+    await tester.tap(find.byKey(const Key('report-share-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('report-csv-button')), findsNothing);
+    expect(find.text('Report (PDF)'), findsOneWidget);
+    expect(find.text('Drive file (for re-upload)'), findsOneWidget);
     await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('report-share-button')));
+      await tester.tap(find.byKey(const Key('report-export-text')));
       for (var i = 0; i < 20 && h.shared.isEmpty; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
