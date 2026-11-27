@@ -15,7 +15,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/app/chat_wiring.dart';
-import 'package:meshsonar/core/api.dart' show DriverKeyStatus;
 import 'package:meshsonar/core/model.dart' show DrivePing, DriveSession;
 import 'package:meshsonar/radio/simulator.dart' show SimulatedRadioScanner;
 import 'package:meshsonar/ui/app.dart' show AppScope, MoreItem, ShellController;
@@ -1899,21 +1898,12 @@ final List<ScreenStep> screens = [
     await deleteConfirm(partly ?? waiting, partly == null ? 'not-uploaded' : 'partly-uploaded');
     await deleteConfirm(uploaded, 'uploaded');
 
-    // ---- a failed sync. The app only says "Sync failed" after a sync it really ran, and it runs none without an accepted
-    // key. So: a stand-in key marked accepted, one sync of a drive id that does not exist (the store answers "no such
-    // drive" before anything is sent; the id is worded so the app reports it as the server not answering), and the saved
-    // settings put back at once. Every drive on this phone is a Simulator drive, which the sync never sends.
-    if (app.sessions.every((x) => x.session.isSimulated)) {
-      final saved = app.settings;
-      try {
-        await app.updateSettings(saved.copyWith(driverKey: 'tour-stand-in-key', keyStatus: DriverKeyStatus.approved));
-        await app.syncSession('tour-upload-timed-out');
-      } finally {
-        await app.updateSettings(saved);
-      }
+    // ---- a failed sync, shown through the app's test seam: no key is set and nothing is sent to the server.
+    {
+      app.debugShowSyncFailed();
       await pumpFor(t, const Duration(seconds: 1));
       if (!app.lastSyncFailed) {
-        misses.add('the stand-in failed sync did not put the app in its Sync failed state');
+        misses.add('the test seam did not put the app in its Sync failed state');
       } else {
         await popToRoots(t);
         await openTab(t, 'Drives');
@@ -1925,8 +1915,6 @@ final List<ScreenStep> screens = [
         await cardShot(partly ?? waiting, 'sync-failed');
         await detailShot(partly ?? waiting, 'sync-failed');
       }
-    } else {
-      _stepNote('drive-sync-states', 'a drive on this phone is not a Simulator drive: the failed sync was not staged (it could send that drive)');
     }
     await popToRoots(t);
     _failIfAny('drive-sync-states', misses);
