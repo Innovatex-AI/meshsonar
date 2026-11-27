@@ -69,10 +69,10 @@ class AttributionLine extends StatelessWidget {
           Text('MeshCore Map', key: const Key('map-attribution-meshcore'), textAlign: TextAlign.end, style: base(ink.withValues(alpha: 0.75))),
       ],
     );
-    // The line is 22 pt tall; the (i) is hit from 11 pt around it (44 x 44), which only works at the root: every ancestor
+    // The line is 22 pt tall; the (i) is hit from 11 pt above/below and 15 pt each side (44 x 44, build 77), which only works at the root: every ancestor
     // checks its own bounds before it lets a tap through.
     return HitSlop(
-      slop: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+      slop: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
       child: Semantics(
       container: true,
       child: Container(

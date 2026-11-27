@@ -1723,7 +1723,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         bwKhz: r?.bwKhz,
         sf: r?.sf,
         cr: r?.cr,
-        antenna: profile == null ? null : antennaToken(profile.mount),
+        antenna: profile == null || profile.isUnknown ? null : antennaToken(profile.mount), // build 77: "Don't know" sends no token
       ),
     );
   }
@@ -2255,7 +2255,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _connecting = false;
       _claims?.radioChanged();
       if (radioProofEnabled) radioProof.radioChanged();
-      // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet).
+      // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet). Build 77 (round 5
+      // decision 4): the question can be swiped away; Start drive no longer waits for it and records "Don't know".
       _antennaPrompt = antennaProfile == null;
       diagnostics.add('Connected to ${kind == RadioKind.simulator ? 'the simulator' : 'radio "${info.name}"'}, '
           'firmware ${info.firmware ?? 'unknown'}');
