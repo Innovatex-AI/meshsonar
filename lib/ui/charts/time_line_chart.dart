@@ -148,7 +148,7 @@ class TimeLinePainter extends CustomPainter {
       lo = 0;
       hi = 1;
     }
-    final ticks = c.gridValues ?? niceTicks(lo, hi);
+    final ticks = c.gridValues ?? niceTicks(lo, hi, minStep: minTickStepFor(c.yLabel));
     if (c.gridValues == null && ticks.isNotEmpty) {
       lo = math.min(lo, ticks.first);
       hi = math.max(hi, ticks.last);

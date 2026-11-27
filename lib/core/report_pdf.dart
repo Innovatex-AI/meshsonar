@@ -75,6 +75,9 @@ class PdfBars extends PdfBlock {
   final String yLabel;
   final int labelEvery;
   final String? caption;
+
+  /// One colour per bar (0xAARRGGBB), e.g. each bar in the colour of its own signal; null = the report's one bar colour.
+  final List<int?>? barColors;
   const PdfBars({
     required this.title,
     required this.summary,
@@ -85,6 +88,7 @@ class PdfBars extends PdfBlock {
     required this.yLabel,
     this.labelEvery = 1,
     this.caption,
+    this.barColors,
   });
   @override
   Iterable<String> get texts => [title, summary, yLabel, ?caption];
@@ -102,6 +106,9 @@ class PdfLine extends PdfBlock {
   final Duration? breakGap;
   final String startLabel, endLabel;
   final String? caption;
+
+  /// The line's colour (0xAARRGGBB); null = the report's line colour.
+  final int? lineColor;
   const PdfLine({
     required this.title,
     required this.summary,
@@ -113,6 +120,7 @@ class PdfLine extends PdfBlock {
     required this.startLabel,
     required this.endLabel,
     this.caption,
+    this.lineColor,
   });
   @override
   Iterable<String> get texts => [title, summary, yLabel, startLabel, endLabel, ?caption];
@@ -348,15 +356,17 @@ pw.Widget _barsWidget(PdfBars b, String Function(String) c) {
             _gridLines(g, size);
             double y(double v) => size.y * ((v - lo) / (top - lo)).clamp(0.0, 1.0);
             final slot = size.x / n;
-            g.setFillColor(_bar);
             for (var i = 0; i < b.values.length; i++) {
               final v = b.values[i];
               if (v == null || !v.isFinite) continue;
               final h = y(math.max(v, lo));
               if (h <= 0) continue;
-              g.drawRect(i * slot + slot * 0.12, 0, slot * 0.76, h);
+              final own = b.barColors != null && i < b.barColors!.length ? b.barColors![i] : null;
+              g
+                ..setFillColor(own == null ? _bar : PdfColor.fromInt(own))
+                ..drawRect(i * slot + slot * 0.12, 0, slot * 0.76, h)
+                ..fillPath();
             }
-            g.fillPath();
             if (b.refLine != null) _refLine(g, size, y(b.refLine!));
           },
         ),
@@ -411,8 +421,9 @@ pw.Widget _lineWidget(PdfLine l, String Function(String) c) {
             double x(DateTime t) => size.x * (t.millisecondsSinceEpoch - t0) / span;
             double y(double v) => size.y * ((v - lo) / (hi - lo));
             if (l.refLine != null) _refLine(g, size, y(l.refLine!));
+            final lineColor = l.lineColor == null ? _line : PdfColor.fromInt(l.lineColor!);
             g
-              ..setStrokeColor(_line)
+              ..setStrokeColor(lineColor)
               ..setLineWidth(1.1)
               ..setLineJoin(PdfLineJoin.round);
             for (var i = 0; i < pts.length; i++) {
@@ -425,7 +436,7 @@ pw.Widget _lineWidget(PdfLine l, String Function(String) c) {
               }
             }
             g.strokePath();
-            g.setFillColor(_line);
+            g.setFillColor(lineColor);
             for (final p in pts) {
               g.drawEllipse(x(p.$1), y(p.$2), 1.2, 1.2);
             }
