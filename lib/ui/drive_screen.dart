@@ -13,6 +13,8 @@
 // still opens its inspector above the Drive panel, so a map tap never hides Stop and Ping. While a drive runs, the shell's
 // mini drive bar (Stop) sits under the sheet with a Ping button beside it, so both stay one tap away; tapping the bar
 // brings the Drive panel back. The iPad / landscape card keeps the stacked cards.
+import 'plan/plan_modes.dart' show PlanModeId;
+import 'shell/plan_tab.dart' show openPlanMode;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -173,7 +175,7 @@ class _DriveScreenState extends State<DriveScreen> with TickerProviderStateMixin
   }
 
   /// Round 4 P-U1: "Where to drive next" in the idle panel opens Plan in Where to drive mode in one tap.
-  void _openWhereToDrive() => _shell?.select(AppTab.plan);
+  void _openWhereToDrive() => openPlanMode(context, PlanModeId.whereToDrive);
 
   /// Round 5 M4: "Drives" in the idle panel (past drives and their reports; Drives stays in More too).
   void _openDrives() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SessionsScreen()));

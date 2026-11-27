@@ -366,7 +366,7 @@ void main() {
               await _show(t, _prefix('site-check-'));
               await shot(t, 'planner-15-find-sites-verify');
             } else {
-              _fail('C3: Verify top 5 showed no check on any site');
+              _fail('C3: Double-check the top 5 showed no check on any site');
             }
           }
           final add = _prefix('site-add-');
