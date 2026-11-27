@@ -1569,6 +1569,14 @@ final List<ScreenStep> screens = [
         await shot(t, 'chat-thread-dm-sending');
         await pumpFor(t, const Duration(seconds: 6));
         await shot(t, 'chat-thread-dm-sent');
+        // The first send asks once whether to turn on alerts (the notification pre-prompt). It covers the thread: shoot it and
+        // answer Not now, so the next steps reach the messages.
+        final notNow = find.byKey(const Key('alerts-preprompt-no'));
+        if (await waitFor(t, notNow, timeout: const Duration(seconds: 3))) {
+          await shot(t, 'chat-alerts-preprompt');
+          await t.tap(notNow.first, warnIfMissed: false);
+          await pumpFor(t, const Duration(seconds: 1));
+        }
       } else {
         misses.add('the composer has no Send button');
       }
@@ -1888,7 +1896,19 @@ final List<ScreenStep> screens = [
       }
       if (name == 'partly-uploaded') await shot(t, 'drive-card-menu');
       await t.tap(delete.first, warnIfMissed: false);
-      if (await waitFor(t, find.byKey(const Key('confirm-delete')), timeout: const Duration(seconds: 6))) {
+      var asked = await waitFor(t, find.byKey(const Key('confirm-delete')), timeout: const Duration(seconds: 6));
+      if (!asked) {
+        // The previous confirm may still have been closing when the menu was tapped: open the menu again, once.
+        await pumpFor(t, const Duration(seconds: 2));
+        if (await _showDriveCard(t, id)) {
+          await t.tap(menu.first, warnIfMissed: false);
+          if (await waitFor(t, delete, timeout: const Duration(seconds: 5))) {
+            await t.tap(delete.first, warnIfMissed: false);
+            asked = await waitFor(t, find.byKey(const Key('confirm-delete')), timeout: const Duration(seconds: 6));
+          }
+        }
+      }
+      if (asked) {
         await shot(t, 'drive-delete-confirm-$name');
         final cancel = find.text('Cancel');
         if (cancel.evaluate().isNotEmpty) {
@@ -1896,6 +1916,7 @@ final List<ScreenStep> screens = [
           await pumpFor(t, const Duration(seconds: 1));
         }
         if (find.byKey(const Key('confirm-delete')).evaluate().isNotEmpty) await _closeRouteOf(t, 'confirm-delete');
+        await pumpFor(t, const Duration(seconds: 2)); // let the sheet finish closing before the next card's menu
       } else {
         misses.add('Delete on the $name drive asked nothing');
       }
