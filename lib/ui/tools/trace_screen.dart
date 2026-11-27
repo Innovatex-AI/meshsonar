@@ -1,4 +1,4 @@
-// Trace path: pick a chain of repeaters from the radio's contacts, send CMD_SEND_TRACE_PATH along it and show each hop's
+// Send a trace ("Trace path" until build 77): pick a chain of repeaters from the radio's contacts, send CMD_SEND_TRACE_PATH along it and show each hop's
 // SNR, the route on a map with distances, and saved traces to compare. The radio answers only when it hears the LAST hop,
 // and a missing hop is silence (research doc 2026-11-01, section B): the screen says so in words.
 import 'package:flutter/material.dart';
@@ -27,8 +27,8 @@ class TraceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ToolPage(
         id: 'trace',
-        title: 'Trace path',
-        about: 'Trace path sends one small packet along repeaters you choose, and each one reports how well it heard it.',
+        title: 'Send a trace',
+        about: 'Send a trace sends one small packet along repeaters you choose, and each one reports how well it heard it.',
         builder: (context, host, tools) => _TraceBody(key: ValueKey(identityHashCode(tools)), host: host, tools: tools, contact: contact),
       );
 }

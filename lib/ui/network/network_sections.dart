@@ -30,6 +30,7 @@ import '../region/analyze_panel.dart';
 import '../region/region_panels.dart';
 import '../region/regions_screen.dart';
 import 'analytics/analytics_section.dart';
+import 'analytics/my_repeaters_panel.dart';
 import 'channels/channels_section.dart';
 import 'live/live_map_view.dart';
 import 'network_header.dart';
@@ -295,11 +296,19 @@ List<AnalyticsNativeRow> regionAnalyticsRows(RegionIndexEntry r, {required Strin
         about: 'What changed and what needs attention in this region',
         builder: (_) => AnalyzePanel(key: const Key('network-findings'), baseUrl: r.url, regionSlug: r.slug, regionName: r.name, timezone: timezone),
       ),
+      // The app's one Overview (Round 2 N-U10): the website's Overview row is gone and its link opens this.
       AnalyticsNativeRow(
         slug: analyticsRegionOverviewSlug,
-        label: 'Region overview',
-        about: 'Repeaters, observers, packets and drives at a glance',
+        label: 'Overview',
+        about: 'Packets, observers, repeaters and signal at a glance',
         builder: (_) => KeyedSubtree(key: const Key('network-region-overview'), child: buildOverviewPanel(r.url, r.slug)),
+      ),
+      // Native since build 77 (Round 2 W6): the person's own starred and claimed repeaters.
+      AnalyticsNativeRow(
+        slug: analyticsMyRepeatersSlug,
+        label: 'My Repeaters',
+        about: 'The repeaters you starred or claimed in the app',
+        builder: (_) => KeyedSubtree(key: const Key('network-my-repeaters'), child: MyRepeatersPanel(baseUrl: r.url, regionSlug: r.slug)),
       ),
     ];
 

@@ -20,6 +20,8 @@ import 'package:meshsonar/ui/network/analytics/site_page_view.dart';
 import 'package:meshsonar/ui/network/packets/decode_packet_screen.dart';
 import 'package:meshsonar/ui/network/tools/path_inspector_screen.dart';
 import 'package:meshsonar/ui/network/tools/prefix_tool_screen.dart';
+import 'package:meshsonar/ui/network/tools/status_screen.dart';
+import 'package:meshsonar/core/v1/insights_api.dart' show InsightsApi, insightsApiFactory;
 import 'package:meshsonar/ui/network/tools/tools_section.dart';
 import 'package:meshsonar/ui/network/tools/trace_viewer_screen.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -87,6 +89,7 @@ void main() {
     resetV1NotLive();
     server = Server();
     toolsApiFactory = (_) => server.api;
+    insightsApiFactory = (b) => InsightsApi(b, client: server.client);
     siteWebEngineFactory = (e, _) => throw UnsupportedError('no webview in tests');
   });
 
@@ -99,7 +102,12 @@ void main() {
       expect(find.byKey(Key('tool-row-${e.id}')), findsOneWidget);
       expect(tester.getSize(find.byKey(Key('tool-row-${e.id}'))).height, greaterThanOrEqualTo(44));
     }
-    expect(toolEntries.where((e) => e.group == ToolGroup.radio).map((e) => e.title), ['Trace path', 'Discover', 'Adverts', 'Rx log', 'Noise floor', 'Telemetry']);
+    expect(toolEntries.where((e) => e.group == ToolGroup.radio).map((e) => e.title), ['Send a trace', 'Discover', 'Adverts', 'Rx log', 'Noise floor', 'Telemetry']);
+    // Build 77 (Round 2 W6): the three site tools locked to site admins are gone; Status is native.
+    for (final gone in ['airtime', 'link', 'painter']) {
+      expect(find.byKey(Key('tool-row-$gone')), findsNothing, reason: gone);
+    }
+    expect(toolEntryOf('status')!.group, ToolGroup.network);
     expect(toolEntries.map((e) => e.id).toSet().length, toolEntries.length);
     expect(tester.takeException(), isNull);
   });
@@ -149,9 +157,14 @@ void main() {
   });
 
   test('tool ids, aliases and site paths', () {
-    for (final id in ['path', 'trace', 'prefix', 'scope-audit', 'compare', 'definition', 'status', 'decode', 'airtime', 'link', 'painter']) {
+    for (final id in ['path', 'trace', 'prefix', 'scope-audit', 'compare', 'definition', 'status', 'decode', 'radio-trace']) {
       expect(toolEntryOf(id), isNotNull, reason: id);
     }
+    // Removed in build 77 (site-admin only): a link to one shows the list.
+    for (final id in ['airtime', 'link', 'painter']) {
+      expect(toolEntryOf(id), isNull, reason: id);
+    }
+    expect(toolEntryOf('trace-path')!.title, 'Send a trace');
     expect(toolEntryOf('RXLOG')!.id, 'rx-log');
     expect(toolEntryOf('region-def')!.id, 'definition');
     expect(toolEntryOf('nope'), isNull);
@@ -161,7 +174,7 @@ void main() {
     expect(sitePathOfTool('definition', '39.96, -83.0'), '/tools/region?lat=39.96&lon=-83.0');
     expect(sitePathOfTool('definition', 'somewhere'), '/tools/region');
     expect(sitePathOfTool('status', 'https://evil.example/x'), '/status');
-    expect(sitePathOfTool('painter', null), '/tools/painter');
+    expect(sitePathOfTool('painter', null), '/status', reason: 'no longer a site page the app opens');
   });
 
   testWidgets('initialTool opens the tool with its argument; an unknown id shows the list', (tester) async {
@@ -177,7 +190,8 @@ void main() {
 
     await pump(tester, const Scaffold(body: ToolsSection(key: Key('c'), baseUrl: base, regionSlug: 'cmh', initialTool: 'status')));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(SitePageView), findsOneWidget);
+    expect(find.byType(StatusScreen), findsOneWidget, reason: 'native since build 77 (Round 2 W9)');
+    expect(find.byType(SitePageView), findsNothing);
     expect(find.text('Status'), findsWidgets);
 
     await pump(tester, const Scaffold(body: ToolsSection(key: Key('d'), baseUrl: base, regionSlug: 'cmh', initialTool: 'nope', initialArg: 'x')));
@@ -197,11 +211,18 @@ void main() {
     '/scope-audit': (SitePageView, '/scope-audit'),
     '/observers/compare': (SitePageView, '/observers/compare'),
     '/tools/region': (SitePageView, '/tools/region'),
-    '/status': (SitePageView, '/status'),
-    '/tools/airtime': (SitePageView, '/tools/airtime'),
-    '/tools/link': (SitePageView, '/tools/link'),
-    '/tools/painter': (SitePageView, '/tools/painter'),
+    '/status': (StatusScreen, null),
   };
+  // Build 77 (Round 2 W6): the three site-admin tools are gone from the app; their old links show the Tools list.
+  for (final gone in ['/tools/airtime', '/tools/link', '/tools/painter']) {
+    testWidgets('link $gone shows the Tools list', (tester) async {
+      final r = NetworkRequest.parse(Uri.parse('$base$gone'))!;
+      await pump(tester, Scaffold(body: ToolsSection(baseUrl: base, regionSlug: 'cmh', initialTool: r.tool, initialArg: r.toolArg)));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const Key('tools-section')), findsOneWidget);
+      expect(find.byType(SitePageView), findsNothing);
+    });
+  }
   for (final e in links.entries) {
     testWidgets('link ${e.key} opens ${e.value.$1}', (tester) async {
       final r = NetworkRequest.parse(Uri.parse('$base${e.key}'))!;

@@ -269,7 +269,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
       if (recent != null && recent.isEmpty)
         Padding(
           padding: const EdgeInsets.only(top: Gap.s),
-          child: Text('No traces were heard here in the last 7 days. Send one with Trace path (Tools, With your radio), or paste a trace ID above.',
+          child: Text('No traces were heard here in the last 7 days. Send one with Send a trace (Tools, With your radio), or paste a trace ID above.',
               key: const Key('trace-recent-none'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       if (recent != null)

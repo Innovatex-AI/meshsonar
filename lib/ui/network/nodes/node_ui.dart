@@ -301,7 +301,8 @@ class UpdatedLine extends StatefulWidget {
   /// When the list was loaded; null shows nothing.
   final DateTime? at;
   final DateTime Function() clock;
-  const UpdatedLine({super.key, required this.at, this.clock = DateTime.now});
+  final EdgeInsetsGeometry padding;
+  const UpdatedLine({super.key, required this.at, this.clock = DateTime.now, this.padding = const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0)});
 
   static String textOf(DateTime at, DateTime now) {
     final ago = relativeTime(at, now: now);
@@ -335,7 +336,7 @@ class _UpdatedLineState extends State<UpdatedLine> {
     if (at == null) return const SizedBox.shrink();
     final t = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Gap.l, Gap.s, Gap.l, 0),
+      padding: widget.padding,
       child: Text(UpdatedLine.textOf(at, widget.clock()), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
     );
   }
