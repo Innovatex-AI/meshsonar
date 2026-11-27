@@ -25,6 +25,10 @@ class FakeRadioPort implements ContactRadioPort {
   final removes = <String>[];
   final resets = <String>[];
   final imports = <Uint8List>[];
+  final fetches = <String>[];
+
+  /// Every contact as it was written (ADD_UPDATE_CONTACT), in order: what route and flags the app put on the radio.
+  final written = <Contact>[];
   int? dropAfter; // the next download throws after this many contacts
   int dropCount = 0;
   Set<String> hasAdvert = {};
@@ -63,6 +67,7 @@ class FakeRadioPort implements ContactRadioPort {
   @override
   Future<Contact?> fetch(String publicKey) async {
     if (!isConnected) throw const RadioUnavailable('not connected');
+    fetches.add(publicKey);
     final c = table[publicKey];
     return c?.copyWith(lastMod: lastMod[publicKey]);
   }
@@ -72,6 +77,7 @@ class FakeRadioPort implements ContactRadioPort {
     if (!isConnected) throw const RadioUnavailable('not connected');
     if (failUpload != null) throw failUpload!;
     uploads.add(contact.publicKey);
+    written.add(contact);
     final exists = table.containsKey(contact.publicKey);
     if (!exists && capacity != null && table.length >= capacity!) throw const ContactTableFull();
     table[contact.publicKey] = contact.copyWith(onRadio: true);
@@ -102,7 +108,16 @@ class FakeRadioPort implements ContactRadioPort {
   Future<bool> shareZeroHop(String publicKey) async => hasAdvert.contains(publicKey);
 
   @override
-  Future<ContactPolicy> getPolicy() async => policy;
+  bool deliveryInFlight = false;
+
+  /// How each policy read was asked for: true = fresh (APP_START again), false = from what the session holds.
+  final policyReads = <bool>[];
+
+  @override
+  Future<ContactPolicy> getPolicy({bool fresh = true}) async {
+    policyReads.add(fresh);
+    return policy;
+  }
 
   @override
   Future<void> setPolicy(ContactPolicy p) async => policy = p;

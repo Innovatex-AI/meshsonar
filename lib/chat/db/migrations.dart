@@ -47,7 +47,64 @@ final List<Migration> chatMigrations = [
   Migration(3, 'chat redesign: message radio facts, path modes, ping history, stats history, manual unread', _v3),
   Migration(4, 'message repeats (every heard copy of a channel message), route actually used by a sent DM', _v4),
   Migration(5, 'outbox: send this message by flood (long-press Send)', _v5),
+  Migration(6, 'build 77 delivery rebuild: per-try state, message log, confirmed-contact flag, route modes and Probably delivered removed', _v6),
 ];
+
+/// M6 (build 77, redesign round 3 part 1: direct-message delivery rebuilt to the official MeshCore flow). Idempotent.
+///   * delivery_attempts: what each try was, as the radio reported it. `wire_attempt` is the try number given to the radio
+///     (0..7), `round` counts manual retries (a retry is a new send with a new timestamp), `ts_sender` the timestamp that
+///     try carried, `outcome` what became of it (sending, waiting, confirmed, noConfirmation, radioNoAnswer, cancelled,
+///     interrupted), `route_known` 0 while the radio has not said direct or flood (its reply was lost), `ack2` the
+///     radio's own confirmation code when it differs from the one the phone computed, `reset_before` 1 when RESET_PATH
+///     was sent right before this try.
+///   * outbox: the plan of the message in flight: how many of its tries come before the one reset (`direct_tries`),
+///     whether that reset was done (`did_reset`) and which round it is.
+///   * contacts.confirmed_ms: when a confirmation from this contact first arrived (rule 16: "They need to add you as a
+///     contact" shows until one has). Backfilled from delivered messages.
+///   * message_log: the delivery log (defect M12). No message text, no secrets.
+///   * Removed features leave no state behind: every contact goes back to the one route behaviour there is (path_mode
+///     auto, no pinned route) and "Probably delivered (they replied)" rows become what they are: not confirmed.
+void _v6(Database db) {
+  _addColumn(db, 'delivery_attempts', 'wire_attempt', 'INTEGER');
+  _addColumn(db, 'delivery_attempts', 'round', 'INTEGER NOT NULL DEFAULT 0');
+  _addColumn(db, 'delivery_attempts', 'ts_sender', 'INTEGER');
+  _addColumn(db, 'delivery_attempts', 'outcome', 'TEXT');
+  _addColumn(db, 'delivery_attempts', 'route_known', 'INTEGER NOT NULL DEFAULT 1');
+  _addColumn(db, 'delivery_attempts', 'ack2', 'INTEGER');
+  _addColumn(db, 'delivery_attempts', 'reset_before', 'INTEGER NOT NULL DEFAULT 0');
+  _addColumn(db, 'delivery_attempts', 'trip_ms', 'INTEGER');
+  db.execute('CREATE INDEX IF NOT EXISTS attempts_ack2 ON delivery_attempts (ack2)');
+
+  _addColumn(db, 'outbox', 'direct_tries', 'INTEGER NOT NULL DEFAULT 4');
+  _addColumn(db, 'outbox', 'did_reset', 'INTEGER NOT NULL DEFAULT 0');
+  _addColumn(db, 'outbox', 'round', 'INTEGER NOT NULL DEFAULT 0');
+
+  final hadConfirmed = _hasColumn(db, 'contacts', 'confirmed_ms');
+  _addColumn(db, 'contacts', 'confirmed_ms', 'INTEGER');
+  if (!hadConfirmed) {
+    db.execute('''
+UPDATE contacts SET confirmed_ms = (
+  SELECT min(m.ts_local_ms) FROM messages m
+  WHERE m.radio_id = contacts.radio_id AND m.direction = 'out' AND m.state = 'acked'
+    AND m.conv_key IN ('d:' || substr(contacts.pubkey, 1, 12), 'r:' || substr(contacts.pubkey, 1, 12)))
+''');
+  }
+  db.execute("UPDATE contacts SET path_mode = 'auto', force_flood = 0, pinned_path = NULL, pinned_hash_size = NULL");
+  db.execute("UPDATE messages SET state = 'failed', fail_reason = 'noAck' WHERE state = 'likelyDelivered'");
+  db.execute("UPDATE conversations SET last_state = 'failed' WHERE last_state = 'likelyDelivered'");
+
+  db.execute('''
+CREATE TABLE IF NOT EXISTS message_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts_ms INTEGER NOT NULL,
+  src TEXT NOT NULL,
+  msg_id TEXT,
+  line TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS message_log_ts ON message_log (ts_ms);
+CREATE INDEX IF NOT EXISTS message_log_msg ON message_log (msg_id) WHERE msg_id IS NOT NULL;
+''');
+}
 
 /// M5 (chat + radio round, CR2): the person chose "Send by flood" for this one message (long-press Send). Idempotent.
 void _v5(Database db) => _addColumn(db, 'outbox', 'force_flood', 'INTEGER NOT NULL DEFAULT 0');

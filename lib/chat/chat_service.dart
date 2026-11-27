@@ -17,6 +17,9 @@ import 'channel_secret.dart';
 import 'channel_text_tap.dart';
 import 'contact_manager.dart';
 import 'db/message_repository.dart';
+import 'db/outbox_repository.dart' show DeliveryAttempt;
+import 'delivery_settings.dart';
+import 'message_log.dart';
 import 'events.dart';
 import 'mesh_links.dart';
 import 'models.dart';
@@ -72,10 +75,34 @@ class ChatService {
   final Random? _random;
   late final Outbox? _ob = sink == null
       ? null
-      : Outbox(store: store, sink: sink!, nowMs: nowMs, policy: policy, random: _random, notify: _emit, restorePath: (c) => contacts.restorePinnedPath(c));
+      : Outbox(store: store, sink: sink!, nowMs: nowMs, policy: policy, random: _random, notify: _emit, settings: () => deliverySettings, log: log);
 
-  /// Longest text the radio carries (MAX_TEXT_LEN = 10 * 16, firmware).
+  /// The message log (defect M12): one line per command and reply code, per confirmation (code, matched or not) and per
+  /// step of a message. Viewable ([MessageLog.recent], [MessageLog.forMessage]) and exportable ([exportMessageLog]).
+  late final MessageLog log = MessageLog(store.db, nowMs: nowMs);
+
+  late final DeliverySettingsStore _deliveryStore = DeliverySettingsStore(store.db);
+  DeliverySettings? _delivery;
+
+  /// How many tries a direct message gets: direct tries 1-4 (4), flood tries 0-4 (4), flood fallback on or off (on).
+  /// Stored in the chat database. A message already on its way keeps the plan it started with.
+  DeliverySettings get deliverySettings => _delivery ??= _deliveryStore.load();
+  set deliverySettings(DeliverySettings v) {
+    final c = DeliverySettings.clamped(directTries: v.directTries, floodTries: v.floodTries, floodFallback: v.floodFallback);
+    _deliveryStore.save(c);
+    _delivery = c;
+    log.addChat('delivery settings: ${c.directTries} direct, ${c.floodTries} flood, fallback ${c.floodFallback ? 'on' : 'off'}');
+  }
+
+  /// How far the connected radio's clock is AHEAD of the phone, seconds (0 = it took the phone's time). The session adapter
+  /// sets it on connect. A radio refuses to set its clock backwards, and a room server ignores a post that is not newer
+  /// than the last thing the radio sent it, so room posts are stamped from the radio's clock when it is ahead (defect M11).
+  int radioClockAheadSecs = 0;
+
+  /// Longest text the radio carries (MAX_TEXT_LEN = 10 * 16, firmware). From its fifth try on a direct message carries 158
+  /// (the radio appends the try number), so a text of 159 or 160 bytes gets four tries; [dmTextBytesForAllTries] fits all.
   static const int maxPacketTextBytes = 160;
+  static const int dmTextBytesForAllTries = 158;
   static const int maxInboundChars = 2000;
 
   /// System (wardrive) channel traffic kept per channel.
@@ -115,14 +142,12 @@ class ChatService {
     this.autoTimer = true,
     ContactManager? contactManager,
     bool Function()? deferContactSync,
-    bool Function()? routeWriteEnabled,
   })  : nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
         selfName = selfName ?? (() => null),
         newId = newId ?? _randomId,
         // ignore: prefer_initializing_formals
         _random = random {
     contacts = contactManager ?? ContactManager(store: store, nowMs: this.nowMs, onChanged: () => _emit(const ChatEvent.contacts()), shouldDefer: deferContactSync);
-    if (routeWriteEnabled != null) contacts.routeWriteEnabled = routeWriteEnabled;
   }
 
   static final Random _rng = Random.secure();
@@ -158,6 +183,7 @@ class ChatService {
 
   Future<void> dispose() async {
     _disposed = true;
+    log.flush();
     contacts.dispose();
     _timer?.cancel();
     await _sub?.cancel();
@@ -375,9 +401,8 @@ class ChatService {
     );
     if (!store.messages.insert(m)) return; // replay, or a sender retry of a DM we already have
     _emit(ChatEvent.added(m, notify: _shouldNotify(convKey, m, blocked: blocked)));
-    // They wrote to us after our unconfirmed DMs went out: those almost certainly arrived (the ack was lost on the way back,
-    // or while the phone was not linked). Stop retrying them and do not show them as failed.
-    if (!isRoom && e.txtType == 0) _ob?.onReply(e.radioId, convKey, now);
+    // Build 77 (decision D2): a reply from them no longer marks our unconfirmed messages "Probably delivered". Only a
+    // confirmation means delivered, and one that arrives late still does (Outbox.onAck).
   }
 
   bool _shouldNotify(String convKey, ChatMessage m, {required bool blocked}) {
@@ -505,7 +530,9 @@ class ChatService {
 
   /// Stores an outgoing message and queues it. Returns at once; delivery state arrives as events.
   /// Throws [MessageTooLong] or [ArgumentError] (empty text, unknown conversation).
-  /// [forceFlood]: the person chose "Send by flood" for this one direct message (long-press Send): every try floods.
+  /// [forceFlood]: long-press Send, "flood" chosen for this one direct message. Done the official way: one reset path
+  /// before the first try, then the normal send (the radio then floods because it holds no route). Choosing "direct" there
+  /// is the normal send: [forceFlood] false.
   ChatMessage send({required String radioId, required String convKey, required String text, bool forceFlood = false}) {
     final body = text.trim();
     if (body.isEmpty) throw ArgumentError('empty message');
@@ -516,11 +543,9 @@ class ChatService {
     if (kind == null) throw ArgumentError('bad conversation $convKey');
     final ob = _ob;
     if (ob == null) throw StateError('no radio sink configured');
-    var hasPath = false;
     if (kind != ConvKind.channel) {
       final c = store.contacts.byPrefix(radioId, ConvKey.body(convKey));
       if (c == null) throw ArgumentError('unknown contact');
-      hasPath = c.hasPath;
     } else {
       final ch = store.channels.getById(int.parse(ConvKey.body(convKey)));
       if (ch == null) throw ArgumentError('unknown channel');
@@ -528,6 +553,9 @@ class ChatService {
     }
     final now = nowMs();
     var ts = now ~/ 1000;
+    // A room server only takes a post newer than the last thing this radio sent it, by the RADIO's clock: when that
+    // clock is ahead of the phone the post is stamped from it. Direct messages keep phone time, as the official app does.
+    if (kind == ConvKind.room && radioClockAheadSecs > 0) ts += radioClockAheadSecs;
     var key = dedupeKeyFor(convKey, ts, body);
     // Receivers dedupe on (conversation, timestamp, text): two identical sends in one second need different timestamps.
     while (store.messages.existsDedupe(radioId, key)) {
@@ -550,7 +578,7 @@ class ChatService {
     );
     store.db.transaction(() {
       store.messages.insert(m);
-      ob.enqueue(m, hasPath: hasPath, forceFlood: forceFlood);
+      ob.enqueue(m, forceFlood: forceFlood && kind != ConvKind.channel);
       store.drafts.clear(convKey);
     });
     _emit(ChatEvent.added(m, notify: false));
@@ -591,17 +619,57 @@ class ChatService {
     }
   }
 
-  bool retryFailed(String messageId) {
-    final m = store.messages.get(messageId);
+  /// "Try again" on a failed message: a NEW send, as in the official app. The message gets a new timestamp and its tries
+  /// start again from the first (build 76 reused the old timestamp, so the mesh dropped every retry as a packet already
+  /// seen). [forceFlood] as in [send].
+  bool retryFailed(String messageId, {bool forceFlood = false}) {
     final ob = _ob;
-    if (m == null || ob == null) return false;
-    final hasPath = m.convKind == ConvKind.channel ? false : (store.contacts.byPrefix(m.radioId, ConvKey.body(m.convKey))?.hasPath ?? false);
-    final ok = ob.retryFailed(messageId, hasPath: hasPath);
+    if (ob == null) return false;
+    final ok = ob.retryFailed(messageId, forceFlood: forceFlood);
     if (ok) _kick();
     return ok;
   }
 
+  /// Cancel on a message that is still retrying (or waiting): no more tries. A confirmation that still arrives for a try
+  /// already made marks it delivered all the same.
   bool cancel(String messageId) => _ob?.cancel(messageId) ?? false;
+
+  /// "Try n of m" and every try of [messageId] with its number, the route the radio reported (direct / flood) and its
+  /// outcome. For the status line and the message details.
+  DeliveryProgress deliveryProgress(String messageId) {
+    final ob = _ob;
+    if (ob != null) return ob.progress(messageId);
+    final all = store.outbox.attemptsFor(messageId);
+    return DeliveryProgress(tryNumber: store.messages.get(messageId)?.attempt ?? all.length, tries: all);
+  }
+
+  /// Every try of [messageId] ever made, oldest first (all sends of it).
+  List<DeliveryAttempt> deliveryTries(String messageId) => store.outbox.attemptsFor(messageId);
+
+  /// Rule 16: true when the thread [convKey] is a direct message with a person who has never confirmed a message from us.
+  /// The thread then shows [needsToAddYouText] ("They need to add you as a contact before they can receive this"): their
+  /// radio can only decrypt and confirm our messages when it has us as a contact.
+  bool needsToAddYou(String radioId, String convKey) {
+    if (ConvKey.kindOf(convKey) != ConvKind.dm) return false;
+    final c = store.contacts.byPrefix(radioId, ConvKey.body(convKey));
+    return c != null && c.type == ContactType.companion && !c.everConfirmed;
+  }
+
+  /// Decision D1: the radio refused a contact because its list is full, and nothing has made room since. Show
+  /// [radioContactListFullText] with a button to the radio's contact list; the app does not make room by itself.
+  bool get radioContactListFull => contacts.radioListFull;
+
+  /// The message log as shareable text (no message text, no secrets). [messageId] limits it to the lines of one message,
+  /// for a failed message's details; without it the newest lines, for Settings > Storage & diagnostics. [formatTime] is
+  /// the app's time formatter (unix ms in, text out).
+  String exportMessageLog({String? messageId, String Function(int ms)? formatTime, List<String> header = const []}) {
+    final s = deliverySettings;
+    return log.exportText(messageId: messageId, formatTime: formatTime, header: [
+      ...header,
+      'Delivery settings: ${s.directTries} direct tries, ${s.floodTries} flood tries, flood fallback ${s.floodFallback ? 'on' : 'off'}',
+      if (radioClockAheadSecs > 0) 'Radio clock: ${radioClockAheadSecs}s ahead of the phone',
+    ]);
+  }
 
   /// Sends again a channel message no repeater relayed (CR2 Resend).
   bool resendChannel(String messageId) {
@@ -755,13 +823,14 @@ class ChatService {
   Future<void> wipeAll() async {
     final secretRefs = store.db.raw.select('SELECT secret_ref FROM channels WHERE secret_ref IS NOT NULL').map((r) => r['secret_ref'] as String).toList();
     store.db.transaction(() {
-      for (final t in ['outbox', 'delivery_attempts', 'messages', 'conversations', 'drafts', 'adverts_seen', 'system_stats', 'contacts', 'channels', 'settings']) {
+      for (final t in ['message_log', 'outbox', 'delivery_attempts', 'messages', 'conversations', 'drafts', 'adverts_seen', 'system_stats', 'contacts', 'channels', 'settings']) {
         store.db.raw.execute('DELETE FROM $t');
       }
     });
     for (final r in secretRefs) {
       await store.secrets.delete(r);
     }
+    _delivery = null;
     _emit(ChatEvent.deleted(null));
   }
 

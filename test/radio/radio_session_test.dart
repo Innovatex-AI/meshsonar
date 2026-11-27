@@ -192,8 +192,22 @@ void main() {
       expect(retry.timestamp, first.timestamp);
       expect(retry.attempt, 1);
       expect(retry.expectedAck, isNot(first.expectedAck));
-      expect(fifth.attempt, 0);
-      expect(fifth.expectedAck, first.expectedAck, reason: 'only attempt & 3 is on the wire (BaseChatMesh.cpp 455-466)');
+      expect(fifth.attempt, 4, reason: 'the try number is not cut to 0-3 any more');
+      expect(fifth.expectedAck, first.expectedAck, reason: 'the ack hash has attempt & 3 (BaseChatMesh.cpp 455-466)...');
+      final onWire = radio.sentFrames.where((f) => f[0] == Cmd.sendTxtMsg).toList();
+      expect(onWire.map((f) => f[2]), [0, 1, 4], reason: '...but the command carries the whole try number, so the radio makes try 5 its own packet');
+      expect(radio.sentDirect.map((d) => d.attempt), [0, 1, 4]);
+    });
+
+    test('DM text limit: 160 bytes on tries 1-4, 158 from the fifth try on; try numbers above 7 are refused', () async {
+      final ann = radio.contactKeys.first;
+      expect((await session.sendContactMessage(ann, 'x' * 160, attempt: 3, timestamp: 1)).isAccepted, isTrue);
+      final late = await session.sendContactMessage(ann, 'x' * 159, attempt: 4, timestamp: 1);
+      expect(late.failure, SendFailure.tooLong);
+      expect(late.detail, contains('158'));
+      expect((await session.sendContactMessage(ann, 'x' * 158, attempt: 7, timestamp: 1)).isAccepted, isTrue);
+      expect((await session.sendContactMessage(ann, 'x', attempt: 8, timestamp: 1)).isFailed, isTrue);
+      expect(radio.sentFrames.where((f) => f[0] == Cmd.sendTxtMsg).map((f) => f[2]), [3, 7], reason: 'what cannot be carried never reaches the radio');
     });
 
     test('DM failures: unknown contact, malformed key, too long', () async {
@@ -202,7 +216,7 @@ void main() {
       expect((await session.sendContactMessage(radio.contactKeys.first, 'x' * 161)).failure, SendFailure.tooLong);
     });
 
-    test('a user send holds pings back for 2 s and wakes the radio-queue probe; an idle session never probed', () async {
+    test('a user send holds pings back for 2 s; the radio is NOT asked for its queue (the stats probe is gone)', () async {
       final gate = session.pingGate;
       expect((await gate.requestPing()).go, isTrue);
       await session.sendChannelMessage(0, 'hi');
@@ -210,7 +224,9 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 2100));
       expect((await gate.requestPing()).go, isTrue);
       radio.outboundQueueLen = 2;
-      expect((await gate.requestPing()).reason, PingSkipReason.radioQueueBusy);
+      expect((await gate.requestPing()).go, isTrue);
+      expect(radio.sentFrames.where((f) => f[0] == Cmd.getStats), isEmpty,
+          reason: 'build 76 sent GET_STATS before a ping while chat was in use: an extra reply through the radio\'s 4-frame queue');
     });
 
     test('scope is set right before a scoped flood and cleared before the next ping, in order on the wire', () async {

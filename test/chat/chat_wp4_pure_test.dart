@@ -94,12 +94,14 @@ void main() {
       expect(ui(msg('a', 0, out: true, state: MessageState.queued), connected: false).detail, 'Will send when your radio connects');
     });
 
-    test('DM: sent, slow after 20 s or a retry, final try widens the search, acked is Delivered', () {
+    test('DM: sent, the try count after 20 s or from the second try, the last try reads like any other, acked is Delivered', () {
       final m = msg('a', 0, out: true, state: MessageState.sent, kind: ConvKind.dm, attempt: 1);
       expect(ui(m, max: 3).word, 'Waiting for confirmation');
       expect(ui(m, max: 3, now: 25000).word, 'Waiting for confirmation (try 1 of 3)');
       expect(ui(msg('a', 0, out: true, state: MessageState.retrying, kind: ConvKind.dm, attempt: 2), max: 3).word, 'Waiting for confirmation (try 2 of 3)');
-      expect(ui(msg('a', 0, out: true, state: MessageState.retrying, kind: ConvKind.dm, attempt: 3), max: 3).word, 'Waiting for confirmation (last try, wider search)');
+      expect(ui(msg('a', 0, out: true, state: MessageState.retrying, kind: ConvKind.dm, attempt: 3), max: 3).word, 'Waiting for confirmation (try 3 of 3)',
+          reason: 'build 77: no "wider search" guess; direct or flood is what the radio reports, shown in the details');
+      expect(ui(msg('a', 0, out: true, state: MessageState.sent, kind: ConvKind.dm, attempt: 5), max: 8).word, 'Waiting for confirmation (try 5 of 8)');
       final ok = ui(msg('a', 0, out: true, state: MessageState.acked, kind: ConvKind.dm, ackMs: 1800), now: 0);
       expect(ok.stage, DeliveryStage.delivered);
       expect(ok.glyph, DeliveryGlyph.checkmarkCircleFill);

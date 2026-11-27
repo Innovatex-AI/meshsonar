@@ -37,9 +37,11 @@ class ContactRepository {
         lastPingMs: r['last_ping_ms'] as int?,
         lastPingRttMs: r['last_ping_rtt_ms'] as int?,
         lastPingOk: r['last_ping_ok'] == null ? null : (r['last_ping_ok'] as int) != 0,
+        confirmedMs: r['confirmed_ms'] as int?,
       );
 
-  /// Inserts or replaces by (radioId, publicKey).
+  /// Inserts or replaces by (radioId, publicKey). `confirmed_ms` is not written here on purpose: a copy read from the radio
+  /// does not know it, and it must survive every merge ([markConfirmed] is its only writer).
   void upsert(Contact c) {
     db.raw.execute('''
 INSERT INTO contacts(radio_id, pubkey, type, name, custom_name, lat, lon, last_advert_ts, lastmod, out_path, out_path_len, favourite, blocked, notes, source,
@@ -124,6 +126,13 @@ ON CONFLICT(radio_id, pubkey) DO UPDATE SET type=excluded.type, name=excluded.na
   void setLastPing(String radioId, String key, {required int tsMs, int? rttMs, required bool ok}) => db.raw.execute(
       'UPDATE contacts SET last_ping_ms = ?, last_ping_rtt_ms = ?, last_ping_ok = ? WHERE radio_id = ? AND pubkey = ?',
       [tsMs, rttMs, ok ? 1 : 0, radioId, key.toLowerCase()]);
+
+  /// A delivery confirmation from this contact arrived at [ms] (kept from the FIRST one: "has ever confirmed a message
+  /// from us", round 3 rule 16). True when this was the first.
+  bool markConfirmed(String radioId, String key, int ms) {
+    db.raw.execute('UPDATE contacts SET confirmed_ms = ? WHERE radio_id = ? AND pubkey = ? AND confirmed_ms IS NULL', [ms, radioId, key.toLowerCase()]);
+    return db.raw.updatedRows > 0;
+  }
 
   void setRadioFlags(String radioId, String key, int flags) =>
       db.raw.execute('UPDATE contacts SET radio_flags = ? WHERE radio_id = ? AND pubkey = ?', [flags, radioId, key.toLowerCase()]);

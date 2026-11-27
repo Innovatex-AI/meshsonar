@@ -19,6 +19,7 @@ import 'caps.dart';
 import 'command_queue.dart';
 import 'crypto.dart';
 import 'inbound.dart';
+import 'link_log.dart';
 import 'message_sync.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
@@ -78,7 +79,44 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   StreamSubscription<Uint8List>? _sub;
 
   final CommandQueue _commands = CommandQueue();
-  Completer<Frame>? _pending;
+
+  /// The one command in flight and what may answer it (round 3 rule 2: a reply is matched to its command by reply code).
+  _PendingReply? _pending;
+
+  /// The message log's link side (link_log.dart): every command, reply code, timeout, stray frame and delivery push. Null =
+  /// nobody listens. Lines carry codes and lengths, never message text or a secret.
+  void Function(LinkLogEntry entry)? onLog;
+
+  /// Reply frames discarded because no command was waiting for them or their code cannot answer the one that was (a late
+  /// reply after a timeout). Before build 77 such a frame was handed to the next command.
+  int strayFrames = 0;
+
+  /// The radio's clock minus the phone's, seconds, as found by [start]: 0 when the radio took the phone's time, positive
+  /// when it refused to go back (it was ahead). Null before start or when the radio would not say.
+  int? get radioClockAheadSecs => _clockAheadAtStart;
+  int? _clockAheadAtStart;
+
+  /// Confirmation codes of direct messages whose SENT reply did not come in time (see [_onFrame]).
+  final Set<int> _orphanAcks = <int>{};
+
+  /// Until when a direct message is waiting for its confirmation push (the radio's estimate x 1.2 after the last SENT). The
+  /// backup message poll stays quiet meanwhile: the radio's Bluetooth queue is 4 frames on ESP32 and the confirmation is
+  /// one of them (defect M5).
+  DateTime? _confirmDue;
+  bool get awaitingConfirmation {
+    final d = _confirmDue;
+    return d != null && _clock().isBefore(d);
+  }
+
+  void _log(LinkLogKind kind, String text, {int? code}) {
+    final cb = onLog;
+    if (cb == null) return;
+    try {
+      cb(LinkLogEntry(_clock(), kind, text, code: code));
+    } catch (_) {
+      // a log sink must never break the link
+    }
+  }
 
   /// While a multi-frame command (GET_CONTACTS) runs, every non-push frame goes here instead of to [_pending].
   void Function(Frame f)? _multi;
@@ -128,7 +166,8 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     sync = MessageSync(this, clock: _clock, pollInterval: messagePollInterval)
       ..onContactText = _onContactText
       ..rxFacts = ((at, snr, hops) => _rxCorrelator.take(at: at, snrDb: snr, hops: hops))
-      ..airMsFor = _airMsFor;
+      ..airMsFor = _airMsFor
+      ..holdPoll = (() => awaitingConfirmation);
     _sub = _transport.incoming.listen(_onFrame, onDone: _onTransportDone, onError: (Object _) {});
   }
 
@@ -242,11 +281,29 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       return;
     }
     final p = _pending;
-    if (p != null && !p.isCompleted) {
-      _pending = null;
-      p.complete(f);
+    // A SENT whose confirmation code belongs to a direct message that already timed out is that message's late reply,
+    // whatever command is waiting now (another send, a login): it must not answer it.
+    if (data[0] == Resp.sent && data.length >= 6 && _orphanAcks.isNotEmpty) {
+      final tag = ByteData.sublistView(data).getUint32(2, Endian.little);
+      if (_orphanAcks.contains(tag) && p?.ownAck != tag) {
+        _orphanAcks.remove(tag);
+        strayFrames++;
+        _log(LinkLogKind.stray, '${describeReplyForLog(data)} discarded: the late reply to a send that already timed out', code: data[0]);
+        return;
+      }
     }
-    // A reply with no command waiting (e.g. a late reply after a timeout) is dropped.
+    if (p != null && !p.done.isCompleted && p.takes(data)) {
+      _pending = null;
+      _log(LinkLogKind.reply, '${describeReplyForLog(data)} for ${commandName(p.command)} after ${_clock().difference(p.sentAt).inMilliseconds}ms', code: data[0]);
+      p.done.complete(f);
+      return;
+    }
+    // Not the reply to the command in flight (or nothing is in flight): the late reply to a command that already timed
+    // out. Discarded, never handed to the next command (round 3 rule 2).
+    strayFrames++;
+    _log(LinkLogKind.stray,
+        '${describeReplyForLog(data)} discarded: ${p == null ? 'no command was waiting' : 'not a reply to ${commandName(p.command)}'}',
+        code: data[0]);
   }
 
   void _onPush(Frame f) {
@@ -266,14 +323,22 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       case LoginSuccessPush() || LoginFailPush() || StatusResponsePush() || BinaryResponsePush():
         if (!_claimEvents.isClosed) _claimEvents.add(f);
       case MsgWaitingPush():
+        _log(LinkLogKind.push, 'MSG_WAITING(0x83)', code: Push.msgWaiting);
         // Drain the radio's offline queue so it never fills (MyMesh.cpp addToOfflineQueue ~224).
         sync.requestDrain();
-      case SendConfirmedPush() ||
-            PathUpdatedPush() ||
-            AdvertPush() ||
-            NewAdvertPush() ||
-            ContactDeletedPush() ||
-            ContactsFullPush():
+      case SendConfirmedPush():
+        _log(LinkLogKind.push, describeReplyForLog(encodeSendConfirmed(f.ack, f.tripMs)), code: Push.sendConfirmed);
+        if (!_unsolicited.isClosed) _unsolicited.add(f);
+      case PathUpdatedPush():
+        _log(LinkLogKind.push, describeReplyForLog(encodePathUpdated(f.publicKey)), code: Push.pathUpdated);
+        if (!_unsolicited.isClosed) _unsolicited.add(f);
+      case ContactDeletedPush():
+        _log(LinkLogKind.push, describeReplyForLog(encodeContactDeleted(f.publicKey)), code: Push.contactDeleted);
+        if (!_unsolicited.isClosed) _unsolicited.add(f);
+      case ContactsFullPush():
+        _log(LinkLogKind.push, 'CONTACTS_FULL(0x90)', code: Push.contactsFull);
+        if (!_unsolicited.isClosed) _unsolicited.add(f);
+      case AdvertPush() || NewAdvertPush():
         if (!_unsolicited.isClosed) _unsolicited.add(f);
       default:
         break;
@@ -289,7 +354,8 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     _closed = true;
     final p = _pending;
     _pending = null;
-    if (p != null && !p.isCompleted) p.completeError(reason);
+    if (p != null && !p.done.isCompleted) p.done.completeError(reason);
+    _log(LinkLogKind.note, 'link closed');
     final m = _multi;
     _multi = null;
     if (m != null) m(const ErrFrame(null)); // fails a running GET_CONTACTS at once
@@ -304,24 +370,36 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   /// Sends one command and waits for its reply. Commands are strictly serialised; a waiting command with a lower
   /// [priority] number goes first ([CommandPriority]).
-  Future<Frame> _command(Uint8List frame, {int priority = CommandPriority.normal}) =>
-      _commands.run(() => _send(frame), priority: priority);
+  Future<Frame> _command(Uint8List frame, {int priority = CommandPriority.normal, bool Function(Uint8List reply)? match}) =>
+      _commands.run(() => _send(frame, match: match), priority: priority);
 
-  Future<Frame> _send(Uint8List frame) async {
+  /// Writes one command and waits for ITS reply: a frame whose code the command can be answered with
+  /// ([expectedReplyCodes]; ERR always can) and, when [match] is given, that [match] accepts (a CONTACT reply must be the
+  /// key that was asked for). Anything else that arrives meanwhile is a stray and is discarded by [_onFrame].
+  Future<Frame> _send(Uint8List frame, {bool Function(Uint8List reply)? match, int? ownAck}) async {
     if (!isConnected) throw StateError('radio not connected');
-    final c = Completer<Frame>();
-    _pending = c;
+    final p = _PendingReply(frame[0], expectedReplyCodes(frame), match, _clock(), ownAck: ownAck);
+    _pending = p;
     PowerCounters.inc(PowerCounters.bleCommand);
+    _log(LinkLogKind.command, describeCommandForLog(frame), code: frame[0]);
     try {
       await _transport.send(frame);
     } catch (e) {
-      if (identical(_pending, c)) _pending = null;
+      if (identical(_pending, p)) _pending = null;
+      _log(LinkLogKind.timeout, '${commandName(frame[0])} could not be written: ${e is FrameTooLongForLink ? e : e.runtimeType}', code: frame[0]);
       rethrow;
     }
     try {
-      return await c.future.timeout(timeout);
+      return await p.done.future.timeout(timeout);
     } on TimeoutException {
-      if (identical(_pending, c)) _pending = null;
+      if (identical(_pending, p)) _pending = null;
+      if (ownAck != null) {
+        _orphanAcks.add(ownAck);
+        while (_orphanAcks.length > 16) {
+          _orphanAcks.remove(_orphanAcks.first);
+        }
+      }
+      _log(LinkLogKind.timeout, 'no reply to ${commandName(frame[0])} after ${timeout.inMilliseconds}ms', code: frame[0]);
       throw TimeoutException('radio did not answer command ${frame[0]}', timeout);
     }
   }
@@ -333,13 +411,10 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   // ---------------------------------------------------------------- CompanionLink
 
+  /// The start sequence of the official clients (meshcore.js onConnected, meshcore_py): CMD_DEVICE_QUERY declaring protocol
+  /// version 3 FIRST (that is what selects the V3 message frames, MyMesh.cpp 1056-1057), then CMD_APP_START, then the clock.
   @override
   Future<SelfInfo> start() async {
-    final si = await _command(encodeAppStart(appName));
-    if (si is! SelfInfoFrame) _fail('app start', si);
-    _selfFrame = si;
-    _maxTxDbm = si.maxTxPowerDbm > 0 ? si.maxTxPowerDbm : null;
-
     String? firmware;
     try {
       final di = await _command(encodeDeviceQuery());
@@ -354,9 +429,36 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       // very old firmware: carry on without device info
     }
 
-    // Set the clock. The firmware refuses to move it backwards (ERR ILLEGAL_ARG) — harmless, ignore.
-    final setTime = await _command(encodeSetDeviceTime(_clock().toUtc().millisecondsSinceEpoch ~/ 1000));
-    if (setTime is! OkFrame && setTime is! ErrFrame) _fail('set time', setTime);
+    final si = await _command(encodeAppStart(appName));
+    if (si is! SelfInfoFrame) _fail('app start', si);
+    _selfFrame = si;
+    _maxTxDbm = si.maxTxPowerDbm > 0 ? si.maxTxPowerDbm : null;
+
+    // Set the clock. The firmware refuses to move it backwards (ERR ILLEGAL_ARG, MyMesh.cpp 1287-1296): the radio is then
+    // AHEAD of the phone. That is not ignored any more (defect M11): the radio's time is read once so the difference is
+    // known (room posts are stamped from it, see ChatService.send) and written to the message log.
+    final phoneNow = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final setTime = await _command(encodeSetDeviceTime(phoneNow));
+    if (setTime is OkFrame) {
+      _radioClockOffsetSecs = 0;
+      _clockAheadAtStart = 0;
+      _log(LinkLogKind.note, 'clock: the radio took the phone time');
+    } else if (setTime is ErrFrame) {
+      try {
+        final t = await _command(encodeGetDeviceTime());
+        if (t is CurrTimeFrame) {
+          _radioClockOffsetSecs = t.epochSecs - (_clock().toUtc().millisecondsSinceEpoch ~/ 1000);
+          _clockAheadAtStart = _radioClockOffsetSecs;
+          _log(LinkLogKind.note, 'clock: the radio refused the phone time (${errName(setTime.code)}); it is ${_radioClockOffsetSecs}s ahead of the phone');
+        } else {
+          _log(LinkLogKind.note, 'clock: the radio refused the phone time (${errName(setTime.code)}) and did not say its own');
+        }
+      } on TimeoutException {
+        _log(LinkLogKind.note, 'clock: the radio refused the phone time (${errName(setTime.code)}) and did not answer GET_DEVICE_TIME');
+      }
+    } else {
+      _fail('set time', setTime);
+    }
 
     final self = SelfInfo(
       publicKey: toHex(si.publicKey),
@@ -435,8 +537,12 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   /// radio first, in the same command-queue slot, when the scope guard says the radio holds another one; null = leave it
   /// (and clear a scope an earlier send left behind). Timestamps are strictly increasing so every send has its own
   /// (encrypted) fingerprint.
+  ///
+  /// No message sync is started after a send (round 3 rule 13: incoming messages are read on the radio's MSG_WAITING push
+  /// and on connect; build 76 drained after every send, which put extra frames through the radio's small Bluetooth queue
+  /// at the moment a confirmation was due).
   Future<Frame> sendChannelFrame(int channelIndex, String text, {int priority = CommandPriority.normal, FloodScope? scope}) {
-    return _drainAfter(_commands.run(() async {
+    return _commands.run(() async {
       await _applyScope(scope);
       var ts = _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
       if (ts <= _lastSentTs) ts = _lastSentTs + 1;
@@ -444,23 +550,15 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       final f = await _send(encodeSendChannelText(channelIndex, ts, text));
       if (f is OkFrame || f is SentFrame || (f is UnknownFrame && f.code == Resp.sent)) _lastSentTs = ts;
       return f;
-    }, priority: priority));
-  }
-
-  /// A drain after every send (battery plan A7): with the backup poll slower, an answer that came in while we were
-  /// sending is still picked up right away. The drain queues behind the send and never changes its result.
-  Future<T> _drainAfter<T>(Future<T> send) {
-    send.then((_) {
-      if (isConnected) sync.requestDrain();
-    }, onError: (Object _) {});
-    return send;
+    }, priority: priority);
   }
 
   /// CMD_SEND_TXT_MSG to a contact. Returns the radio's answer: SENT (flood flag, expected ack, estimated timeout) or ERR.
   /// [timestamp] null = now (strictly increasing); a retry passes the first try's timestamp. Returns the timestamp used.
+  /// [attempt] goes to the radio untouched (0..7, see [encodeSendTxt]).
   Future<(Frame, int)> sendContactFrame(String pubkeyHex, String text,
       {int attempt = 0, int? timestamp, int priority = CommandPriority.user, FloodScope? scope}) {
-    return _drainAfter(_commands.run(() async {
+    return _commands.run(() async {
       await _applyScope(scope);
       var ts = timestamp ?? _clock().toUtc().millisecondsSinceEpoch ~/ 1000;
       if (timestamp == null) {
@@ -468,9 +566,16 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
         _lastSentTs = ts;
       }
       _lastAttemptTs = ts;
-      final f = await _send(encodeSendTxt(txtTypePlain, attempt, ts, fromHex(pubkeyHex), text));
+      // The confirmation code this send will get (computed as the radio does). If the radio's SENT for it comes late,
+      // after the timeout, that code is how the late frame is recognised and kept away from the next command.
+      final self = _self?.publicKey;
+      final own = (self == null || self.length != 64) ? null : expectedDmAck(sha256, timestamp: ts, attempt: attempt, text: text, senderPublicKey: fromHex(self));
+      final f = await _send(encodeSendTxt(txtTypePlain, attempt, ts, fromHex(pubkeyHex), text), ownAck: own);
+      // The confirmation push is due within the radio's estimate (x 1.2, what the outbox waits): keep the backup poll off
+      // the link until then.
+      if (f is SentFrame) _confirmDue = _clock().add(Duration(milliseconds: (f.estTimeoutMs * 1.2).round()));
       return (f, ts);
-    }, priority: priority));
+    }, priority: priority);
   }
 
   /// Puts the flood scope a send wants on the radio, inside the send's queue slot (see scope_guard.dart).
@@ -608,14 +713,16 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     if (!isConnected || _unsupported.contains(_telemetryKey)) return null;
     return _commands.run(() async {
       if (!isConnected) return null;
-      final reply = Completer<Frame>();
+      final cmd = encodeSelfTelemetryReq();
+      final reply = _PendingReply(cmd[0], expectedReplyCodes(cmd), null, _clock()); // answered by a push; only ERR is a reply
       final push = Completer<SelfTelemetry>();
       _pending = reply;
       _telemetryWaiter = push;
       try {
         PowerCounters.inc(PowerCounters.bleCommand);
-        await _transport.send(encodeSelfTelemetryReq());
-        final r = await Future.any<Object>([reply.future, push.future]).timeout(timeout);
+        _log(LinkLogKind.command, describeCommandForLog(cmd), code: cmd[0]);
+        await _transport.send(cmd);
+        final r = await Future.any<Object>([reply.done.future, push.future]).timeout(timeout);
         if (r is SelfTelemetry) return r;
         if (r is ErrFrame && (r.code == ErrCode.unsupportedCmd || r.code == ErrCode.illegalArg)) {
           _unsupported.add(_telemetryKey);
@@ -683,8 +790,16 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       arm();
       try {
         PowerCounters.inc(PowerCounters.bleCommand);
-        await _transport.send(encodeGetContacts(since: since));
+        final cmd = encodeGetContacts(since: since);
+        _log(LinkLogKind.command, describeCommandForLog(cmd), code: cmd[0]);
+        await _transport.send(cmd);
         await done.future;
+        _log(LinkLogKind.reply, 'END_OF_CONTACTS(4) for GET_CONTACTS: ${found.length} of $total', code: Resp.endOfContacts);
+      } on TimeoutException {
+        // Contact frames still on their way are strays from here on: [_onFrame] discards them (a CONTACT is only taken by
+        // GET_CONTACT_BY_KEY when it is the key that was asked for).
+        _log(LinkLogKind.timeout, 'GET_CONTACTS stopped after ${found.length} of $total: no frame for ${timeout.inMilliseconds}ms', code: Cmd.getContacts);
+        rethrow;
       } finally {
         idle?.cancel();
         _multi = null;
@@ -712,7 +827,8 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   /// The radio's own copy of one contact; null when it does not have it (ERR NOT_FOUND).
   Future<RadioContact?> getContactByKey(String publicKeyHex) async {
-    final f = await _command(encodeGetContactByKey(fromHex(publicKeyHex)), priority: CommandPriority.admin);
+    final key = fromHex(publicKeyHex);
+    final f = await _command(encodeGetContactByKey(key), priority: CommandPriority.admin, match: (r) => _isErrOrContactFor(r, key));
     if (f is ContactFrame) return radioContactOf(f);
     if (f is ErrFrame && f.code == ErrCode.notFound) return null;
     _fail('get contact', f);
@@ -757,6 +873,17 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
     _fail('share contact', f);
   }
 
+  /// True for an ERR, or a CONTACT frame that is about [key] (a CONTACT left over from a contact list that timed out is
+  /// about someone else and must not answer GET_CONTACT_BY_KEY).
+  static bool _isErrOrContactFor(Uint8List reply, List<int> key) {
+    if (reply.isEmpty || reply[0] != Resp.contact) return true;
+    if (reply.length < 33 || key.length < 32) return false;
+    for (var i = 0; i < 32; i++) {
+      if (reply[1 + i] != key[i]) return false;
+    }
+    return true;
+  }
+
   /// SELF_INFO as the radio holds it NOW (APP_START again; harmless mid-session). Another screen may have changed the radio's
   /// "other params" since [start], and SET_OTHER_PARAMS overwrites them all, so never write from a stale copy.
   Future<SelfInfoFrame> _freshSelfFrame() async {
@@ -773,8 +900,12 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
 
   /// What the radio does with a node it hears: from SELF_INFO (manual_add) and AUTOADD_CONFIG. [autoAddSupported] is false
   /// on a firmware without CMD_GET_AUTOADD_CONFIG (the per-type switches then do nothing).
-  Future<ContactPolicy> getContactPolicy() async {
-    final si = await _freshSelfFrame();
+  ///
+  /// [fresh] false = use the SELF_INFO this link already holds instead of sending APP_START again. The contact sync on
+  /// every connect uses that (round 3, "Removed: the repeated app start during contact sync"); a settings screen that is
+  /// about to write passes true.
+  Future<ContactPolicy> getContactPolicy({bool fresh = true}) async {
+    final si = fresh ? await _freshSelfFrame() : (_selfFrame ?? (throw StateError('radio not started')));
     var cfg = 0; // NodePrefs.h:38 default; also what a firmware without the command does in "ask" mode
     var hops = 0;
     var supported = false;
@@ -871,10 +1002,10 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   }
 
   /// One command, with radio-side failures mapped to [ClaimRadioException].
-  Future<Frame> _claimCommand(Uint8List frame, String what) async {
+  Future<Frame> _claimCommand(Uint8List frame, String what, {bool Function(Uint8List reply)? match}) async {
     _requireLink();
     try {
-      final r = await _command(frame, priority: CommandPriority.admin);
+      final r = await _command(frame, priority: CommandPriority.admin, match: match);
       if (r is SentFrame) onRemoteSent?.call(r);
       return r;
     } on TimeoutException {
@@ -927,7 +1058,7 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   @override
   Future<void> ensureContact(String pubkeyHex, {required int nodeType, String name = ''}) async {
     final key = fromHex(pubkeyHex);
-    final have = await _claimCommand(encodeGetContactByKey(key), 'get contact');
+    final have = await _claimCommand(encodeGetContactByKey(key), 'get contact', match: (r) => _isErrOrContactFor(r, key));
     if (have is ContactFrame) return;
     if (have is! ErrFrame || have.code != ErrCode.notFound) throw _sendFailure(have, 'get contact');
     final add = await _claimCommand(encodeAddUpdateContact(key, type: nodeType, name: name), 'add contact');
@@ -1139,6 +1270,28 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   }
 }
 
+
+/// The command in flight: its code, the reply codes that can answer it (null = any), an optional closer check, and when
+/// it was written.
+class _PendingReply {
+  final int command;
+  final Set<int>? accept;
+  final bool Function(Uint8List reply)? match;
+  final DateTime sentAt;
+
+  /// For a direct message: the confirmation code its own SENT reply will carry.
+  final int? ownAck;
+  final Completer<Frame> done = Completer<Frame>();
+  _PendingReply(this.command, this.accept, this.match, this.sentAt, {this.ownAck});
+
+  bool takes(Uint8List reply) {
+    final code = reply[0];
+    final a = accept;
+    if (code != Resp.err && a != null && !a.contains(code)) return false;
+    final m = match;
+    return m == null || m(reply);
+  }
+}
 
 /// One-shot wait for a claim event; the timer only starts in [wait], so the subscription can be made before the
 /// command goes out.

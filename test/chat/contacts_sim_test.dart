@@ -29,7 +29,8 @@ Future<void> until(bool Function() test, {int ms = 4000, String? why}) async {
   }
 }
 
-const fast = RetryPolicy(timeoutFactor: 0.05, slackMs: 20, jitterMs: 0, minWaitMs: 120, maxWaitMs: 400, minGapMs: 0, busyBaseMs: 30, notConnectedRecheckMs: 50);
+// The simulator estimates 1200 ms (direct) and 2500 ms (flood); x 0.08 keeps the waits near 100-200 ms.
+const fast = RetryPolicy(ackWaitFactor: 0.08, minGapMs: 0, busyBaseMs: 30, notConnectedRecheckMs: 50);
 
 class Rig {
   final SimulatedRadioScanner scanner;
@@ -296,16 +297,19 @@ void main() {
       await rig.close();
     });
 
-    test('adding a contact to a full radio frees the least useful slot by itself and tells the user', () async {
+    test('adding a contact to a full radio: nothing is taken off the radio; the state says the list is full (decision D1)', () async {
       final rig = Rig(maxContacts: 9);
       await rig.connect();
       await until(() => rig.cm.state.lastSyncMs != null);
       expect(rig.radio.contactCount, 9);
-      final notice = rig.cm.notices.first;
       final r = await rig.cm.addByKey('ab' * 32, name: 'Newcomer');
-      expect(r.onRadio, isTrue);
+      expect(r.ok, isTrue);
+      expect(r.onRadio, isFalse);
+      expect(r.note, contains('Your radio\'s contact list is full'));
       expect(rig.radio.contactCount, 9);
-      expect((await notice).message, contains('taken off the radio'));
+      expect(rig.radio.sentFrames.where((f) => f[0] == Cmd.removeContact), isEmpty);
+      expect(rig.cm.state.tableFull, isTrue);
+      expect(rig.chat.radioContactListFull, isTrue);
       await rig.close();
     });
   });
@@ -332,25 +336,28 @@ void main() {
       await rig.close();
     });
 
-    test('no acknowledgement: three flood tries with the same timestamp, then it gives up with the reason in words', () async {
+    test('no confirmation: eight flood tries (try numbers 0..7, one timestamp), then it gives up with the reason in words', () async {
       final rig = Rig();
       await rig.connect();
       await until(() => rig.cm.state.lastSyncMs != null);
       rig.radio.dropAcks = true;
       final bob = keyOf('Bob W8BOB');
       final m = rig.chat.send(radioId: rig.radioId, convKey: ConvKey.dm(bob.substring(0, 12)), text: 'anyone there');
-      await until(() => rig.store.messages.get(m.id)!.state == MessageState.failed, ms: 8000, why: 'gives up');
+      await until(() => rig.store.messages.get(m.id)!.state == MessageState.failed, ms: 12000, why: 'gives up');
       final got = rig.store.messages.get(m.id)!;
       expect(got.failReason, FailReason.noAck);
-      expect(rig.radio.sentDirect.map((d) => d.attempt), [0, 1, 2]);
+      expect(rig.radio.sentDirect.map((d) => d.attempt), [0, 1, 2, 3, 4, 5, 6, 7]);
       expect(rig.radio.sentDirect.map((d) => d.timestamp).toSet(), hasLength(1));
-      expect(rig.store.outbox.attemptsFor(m.id), hasLength(3));
-      expect(describeFailure(got, rig.store.outbox.attemptsFor(m.id)), allOf(contains('3 tries'), contains('everyone nearby')));
-      // Retry starts again from zero and, once acks flow, completes; the receiver sees one message (same timestamp)
+      expect(rig.radio.sentFrames.where((f) => f[0] == Cmd.resetPath), isEmpty, reason: 'the radio has no route: every try is a flood and no reset is sent');
+      expect(rig.store.outbox.attemptsFor(m.id), hasLength(8));
+      expect(describeFailure(got, rig.store.outbox.attemptsFor(m.id)), allOf(contains('8 tries'), contains('everyone nearby')));
+      // Try again is a NEW send: a new timestamp, try number 0 again. Once confirmations flow it completes.
       rig.radio.dropAcks = false;
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
       expect(rig.chat.retryFailed(m.id), isTrue);
       await until(() => rig.store.messages.get(m.id)!.state == MessageState.acked, ms: 8000);
-      expect(rig.radio.sentDirect.map((d) => d.timestamp).toSet(), hasLength(1));
+      expect(rig.radio.sentDirect.map((d) => d.timestamp).toSet(), hasLength(2));
+      expect(rig.radio.sentDirect.last.attempt, 0);
       await rig.close();
     });
 
@@ -366,7 +373,7 @@ void main() {
       await rig.close();
     });
 
-    test('"always flood" for a contact: even with a saved route the DM floods', () async {
+    test('long-press Send, flood chosen: one RESET_PATH, then the normal send, which the radio floods', () async {
       final rig = Rig();
       await rig.connect();
       await until(() => rig.cm.state.lastSyncMs != null);
@@ -375,10 +382,17 @@ void main() {
       final m1 = rig.chat.send(radioId: rig.radioId, convKey: conv, text: 'learn a route');
       await until(() => rig.store.messages.get(m1.id)!.state == MessageState.acked);
       await until(() => rig.store.contacts.get(rig.radioId, ann)!.hasPath);
-      rig.cm.setForceFlood(ann, true);
-      final m2 = rig.chat.send(radioId: rig.radioId, convKey: conv, text: 'flood anyway');
+      // A normal send now goes direct: the radio holds the route.
+      final direct = rig.chat.send(radioId: rig.radioId, convKey: conv, text: 'along the route');
+      await until(() => rig.store.messages.get(direct.id)!.state == MessageState.acked);
+      expect(rig.store.messages.get(direct.id)!.route, Route.direct);
+      expect(rig.radio.sentFrames.where((f) => f[0] == Cmd.resetPath), isEmpty);
+      final m2 = rig.chat.send(radioId: rig.radioId, convKey: conv, text: 'flood anyway', forceFlood: true);
       await until(() => rig.store.messages.get(m2.id)!.state == MessageState.acked);
-      expect(rig.store.messages.get(m2.id)!.route, Route.flood);
+      expect(rig.store.messages.get(m2.id)!.route, Route.flood, reason: 'as the radio reported it');
+      final codes = rig.radio.sentFrames.map((f) => f[0]).toList();
+      expect(codes.where((c) => c == Cmd.resetPath), hasLength(1));
+      expect(codes.lastIndexOf(Cmd.resetPath), lessThan(codes.lastIndexOf(Cmd.sendTxtMsg)), reason: 'the reset comes before the send');
       await rig.close();
     });
 

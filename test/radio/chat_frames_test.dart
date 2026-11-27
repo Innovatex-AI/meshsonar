@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/radio/crypto.dart' show sha256;
 import 'package:meshsonar/radio/protocol.dart';
 
 Uint8List b(List<int> x) => Uint8List.fromList(x);
@@ -110,7 +111,44 @@ void main() {
   group('DM: SEND_TXT_MSG and its answers (1132-1177)', () {
     test('command [2][txt_type][attempt][timestamp u32][pubkey prefix x6][text]', () {
       final f = encodeSendTxt(txtTypePlain, 5, 0x11223344, key, 'hi');
-      expect(f, [2, 0, 1, 0x44, 0x33, 0x22, 0x11, ...key.take(6), 0x68, 0x69], reason: 'attempt is masked to 2 bits');
+      expect(f, [2, 0, 5, 0x44, 0x33, 0x22, 0x11, ...key.take(6), 0x68, 0x69],
+          reason: 'the try number goes to the radio UNTOUCHED: the radio masks it for the ack hash and appends it to the packet above 3 '
+              '(BaseChatMesh.cpp 451-471). Build 76 masked it here, which made try 5 the same packet as try 1.');
+    });
+
+    test('try numbers 0..7 give eight different commands with the same timestamp and text', () {
+      final frames = [for (var a = 0; a <= maxDmWireAttempt; a++) encodeSendTxt(txtTypePlain, a, 0x11223344, key, 'hi')];
+      expect(frames.map((f) => f[2]), [0, 1, 2, 3, 4, 5, 6, 7]);
+      expect(frames.map((f) => f.sublist(3).join(',')).toSet(), hasLength(1), reason: 'only the try byte differs');
+      expect(frames.map((f) => f.join(',')).toSet(), hasLength(8));
+    });
+
+    test('text limit: 160 bytes on tries 1-4, 158 from the fifth try on (composeMsgPacket)', () {
+      expect([for (var a = 0; a <= 7; a++) maxDmTextBytesFor(a)], [160, 160, 160, 160, 158, 158, 158, 158]);
+    });
+
+    test('the confirmation code is SHA-256(timestamp LE, try & 3, text, sender key)[0..4]: tries n and n+4 share it', () {
+      int ack(int a, {int ts = 0x11223344, String text = 'hi'}) => expectedDmAck(sha256, timestamp: ts, attempt: a, text: text, senderPublicKey: key);
+      final want = ByteData.sublistView(sha256([0x44, 0x33, 0x22, 0x11, 2, 0x68, 0x69, ...key])).getUint32(0, Endian.little);
+      expect(ack(2), want);
+      expect(ack(6), want);
+      expect({ack(0), ack(1), ack(2), ack(3)}, hasLength(4));
+      expect(ack(0, ts: 0x11223345), isNot(ack(0)), reason: 'a new timestamp (a manual retry) is a new code');
+      // The same bytes the SENT reply and the confirmation push carry.
+      expect((decodeFrame(encodeSent(tag: ack(1))) as SentFrame).tag, ack(1));
+      expect((decodeFrame(encodeSendConfirmed(ack(1), 0)) as SendConfirmedPush).ack, ack(1));
+    });
+
+    test('reply codes per command: what may answer what (handleCmdFrame)', () {
+      Set<int>? codes(List<int> cmd) => expectedReplyCodes(Uint8List.fromList(cmd));
+      expect(codes(encodeSendTxt(txtTypePlain, 0, 1, key, 'x')), {Resp.sent});
+      expect(codes(encodeResetPath(key)), {Resp.ok});
+      expect(codes(encodeGetContactByKey(key)), {Resp.contact});
+      expect(codes(encodeSyncNextMessage()), containsAll([Resp.contactMsgRecvV3, Resp.channelMsgRecvV3, Resp.noMoreMessages, Resp.channelDataRecv]));
+      expect(codes(encodeDeviceQuery()), {Resp.deviceInfo});
+      expect(codes(encodeAppStart('x')), {Resp.selfInfo});
+      expect(codes(encodeSelfTelemetryReq()), isEmpty, reason: 'answered by a push; only ERR is a reply');
+      expect(codes([200]), isNull, reason: 'a command the table does not know takes any reply, as before');
     });
 
     test('RESP_CODE_SENT [6][flood][expected_ack u32][est_timeout u32] (1169-1175)', () {

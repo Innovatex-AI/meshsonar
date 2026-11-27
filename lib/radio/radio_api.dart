@@ -14,6 +14,25 @@ abstract class ByteTransport {
   bool get isConnected;
 }
 
+/// A frame that does not fit in one write on this link (the Bluetooth link's negotiated size). Thrown by a transport's
+/// [ByteTransport.send] instead of writing a frame the radio would never see whole (round 3 rule 3).
+class FrameTooLongForLink implements Exception {
+  final int frameBytes;
+  final int maxBytes;
+  const FrameTooLongForLink(this.frameBytes, this.maxBytes);
+  @override
+  String toString() => 'frame of $frameBytes bytes does not fit this link ($maxBytes bytes per write)';
+}
+
+/// How one frame goes out over Bluetooth (round 3 rule 3, companion_protocol.md "use write with response"): a CONFIRMED
+/// write whenever the radio's characteristic allows one, and never a frame longer than the link carries in one write.
+/// [maxWriteBytes] null = the platform did not say. Returns true for a confirmed write (with response); throws
+/// [FrameTooLongForLink] when the frame cannot go out whole. Pure, so it is tested without a Bluetooth stack.
+bool planBleWrite({required int frameBytes, required bool canWriteWithResponse, required bool canWriteWithoutResponse, int? maxWriteBytes}) {
+  if (maxWriteBytes != null && maxWriteBytes > 0 && frameBytes > maxWriteBytes) throw FrameTooLongForLink(frameBytes, maxWriteBytes);
+  return canWriteWithResponse || !canWriteWithoutResponse;
+}
+
 /// A radio found by scanning.
 class RadioDevice {
   final String id; // platform device id

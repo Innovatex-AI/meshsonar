@@ -48,7 +48,8 @@ abstract interface class ContactRadioPort {
   /// GET_CONTACT_BY_KEY: the radio's copy, or null when it does not have it.
   Future<Contact?> fetch(String publicKey);
 
-  /// ADD_UPDATE_CONTACT with the phone's copy (including a favourite flag and the saved path). Throws [ContactTableFull].
+  /// ADD_UPDATE_CONTACT with [contact] exactly as given. Callers pass either the radio's own copy with the flags changed
+  /// (an edit) or a new contact with no route (ContactManager); never the phone's copy of a route. Throws [ContactTableFull].
   Future<void> upload(Contact contact);
 
   /// REMOVE_CONTACT; false when the radio did not have it.
@@ -60,6 +61,10 @@ abstract interface class ContactRadioPort {
   Future<void> importAdvert(Uint8List packet);
   Future<bool> shareZeroHop(String publicKey);
 
-  Future<ContactPolicy> getPolicy();
+  /// A direct message is waiting for its delivery confirmation right now: reads that can wait should wait.
+  bool get deliveryInFlight;
+
+  /// [fresh] false = from what the session already knows, without sending APP_START again (the sync on every connect).
+  Future<ContactPolicy> getPolicy({bool fresh = true});
   Future<void> setPolicy(ContactPolicy policy);
 }

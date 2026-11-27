@@ -69,9 +69,10 @@ void main() {
       port.radioAdd(radioContact(1, name: 'Old name'));
       await attachAndSync();
       cm.setFavourite(keyN(1), true);
+      await Future<void>.delayed(Duration.zero); // the favourite edit reaches the radio (read, then write)
       cm.rename(keyN(1), 'Mum');
       cm.setNotes(keyN(1), 'blue car');
-      cm.setForceFlood(keyN(1), true);
+      cm.setForceFlood(keyN(1), true); // removed in build 77: does nothing
       port.radioAdd(radioContact(1, name: 'New name', path: true));
       await cm.syncNow();
       final c = store.contacts.get(radioA, keyN(1))!;
@@ -81,7 +82,7 @@ void main() {
       expect(c.customName, 'Mum');
       expect(c.displayName, 'Mum');
       expect(c.notes, 'blue car');
-      expect(c.forceFlood, isTrue);
+      expect(c.forceFlood, isFalse, reason: 'route modes are gone: the radio alone decides direct or flood');
     });
 
     test('a new contact with the radio-side favourite flag arrives as a favourite', () async {
@@ -147,8 +148,7 @@ void main() {
     });
 
     test('an unexpected error becomes the generic plain sentence, not a stack trace', () async {
-      port.failUpload = StateError('boom');
-      store.contacts.upsert(radioContact(1).copyWith(source: ContactSource.manual));
+      port = _BoomPort();
       await attachAndSync();
       expect(cm.state.phase, SyncPhase.failed);
       expect(cm.state.error, isNot(contains('boom')));
@@ -156,42 +156,46 @@ void main() {
     });
   });
 
-  group('the phone is the master', () {
-    test('user-added contacts and favourites are put on the radio, anyone else is not pushed unasked', () async {
-      store.contacts.upsert(radioContact(1).copyWith(source: ContactSource.manual)); // added by hand
-      store.contacts.upsert(radioContact(2).copyWith(favourite: true));
-      store.contacts.upsert(radioContact(3)); // known from an earlier radio session, nothing special
-      await attachAndSync();
-      expect(port.table.keys, containsAll([keyN(1), keyN(2)]));
-      expect(port.table.containsKey(keyN(3)), isFalse);
-      expect(port.table[keyN(2)]!.radioFlags & 1, 1, reason: 'the favourite is the radio\'s "never replace me"');
-      expect(store.contacts.get(radioA, keyN(1))!.onRadio, isTrue);
-      expect(store.contacts.get(radioA, keyN(3))!.onRadio, isFalse);
-    });
-
-    test('a contact with a conversation goes back on the radio so its DMs can be decrypted', () async {
+  group('the phone is the master of the book; the radio is the master of its table and of every route', () {
+    test('NOTHING is written to the radio on connect: no favourite push, no cache fill, never the phone\'s copy of a route', () async {
+      // On the radio: Node 1 with the route the radio learned, not a favourite there.
+      port.radioAdd(radioContact(1, path: true).copyWith(outPath: Uint8List.fromList([0x42]), outPathLen: 1));
+      // On the phone: Node 1 as a favourite with a STALE route, plus contacts the radio does not hold: one added by hand
+      // (with a route the phone remembers), one favourite, one with a conversation.
+      store.contacts.upsert(radioContact(1, path: true).copyWith(favourite: true, outPath: Uint8List.fromList([0x99, 0x98]), outPathLen: 2, onRadio: true));
+      store.contacts.upsert(radioContact(2, path: true).copyWith(source: ContactSource.manual));
+      store.contacts.upsert(radioContact(3).copyWith(favourite: true));
       store.contacts.upsert(radioContact(7));
       store.messages.insert(ChatMessage(
           id: 'x', radioId: radioA, convKind: ConvKind.dm, convKey: ConvKey.dm(keyN(7).substring(0, 12)), direction: Direction.incoming,
           tsSender: 1, tsLocalMs: clock.ms, text: 'hi', state: MessageState.received, dedupeKey: 'k1'));
       await attachAndSync();
-      expect(port.table.containsKey(keyN(7)), isTrue);
+      expect(cm.state.phase, SyncPhase.idle);
+      expect(port.uploads, isEmpty, reason: 'build 76 pushed favourite flags and filled the radio with the phone\'s copies, routes included');
+      expect(port.table.keys, [keyN(1)]);
+      expect(port.table[keyN(1)]!.routeIds, ['42'], reason: 'the route the radio learned is untouched');
+      // The phone's mirror now shows the radio's route, not its own stale one.
+      expect(store.contacts.get(radioA, keyN(1))!.routeIds, ['42']);
+      expect(store.contacts.get(radioA, keyN(1))!.favourite, isTrue, reason: 'the phone keeps what only the phone knows');
+      expect(port.policyReads, [false], reason: 'the policy read on connect sends no APP_START');
     });
 
-    test('cache fill stops short of the reserve for the radio\'s own use, but never for contacts the user added by hand', () async {
-      port.capacity = 10;
-      for (var i = 1; i <= 8; i++) {
-        port.radioAdd(radioContact(i));
-      }
-      for (var i = 20; i < 24; i++) {
-        store.contacts.upsert(radioContact(i).copyWith(favourite: true)); // want to go on
-      }
-      store.contacts.upsert(radioContact(30).copyWith(source: ContactSource.manual));
-      await attachAndSync();
-      // 8 on the radio, capacity 10, reserve 5: favourites find no room (3 would breach the reserve); the manual add takes a slot
-      expect(port.table.length, 9);
-      expect(port.table.containsKey(keyN(30)), isTrue);
-      expect(store.contacts.list(radioA).where((c) => c.favourite && !c.onRadio), hasLength(4));
+    test('a contact the person added while the radio was away goes on at the next sync: a NEW contact, route unknown', () async {
+      cm.attach(port);
+      port.isConnected = false;
+      final r = await cm.addByKey(keyN(5), name: 'Added offline');
+      expect(r.onRadio, isFalse);
+      expect(cm.pendingAdds, {keyN(5)});
+      // Even if the phone has a route for it from an earlier radio, that is not written.
+      store.contacts.setPath(radioA, keyN(5), Uint8List.fromList([1, 2, 3]), 3);
+      port.isConnected = true;
+      await cm.syncNow();
+      expect(port.written.single.publicKey, keyN(5));
+      expect(port.written.single.hasPath, isFalse, reason: 'written as "unknown", never "direct" and never the phone\'s copy');
+      expect(port.fetches, contains(keyN(5)), reason: 'the radio is read first');
+      expect(cm.pendingAdds, isEmpty);
+      await cm.syncNow();
+      expect(port.written.length, 1, reason: 'once: a later connect writes nothing');
     });
 
     test('no contact is ever deleted from the phone because the radio is full', () async {
@@ -208,18 +212,30 @@ void main() {
       expect(book(), hasLength(4));
     });
 
-    test('adding with a full radio makes room by taking the least useful contact off the radio, and says so', () async {
+    test('adding with a full radio takes NOTHING off the radio: the state says "Your radio\'s contact list is full" (decision D1)', () async {
       port.capacity = 3;
       for (var i = 1; i <= 3; i++) {
         port.radioAdd(radioContact(i));
       }
       await attachAndSync();
-      final notice = cm.notices.first;
+      var notices = 0;
+      final sub = cm.notices.listen((_) => notices++);
       final r = await cm.addByKey(keyN(9), name: 'Newcomer');
-      expect(r.onRadio, isTrue);
-      expect(port.table.length, 3);
-      expect(book(), hasLength(4), reason: 'the evicted contact is still in the phone\'s book');
-      expect((await notice).message, contains('still in your contacts'));
+      expect(r.ok, isTrue);
+      expect(r.onRadio, isFalse);
+      expect(r.note, contains('Your radio\'s contact list is full'));
+      expect(port.removes, isEmpty, reason: 'build 76 removed a little-used contact from the radio to make room');
+      expect(port.table.keys, [keyN(1), keyN(2), keyN(3)]);
+      expect(cm.state.tableFull, isTrue);
+      expect(cm.radioListFull, isTrue);
+      expect(book(), hasLength(4));
+      // The person makes room; the add then goes through at the next sync and the state clears.
+      await cm.removeFromRadio([keyN(1)]);
+      expect(cm.radioListFull, isFalse);
+      await cm.syncNow();
+      expect(port.table.containsKey(keyN(9)), isTrue);
+      expect(notices, 0);
+      await sub.cancel();
     });
   });
 
@@ -232,41 +248,36 @@ void main() {
       expect(port.uploads, isEmpty);
     });
 
-    test('not there: uploaded with its saved route; learns the radio\'s route when the radio has a newer one', () async {
+    test('not there: written as a NEW contact with route unknown (never the phone\'s saved route); there: the radio\'s route is taken', () async {
       store.contacts.upsert(radioContact(1, path: true));
       await attachAndSync();
-      port.table.remove(keyN(1));
-      store.contacts.setOnRadio(radioA, keyN(1), false);
+      expect(port.uploads, isEmpty);
       await cm.ensureOnRadio(keyN(1));
-      expect(port.table[keyN(1)]!.hasPath, isTrue);
+      expect(port.fetches, [keyN(1)], reason: 'the radio\'s copy is read first');
+      expect(port.written.single.hasPath, isFalse);
+      expect(port.table[keyN(1)]!.hasPath, isFalse);
+      expect(port.table[keyN(1)]!.lastAdvertTs, radioContact(1).lastAdvertTs);
       expect(store.contacts.get(radioA, keyN(1))!.onRadio, isTrue);
-      // the radio holds a newer route: ensureOnRadio(force) reads it back
+      // the radio holds a route: ensureOnRadio(force) reads it back and writes nothing
       port.radioAdd(radioContact(1, path: true).copyWith(outPath: Uint8List.fromList([9, 9]), outPathLen: 2));
+      port.written.clear();
       await cm.ensureOnRadio(keyN(1), force: true);
       expect(store.contacts.get(radioA, keyN(1))!.outPathLen, 2);
+      expect(port.written, isEmpty);
     });
 
-    test('full: takes the least useful non-favourite, non-conversation contact off the RADIO only, says so, and uploads', () async {
+    test('full: ContactTableFull, the state says full, and nothing is taken off the radio', () async {
       port.capacity = 4;
-      port.radioAdd(radioContact(1).copyWith(lastHeardMs: 5000)); // oldest heard, no conversation: the victim
-      port.radioAdd(radioContact(2).copyWith(lastHeardMs: 9000));
-      port.radioAdd(radioContact(3));
-      port.radioAdd(radioContact(4));
+      for (var i = 1; i <= 4; i++) {
+        port.radioAdd(radioContact(i));
+      }
       store.contacts.upsert(radioContact(10));
       await attachAndSync();
-      store.contacts.upsert(store.contacts.get(radioA, keyN(1))!.copyWith(lastHeardMs: 5000));
-      store.contacts.upsert(store.contacts.get(radioA, keyN(2))!.copyWith(lastHeardMs: 9000));
-      store.contacts.upsert(store.contacts.get(radioA, keyN(3))!.copyWith(favourite: true));
-      store.messages.insert(ChatMessage(
-          id: 'c4', radioId: radioA, convKind: ConvKind.dm, convKey: ConvKey.dm(keyN(4).substring(0, 12)), direction: Direction.incoming,
-          tsSender: 1, tsLocalMs: clock.ms, text: 'hi', state: MessageState.received, dedupeKey: 'k4'));
-      final notice = cm.notices.first;
-      await cm.ensureOnRadio(keyN(10));
-      expect(port.removes, [keyN(1)]);
-      expect(port.table.containsKey(keyN(10)), isTrue);
-      expect(store.contacts.get(radioA, keyN(1)), isNotNull, reason: 'still in the phone\'s book');
-      expect(store.contacts.get(radioA, keyN(1))!.onRadio, isFalse);
-      expect((await notice).message, allOf(contains('Node 1'), contains('still in your contacts')));
+      await expectLater(cm.ensureOnRadio(keyN(10)), throwsA(isA<ContactTableFull>()));
+      expect(port.removes, isEmpty);
+      expect(port.table.length, 4);
+      expect(cm.state.tableFull, isTrue);
+      expect(store.contacts.get(radioA, keyN(10))!.onRadio, isFalse);
     });
 
     test('full and nothing can go (all favourites): ContactTableFull and the state says full', () async {
@@ -460,9 +471,16 @@ void main() {
     test('favourite pushes the radio flag; unfavourite clears it', () async {
       port.radioAdd(radioContact(1));
       await attachAndSync();
+      // The radio learns a route the phone has not heard about (a missed PATH_UPDATED) and the phone holds a stale one.
+      port.radioAdd(radioContact(1, path: true).copyWith(outPath: Uint8List.fromList([0x42, 0x43]), outPathLen: 2, lastAdvertTs: 1770000000));
+      store.contacts.setPath(radioA, keyN(1), Uint8List.fromList([0x99]), 1);
       cm.setFavourite(keyN(1), true);
       await Future<void>.delayed(Duration.zero);
       expect(port.table[keyN(1)]!.radioFlags & 1, 1);
+      // An edit: the radio's copy is read first and goes back with only the flag changed (rule 15).
+      expect(port.fetches.last, keyN(1));
+      expect(port.written.single.routeIds, ['42', '43'], reason: 'the radio\'s current route, not the phone\'s stale copy');
+      expect(port.written.single.lastAdvertTs, 1770000000, reason: 'the radio\'s last-advert time, not the phone\'s');
       cm.setFavourite(keyN(1), false);
       await Future<void>.delayed(Duration.zero);
       expect(port.table[keyN(1)]!.radioFlags & 1, 0);
@@ -640,5 +658,13 @@ void main() {
       }
       m.dispose();
     });
+  }
+}
+
+/// A radio whose contact list read fails in a way nobody planned for.
+class _BoomPort extends FakeRadioPort {
+  @override
+  Future<ContactDownload> download({required int since, required void Function(Contact contact, int received, int total) onContact}) async {
+    throw const FormatException('boom');
   }
 }
