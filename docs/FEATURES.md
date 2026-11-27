@@ -893,7 +893,11 @@ their numbers in words, distance and speed bars, TX power, GPS, the repeaters ta
 says "Contains where you drove (grid cells)"; units as set, phone local time with the zone named; Barlow embedded,
 characters it lacks shown as "?" and said in the footer). PDF and CSV are disabled for a drive with no pings.
 
-Sections: **hero** (distance in km and mi, date, duration, antenna; grids mapped, % pings heard, repeaters),
+Build 77 (round 5 section 6): the report's headline is the drive's verdict (Good / Patchy / Poor / Nothing answered /
+Listen-only), distance joins the stat row, the radio charts fold into one-line "Radio details" readings that open their
+chart, and colour has one meaning: percent heard is its own teal scale (0 % is the neutral No reply), distance bars take
+the colour of their own signal, the noise line is neutral and turns to the warning colour only when the noise is high;
+the PDF matches and is in UTC. Before build 77: sections: **hero** (distance in km and mi, date, duration, antenna; grids mapped, % pings heard, repeaters),
 **highlights**, a **grid map** of cells coloured by heard % (red = 0%, then blue → teal → green), with new cells
 outlined and heard repeaters with known positions marked. Then **the drive** numbers, **signal over the drive** (SNR
 chart and heard strip), **noise floor** (line with the -100 dBm interference line; "Your radio did not report a noise
