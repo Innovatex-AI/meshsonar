@@ -54,6 +54,9 @@ abstract final class AppSymbols {
   static const checkmark = AppSymbol('checkmark', CupertinoIcons.check_mark, Icons.check);
   static const checkmarkCircleFill = AppSymbol('checkmark.circle.fill', CupertinoIcons.check_mark_circled_solid, Icons.check_circle);
   static const arrowClockwise = AppSymbol('arrow.clockwise', CupertinoIcons.arrow_clockwise, Icons.refresh);
+  /// Undo and Redo (build 77, Plan menu: they used the back and forward chevrons).
+  static const undo = AppSymbol('arrow.uturn.backward', CupertinoIcons.arrow_uturn_left, Icons.undo);
+  static const redo = AppSymbol('arrow.uturn.forward', CupertinoIcons.arrow_uturn_right, Icons.redo);
   static const ellipsis = AppSymbol('ellipsis', CupertinoIcons.ellipsis, Icons.more_horiz);
   static const magnifyingglass = AppSymbol('magnifyingglass', CupertinoIcons.search, Icons.search);
   static const lineDecrease = AppSymbol('line.3.horizontal.decrease', CupertinoIcons.line_horizontal_3_decrease, Icons.filter_list);
@@ -117,6 +120,7 @@ abstract final class AppSymbols {
     location, locationFill, antenna, wifi, bolt, battery, thermometer, tray, waveform, //
     route, gauge, bubbles, qrcode,
     squareAndPencil, globe, numberSign, exclamationCircleFill, checkmarkBubble, squareAndArrowDown, camera, photo, arrowClockwise,
+    undo, redo,
   ];
 }
 

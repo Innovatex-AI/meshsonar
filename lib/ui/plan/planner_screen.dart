@@ -12,13 +12,22 @@
 // Requests from anywhere in the app (ShellController.openPlan, taken by plan_tab.dart) arrive at [PlannerScreenState.handle]:
 // a shared plan link, Plan from here, Add to plan, Link to…, a point, a saved plan.
 //
-// First useful result within one tap (plan §4.5 item 8): an empty plan shows "Coverage from my location", which adds a
-// node where the phone is and runs the coverage Estimate (without a phone position: "Coverage from the map centre").
+// Build 77 (round 4, the Plan tab):
+//   * the mode comes first: under the mode bar the mode's question, then the mode's own controls; the plan's row (count,
+//     save state, menu) and the radio row sit lower, above the list of spots; the selected spot is one line (P-V1);
+//   * an empty plan shows only the first-run card: one sentence and three jobs (P-U2, P-V2); its first button is the
+//     one-tap start of plan §4.5 item 8 (a spot where the phone is, or the map centre, then its coverage Estimate);
+//   * Where to drive stands on its own (P-U1); the tab remembers the last mode (PlanModeMemory) and other tabs can open
+//     a mode directly ([openMode], through plan_tab.dart's openPlanMode);
+//   * "Add a spot" shows the same crosshair with Set here / Cancel as moving one (P-U3); press and hold still works;
+//   * the plan name is said once, on the map pill, which opens Saved plans (P-V5, P-U5).
 //
-// Keys: 'planner', 'planner-map', 'planner-mode-<id>' (chips), 'plan-name', 'plan-menu', 'plan-radio-summary',
-// 'plan-quick-here', 'plan-quick-centre', 'plan-quick-network', 'plan-selected', 'plan-selected-edit', 'plan-node-drive' (J4:
-// Navigate / Show on the Drive map for the selected node), 'plan-menu-drive-map' (the plan's planned sites on the Drive map), 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair',
-// 'saved-plans', 'saved-plan-<id>'; Rename uses saved_plans.dart's sheet ('saved-plan-name-field', 'saved-plan-name-save').
+// Keys: 'planner', 'planner-map', 'planner-mode-<id>' (chips), 'planner-title' (the pill's name; the pill is
+// 'planner-title-pill'), 'plan-name' (the plan row's count and save state), 'plan-menu', 'plan-radio-summary',
+// 'plan-first-run', 'plan-quick-here', 'plan-quick-centre', 'plan-quick-no-location', 'plan-quick-network' ("Will two places
+// connect?"), 'plan-quick-drive', 'plan-selected', 'plan-selected-edit', 'plan-menu-drive-map' (the plan's planned spots on
+// the Drive map), 'planner-move-bar', 'planner-move-set', 'planner-move-cancel', 'planner-crosshair' (moving or adding a
+// spot), 'saved-plans', 'saved-plan-<id>'; Rename uses saved_plans.dart's sheet ('saved-plan-name-field', 'saved-plan-name-save').
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -32,6 +41,7 @@ import '../../core/map_prefs.dart' show kPlanLayerPage;
 import '../../core/plan/plan_api.dart';
 import '../../core/plan/plan_codec.dart' show decodePlanUri;
 import '../../core/plan/plan_controller.dart';
+import '../../core/plan/plan_mode_memory.dart';
 import '../../core/plan/plan_model.dart';
 import '../../core/plan/saved_plans.dart';
 import '../../core/plan_contract.dart';
@@ -81,6 +91,7 @@ class PlannerScreen extends StatefulWidget {
 class PlannerScreenState extends State<PlannerScreen> {
   late AppState _s;
   late SavedPlans _saved;
+  late PlanModeMemory _modeMemory;
   PlanApi? _api;
   String? _apiBase;
   PlanController? _c;
@@ -108,6 +119,9 @@ class PlannerScreenState extends State<PlannerScreen> {
   late PageLayersModel _layersModel;
   String? _selected;
   String? _moving;
+
+  /// "Add a spot" is showing its crosshair (round 4 P-U3).
+  bool _adding = false;
   PlanModeOverlay _modeOverlay = PlanModeOverlay.empty;
   PlanModeIntent? _intent;
   int _intentSeq = 0;
@@ -121,7 +135,7 @@ class PlannerScreenState extends State<PlannerScreen> {
 
   /// The Plan tab was tapped again: the sheet goes down so the whole map shows, or comes back up when it already is down.
   void collapseSheet() {
-    if (!mounted || _moving != null) return;
+    if (!mounted || _moving != null || _adding) return;
     setState(() => _detent = _detent == PlannerDetent.dock ? PlannerDetent.medium : PlannerDetent.dock);
   }
   String? get selectedNodeId => _selected;
@@ -138,6 +152,10 @@ class PlannerScreenState extends State<PlannerScreen> {
   @visibleForTesting
   Future<bool> longPressForTest(LongPressHit hit) => _onLongPress(context, hit);
 
+  /// The map point under the middle of the part of the map above the sheet (where a focused place sits).
+  @visibleForTesting
+  LatLng? get mapCentreForTest => _crosshair;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -145,6 +163,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     _init = true;
     _s = AppScope.read(context);
     _saved = SavedPlans(_s.plans, clock: _s.services.clock);
+    _modeMemory = PlanModeMemory(_s.planStore);
     // A Drive-map request that names a saved plan draws it (J4). Holds only the store, not this screen.
     final saved = _saved;
     MainMapFocus.overlay.resolvePlan = (id) async {
@@ -197,6 +216,10 @@ class PlannerScreenState extends State<PlannerScreen> {
   Plan _fresh() => Plan.create(region: _s.viewingRegion?.slug, preset: _s.siteConfig?.radioPreset, now: _s.services.clock());
 
   Future<void> _load() async {
+    // The tab opens on the mode used last (round 4 P-U1; it always opened on Link).
+    final last = await _modeMemory.read();
+    final id = PlanModeId.values.where((m) => m.name == last).firstOrNull;
+    if (id != null && mounted) _mode = id;
     Plan? p;
     try {
       final list = await _saved.list();
@@ -221,6 +244,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     setState(() {
       _selected = null;
       _moving = null;
+      _adding = false;
     });
     _syncOverlay();
     // Once now, and once more after the map's own first camera move (it centres on the phone's position when that arrives).
@@ -350,16 +374,31 @@ class PlannerScreenState extends State<PlannerScreen> {
       _finishMove(moving, at);
       return true;
     }
+    if (_adding) {
+      _finishAdd(at);
+      return true;
+    }
     if (_hooks.onMapPoint?.call(at) == true) return true;
     _addAt(at);
     return true;
   }
 
-  /// Drops a planned node at [at] (the long-press default).
+  /// "Spot 1", "Spot 2"…: the first number no spot of the plan uses.
+  String _nextSpotName() {
+    final c = _c!;
+    final used = {for (final n in c.nodes) n.name};
+    var k = c.nodes.where((x) => x.status == PlanNodeStatus.planned).length + 1;
+    while (used.contains('Spot $k')) {
+      k++;
+    }
+    return 'Spot $k';
+  }
+
+  /// Drops a planned spot at [at] (the long-press default, and Add a spot's Set here).
   PlanNode? _addAt(PlanPoint at, {String? name}) {
     final c = _c!;
     try {
-      final n = c.addNode(name: name ?? 'Site ${c.nodes.where((x) => x.status == PlanNodeStatus.planned).length + 1}', lat: at.lat, lon: at.lon);
+      final n = c.addNode(name: name ?? _nextSpotName(), lat: at.lat, lon: at.lon);
       _select(n.id);
       unawaited(AppHaptics.success());
       showAppToast(context, 'Dropped ${n.name}.', actionLabel: 'Undo', onAction: c.undo);
@@ -372,7 +411,7 @@ class PlannerScreenState extends State<PlannerScreen> {
 
   Future<bool> _onPlanNode(BuildContext context, PlanNodeHit hit) async {
     final c = _c;
-    if (c == null || _moving != null) return true;
+    if (c == null || _moving != null || _adding) return true;
     if (_hooks.onNodeTap?.call(hit.nodeId) == true) return true;
     if (c.plan.node(hit.nodeId) != null) {
       _select(hit.nodeId);
@@ -406,6 +445,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     if (n == null) return;
     setState(() {
       _moving = id;
+      _adding = false;
       _detent = PlannerDetent.dock;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus(n.point));
@@ -421,8 +461,34 @@ class PlannerScreenState extends State<PlannerScreen> {
     });
     if (ok) {
       unawaited(AppHaptics.success());
-      showAppToast(context, 'Moved ${c.plan.node(id)?.name ?? 'the node'}.', actionLabel: 'Undo', onAction: c.undo);
+      showAppToast(context, 'Moved ${c.plan.node(id)?.name ?? 'the spot'}.', actionLabel: 'Undo', onAction: c.undo);
     }
+  }
+
+  // ------------------------------------------------------------------------------------------------ adding a spot
+
+  /// "Add a spot" (round 4 P-U3): the move crosshair and its bar, for a new planned spot. Press and hold still adds one.
+  void _startAdd() {
+    final c = _c;
+    if (c == null) return;
+    if (c.plan.isFull) {
+      showAppToast(context, const PlanFullException().toString(), kind: AppToastKind.error);
+      return;
+    }
+    unawaited(AppHaptics.selection());
+    setState(() {
+      _adding = true;
+      _moving = null;
+      _detent = PlannerDetent.dock;
+    });
+  }
+
+  void _finishAdd(PlanPoint at) {
+    setState(() {
+      _adding = false;
+      _detent = PlannerDetent.medium;
+    });
+    _addAt(at);
   }
 
   // ------------------------------------------------------------------------------------------------ dragging a node
@@ -446,7 +512,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     if (!moved || c == null || !mounted) return;
     setState(() => _selected = id);
     unawaited(AppHaptics.success());
-    showAppToast(context, 'Moved ${c.plan.node(id)?.name ?? 'the node'}.', actionLabel: 'Undo', onAction: c.undo);
+    showAppToast(context, 'Moved ${c.plan.node(id)?.name ?? 'the spot'}.', actionLabel: 'Undo', onAction: c.undo);
   }
 
   // ------------------------------------------------------------------------------------------------ requests
@@ -495,7 +561,7 @@ class PlannerScreenState extends State<PlannerScreen> {
           final other = _c!.nodes.where((x) => x.id != n.id).firstOrNull;
           _startMode(PlanModeId.link, PlanModeIntent(PlanModeIntentKind.linkFrom, n.id, otherId: null, seq: ++_intentSeq));
           if (mounted) {
-            showAppToast(context, other == null ? 'Now add the other end: long-press the map or add a repeater.' : 'Pick the other end: tap a node on the map or choose End B.');
+            showAppToast(context, other == null ? 'Now add the other end: Add a spot, or a repeater from the network.' : 'Pick the other end: tap a spot on the map or choose Spot B.');
           }
         }
       case PlanRequestKind.point:
@@ -511,7 +577,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     final network = key != null && const {'repeater', 'observer', 'contact'}.contains(seed.source);
     try {
       final n = c.addNode(
-        name: seed.name.trim().isEmpty ? 'Pin' : seed.name,
+        name: seed.name.trim().isEmpty ? _nextSpotName() : seed.name,
         lat: seed.lat,
         lon: seed.lon,
         status: network ? PlanNodeStatus.existing : PlanNodeStatus.planned,
@@ -527,8 +593,20 @@ class PlannerScreenState extends State<PlannerScreen> {
     }
   }
 
+  /// Opens [id] from elsewhere in the app (plan_tab.dart's openPlanMode: the Drive panel's "Where to drive next").
+  Future<void> openMode(PlanModeId id) async {
+    await ready;
+    if (!mounted) return;
+    setState(() {
+      _moving = null;
+      _adding = false;
+    });
+    _startMode(id, null);
+  }
+
   void _startMode(PlanModeId id, PlanModeIntent? intent) {
     _hooks.clear();
+    unawaited(_modeMemory.write(id.name));
     setState(() {
       _mode = id;
       _intent = intent;
@@ -544,7 +622,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     final c = _c;
     if (c == null) return;
     final centre = _crosshair;
-    unawaited(showNodePicker(context, c, near: centre == null ? null : PlanPoint(centre.latitude, centre.longitude), onAdded: (n) => _select(n.id)));
+    unawaited(showNodePicker(context, c, near: centre == null ? null : PlanPoint(centre.latitude, centre.longitude), onAdded: (n) => _select(n.id), onSpot: _startAdd));
   }
 
   void _edit(String id) {
@@ -562,7 +640,14 @@ class PlannerScreenState extends State<PlannerScreen> {
     _startMode(PlanModeId.coverage, PlanModeIntent(PlanModeIntentKind.coverageOf, n.id, seq: ++_intentSeq));
   }
 
-  /// The quick start without a phone position: a planned node at the middle of the map above the sheet, then its coverage.
+  /// "Will two places connect?" on the first-run card: Link, and the picker for the first end (a repeater, or "Put a spot
+  /// on the map instead").
+  void _quickLink() {
+    _startMode(PlanModeId.link, null);
+    _openPicker();
+  }
+
+  /// The quick start without a phone position: a planned spot at the middle of the map above the sheet, then its coverage.
   void _quickCentre() {
     final at = _crosshair;
     if (at == null) return;
@@ -579,16 +664,17 @@ class PlannerScreenState extends State<PlannerScreen> {
       title: c.plan.name,
       sheetKey: const Key('plan-menu-sheet'),
       actions: [
+        // Saved plans first (round 4 P-U5; it was sixth). The map pill opens it too.
+        const AppAction('Saved plans', 'open', symbol: AppSymbols.tray, key: Key('plan-menu-open')),
         const AppAction('Rename', 'rename', symbol: AppSymbols.squareAndPencil, key: Key('plan-menu-rename')),
         const AppAction('Radio and trees', 'settings', symbol: AppSymbols.antenna, key: Key('plan-menu-settings')),
         if (planDriveTargets(c.nodes).isNotEmpty)
           const AppAction('Show plan on the Drive map', 'drive', symbol: AppSymbols.car, key: Key('plan-menu-drive-map')),
         const AppAction('Share or export', 'share', symbol: AppSymbols.squareAndArrowUp, key: Key('plan-menu-share')),
-        const AppAction('Saved plans', 'open', symbol: AppSymbols.tray, key: Key('plan-menu-open')),
         const AppAction('Import a plan or contacts', 'import', symbol: AppSymbols.squareAndArrowDown, key: Key('plan-menu-import')),
         const AppAction('New plan', 'new', symbol: AppSymbols.plus, key: Key('plan-menu-new')),
-        if (c.canUndo) const AppAction('Undo', 'undo', symbol: AppSymbols.chevronLeft, key: Key('plan-menu-undo')),
-        if (c.canRedo) const AppAction('Redo', 'redo', symbol: AppSymbols.chevronRight, key: Key('plan-menu-redo')),
+        if (c.canUndo) const AppAction('Undo', 'undo', symbol: AppSymbols.undo, key: Key('plan-menu-undo')),
+        if (c.canRedo) const AppAction('Redo', 'redo', symbol: AppSymbols.redo, key: Key('plan-menu-redo')),
       ],
     );
     if (!mounted) return;
@@ -664,7 +750,7 @@ class PlannerScreenState extends State<PlannerScreen> {
       case PlanImportOpen(:final link):
         await handle(PlanRequest.openLink(link));
       case PlanImportAdded(:final count) when count > 0:
-        showAppToast(context, 'Added $count ${count == 1 ? 'node' : 'nodes'} to the plan.', kind: AppToastKind.success, actionLabel: 'Undo', onAction: () {
+        showAppToast(context, 'Added $count ${count == 1 ? 'contact' : 'contacts'} to the plan.', kind: AppToastKind.success, actionLabel: 'Undo', onAction: () {
           for (var i = 0; i < count; i++) {
             c.undo();
           }
@@ -689,6 +775,7 @@ class PlannerScreenState extends State<PlannerScreen> {
         switchMode: (id) => _startMode(id, null),
         openNodePicker: _openPicker,
         editNode: _edit,
+        addSpot: _startAdd,
       );
 
   MapLayerState get _layers => _layersModel.layerState;
@@ -753,7 +840,7 @@ class PlannerScreenState extends State<PlannerScreen> {
           Positioned.fill(
             child: Semantics(
               container: true,
-              label: 'Plan map. Long-press to drop a planned node; tap a node to select it.',
+              label: 'Plan map. Press and hold to drop a spot; tap a spot to select it.',
               child: CoverageMap(
                 key: const Key('planner-map'),
                 viewController: _view,
@@ -792,7 +879,7 @@ class PlannerScreenState extends State<PlannerScreen> {
               ),
             ),
           ),
-          if (_moving != null) ..._moveUi(context, box, sheetH),
+          if (_moving != null || _adding) ..._moveUi(context, box, sheetH),
           PlannerSheet(
             detent: _detent,
             onDetent: (d) => setState(() => _detent = d),
@@ -810,17 +897,33 @@ class PlannerScreenState extends State<PlannerScreen> {
     );
   }
 
+  /// The plan's name, said once (round 4 P-V5): the pill on the map, which opens Saved plans (P-U5: two taps to reopen
+  /// a plan). Until the saved plans have loaded it reads "Plan" and does nothing.
   Widget _titlePill(BuildContext context, PlanController? c) {
     final t = Theme.of(context);
+    final name = c?.plan.name;
     return Semantics(
       header: true,
+      button: c != null,
+      hint: c == null ? null : 'Opens Saved plans',
       child: Material(
+        key: const Key('planner-title-pill'),
         color: t.colorScheme.surface.withValues(alpha: 0.92),
         shape: const StadiumBorder(),
         elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
-          child: Text(c == null ? 'Plan' : 'Plan · ${c.plan.name}', key: const Key('planner-title'), style: t.textTheme.titleSmall, overflow: TextOverflow.ellipsis),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: c == null ? null : () => unawaited(_openSavedList()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Flexible(child: Text(name ?? 'Plan', key: const Key('planner-title'), style: t.textTheme.titleSmall, overflow: TextOverflow.ellipsis)),
+              if (c != null) ...[
+                const SizedBox(width: Gap.xs),
+                AppSymbolIcon(AppSymbols.chevronDown, size: 14, color: t.colorScheme.onSurfaceVariant),
+              ],
+            ]),
+          ),
         ),
       ),
     );
@@ -886,14 +989,18 @@ class PlannerScreenState extends State<PlannerScreen> {
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     AppSymbolIcon(m.symbol, size: 20, color: _mode == m.id ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
                     const SizedBox(height: 4),
-                    Text(
-                      m.label,
-                      maxLines: 2,
-                      textAlign: TextAlign.center,
-                      style: t.textTheme.labelMedium?.copyWith(
-                        height: 1.2,
-                        fontWeight: _mode == m.id ? FontWeight.w700 : FontWeight.w500,
-                        color: _mode == m.id ? t.colorScheme.primary : t.colorScheme.onSurface,
+                    // One line for every label (round 4: "Where to drive" wrapped and made the bar taller for all four).
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        m.label,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        style: t.textTheme.labelMedium?.copyWith(
+                          height: 1.2,
+                          fontWeight: _mode == m.id ? FontWeight.w700 : FontWeight.w500,
+                          color: _mode == m.id ? t.colorScheme.primary : t.colorScheme.onSurface,
+                        ),
                       ),
                     ),
                   ]),
@@ -910,160 +1017,184 @@ class PlannerScreenState extends State<PlannerScreen> {
     final p = c.plan;
     final mode = planModeOf(_mode);
     final sel = _selected == null ? null : p.node(_selected!);
-    return [
-      // What the picked mode answers, in one line (build 76): the chips alone ("Link", "Coverage") did not say.
+    final top = [
+      // What the picked mode answers, in one line (build 76), in the normal text colour (round 4: teal read as a link).
       Padding(
         padding: const EdgeInsets.only(bottom: Gap.xs),
-        child: Text(mode.what, key: const Key('planner-mode-what'), style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.primary)),
-      ),
-      // The plan bar: name, count, save state, menu.
-      Row(children: [
-        Expanded(
-          child: InkWell(
-            key: const Key('plan-name'),
-            onTap: _rename,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: Hit.min),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text(p.name, style: t.textTheme.titleMedium, semanticsLabel: 'Plan ${p.name}. Double-tap to rename.'),
-                Text('${p.nodes.length} ${p.nodes.length == 1 ? 'node' : 'nodes'} · ${c.dirty ? 'Saving…' : 'Saved on this phone'}',
-                    style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-              ]),
-            ),
-          ),
-        ),
-        IconButton(
-          key: const Key('plan-menu'),
-          tooltip: 'Plan options',
-          constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
-          onPressed: _menu,
-          icon: const AppSymbolIcon(AppSymbols.ellipsisCircle),
-        ),
-      ]),
-      InkWell(
-        key: const Key('plan-radio-summary'),
-        onTap: () => showPlanSettings(context, c, regionPreset: _s.siteConfig?.radioPreset),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Hit.min),
-          // One line with a chevron (build 76): it read as a paragraph of radio figures and nobody saw it was a button.
-          child: Row(children: [
-            AppSymbolIcon(AppSymbols.antenna, size: 18, color: t.colorScheme.onSurfaceVariant),
-            const SizedBox(width: Gap.s),
-            Expanded(
-              child: Text(
-                'Radio and trees: ${p.radio.freqMHz.toStringAsFixed(1)} MHz · SF${p.radio.sf} · ${AppScope.unitsOf(context).height(p.clutter.canopyM.roundToDouble())}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.textTheme.bodyMedium,
-                semanticsLabel: 'Radio ${radioWords(p.radio)}, trees ${AppScope.unitsOf(context).height(p.clutter.canopyM.roundToDouble())}, an Estimate. Double-tap to change.',
-              ),
-            ),
-            AppSymbolIcon(AppSymbols.chevronRight, size: 16, color: t.colorScheme.onSurfaceVariant),
-          ]),
-        ),
+        child: Text(mode.what, key: const Key('planner-mode-what'), style: t.textTheme.titleMedium?.copyWith(color: t.colorScheme.onSurface)),
       ),
       if (_loadNote != null) PlanLine(AppSymbols.exclamationTriangle, _loadNote!, key: const Key('planner-load-note')),
-      const Divider(),
-      if (p.nodes.isEmpty && mode.needsNodes) ..._quickStart(context),
+    ];
+    // Where to drive stands on its own (round 4 P-U1): only its list and "Show on the Drive map".
+    if (!mode.usesPlan) return [...top, mode.buildSheet(_modeContext(c))];
+    // An empty plan: only the first-run card (P-V2, P-U2); the radio row and the count wait for the first spot.
+    if (p.nodes.isEmpty) {
+      return [
+        ...top,
+        if (mode.needsNodes) _firstRun(context) else mode.buildSheet(_modeContext(c)),
+        const SizedBox(height: Gap.m),
+        _planRow(context, c),
+      ];
+    }
+    // The mode first (P-V1): its question, the selected spot in one line, the mode's own controls; the plan's row, the
+    // radio row and the list of spots below.
+    return [
+      ...top,
       if (sel != null) _selectedCard(context, sel),
       mode.buildSheet(_modeContext(c)),
       const SizedBox(height: Gap.m),
       const Divider(),
-      NodeList(controller: c, selectedId: _selected, onSelect: _select, onEdit: _edit, onAdd: _openPicker),
+      _planRow(context, c),
+      _radioRow(context, c),
+      NodeList(controller: c, selectedId: _selected, onSelect: _select, onEdit: _edit, onAdd: _openPicker, onAddSpot: _startAdd),
     ];
   }
 
-  List<Widget> _quickStart(BuildContext context) {
+  /// The plan's one compact row: how many spots, the save state and the ⋯ menu. The name is on the map pill only (P-V5);
+  /// an empty plan shows no count (P-U2).
+  Widget _planRow(BuildContext context, PlanController c) {
+    final t = Theme.of(context);
+    final n = c.plan.nodes.length;
+    final saved = c.dirty ? 'Saving…' : 'Saved on this phone';
+    return Row(children: [
+      Expanded(
+        child: Text(
+          n == 0 ? saved : '$n ${n == 1 ? 'spot' : 'spots'} · $saved',
+          key: const Key('plan-name'),
+          style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+        ),
+      ),
+      IconButton(
+        key: const Key('plan-menu'),
+        tooltip: 'Plan options',
+        constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+        onPressed: _menu,
+        icon: const AppSymbolIcon(AppSymbols.ellipsisCircle),
+      ),
+    ]);
+  }
+
+  /// "Radio: US / Canada preset · Trees: 49 ft" (round 4 P-V5: words, not "910.5 MHz · SF7 · 49 ft"); opens Radio and trees.
+  Widget _radioRow(BuildContext context, PlanController c) {
+    final t = Theme.of(context);
+    final p = c.plan;
+    final trees = AppScope.unitsOf(context).height(p.clutter.canopyM.roundToDouble());
+    final radio = radioPresetWords(p.radio, _s.siteConfig?.radioPreset);
+    return InkWell(
+      key: const Key('plan-radio-summary'),
+      onTap: () => showPlanSettings(context, c, regionPreset: _s.siteConfig?.radioPreset),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: Hit.min),
+        // One line with a chevron (build 76): it read as a paragraph of radio figures and nobody saw it was a button.
+        child: Row(children: [
+          AppSymbolIcon(AppSymbols.antenna, size: 18, color: t.colorScheme.onSurfaceVariant),
+          const SizedBox(width: Gap.s),
+          Expanded(
+            child: Text(
+              'Radio: $radio · Trees: $trees',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.textTheme.bodyMedium,
+              semanticsLabel: 'Radio: $radio. Trees: $trees, an Estimate. Double-tap to change.',
+            ),
+          ),
+          AppSymbolIcon(AppSymbols.chevronRight, size: 16, color: t.colorScheme.onSurfaceVariant),
+        ]),
+      ),
+    );
+  }
+
+  /// The first-run card (round 4 P-U2): what the tab is for in one sentence, and the three jobs it does. The first is the
+  /// one-tap start (plan §4.5 item 8): a spot where the phone is, or the map centre without a position, then its coverage.
+  Widget _firstRun(BuildContext context) {
     final t = Theme.of(context);
     final fix = _s.phoneFix;
-    return [
-      Semantics(header: true, child: Text('Start a plan', style: t.textTheme.titleSmall)),
-      const SizedBox(height: Gap.xs),
+    ButtonStyle tall(ButtonStyle? s) => (s ?? const ButtonStyle()).copyWith(minimumSize: WidgetStateProperty.all(const Size.fromHeight(Hit.min + 8)));
+    return Column(key: const Key('plan-first-run'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text('Plan where a repeater could go and check it before you climb.', style: t.textTheme.bodyLarge),
+      const SizedBox(height: Gap.m),
       if (fix != null)
         FilledButton.icon(
           key: const Key('plan-quick-here'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 8)),
+          style: tall(FilledButton.styleFrom()),
           onPressed: _quickHere,
-          icon: const AppSymbolIcon(AppSymbols.locationFill, size: 18),
-          label: const Text('Coverage from my location'),
+          icon: const AppSymbolIcon(AppSymbols.antenna, size: 18),
+          label: const Text('How far would a radio here reach?', textAlign: TextAlign.center),
         )
       else ...[
         // No position for the phone yet (location off or still coming): still one tap to a result, from the map's centre.
         FilledButton.icon(
           key: const Key('plan-quick-centre'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 8)),
+          style: tall(FilledButton.styleFrom()),
           onPressed: _quickCentre,
-          icon: const AppSymbolIcon(AppSymbols.map, size: 18),
-          label: const Text('Coverage from the map centre'),
+          icon: const AppSymbolIcon(AppSymbols.antenna, size: 18),
+          label: const Text('How far would a radio here reach?', textAlign: TextAlign.center),
         ),
-        const PlanLine(AppSymbols.location, 'Allow location to start from where you are.', key: Key('plan-quick-no-location')),
+        const PlanLine(AppSymbols.location, 'Without your location this starts from the middle of the map. Allow location to start from where you are.',
+            key: Key('plan-quick-no-location')),
       ],
       const SizedBox(height: Gap.s),
       OutlinedButton.icon(
         key: const Key('plan-quick-network'),
-        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(Hit.min + 4)),
-        onPressed: _openPicker,
-        icon: const AppSymbolIcon(AppSymbols.antenna, size: 18),
-        label: const Text('Add a repeater from the network'),
+        style: tall(OutlinedButton.styleFrom()),
+        onPressed: _quickLink,
+        icon: const AppSymbolIcon(AppSymbols.route, size: 18),
+        label: const Text('Will two places connect?', textAlign: TextAlign.center),
       ),
-      const PlanLine(AppSymbols.pin, 'Or press and hold the map to add a spot.'),
-      const Divider(),
-    ];
+      const SizedBox(height: Gap.s),
+      OutlinedButton.icon(
+        key: const Key('plan-quick-drive'),
+        style: tall(OutlinedButton.styleFrom()),
+        onPressed: () {
+          unawaited(AppHaptics.selection());
+          _startMode(PlanModeId.whereToDrive, null);
+        },
+        icon: const AppSymbolIcon(AppSymbols.car, size: 18),
+        label: const Text('Where should I drive next?', textAlign: TextAlign.center),
+      ),
+    ]);
   }
 
-  /// The selected node in one row: what it is, Edit (name, height, power, Move, Delete) and clear. A mode uses the selected
-  /// node as its default (Coverage estimates it, Link starts from it).
+  /// The selected spot in one line (round 4 P-V1): its name, Edit (name, height, power, Navigate, Move, Delete) and clear.
+  /// A mode uses the selected spot as its default (Coverage estimates it, Link starts from it).
   Widget _selectedCard(BuildContext context, PlanNode n) {
     final t = Theme.of(context);
-    final edit = TextButton(
-      key: const Key('plan-selected-edit'),
-      style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
-      onPressed: () => _edit(n.id),
-      child: Text('Edit', semanticsLabel: 'Edit ${n.name}'),
-    );
-    final clear = IconButton(
-      tooltip: 'Clear the selection',
-      constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
-      onPressed: () => _select(null),
-      icon: const AppSymbolIcon(AppSymbols.xmark, size: 18),
-    );
-    final what = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(n.name, style: t.textTheme.titleSmall),
-      Text(nodeSummary(n, context), style: t.textTheme.bodySmall),
-    ]);
-    // At large text the buttons go under the words, so the name keeps the full width.
     final large = MediaQuery.textScalerOf(context).scale(14) > 14 * 1.6;
-    final drive = nodeCanBeDrivenTo(n) ? PlanNodeDriveActions(node: n) : null;
-    Widget card(Widget top) => drive == null
-        ? top
-        : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [top, Padding(padding: const EdgeInsets.only(bottom: Gap.xs), child: drive)]);
     return Container(
       key: const Key('plan-selected'),
       margin: const EdgeInsets.only(bottom: Gap.s),
-      padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: Gap.xs),
+      padding: const EdgeInsets.only(left: Gap.s),
       decoration: BoxDecoration(color: t.colorScheme.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(Corners.small)),
-      child: card(large
-          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
-                const SizedBox(width: Gap.s),
-                Expanded(child: what),
-              ]),
-              Wrap(alignment: WrapAlignment.end, children: [edit, clear]),
-            ])
-          : Row(children: [
-              AppSymbolIcon(nodeSymbol(n), color: t.colorScheme.primary),
-              const SizedBox(width: Gap.s),
-              Expanded(child: what),
-              edit,
-              clear,
-            ])),
+      child: Row(children: [
+        AppSymbolIcon(nodeSymbol(n), size: 18, color: t.colorScheme.primary),
+        const SizedBox(width: Gap.s),
+        Expanded(
+          child: Text(n.name,
+              maxLines: large ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.textTheme.titleSmall,
+              semanticsLabel: 'Selected: ${n.name}, ${nodeSummary(n, context)}'),
+        ),
+        TextButton(
+          key: const Key('plan-selected-edit'),
+          style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+          onPressed: () => _edit(n.id),
+          child: Text('Edit', semanticsLabel: 'Edit ${n.name}'),
+        ),
+        IconButton(
+          tooltip: 'Clear the selection',
+          constraints: const BoxConstraints(minWidth: Hit.min, minHeight: Hit.min),
+          onPressed: () => _select(null),
+          icon: const AppSymbolIcon(AppSymbols.xmark, size: 18),
+        ),
+      ]),
     );
   }
 
   List<Widget> _moveUi(BuildContext context, BoxConstraints box, double sheetH) {
     final t = Theme.of(context);
-    final n = _c?.plan.node(_moving!);
+    final n = _moving == null ? null : _c?.plan.node(_moving!);
+    final adding = _adding;
     final top = MediaQuery.paddingOf(context).top;
     final cy = (box.maxHeight - sheetH) / 2;
     return [
@@ -1072,7 +1203,7 @@ class PlannerScreenState extends State<PlannerScreen> {
         top: cy - 22,
         child: IgnorePointer(
           child: Semantics(
-            label: 'Crosshair: the new position of ${n?.name ?? 'the node'}',
+            label: adding ? 'Crosshair: where the new spot goes' : 'Crosshair: the new position of ${n?.name ?? 'the spot'}',
             child: SizedBox(
               key: const Key('planner-crosshair'),
               width: 44,
@@ -1096,7 +1227,11 @@ class PlannerScreenState extends State<PlannerScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
               Semantics(
                 liveRegion: true,
-                child: Text('Move ${n?.name ?? 'the node'}: pan the map under the crosshair, or long-press the new spot.', style: t.textTheme.bodyMedium),
+                child: Text(
+                    adding
+                        ? 'Add a spot: pan the map under the crosshair and press Set here, or press and hold the place.'
+                        : 'Move ${n?.name ?? 'the spot'}: pan the map under the crosshair, or press and hold the new place.',
+                    style: t.textTheme.bodyMedium),
               ),
               const SizedBox(height: Gap.xs),
               Wrap(alignment: WrapAlignment.end, spacing: Gap.s, children: [
@@ -1105,6 +1240,7 @@ class PlannerScreenState extends State<PlannerScreen> {
                   style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
                   onPressed: () => setState(() {
                     _moving = null;
+                    _adding = false;
                     _detent = PlannerDetent.medium;
                   }),
                   child: const Text('Cancel'),
@@ -1114,7 +1250,12 @@ class PlannerScreenState extends State<PlannerScreen> {
                   style: FilledButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
                   onPressed: () {
                     final at = _crosshair;
-                    if (at != null) _finishMove(_moving!, PlanPoint(at.latitude, at.longitude));
+                    if (at == null) return;
+                    if (_adding) {
+                      _finishAdd(PlanPoint(at.latitude, at.longitude));
+                    } else if (_moving != null) {
+                      _finishMove(_moving!, PlanPoint(at.latitude, at.longitude));
+                    }
                   },
                   child: const Text('Set here'),
                 ),

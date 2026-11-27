@@ -52,10 +52,11 @@ abstract final class PlannerSheetMetrics {
   /// Large text: the mode bar becomes one scrolling row of chips (four equal segments would not fit their words).
   static bool compactModes(BuildContext context) => textScale(context) >= kFormSheetFullHeightScale;
 
-  /// Height of the mode bar: four equal segments (symbol over up to two lines of label), or one row of chips at large text.
+  /// Height of the mode bar: four equal segments (symbol over one line of label: build 77, "Where to drive" no longer
+  /// wraps and makes the bar taller for all four), or one row of chips at large text.
   static double modeBarHeight(BuildContext context) {
     final s = textScale(context);
-    return compactModes(context) ? math.max(48.0, 20 * s + 20) + 8 : 20 * s + 4 + 2 * 16 * s + 16;
+    return compactModes(context) ? math.max(48.0, 20 * s + 20) + 8 : 20 * s + 4 + 16 * s + 16;
   }
 
   /// The handle and the mode bar, sized for the text.
@@ -303,8 +304,20 @@ class PlanRadioChoice {
 List<PlanRadioChoice> planRadioChoices(RadioPreset? region) => [
       if (region != null) PlanRadioChoice('region', 'This region: ${region.name}', planRadioFor(region)),
       const PlanRadioChoice('us', 'MeshCore US / Canada', PlanRadio.usDefault),
-      const PlanRadioChoice('eu', 'MeshCore EU / UK (narrow)', PlanRadio(freqMHz: 869.618, bwKHz: 62.5, sf: 8, cr: 8)),
+      const PlanRadioChoice('eu', 'MeshCore EU / UK (narrow)', kPlanRadioEuNarrow),
     ];
+
+/// MeshCore's published EU / UK narrow preset.
+const PlanRadio kPlanRadioEuNarrow = PlanRadio(freqMHz: 869.618, bwKHz: 62.5, sf: 8, cr: 8);
+
+/// The plan's radio in words for the panel's one row (round 4 P-V5): which preset, not its figures. The figures are in
+/// Radio and trees.
+String radioPresetWords(PlanRadio r, RadioPreset? region) {
+  if (r == PlanRadio.usDefault) return 'US / Canada preset';
+  if (r == kPlanRadioEuNarrow) return 'EU / UK preset';
+  if (region != null && planRadioFor(region) == r) return '${region.name} preset';
+  return 'Custom (SF${r.sf}, ${r.bwKHz % 1 == 0 ? r.bwKHz.toStringAsFixed(0) : r.bwKHz} kHz)';
+}
 
 String radioWords(PlanRadio r) => '${r.freqMHz.toStringAsFixed(3)} MHz, ${r.bwKHz % 1 == 0 ? r.bwKHz.toStringAsFixed(0) : r.bwKHz} kHz, SF${r.sf}, CR${r.cr}';
 

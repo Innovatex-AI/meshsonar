@@ -31,14 +31,8 @@ void _clearMap() {
 }
 
 void main() {
-  setUp(() {
-    DriveNextCard.testMap = (c, me, t) => SizedBox(key: const Key('fake-map'), height: 10, child: Text('${t.length} targets'));
-    _clearMap();
-  });
-  tearDown(() {
-    DriveNextCard.testMap = null;
-    _clearMap();
-  });
+  setUp(_clearMap);
+  tearDown(_clearMap);
 
   group('J4 targets from the plan', () {
     test('Find-sites results become numbered targets in rank order; only planned plan nodes are targets', () {
@@ -134,14 +128,20 @@ void main() {
   });
 
   group('J4 the plan\'s own nodes reach the Drive map', () {
-    testWidgets('the selected planned node: Navigate opens Maps; Show on the Drive map requests that node as the target', (tester) async {
+    testWidgets('the selected planned spot: its editor has Navigate (opens Maps) and Show on the Drive map (that spot as the target)', (tester) async {
       phone(tester, h: 1100);
       final h = Harness();
       final st = await openPlanner(tester, h);
       final n = st.controller!.addNode(name: 'Hill site', lat: 40.31, lon: -82.71);
       st.selectNodeForTest(n.id);
       await settle(tester);
-      final card = find.byKey(const Key('plan-selected'));
+      // Build 77 (round 4 P-V1): the selected spot is one line (name, Edit, close); Navigate is in Edit.
+      expect(find.descendant(of: find.byKey(const Key('plan-selected')), matching: find.byKey(const Key('plan-node-drive'))), findsNothing);
+      await tapKey(tester, 'plan-selected-edit');
+      await settle(tester);
+      final card = find.byKey(const Key('node-editor'));
+      expect(tester.widget(find.descendant(of: card, matching: find.byKey(const Key('drive-target-navigate')))), isA<OutlinedButton>(),
+          reason: 'Navigate is outlined: amber only for warnings');
       expect(find.descendant(of: card, matching: find.byKey(const Key('plan-node-drive'))), findsOneWidget);
       await tester.tap(find.descendant(of: card, matching: find.byKey(const Key('drive-target-navigate'))));
       await settle(tester);
@@ -163,13 +163,20 @@ void main() {
       c.updateNode(built.id, (x) => x.copyWith(status: PlanNodeStatus.installed));
       st.selectNodeForTest(built.id);
       await settle(tester);
+      await tapKey(tester, 'plan-selected-edit');
+      await settle(tester);
       expect(find.byKey(const Key('drive-target-navigate')), findsOneWidget);
       expect(find.byKey(const Key('drive-target-show-map')), findsNothing);
+      Navigator.of(tester.element(find.byKey(const Key('node-editor')))).pop();
+      await settle(tester);
 
       final hidden = c.addNode(name: 'Secret \u{1F6AB}', lat: 40.5, lon: -82.5);
       st.selectNodeForTest(hidden.id);
       await settle(tester);
       expect(find.byKey(const Key('plan-selected')), findsOneWidget);
+      await tapKey(tester, 'plan-selected-edit');
+      await settle(tester);
+      expect(find.byKey(const Key('node-editor')), findsOneWidget);
       expect(find.byKey(const Key('plan-node-drive')), findsNothing);
       expect(find.byKey(const Key('drive-target-navigate')), findsNothing);
       expect(find.byKey(const Key('drive-target-show-map')), findsNothing);
@@ -232,6 +239,13 @@ void main() {
       expect(find.byKey(const Key('plan-drive-next')), findsOneWidget);
       expect(find.byKey(const Key('plan-target-0')), findsOneWidget);
       expect(st.overlayForTest.targets, isNotEmpty);
+      // Round 4 P-V3: no small map in the panel; a tap on a row centres the big map on that place.
+      expect(find.byKey(const Key('plan-drive-next-map')), findsNothing);
+      await tapKey(tester, 'plan-target-0');
+      await settle(tester);
+      final centre = st.mapCentreForTest!;
+      expect(centre.latitude, closeTo(40.136, 0.002));
+      expect(centre.longitude, closeTo(-82.93, 0.002));
 
       await tapKey(tester, 'plan-navigate-0');
       final nav = h.openedUrls.last;

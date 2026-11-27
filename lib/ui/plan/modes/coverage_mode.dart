@@ -39,10 +39,12 @@ import '../../design/app_symbols.dart';
 import '../../design/tokens.dart';
 import '../../map/coverage_bands.dart' show CoverageBandColors;
 import '../../map/layers/plan_overlay.dart' show PlanOverlayLink;
+import '../../pick_field.dart';
 import '../../settings/settings_kit.dart' show SliderTile;
 import '../../design/state_views.dart';
 import '../plan_modes.dart';
 import 'footprint_field.dart';
+import 'link_mode.dart' show showPlanGlossary;
 import 'footprint_layer.dart';
 
 /// The most nodes "Estimate every node" runs (one coverage run each, one after the other).
@@ -57,7 +59,7 @@ class CoverageMode extends PlanMode {
   @override
   AppSymbol get symbol => AppSymbols.antenna;
   @override
-  String get hint => 'What the nodes of the plan would cover, drawn on the map.';
+  String get hint => 'What the spots of the plan would cover, drawn on the map.';
   @override
   String get what => 'How far would a radio here reach?';
   @override
@@ -457,7 +459,7 @@ class CoverageBodyState extends State<CoverageBody> {
     final colours = CoverageBandColors.of(palette, t.brightness);
     layer.show(
       footprintCells(f, v, mode: _session.colour, colours: colours, opacity: _session.opacity, sf: _plan.radio.sf),
-      summary: 'Coverage estimate on the map: ${_fieldSites.length} ${_fieldSites.length == 1 ? 'site' : 'sites'}, ${areaWords(units, v.areaKm2)} at ${_snrWords(_minSnr)} SNR or better.',
+      summary: 'Coverage estimate on the map: ${_fieldSites.length} ${_fieldSites.length == 1 ? 'spot' : 'spots'}, ${areaWords(units, v.areaKm2)} at your "show signal at least" setting.',
     );
   }
 
@@ -509,7 +511,7 @@ class CoverageBodyState extends State<CoverageBody> {
       }
       final r = judgeLink(p, n, rx, pr.data!, direction: PlanDirection.down);
       final v = r.verdict;
-      rows.add((n.name, '${v == null ? 'unknown' : verdictWords(v)} (terrain profile)', v == PlanVerdict.likely));
+      rows.add((n.name, '${v == null ? 'Unknown' : verdictWords(v)} (terrain profile)', v == PlanVerdict.likely));
     }
     if (!mounted) return;
     rows.sort((a, b) => (b.$3 ? 1 : 0) - (a.$3 ? 1 : 0));
@@ -542,10 +544,10 @@ class CoverageBodyState extends State<CoverageBody> {
       return AppEmptyView(
         key: const Key('plan-mode-coverage'),
         symbol: AppSymbols.antenna,
-        title: 'Add a node to estimate its coverage',
-        message: 'Press and hold the map where a repeater could go, or add one from the network.',
-        actionLabel: 'Add from the network',
-        onAction: ctx.openNodePicker,
+        title: 'Add a spot to estimate its coverage',
+        message: 'A spot where a repeater could go, or a repeater from the network.',
+        actionLabel: 'Add a spot',
+        onAction: ctx.addSpot,
       );
     }
     final p = _plan;
@@ -555,21 +557,23 @@ class CoverageBodyState extends State<CoverageBody> {
     final busy = node != null && _busy.contains(node.id);
     final missing = [for (final n in nodes.take(coverageMaxSites)) if (!_current(n)) n];
     return Column(key: const Key('plan-mode-coverage'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // The app's action-sheet pick field (round 4 P-V4; it was the last Material dropdown with Link's ends).
       Padding(
         padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-        child: DropdownButtonFormField<String>(
+        child: PickField<String?>(
           key: Key('coverage-node-$_node'),
-          initialValue: _node,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Site', border: OutlineInputBorder()),
-          items: [for (final n in nodes) DropdownMenuItem(value: n.id, child: Text(n.name, overflow: TextOverflow.ellipsis))],
+          label: 'Spot',
+          dense: true,
+          value: _node,
+          options: [for (final n in nodes) PickOption<String?>(n.id, n.name)],
           onChanged: (v) {
             setState(() => _node = v);
             if (v != null) ctx.selectNode(v);
           },
         ),
       ),
-      if (node != null) PlanFact('Antenna', '${units.height(node.antennaM)} above ground, ${node.effectiveTxDbm.round()} dBm, ${node.effectiveGainDbi.toStringAsFixed(1)} dBi'),
+      // Plain words: the height people can picture; power and gain are under the result's numbers (round 4 P-U4).
+      if (node != null) PlanFact('Antenna', '${units.height(node.antennaM)} above ground', key: const Key('coverage-antenna')),
       const SizedBox(height: Gap.s),
       _button(
         key: const Key('coverage-run'),
@@ -586,7 +590,7 @@ class CoverageBodyState extends State<CoverageBody> {
           icon: const AppSymbolIcon(AppSymbols.layers, size: 18),
           label: Text(_all != null
               ? 'Estimating ${math.min(_all!.$1 + 1, _all!.$2)} of ${_all!.$2}…'
-              : 'Estimate ${missing.length == nodes.length ? 'every node' : 'the other ${missing.length} ${missing.length == 1 ? 'node' : 'nodes'}'}${nodes.length > coverageMaxSites ? ' (first $coverageMaxSites)' : ''}'),
+              : 'Estimate ${missing.length == nodes.length ? 'every spot' : 'the other ${missing.length} ${missing.length == 1 ? 'spot' : 'spots'}'}${nodes.length > coverageMaxSites ? ' (first $coverageMaxSites)' : ''}'),
         ),
       ],
       if (busy) const PlanLine(AppSymbols.clock, 'Working it out from the hills around it. The first time can take up to a minute.'),
@@ -678,7 +682,8 @@ class CoverageBodyState extends State<CoverageBody> {
 
   Widget _siteCard(BuildContext context, PlanNode node, _SiteRun run, bool current, Units units, ThemeData t) {
     final d = run.result.data!;
-    final bandWords = {'below': 'No decode', 'fringe': 'Fringe (0 to 6 dB margin)', 'usable': 'Usable (6 to 12 dB)', 'solid': 'Solid (over 12 dB)'};
+    // Band names in plain words; their dB ranges are in the glossary (round 4 P-U4).
+    final bandWords = {'below': 'No decode', 'fringe': 'Fringe', 'usable': 'Usable', 'solid': 'Solid'};
     final heard = d.links.where((l) => l.$4 >= 0).toList()..sort((a, b) => b.$4.compareTo(a.$4));
     final idx = _fieldSites.indexWhere((f) => f.nodeId == node.id);
     final atMin = idx >= 0 && _view != null ? _view!.siteKm2[idx] : null;
@@ -705,7 +710,7 @@ class CoverageBodyState extends State<CoverageBody> {
         for (final b in d.bands)
           if (b.$1 != 'below') PlanFact(bandWords[b.$1] ?? b.$2, areaWords(units, b.$3)),
         if (atMin != null && current && (_session.minSnrDb != null || restyled))
-          PlanFact('At ${_snrWords(_minSnr)} SNR or better', areaWords(units, atMin)),
+          PlanFact('At your "show signal at least" setting', areaWords(units, atMin)),
         if (d.newAreaKm2 != null) PlanFact('New area not covered today', areaWords(units, d.newAreaKm2!)),
         if (d.alreadyKm2 != null) PlanFact('Already covered today', areaWords(units, d.alreadyKm2!)),
         if (d.newPeople != null)
@@ -713,6 +718,7 @@ class CoverageBodyState extends State<CoverageBody> {
         else
           const PlanLine(AppSymbols.person2, 'People: no census counts for this area, so none are shown.'),
         PlanFact('Longest link (Estimate)', longest == null ? 'none' : units.distance(longest * 1000)),
+        PlanFact('Radio power and antenna gain', '${node.effectiveTxDbm.round()} dBm, ${node.effectiveGainDbi.toStringAsFixed(1)} dBi', key: const Key('coverage-power')),
         const SizedBox(height: Gap.s),
         if (heard.isEmpty)
           const PlanLine(AppSymbols.antenna, 'By the Estimate, no live repeater hears this site.', key: Key('coverage-nolinks'))
@@ -722,7 +728,7 @@ class CoverageBodyState extends State<CoverageBody> {
         ],
         if (restyled)
           PlanLine(AppSymbols.waveform,
-              'Re-coloured for SF${_plan.radio.sf}, ${_plan.radio.bwKHz} kHz from the stored estimate (made for SF${fp.radio.sf}, ${fp.radio.bwKHz} kHz): the received power does not change, only what the radio can decode. The areas above are for SF${fp.radio.sf}.',
+              'Re-coloured on the map for the plan\'s radio now. The areas above are still for the radio the estimate was made with (SF${fp.radio.sf}): Estimate again to update them.',
               key: const Key('coverage-restyled')),
         if (fp == null) const PlanLine(AppSymbols.map, 'This answer had no footprint to draw: numbers only.')
         else if (fp.fromBands) const PlanLine(AppSymbols.map, 'Drawn from the signal bands (the server did not send the fine grid): each band at its middle value.'),
@@ -730,6 +736,16 @@ class CoverageBodyState extends State<CoverageBody> {
         if (d.confidence.isNotEmpty) PlanLine(AppSymbols.infoCircle, 'Confidence: ${d.confidence}.'),
         ...resultNotes(context, run.result),
         if (d.note.isNotEmpty) Text('Estimate, not a measurement. ${d.note}', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('coverage-glossary'),
+            style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+            onPressed: () => unawaited(showPlanGlossary(context)),
+            icon: const AppSymbolIcon(AppSymbols.infoCircle, size: 18),
+            label: const Text('What these words mean'),
+          ),
+        ),
         ..._verifyLoop(context, node, run, current, units, t, cells),
       ]),
     );
@@ -801,7 +817,7 @@ class CoverageBodyState extends State<CoverageBody> {
           words.add(PlanLine(AppSymbols.gauge,
               v.biasDb!.abs() < 3 ? 'The estimate matches the drives within 3 dB.' : 'The estimate is ${v.biasDb!.abs().toStringAsFixed(1)} dB ${v.biasDb! > 0 ? 'more hopeful' : 'more cautious'} than the drives.'));
         }
-        words.add(Text('Measured: every drive and observer of the region in those cells (Measured), not only this node.', style: t.textTheme.bodySmall));
+        words.add(Text('Measured: every drive and observer of the region in those cells (Measured), not only this one.', style: t.textTheme.bodySmall));
       }
     }
     return [const SizedBox(height: Gap.s), head, Column(key: const Key('coverage-verify-loop'), crossAxisAlignment: CrossAxisAlignment.stretch, children: words)];
@@ -848,8 +864,8 @@ class CoverageBodyState extends State<CoverageBody> {
         key: const ValueKey('coverage-min-snr'),
         sliderKey: const Key('coverage-min-snr-slider'),
         icon: symbolData(context, AppSymbols.waveform),
-        title: 'Minimum SNR',
-        caption: 'SF${_plan.radio.sf} decodes down to ${_snrWords(decode)}. Raise it to see only where the signal has room to spare. Re-draws at once, no new request.',
+        title: 'Show signal at least',
+        caption: 'Weaker shows everywhere a radio can just hear it; move toward Stronger to see only where the signal has room to spare. Redraws at once.',
         stops: const [-200, -175, -150, -125, -100, -75, -50, -25, 0, 25, 50, 75, 100, 125, 150],
         value: (_minSnr * 10).round(),
         label: (v) => _snrWords(v / 10),
@@ -870,14 +886,14 @@ class CoverageBodyState extends State<CoverageBody> {
       container: true,
       child: Column(key: const Key('coverage-union'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const SizedBox(height: Gap.s),
-        Semantics(header: true, child: Text(n == 1 ? 'On the map (Estimate)' : 'All $n sites together (Estimate)', style: t.textTheme.titleSmall)),
-        PlanFact('Area at ${_snrWords(_minSnr)} SNR or better', areaWords(units, v.areaKm2)),
-        if (n > 1) PlanFact('Reached by two or more sites', areaWords(units, v.overlapKm2)),
+        Semantics(header: true, child: Text(n == 1 ? 'On the map (Estimate)' : 'All $n spots together (Estimate)', style: t.textTheme.titleSmall)),
+        PlanFact('Area at your "show signal at least" setting', areaWords(units, v.areaKm2)),
+        if (n > 1) PlanFact('Reached by two or more spots', areaWords(units, v.overlapKm2)),
         if (hasExisting && hasNew) ...[
-          PlanFact('Covered by the existing nodes', areaWords(units, v.existingKm2)),
-          PlanFact('Added by the planned and installed sites', areaWords(units, v.addedKm2)),
+          PlanFact('Covered by the repeaters already up', areaWords(units, v.existingKm2)),
+          PlanFact('Added by your planned and installed spots', areaWords(units, v.addedKm2)),
         ],
-        if (noEstimate > 0) PlanLine(AppSymbols.infoCircle, '$noEstimate ${noEstimate == 1 ? 'node has' : 'nodes have'} no current estimate and ${noEstimate == 1 ? 'is' : 'are'} not in this layer.'),
+        if (noEstimate > 0) PlanLine(AppSymbols.infoCircle, '$noEstimate ${noEstimate == 1 ? 'spot has' : 'spots have'} no current estimate and ${noEstimate == 1 ? 'is' : 'are'} not in this layer.'),
       ]),
     );
   }
@@ -886,12 +902,12 @@ class CoverageBodyState extends State<CoverageBody> {
     final spot = _session.spot;
     final reach = spot?.rows.where((r) => r.$3).length ?? 0;
     return [
-      Semantics(header: true, child: Text('Which repeaters reach one spot?', style: t.textTheme.titleSmall)),
+      Semantics(header: true, child: Text('Which repeaters reach one place?', style: t.textTheme.titleSmall)),
       Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
         FilterChip(
           key: const Key('coverage-spot-arm'),
           avatar: const AppSymbolIcon(AppSymbols.pin, size: 16),
-          label: Text(_spotArmed ? 'Now press and hold the map' : 'Check a spot'),
+          label: Text(_spotArmed ? 'Now press and hold the map' : 'Check a place'),
           selected: _spotArmed,
           onSelected: (on) => setState(() => _spotArmed = on),
         ),
@@ -906,7 +922,7 @@ class CoverageBodyState extends State<CoverageBody> {
           child: const Text('Check the map centre'),
         ),
       ]),
-      if (_spotArmed) const PlanLine(AppSymbols.infoCircle, 'On: press and hold the map to check that spot (no node is added).'),
+      if (_spotArmed) const PlanLine(AppSymbols.infoCircle, 'On: press and hold the map to check that place (nothing is added to the plan).'),
       if (spot != null)
         Semantics(
           liveRegion: true,
@@ -915,10 +931,10 @@ class CoverageBodyState extends State<CoverageBody> {
             if (spot.loading)
               const PlanLine(AppSymbols.clock, 'Checking the spot against every repeater of the plan…')
             else if (spot.rows.isEmpty)
-              const PlanLine(AppSymbols.antenna, 'The plan has no repeater node to check against.')
+              const PlanLine(AppSymbols.antenna, 'The plan has no repeater to check against.')
             else ...[
               PlanLine(reach == 0 ? AppSymbols.xmarkCircleFill : AppSymbols.checkmarkCircleFill,
-                  '$reach of ${spot.rows.length} ${spot.rows.length == 1 ? 'repeater reaches' : 'repeaters reach'} this spot (Estimate, ${_snrWords(_minSnr)} SNR or better).',
+                  '$reach of ${spot.rows.length} ${spot.rows.length == 1 ? 'repeater reaches' : 'repeaters reach'} this place (Estimate, at your "show signal at least" setting).',
                   style: t.textTheme.titleMedium),
               for (final r in spot.rows) PlanFact(r.$1, '${r.$3 ? 'Reaches' : 'Does not reach'} · ${r.$2}'),
             ],
@@ -938,7 +954,7 @@ class CoverageBodyState extends State<CoverageBody> {
       Semantics(header: true, child: Text('Every link in the plan', style: t.textTheme.titleSmall)),
     ];
     if (p.nodes.length < 2) {
-      out.add(const PlanLine(AppSymbols.route, 'Add a second node to see how the nodes link to each other.'));
+      out.add(const PlanLine(AppSymbols.route, 'Add a second spot to see how the spots link to each other.'));
       return out;
     }
     out.add(OutlinedButton.icon(
@@ -948,9 +964,9 @@ class CoverageBodyState extends State<CoverageBody> {
       icon: _matrixBusy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const AppSymbolIcon(AppSymbols.route, size: 18),
       label: Text(_matrixBusy ? 'Reading the terrain of $pairs ${pairs == 1 ? 'pair' : 'pairs'}…' : fresh ? 'Check every link again' : 'Check every link ($pairs ${pairs == 1 ? 'pair' : 'pairs'})'),
     ));
-    if (p.nodes.length > linkMatrixMaxNodes) out.add(PlanLine(AppSymbols.infoCircle, 'Links are checked between the first $linkMatrixMaxNodes nodes of the plan.'));
+    if (p.nodes.length > linkMatrixMaxNodes) out.add(PlanLine(AppSymbols.infoCircle, 'Links are checked between the first $linkMatrixMaxNodes spots of the plan.'));
     if (m == null) return out;
-    if (!fresh) out.add(const PlanLine(AppSymbols.clock, 'The nodes or settings changed: these are the last results. Check again to update them.'));
+    if (!fresh) out.add(const PlanLine(AppSymbols.clock, 'The spots or settings changed: these are the last results. Check again to update them.'));
     final links = m.links.toList()
       ..sort((a, b) {
         final ra = a.verdict == null ? -1 : 2 - PlanVerdict.values.indexOf(a.verdict!), rb = b.verdict == null ? -1 : 2 - PlanVerdict.values.indexOf(b.verdict!);
@@ -962,7 +978,7 @@ class CoverageBodyState extends State<CoverageBody> {
     if (fresh) {
       final classes = ctx.controller.nodeClasses(matrix: m);
       out.add(const SizedBox(height: Gap.s));
-      out.add(Semantics(header: true, child: Text('What each node does for the mesh', style: t.textTheme.titleSmall)));
+      out.add(Semantics(header: true, child: Text('What each spot does for the mesh', style: t.textTheme.titleSmall)));
       out.add(Column(key: const Key('coverage-classes'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         for (final id in m.nodeIds)
           if (classes[id] case final c?)
@@ -999,8 +1015,8 @@ class CoverageBodyState extends State<CoverageBody> {
         if (r.fresnelClearancePct != null) PlanFact('Fresnel zone open at the tightest point', '${r.fresnelClearancePct!.toStringAsFixed(0)} %'),
         if (r.odds != null) PlanFact('Terrain odds (Estimate)', '${(r.odds! * 100).clamp(0, 100).toStringAsFixed(0)} %'),
         if (r.tightest != null && r.tightest!.raiseM > 0)
-          PlanLine(AppSymbols.arrowUpCircleFill, 'Raise ${names[l.aId] ?? 'the first end'} by ${units.height(r.tightest!.raiseM)} to clear 60 % of the Fresnel zone.'),
-        if (r.ridge != null) PlanLine(AppSymbols.flag, 'Blocking ridge ${units.distance(r.ridge!.km * 1000)} from ${names[l.aId] ?? 'the first end'}.'),
+          PlanLine(AppSymbols.arrowUpCircleFill, 'Raise ${names[l.aId] ?? 'the first end'} ${units.height(r.tightest!.raiseM)} to clear ${r.ridge != null ? 'the hill' : 'the ground in between'}.'),
+        if (r.ridge != null) PlanLine(AppSymbols.flag, 'A hill ${units.distance(r.ridge!.km * 1000)} from ${names[l.aId] ?? 'the first end'} is in the way.'),
         if (l.offlineAsOf != null) const PlanLine(AppSymbols.wifi, 'Offline: from the saved terrain profile.'),
         Text('Worked out on this phone from the terrain profile with the plan\'s radio and clutter.', style: t.textTheme.bodySmall),
       ],

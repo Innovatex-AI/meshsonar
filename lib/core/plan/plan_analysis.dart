@@ -320,13 +320,13 @@ Map<String, NodeClassification> classifyNodes(Plan plan, {LinkMatrix? matrix, Ne
     } else if (cut.contains(n.id)) {
       out[n.id] = NodeClassification(PlanNodeClass.critical, 'The only link between parts of this plan', peers);
     } else if (peers >= 3) {
-      out[n.id] = NodeClassification(PlanNodeClass.backbone, 'Links to $peers nodes', peers);
+      out[n.id] = NodeClassification(PlanNodeClass.backbone, 'Links to $peers others', peers);
     } else if (peers == 2) {
       out[n.id] = NodeClassification(PlanNodeClass.redundant, 'Two links: one can fail', peers);
     } else if (peers == 0 && marginalPeers[n.id]!.isNotEmpty) {
       out[n.id] = NodeClassification(PlanNodeClass.marginal, 'Only marginal links', peers);
     } else {
-      out[n.id] = NodeClassification(PlanNodeClass.marginal, peers == 1 ? 'Reaches only 1 node' : 'Reaches no other node', peers);
+      out[n.id] = NodeClassification(PlanNodeClass.marginal, peers == 1 ? 'Reaches only 1 other' : 'Reaches no other spot or repeater', peers);
     }
   }
   return out;

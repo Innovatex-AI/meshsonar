@@ -7,8 +7,9 @@
 //
 // Registration: [planModes] below, one entry per chip, in chip order: LinkMode (ui/plan/modes/link_mode.dart),
 // CoverageMode (coverage_mode.dart), FindSitesMode (find_sites_mode.dart + wizard.dart) and WhereToDriveMode (this file),
-// which hosts the existing DriveNextCard (ui/shell/drive_next_card.dart, unchanged logic) and opens the Drive map with
-// the targets. This file also keeps the pieces the modes share: PlanModeContext, the overlay, PlanFact, resultNotes.
+// which hosts the DriveNextCard list (ui/shell/drive_next_card.dart) and opens the Drive map with the targets; it stands on
+// its own (build 77, round 4 P-U1: no plan bar, radio row, selected spot or list of spots around it). This file also keeps
+// the pieces the modes share: PlanModeContext, the overlay, PlanFact, resultNotes.
 //
 // Keys: each mode file lists its own; this file's: 'plan-mode-drive' (the Where to drive body), 'drive-next-show-map'.
 
@@ -22,10 +23,12 @@ import '../../core/hex_cells.dart' show loadHexEngine;
 import '../../core/plan/plan_api.dart';
 import '../../core/plan/plan_controller.dart';
 import '../../core/plan_contract.dart';
+import '../../core/time_format.dart' show shortDateTime;
 import '../../core/units.dart' show Units;
 import '../app.dart';
 import '../design/app_symbols.dart';
 import '../design/tokens.dart';
+import '../map/coverage_bands.dart' show CoverageBandColors;
 import '../map/layers/plan_overlay.dart' show PlanLinkVerdict, PlanOverlayLink;
 import '../map/layers/registry.dart' show kPlanLayerId;
 import '../map/main_map_focus.dart';
@@ -54,9 +57,13 @@ abstract class PlanMode {
   /// The one line the sheet shows under the chips: what this mode answers, in plain words (build 76).
   String get what => hint;
 
-  /// Does this mode need nodes in the plan before it can show anything? (The planner shows its quick starts above the
-  /// body of a mode that does while the plan is empty.)
+  /// Does this mode need spots in the plan before it can show anything? (While the plan is empty the planner shows only
+  /// its first-run card instead of the body of a mode that does, round 4 P-V2.)
   bool get needsNodes => true;
+
+  /// Does this mode work on the plan? False (Where to drive): the panel shows only the mode's own body, without the plan's
+  /// row, radio row, selected spot and list of spots (round 4 P-U1).
+  bool get usesPlan => true;
 
   /// The sheet content while this mode is picked.
   Widget buildSheet(PlanModeContext context);
@@ -148,6 +155,9 @@ class PlanModeContext {
 
   /// Opens the node editor for [nodeId].
   final ValueChanged<String> editNode;
+
+  /// "Add a spot": the planner's crosshair with Set here / Cancel (round 4 P-U3; press and hold still works).
+  final VoidCallback addSpot;
   const PlanModeContext({
     required this.controller,
     required this.plan,
@@ -162,6 +172,7 @@ class PlanModeContext {
     required this.switchMode,
     required this.openNodePicker,
     required this.editNode,
+    required this.addSpot,
   });
 }
 
@@ -185,12 +196,26 @@ IconData symbolData(BuildContext context, AppSymbol s) {
   return p == TargetPlatform.iOS || p == TargetPlatform.macOS ? s.apple : s.material;
 }
 
-/// "Estimate" words for a verdict (three states with the fade margin, plan §4.3 item 2).
+/// "Estimate" words for a verdict (three states with the fade margin, plan §4.3 item 2). One set everywhere in Plan (build
+/// 77, round 4 P-U4: Coverage said "Won't work" where Link said "Unlikely" for the same result).
 String verdictWords(PlanVerdict v) => switch (v) {
       PlanVerdict.likely => 'Works',
       PlanVerdict.marginal => 'Marginal',
-      PlanVerdict.unlikely => "Won't work",
+      PlanVerdict.unlikely => 'Unlikely',
     };
+
+/// The colour a verdict's symbol takes. Marginal is the warning amber (the yellow coverage band was too faint on the light
+/// panel, round 4); the words themselves are always in the normal text colour.
+Color verdictColour(BuildContext context, PlanVerdict? v) {
+  final m = MeshSonarColors.of(context);
+  final bands = CoverageBandColors.of(m.palette, Theme.of(context).brightness);
+  return switch (v) {
+    PlanVerdict.likely => bands[5],
+    PlanVerdict.marginal => m.warning,
+    PlanVerdict.unlikely => bands[1],
+    null => Theme.of(context).colorScheme.onSurfaceVariant,
+  };
+}
 
 AppSymbol verdictSymbol(PlanVerdict v) => switch (v) {
       PlanVerdict.likely => AppSymbols.checkmarkCircleFill,
@@ -209,11 +234,8 @@ String areaWords(Units units, double km2) => units.area(km2);
 
 String dbWords(double v, {bool signed = false}) => '${signed && v > 0 ? '+' : v < 0 ? '-' : ''}${v.abs().toStringAsFixed(1)} dB';
 
-String _when(DateTime t) {
-  final l = t.toLocal();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
-}
+/// When a stored answer was made, through the app's one formatter (Local / UTC setting).
+String _when(DateTime t) => shortDateTime(t);
 
 /// One line with a symbol and text (every state has an icon AND words, plan §4.5 item 8).
 class PlanLine extends StatelessWidget {
@@ -276,8 +298,9 @@ Widget _primary(BuildContext context, {required Key key, required String label, 
 
 // ------------------------------------------------------------------------------------------------ Where to drive
 
-/// Where to drive (plan §4.1): the DriveNextCard as it was on the old Plan tab, plus "Show on the Drive map", which opens
-/// the Drive tab's map with the targets drawn on its `plan` layer (MainMapFocus, J5).
+/// Where to drive (plan §4.1): the DriveNextCard list (a tap on a row centres the big map there) and "Show on the Drive
+/// map", which opens the Drive tab's map with the targets drawn on its `plan` layer (MainMapFocus, J5). Nothing else of the
+/// plan shows in this mode (round 4 P-U1).
 class WhereToDriveMode extends PlanMode {
   const WhereToDriveMode();
   @override
@@ -292,6 +315,8 @@ class WhereToDriveMode extends PlanMode {
   String get what => 'Where should I drive next?';
   @override
   bool get needsNodes => false;
+  @override
+  bool get usesPlan => false;
   @override
   Widget buildSheet(PlanModeContext context) => _WhereToDriveBody(context, key: const ValueKey('plan-mode-body-drive'));
 }
@@ -339,7 +364,7 @@ class _WhereToDriveBodyState extends State<_WhereToDriveBody> {
       });
     }
     return Column(key: const Key('plan-mode-drive'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const DriveNextCard(),
+      DriveNextCard(onShow: (x) => widget.ctx.focusMap(PlanPoint(x.lat, x.lon), zoom: 14)),
       if (me != null && targets.isNotEmpty)
         _primary(context, key: const Key('drive-next-show-map'), label: 'Show on the Drive map', symbol: AppSymbols.car, onPressed: () {
           MainMapFocus.request(me, 13, showLayers: const {kPlanLayerId}, targets: _targets(targets, units, me));

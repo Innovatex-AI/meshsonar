@@ -11,7 +11,10 @@ import 'package:meshsonar/core/plan/plan_api.dart';
 import 'package:meshsonar/core/plan/plan_codec.dart';
 import 'package:meshsonar/core/plan/plan_model.dart';
 import 'package:meshsonar/core/map_styles.dart' show BaseMapStyle;
+import 'package:meshsonar/core/plan/plan_mode_memory.dart';
 import 'package:meshsonar/core/plan/plan_store.dart';
+import 'package:meshsonar/ui/app.dart' show AppScope;
+import 'package:meshsonar/ui/design/app_symbols.dart';
 import 'package:meshsonar/ui/design/map_panel.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart' show CoverageMap;
 import 'package:meshsonar/ui/map/layers/map_layer.dart' show LongPressHit;
@@ -20,7 +23,7 @@ import 'package:meshsonar/ui/map/main_map_focus.dart';
 import 'package:meshsonar/ui/plan/plan_modes.dart';
 import 'package:meshsonar/ui/plan/planner_screen.dart';
 import 'package:meshsonar/ui/plan/planner_sheet.dart';
-import 'package:meshsonar/ui/shell/drive_next_card.dart';
+import 'package:meshsonar/ui/shell/plan_tab.dart' show openPlanMode, pendingPlanModeForTest;
 import 'package:meshsonar/ui/shell/shell_controller.dart';
 
 import '../fakes.dart';
@@ -80,18 +83,150 @@ Future<void> settle(WidgetTester tester) async {
 
 void main() {
   group('shell', () {
-    testWidgets('opens on the map with the sheet at Medium, Link picked, the empty plan offering one-tap starts', (tester) async {
+    testWidgets('opens on the map with the sheet at Medium, Link picked, the empty plan showing only the first-run card', (tester) async {
       phone(tester);
       final h = Harness();
       final st = await openPlanner(tester, h);
       expect(find.byKey(const Key('planner-map')), findsOneWidget);
       expect(st.mode, PlanModeId.link);
       expect(st.detent, PlannerDetent.medium);
-      expect(find.byKey(const Key('planner-title')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('planner-title'))).data, st.controller!.plan.name, reason: 'the pill shows the plan name');
+      // Round 4 P-U2 / P-V2: one sentence and three jobs; nothing else says how to add a spot.
+      expect(find.byKey(const Key('plan-first-run')), findsOneWidget);
+      expect(find.text('Plan where a repeater could go and check it before you climb.'), findsOneWidget);
       expect(find.byKey(const Key('plan-quick-here')), findsOneWidget, reason: 'the phone has a fix: one tap to a result');
+      expect(find.text('How far would a radio here reach?'), findsWidgets);
+      expect(find.text('Will two places connect?'), findsOneWidget);
+      expect(find.text('Where should I drive next?'), findsOneWidget);
       expect(find.byKey(const Key('plan-quick-network')), findsOneWidget);
-      expect(find.byKey(const Key('plan-mode-link')), findsOneWidget);
+      expect(find.byKey(const Key('plan-quick-drive')), findsOneWidget);
+      expect(find.byKey(const Key('plan-mode-link')), findsNothing, reason: 'the mode\'s own empty view is not repeated');
+      expect(find.byKey(const Key('plan-node-list')), findsNothing);
+      expect(find.byKey(const Key('plan-radio-summary')), findsNothing, reason: 'the radio row waits for the first spot');
+      expect(tester.widget<Text>(find.byKey(const Key('plan-name'))).data, 'Saved on this phone', reason: 'no count on an empty plan');
+      expect(find.textContaining('press and hold', findRichText: true), findsNothing);
+      expect(find.textContaining('Add from the network'), findsNothing);
       expect(st.controller!.plan.radio, PlanRadio.usDefault, reason: 'no region preset in the harness');
+      await drain(tester);
+    });
+
+    testWidgets('the first-run card: each button opens its mode; with a spot the plan row, radio row and list come back', (tester) async {
+      phone(tester, h: 1000);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      await tapIn(tester, find.byKey(const Key('plan-quick-drive')));
+      await settle(tester);
+      expect(st.mode, PlanModeId.whereToDrive);
+      expect(find.byKey(const Key('plan-mode-drive')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('planner-mode-link')));
+      await settle(tester);
+      await tapIn(tester, find.byKey(const Key('plan-quick-network')));
+      await settle(tester);
+      expect(st.mode, PlanModeId.link);
+      expect(find.byKey(const Key('node-picker')), findsOneWidget, reason: 'Will two places connect? asks for the first end');
+      // The picker's way to a spot instead: the Add a spot crosshair.
+      await tapIn(tester, find.byKey(const Key('node-picker-spot')));
+      await settle(tester);
+      expect(find.byKey(const Key('planner-crosshair')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('planner-move-set')));
+      await settle(tester);
+      final c = st.controller!;
+      expect(c.nodes.single.name, 'Spot 1');
+      expect(c.nodes.single.status, PlanNodeStatus.planned);
+      expect(find.byKey(const Key('plan-first-run')), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const Key('plan-name'))).data, '1 spot · Saved on this phone');
+      expect(find.text('Radio: US / Canada preset · Trees: ${AppScope.unitsOf(tester.element(find.byType(PlannerScreen))).height(c.plan.clutter.canopyM.roundToDouble())}'), findsOneWidget);
+      expect(find.text('Add one more spot to check a link'), findsOneWidget);
+      // P-V1: the mode's controls come before the plan's own rows.
+      expect(tester.getTopLeft(find.byKey(const Key('plan-mode-link'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('plan-menu'))).dy));
+      await drain(tester);
+    });
+
+    testWidgets('Add a spot: the crosshair with Set here / Cancel; press and hold still drops one', (tester) async {
+      phone(tester, h: 1000);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      final c = st.controller!;
+      c.addNode(name: 'Hill', lat: 40.10, lon: -82.90);
+      await settle(tester);
+      await tapIn(tester, find.byKey(const Key('plan-node-add-spot')));
+      await settle(tester);
+      expect(find.byKey(const Key('planner-move-bar')), findsOneWidget);
+      expect(find.textContaining('Add a spot: pan the map'), findsOneWidget);
+      expect(st.detent, PlannerDetent.dock);
+      await tester.tap(find.byKey(const Key('planner-move-cancel')));
+      await settle(tester);
+      expect(c.nodes, hasLength(1), reason: 'Cancel adds nothing');
+      await tapIn(tester, find.byKey(const Key('plan-node-add-spot')));
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('planner-move-set')));
+      await settle(tester);
+      expect(c.nodes, hasLength(2));
+      final centre = st.mapCentreForTest!;
+      expect(c.nodes.last.lat, closeTo(centre.latitude, 0.01));
+      expect(st.detent, PlannerDetent.medium);
+      expect(find.byKey(const Key('planner-move-bar')), findsNothing);
+      await st.longPressForTest(LongPressHit(lat: 40.2, lon: -82.8));
+      await settle(tester);
+      expect(c.nodes, hasLength(3));
+      expect(c.nodes.last.name, 'Spot 2');
+      await drain(tester);
+    });
+
+    testWidgets('the plan name is said once: the pill opens Saved plans; Saved plans is first in the menu; Undo and Redo have their own symbols', (tester) async {
+      phone(tester, h: 1000);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      final c = st.controller!;
+      c.addNode(name: 'Hill', lat: 40.10, lon: -82.90);
+      await settle(tester);
+      expect(find.text(c.plan.name), findsOneWidget, reason: 'the panel does not repeat the name');
+      await tester.tap(find.byKey(const Key('planner-title-pill')));
+      await settle(tester);
+      expect(find.byKey(const Key('saved-plans')), findsOneWidget);
+      Navigator.of(tester.element(find.byKey(const Key('saved-plans')))).pop();
+      await settle(tester);
+      await tapIn(tester, find.byKey(const Key('plan-menu')));
+      await settle(tester);
+      final first = find.descendant(of: find.byKey(const Key('plan-menu-sheet')), matching: find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('plan-menu-') && (w.key as ValueKey<String>).value != 'plan-menu-sheet'));
+      expect((tester.widget(first.first).key as ValueKey<String>).value, 'plan-menu-open');
+      final undo = find.descendant(of: find.byKey(const Key('plan-menu-undo')), matching: find.byType(Icon));
+      expect(tester.widget<Icon>(undo).icon, anyOf(AppSymbols.undo.material, AppSymbols.undo.apple));
+      await drain(tester);
+    });
+
+    testWidgets('the tab remembers the last mode; another tab can open a mode directly', (tester) async {
+      phone(tester);
+      final h = Harness();
+      final st = await openPlanner(tester, h);
+      await tester.tap(find.byKey(const Key('planner-mode-coverage')));
+      await settle(tester);
+      final s = AppScope.read(tester.element(find.byType(PlannerScreen)));
+      expect(await PlanModeMemory(s.planStore).read(), 'coverage');
+      // From the Drive tab: openPlanMode (W2-B's "Where to drive next" row) goes to Plan at that mode.
+      final shell = ShellScope.maybeRead(tester.element(find.byType(PlannerScreen, skipOffstage: false)))!;
+      shell.select(AppTab.drive);
+      await settle(tester);
+      openPlanMode(tester.element(find.byType(PlannerScreen, skipOffstage: false)), PlanModeId.whereToDrive);
+      await settle(tester);
+      expect(shell.tab, AppTab.plan);
+      expect(st.mode, PlanModeId.whereToDrive);
+      expect(pendingPlanModeForTest, isNull, reason: 'taken by the Plan tab');
+      expect(await PlanModeMemory(s.planStore).read(), 'whereToDrive');
+      await drain(tester);
+    });
+
+    testWidgets('the question line is in the normal text colour; the mode labels are one line', (tester) async {
+      phone(tester);
+      final h = Harness();
+      await openPlanner(tester, h);
+      final what = tester.widget<Text>(find.byKey(const Key('planner-mode-what')));
+      final ctx = tester.element(find.byKey(const Key('planner-mode-what')));
+      expect(what.style?.color, Theme.of(ctx).colorScheme.onSurface);
+      for (final m in planModes) {
+        final label = tester.widget<Text>(find.descendant(of: find.byKey(Key('planner-mode-${m.id.name}')), matching: find.text(m.label)));
+        expect(label.maxLines, 1, reason: m.label);
+      }
       await drain(tester);
     });
 
@@ -172,11 +307,12 @@ void main() {
       phone(tester);
       final h = Harness();
       final st = await openPlanner(tester, h);
+      // An empty plan: Link and Coverage show the first-run card; Find sites and Where to drive need no spot.
       for (final (id, body) in [
-        (PlanModeId.coverage, 'plan-mode-coverage'),
+        (PlanModeId.coverage, 'plan-first-run'),
         (PlanModeId.findSites, 'plan-mode-sites'),
         (PlanModeId.whereToDrive, 'plan-mode-drive'),
-        (PlanModeId.link, 'plan-mode-link'),
+        (PlanModeId.link, 'plan-first-run'),
       ]) {
         await tester.tap(find.byKey(Key('planner-mode-${id.name}')));
         await settle(tester);
@@ -231,12 +367,16 @@ void main() {
       // A long-press on the bare map: one planned node (the map may resolve the long-press anywhere on screen).
       expect(c.nodes, hasLength(1));
       expect(c.nodes.single.status, PlanNodeStatus.planned);
-      expect(c.nodes.single.name, 'Site 1');
+      expect(c.nodes.single.name, 'Spot 1');
       expect(st.selectedNodeId, c.nodes.single.id);
       expect(find.byKey(const Key('plan-selected')), findsOneWidget);
+      // Round 4 P-V1: the selected spot is one line: its name, Edit and close (Navigate moved into Edit).
+      expect(find.descendant(of: find.byKey(const Key('plan-selected')), matching: find.byKey(const Key('plan-selected-edit'))), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('plan-selected')), matching: find.byKey(const Key('drive-target-navigate'))), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('plan-selected'))).height, lessThan(64));
       expect(find.byKey(Key('plan-list-node-${c.nodes.single.id}')), findsOneWidget);
       expect(find.byKey(Key('plan-node-${c.nodes.single.id}')), findsOneWidget, reason: 'the marker on the plan layer');
-      expect(find.text('Dropped Site 1.'), findsOneWidget);
+      expect(find.text('Dropped Spot 1.'), findsOneWidget);
       c.undo();
       await settle(tester);
       expect(c.nodes, isEmpty);
@@ -317,6 +457,7 @@ void main() {
       await tapIn(tester, find.byKey(const Key('plan-quick-network')));
       await settle(tester);
       expect(find.byKey(const Key('node-picker')), findsOneWidget);
+      expect(find.byKey(const Key('node-picker-spot')), findsOneWidget, reason: 'or put a spot on the map instead');
       // No repeater sync in this harness: the honest empty state, with the way forward.
       expect(find.byKey(const Key('node-picker-empty')), findsOneWidget);
       expect(st.controller!.nodes, isEmpty);
@@ -391,7 +532,7 @@ void main() {
       await tapIn(tester, find.byKey(const Key('site-add-s1')));
       await settle(tester);
       final n = st.controller!.nodes.single;
-      expect(n.name, 'Site 1');
+      expect(n.name, 'Spot 1');
       expect(n.lat, 40.2);
       await drain(tester);
     });
@@ -412,8 +553,6 @@ void main() {
     testWidgets('Where to drive hosts the card and opens the Drive map with the targets on its plan layer', (tester) async {
       phone(tester, h: 1100);
       final h = Harness();
-      DriveNextCard.testMap = (c, me, t) => SizedBox(key: const Key('fake-map'), height: 10, child: Text('${t.length} targets'));
-      addTearDown(() => DriveNextCard.testMap = null);
       h.client.publicCoverageResult = PublicCoverage(
         asOf: '2026-10-31T00:00:00Z',
         grid: const CoverageGrid.square(cellDeg: 0.005),
@@ -441,6 +580,8 @@ void main() {
       phone(tester, h: 1100);
       final h = Harness();
       final st = await openPlanner(tester, h);
+      st.controller!.addNode(name: 'Hill', lat: 40.10, lon: -82.90);
+      await settle(tester);
       await tapIn(tester, find.byKey(const Key('plan-radio-summary')));
       await settle(tester);
       expect(find.byKey(const Key('plan-settings')), findsOneWidget);
@@ -452,6 +593,7 @@ void main() {
       await settle(tester);
       expect(st.controller!.plan.radio.freqMHz, 869.618);
       expect(st.controller!.plan.radio.sf, 8);
+      expect(find.textContaining('Radio: EU / UK preset · Trees: ', skipOffstage: false), findsOneWidget, reason: 'the row names the preset, not its figures');
       await drain(tester);
     });
   });

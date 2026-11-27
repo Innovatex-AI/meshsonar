@@ -7,8 +7,9 @@
 //      Undo takes it back) and the blocking ridge, marked on the map and on the profile chart.
 //   3  measured next to predicted: plan-link's `measured` (packets our observers heard between the pair), our drive cells
 //      near each end, and a flag when the measurement and the model disagree.
-//   4  the plan's radio (never a constant: the region's preset, changed in Radio and clutter), shown and changeable here.
-//   5  tree / clutter sliders, labelled Estimate.
+//   4  the plan's radio (never a constant: the region's preset), changed in the one Radio and trees sheet (build 77: this
+//      mode no longer repeats the radio and tree settings under other names).
+//   5  tree / clutter: in Radio and trees, labelled Estimate.
 //   6  the terrain profile chart with a scrubbing crosshair (profile_chart.dart); the same spot is drawn on the map.
 //   7  relay finder (core/plan/plan_analysis.dart findRelays: dual line of sight first) with one-tap Add, and "snap to high
 //      ground" for planned ends.
@@ -18,12 +19,15 @@
 // (localPlanLink); when neither answers, the last profile this mode saw for the same two points is re-judged on the phone
 // (heights, radio, clutter or direction changed while offline). Every state has an icon and words.
 //
-// Keys: 'plan-mode-link' (body), 'link-a-<id>', 'link-b-<id>', 'link-swap', 'link-add-network', 'link-dir-<down|up|both>',
+// Build 77 (round 4): the ends are the app's action-sheet pick fields; plain words first (verdict, sentence, what to change
+// "to clear the hill"), every figure under "The numbers"; a planned place is a "spot", a real one a "repeater".
+//
+// Keys: 'plan-mode-link' (body), 'link-a-<id>', 'link-b-<id>' (the pick fields), 'link-swap', 'link-add-network', 'link-dir-<down|up|both>',
 // 'link-run', 'link-loading', 'link-error', 'link-result', 'link-verdict', 'link-stale', 'link-profile',
 // 'link-scrub-readout', 'link-raise', 'link-raise-apply', 'link-raise-relay', 'link-ridge', 'link-ridge-show',
 // 'link-disagree', 'link-never-heard', 'link-measured', 'link-measured-none', 'link-drive-cells', 'link-confidence',
 // 'link-relay-find', 'link-relay-<i>', 'link-relay-add-<i>', 'link-relay-empty', 'link-relay-error', 'link-snap-a',
-// 'link-snap-b', 'link-glossary', 'link-glossary-sheet', 'link-radio', 'link-receiver', 'link-canopy', 'link-clutter'.
+// 'link-snap-b', 'link-glossary', 'link-glossary-sheet', 'link-receiver', 'link-margin'.
 // Map targets: 'link-ridge', 'link-scrub', 'link-relay-<i>'.
 import 'dart:async';
 
@@ -37,6 +41,7 @@ import '../../../core/plan/plan_api.dart';
 import '../../../core/plan/plan_controller.dart' show PlanFullException;
 import '../../../core/plan/plan_model.dart';
 import '../../../core/plan_contract.dart';
+import '../../../core/time_format.dart' show dateOnly;
 import '../../../core/units.dart' show Units;
 import '../../app.dart';
 import '../../design/app_haptics.dart';
@@ -45,12 +50,11 @@ import '../../design/app_symbols.dart';
 import '../../design/sheet_detents.dart' show formSheetDetents;
 import '../../design/state_views.dart';
 import '../../design/tokens.dart';
-import '../../map/coverage_bands.dart' show CoverageBandColors;
 import '../../map/layers/plan_overlay.dart' show PlanLinkVerdict, PlanOverlayLink;
 import '../../map/main_map_focus.dart' show MapFocusTarget;
+import '../../pick_field.dart';
 import '../../settings/settings_kit.dart' show SliderTile;
 import '../plan_modes.dart';
-import '../planner_sheet.dart' show radioWords, showPlanSettings;
 import 'profile_chart.dart';
 
 /// The three verdict words of the Link mode (plan: Works / Marginal / Unlikely).
@@ -90,9 +94,38 @@ const List<(String, String)> linkGlossary = [
   ('Receiver height', 'How high a handheld or companion radio is held above the ground: lowest in a hand, a little higher on a car roof, highest at a window or on a mast.'),
   ('Clutter', 'Trees and buildings the terrain data does not show. The model adds a loss per kilometre for the part of the path below the canopy height. Both are estimates you can change.'),
   ('Estimate', 'Worked out by the model from bare-earth terrain. Not a promise: real links can be better or worse.'),
-  ('Measured', 'From our own data: packets our observers heard between the two nodes, or drives near them.'),
-  ('Relay', 'A third node both ends can reach, so messages hop around the obstacle.'),
+  ('Measured', 'From our own data: packets our observers heard between the two, or drives near them.'),
+  ('Relay', 'A third spot both ends can reach, so messages hop around the obstacle.'),
+  ('Fringe, Usable, Solid', 'How strong the signal is in a coverage estimate. Fringe: 0 to 6 dB above what the radio can decode, it may drop out. Usable: 6 to 12 dB. Solid: more than 12 dB.'),
+  ('Show signal at least', 'Hides the parts of a coverage estimate where the signal is weaker than this. Weaker shows everywhere a radio can just decode; Stronger only where the signal has room to spare.'),
+  ('Spot', 'A place in your plan where a radio could go. A repeater is a real one already on the network.'),
 ];
+
+/// The plan's words in plain language (Link and Coverage both open it). Keeps the figures the results no longer put in
+/// their names, such as the dB range of each coverage band.
+Future<void> showPlanGlossary(BuildContext context) => showAppSheet<void>(
+      context,
+      detents: formSheetDetents(context),
+      builder: (ctx, scroll) => AppSheetScaffold(
+        key: const Key('link-glossary-sheet'),
+        controller: scroll,
+        title: 'Words used in a plan',
+        children: [
+          for (final (term, words) in linkGlossary)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Gap.s),
+              child: MergeSemantics(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Semantics(header: true, child: Text(term, style: Theme.of(ctx).textTheme.titleSmall)),
+                  const SizedBox(height: 2),
+                  Text(words, style: Theme.of(ctx).textTheme.bodyMedium),
+                ]),
+              ),
+            ),
+          const SizedBox(height: Gap.l),
+        ],
+      ),
+    );
 
 class LinkMode extends PlanMode {
   const LinkMode();
@@ -103,7 +136,7 @@ class LinkMode extends PlanMode {
   @override
   AppSymbol get symbol => AppSymbols.route;
   @override
-  String get hint => 'Will one node hear another: pick two nodes of the plan or from the network.';
+  String get hint => 'Will one spot hear another: pick two spots of the plan or repeaters from the network.';
   @override
   String get what => 'Will these two radios hear each other?';
   @override
@@ -426,7 +459,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         _relays = [for (var j = 0; j < r.length; j++) if (j != i) r[j]];
       });
       _publish();
-      showAppToast(context, 'Added ${node.name} to the plan as a planned node.', kind: AppToastKind.success, actionLabel: 'Undo', onAction: ctx.controller.undo);
+      showAppToast(context, 'Added ${node.name} to the plan as a planned spot.', kind: AppToastKind.success, actionLabel: 'Undo', onAction: ctx.controller.undo);
     } on PlanFullException catch (e) {
       showAppToast(context, e.toString(), kind: AppToastKind.error);
     }
@@ -457,59 +490,27 @@ class LinkModeBodyState extends State<LinkModeBody> {
     );
   }
 
-  Future<void> _glossary() => showAppSheet<void>(
-        context,
-        detents: formSheetDetents(context),
-        builder: (ctx, scroll) => AppSheetScaffold(
-          key: const Key('link-glossary-sheet'),
-          controller: scroll,
-          title: 'Words used in a link check',
-          children: [
-            for (final (term, words) in linkGlossary)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Gap.s),
-                child: MergeSemantics(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Semantics(header: true, child: Text(term, style: Theme.of(ctx).textTheme.titleSmall)),
-                    const SizedBox(height: 2),
-                    Text(words, style: Theme.of(ctx).textTheme.bodyMedium),
-                  ]),
-                ),
-              ),
-            const SizedBox(height: Gap.l),
-          ],
-        ),
-      );
+  Future<void> _glossary() => showPlanGlossary(context);
 
   // ------------------------------------------------------------------------------------------------ build
 
-  Color _verdictColour(BuildContext context, PlanVerdict? v) {
-    final bands = CoverageBandColors.of(MeshSonarColors.of(context).palette, Theme.of(context).brightness);
-    return switch (v) {
-      PlanVerdict.likely => bands[5],
-      PlanVerdict.marginal => bands[3],
-      PlanVerdict.unlikely => bands[1],
-      null => Theme.of(context).colorScheme.primary,
-    };
-  }
+  Color _verdictColour(BuildContext context, PlanVerdict? v) => v == null ? Theme.of(context).colorScheme.primary : verdictColour(context, v);
 
+  /// Spot A / Spot B: the app's action-sheet pick field (round 4 P-V4; the Material dropdown opened over the content).
   Widget _endPicker(String label, String? value, ValueChanged<String?> onChanged, Key key) {
     final nodes = ctx.controller.nodes;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-      child: DropdownButtonFormField<String>(
+      child: PickField<String?>(
         key: key,
-        initialValue: value,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-        items: [
+        label: label,
+        dense: true,
+        value: value,
+        options: [
           for (final n in nodes)
-            DropdownMenuItem(
-              value: n.id,
-              child: Text(
-                '${n.name}${n.mine ? ' (mine)' : n.status == PlanNodeStatus.existing ? ' (network)' : n.status == PlanNodeStatus.planned ? ' (planned)' : ''}',
-                overflow: TextOverflow.ellipsis,
-              ),
+            PickOption<String?>(
+              n.id,
+              '${n.name}${n.mine ? ' (yours)' : n.status == PlanNodeStatus.existing ? ' (repeater)' : n.status == PlanNodeStatus.planned ? ' (planned spot)' : ''}',
             ),
         ],
         onChanged: onChanged,
@@ -539,13 +540,15 @@ class LinkModeBodyState extends State<LinkModeBody> {
     final units = AppScope.unitsOf(context);
     final nodes = ctx.controller.nodes;
     if (nodes.length < 2) {
+      // One spot short of a link (an empty plan shows the planner's first-run card instead). The list of spots below
+      // has "Add from the network"; this offers the spot itself.
       return AppEmptyView(
         key: const Key('plan-mode-link'),
         symbol: AppSymbols.route,
-        title: nodes.isEmpty ? 'Add two nodes to check a link' : 'Add one more node to check a link',
-        message: 'Press and hold the map to add a spot, or add a repeater from the network.',
-        actionLabel: 'Add from the network',
-        onAction: ctx.openNodePicker,
+        title: nodes.isEmpty ? 'Add two spots to check a link' : 'Add one more spot to check a link',
+        message: 'A spot on the map, or a repeater from the network.',
+        actionLabel: 'Add a spot',
+        onAction: ctx.addSpot,
       );
     }
     final km = _km;
@@ -553,8 +556,8 @@ class LinkModeBodyState extends State<LinkModeBody> {
     final res = _res;
     final current = _current;
     return Column(key: const Key('plan-mode-link'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _endPicker('End A', _a, (v) => _setEnds(v, _b == v ? null : _b), Key('link-a-$_a')),
-      _endPicker('End B', _b, (v) => _setEnds(_a == v ? null : _a, v), Key('link-b-$_b')),
+      _endPicker('Spot A', _a, (v) => _setEnds(v, _b == v ? null : _b), Key('link-a-$_a')),
+      _endPicker('Spot B', _b, (v) => _setEnds(_a == v ? null : _a, v), Key('link-b-$_b')),
       Wrap(spacing: Gap.s, runSpacing: 0, children: [
         TextButton.icon(
           key: const Key('link-swap'),
@@ -571,9 +574,9 @@ class LinkModeBodyState extends State<LinkModeBody> {
           label: const Text('Add from the network'),
         ),
       ]),
-      if (_b == null) const PlanLine(AppSymbols.infoCircle, 'Pick end B: choose it above or tap a node on the map.', key: Key('link-pick-b')),
+      if (_b == null) const PlanLine(AppSymbols.infoCircle, 'Pick spot B: choose it above or tap a spot on the map.', key: Key('link-pick-b')),
       // Only until there is a result (build 76): after that the screen shows the answer, not a tip.
-      if (res == null) Text('Tip: tap a node on the map to pick it as an end.', key: const Key('link-tip'), style: t.textTheme.bodySmall),
+      if (res == null) Text('Tip: tap a spot on the map to pick it as A or B.', key: const Key('link-tip'), style: t.textTheme.bodySmall),
       if (km != null) PlanFact('Straight line', units.distance(km * 1000)),
       if (km != null && km > 40)
         PlanLine(AppSymbols.exclamationTriangle, 'The ends are ${units.distance(km * 1000)} apart; a link check reads terrain for up to ${units.distance(40000)}. Add a relay between them.',
@@ -618,7 +621,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
           onRetry: () => unawaited(_run()),
         ),
       if (res != null && res.ok) _result(context, res, current, units),
-      ..._settings(context, units),
+      ..._receiver(context, units),
     ]);
   }
 
@@ -661,8 +664,39 @@ class LinkModeBodyState extends State<LinkModeBody> {
           key: const Key('link-plain'),
           style: t.textTheme.bodyLarge,
         ),
-      if (d.marginDb != null)
-        PlanFact('Link margin after the ${fadeMarginDb.round()} dB fade margin (${directionWords(rq.direction)})', dbWords(d.marginDb!, signed: true)),
+      // ---- what to change, in plain words (round 4 P-U4); the figures are under "The numbers".
+      if (raise > 0 || ridge != null) _header(context, 'What to change'),
+      if (raise > 0 && raise < raiseMaxM)
+        PlanLine(AppSymbols.arrowUpCircleFill, 'Raise $raiseName ${units.height(raise)} to clear ${ridge != null ? 'the hill' : 'the ground in between'}.', key: const Key('link-raise')),
+      if (canRaise)
+        _button(
+          key: const Key('link-raise-apply'),
+          label: 'Raise $raiseName to ${units.height(_heightOf(raiseEnd) + raise)}',
+          symbol: AppSymbols.arrowUpCircleFill,
+          onPressed: () => _applyRaise(raiseEnd, raise),
+        ),
+      if (raise >= raiseMaxM || (raise > 0 && !canRaise))
+        const PlanLine(AppSymbols.exclamationTriangle, 'No mast is tall enough to clear this path: put a relay on high ground between them.', key: Key('link-raise-relay')),
+      if (ridge != null) ...[
+        PlanLine(
+          AppSymbols.flag,
+          'A hill ${units.distance(ridge.km * 1000)} from $aName is in the way. It is marked on the chart and the map.',
+          key: const Key('link-ridge'),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('link-ridge-show'),
+            style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
+            onPressed: () {
+              final p = _ridgePoint();
+              if (p != null) ctx.focusMap(p, zoom: 14);
+            },
+            icon: const AppSymbolIcon(AppSymbols.map, size: 18),
+            label: const Text('Show the hill on the map'),
+          ),
+        ),
+      ],
       // ---- the profile
       const SizedBox(height: Gap.s),
       ProfileChart(
@@ -685,39 +719,6 @@ class LinkModeBodyState extends State<LinkModeBody> {
       ),
       Text('Shaded: the space the signal needs clear of hills.',
           style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
-      // ---- what to change
-      if (raise > 0 || ridge != null) _header(context, 'What to change'),
-      if (raise > 0 && raise < raiseMaxM)
-        PlanLine(AppSymbols.arrowUpCircleFill, 'Raise $raiseName by ${units.height(raise)} to clear 60 % of the Fresnel zone.', key: const Key('link-raise')),
-      if (canRaise)
-        _button(
-          key: const Key('link-raise-apply'),
-          label: 'Raise $raiseName to ${units.height(_heightOf(raiseEnd) + raise)}',
-          symbol: AppSymbols.arrowUpCircleFill,
-          onPressed: () => _applyRaise(raiseEnd, raise),
-        ),
-      if (raise >= raiseMaxM || (raise > 0 && !canRaise))
-        const PlanLine(AppSymbols.exclamationTriangle, 'No mast is tall enough to clear this path: put a relay on high ground between the ends.', key: Key('link-raise-relay')),
-      if (ridge != null) ...[
-        PlanLine(
-          AppSymbols.flag,
-          'Blocking ridge ${units.distance(ridge.km * 1000)} from $aName${ridge.groundM == null ? '' : ', ground ${units.height(ridge.groundM!)}'}. It is flagged on the chart and the map.',
-          key: const Key('link-ridge'),
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            key: const Key('link-ridge-show'),
-            style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
-            onPressed: () {
-              final p = _ridgePoint();
-              if (p != null) ctx.focusMap(p, zoom: 14);
-            },
-            icon: const AppSymbolIcon(AppSymbols.map, size: 18),
-            label: const Text('Show the ridge on the map'),
-          ),
-        ),
-      ],
       if (notWorking) ..._relaySection(context, units),
       ..._snapButtons(context, units, a, b),
       // ---- measured next to predicted
@@ -727,7 +728,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
           AppSymbols.exclamationCircle,
           'The terrain model alone says ${linkVerdictWords(model)}, but ${m.echoes} measured ${m.echoes == 1 ? 'packet says' : 'packets say'} otherwise: the verdict follows the measurement.',
           key: const Key('link-disagree'),
-          color: t.colorScheme.tertiary,
+          color: MeshSonarColors.of(context).warning,
         ),
       if (m == null && v == PlanVerdict.likely && a?.existingKey != null && b?.existingKey != null)
         const PlanLine(AppSymbols.exclamationCircle, 'The Estimate says it works, but no packets between these two have been Measured yet.', key: Key('link-never-heard')),
@@ -735,8 +736,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         PlanLine(
           AppSymbols.waveform,
           'Between them: ${m.echoes} ${m.echoes == 1 ? 'packet' : 'packets'} heard'
-          '${m.meanSnr == null ? '' : ', mean SNR ${dbWords(m.meanSnr!)}'}'
-          '${m.lastAt == null ? '' : ', last ${_day(m.lastAt!)}'} (${m.source}).',
+          '${m.lastAt == null ? '' : ', last ${dateOnly(m.lastAt!)}'} (${m.source}).',
           key: const Key('link-measured'),
         )
       else
@@ -749,15 +749,19 @@ class LinkModeBodyState extends State<LinkModeBody> {
       ),
       // ---- the numbers
       _header(context, 'The numbers (Estimate)'),
+      if (d.marginDb != null)
+        PlanFact('Link margin after the ${fadeMarginDb.round()} dB fade margin (${directionWords(rq.direction)})', dbWords(d.marginDb!, signed: true), key: const Key('link-margin')),
       PlanFact('Distance', units.distance(d.km * 1000)),
       PlanFact('Antennas', '$aName ${units.height(rq.haM)}, $bName ${units.height(rq.hbM)} above ground'),
+      if (raise > 0 && raise < raiseMaxM) PlanFact('Raise $raiseName to clear 60 % of the Fresnel zone', units.height(raise)),
+      if (ridge?.groundM != null) PlanFact('Ground at the hill', units.height(ridge!.groundM!)),
       if (d.fresnelClearancePct != null)
         PlanFact('Fresnel zone open at the tightest point', d.fresnelClearancePct! < 0 ? 'blocked (${d.fresnelClearancePct!.round()} %)' : '${d.fresnelClearancePct!.round()} %'),
       if (d.odds != null) PlanFact('Terrain odds', '${(d.odds! * 100).clamp(0, 100).toStringAsFixed(0)} %'),
-      PlanFact('Radio', radioWords(rq.radio)),
+      if (m?.meanSnr != null) PlanFact('Measured mean SNR', dbWords(m!.meanSnr!)),
       ...resultNotes(context, r),
       Text(
-        'Estimate from ${d.provenance.terrain.isEmpty ? 'bare-earth terrain' : d.provenance.terrain}; trees use the clutter setting below. Model: ${d.provenance.model}. Not a promise.',
+        'Estimate from ${d.provenance.terrain.isEmpty ? 'bare-earth terrain' : d.provenance.terrain}; trees use the plan\'s Radio and trees setting. Model: ${d.provenance.model}. Not a promise.',
         style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
       ),
       Align(
@@ -781,12 +785,6 @@ class LinkModeBodyState extends State<LinkModeBody> {
       return p.confidence == PlanConfidenceLevel.estimate ? 'Confidence: $level. Nothing measured between these two yet; the model alone.' : 'Confidence: $level.';
     }
     return 'Confidence: $level ($note).';
-  }
-
-  static String _day(DateTime t) {
-    final l = t.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${l.year}-${two(l.month)}-${two(l.day)}';
   }
 
   PublicCoverage? _cellsFor;
@@ -839,7 +837,7 @@ class LinkModeBodyState extends State<LinkModeBody> {
         const PlanLine(AppSymbols.exclamationTriangle, 'None of these points makes both hops work at the default mast height. Try a taller mast on the relay, or Find sites for higher ground.',
             key: Key('link-relay-none-works')),
       if (relays != null && relays.isEmpty && !_relayLoading)
-        const PlanLine(AppSymbols.infoCircle, 'No point between them was found that both ends reach. Try a node on higher ground with Find sites.', key: Key('link-relay-empty')),
+        const PlanLine(AppSymbols.infoCircle, 'No point between them was found that both ends reach. Try a spot on higher ground with Find sites.', key: Key('link-relay-empty')),
       if (relays != null && !_relayLoading)
         for (var i = 0; i < relays.length; i++)
           Padding(
@@ -885,62 +883,31 @@ class LinkModeBodyState extends State<LinkModeBody> {
     ];
   }
 
-  List<Widget> _settings(BuildContext context, Units units) {
-    final t = Theme.of(context);
+  /// The receiver height for a handheld end (the one link setting the Radio and trees sheet does not hold). The radio and
+  /// the trees are no longer repeated here under other names (round 4): they live in Radio and trees only.
+  List<Widget> _receiver(BuildContext context, Units units) {
     final p = _plan;
     final a = _nodeA, b = _nodeB;
     final handheldEnds = [if (a != null && a.role == PlanNodeRole.handheld && a.heightM == null) 'A', if (b != null && b.role == PlanNodeRole.handheld && b.heightM == null) 'B'];
     final rx = p.receiverM ?? handheldHeightM;
     return [
-      _header(context, 'Settings for this plan'),
-      InkWell(
-        key: const Key('link-radio'),
-        onTap: () => unawaited(showPlanSettings(context, ctx.controller, regionPreset: AppScope.read(context).siteConfig?.radioPreset)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Hit.min),
-          child: PlanLine(AppSymbols.antenna, 'Radio: ${radioWords(p.radio)}. Change'),
-        ),
-      ),
+      const SizedBox(height: Gap.s),
       SliderTile(
         key: const ValueKey('link-receiver'),
         sliderKey: const Key('link-receiver-slider'),
         icon: symbolData(context, AppSymbols.person),
         title: 'Receiver height',
-        caption: handheldEnds.isEmpty ? null : 'Used for end ${handheldEnds.join(' and ')} (a handheld).',
+        caption: handheldEnds.isEmpty ? null : 'Used for spot ${handheldEnds.join(' and ')} (a handheld).',
         enabled: handheldEnds.isNotEmpty,
-        disabledReason: 'Both ends are fixed nodes with their own heights. A handheld end (a contact or your companion radio) uses this height.',
+        disabledReason: 'Both ends have their own antenna heights. A handheld end (a contact or your companion radio) uses this height.',
         stops: _receiverStops,
         value: (rx * 10).round(),
         label: (v) => units.height(v / 10),
         onChanged: (v) => ctx.controller.setReceiverM(v / 10),
       ),
-      SliderTile(
-        key: const ValueKey('link-canopy'),
-        sliderKey: const Key('link-canopy-slider'),
-        icon: symbolData(context, AppSymbols.arrowUpCircleFill),
-        title: 'Tree canopy height (Estimate)',
-        stops: _canopyStops,
-        value: p.clutter.canopyM.round(),
-        label: (v) => units.height(v.toDouble()),
-        onChanged: (v) => ctx.controller.setClutter(PlanClutter(canopyM: v.toDouble(), dbPerKm: p.clutter.dbPerKm)),
-      ),
-      SliderTile(
-        key: const ValueKey('link-clutter'),
-        sliderKey: const Key('link-clutter-slider'),
-        icon: symbolData(context, AppSymbols.minus),
-        title: 'Loss through trees and clutter (Estimate)',
-        stops: _lossStops,
-        value: (p.clutter.dbPerKm * 10).round(),
-        label: (v) => '${(v / 10).toStringAsFixed(1)} dB/km',
-        onChanged: (v) => ctx.controller.setClutter(PlanClutter(canopyM: p.clutter.canopyM, dbPerKm: v / 10)),
-      ),
-      Text('The map data has no trees or buildings. Change these if you know the area.',
-          style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
     ];
   }
 }
 
 /// Receiver heights offered, decimetres (1 m to 10 m; 1.5 m is a hand).
 const List<int> _receiverStops = [10, 15, 20, 30, 50, 80, 100];
-const List<int> _canopyStops = [0, 5, 10, 15, 20, 25, 30];
-const List<int> _lossStops = [0, 30, 60, 90, 133, 160, 200, 250];
