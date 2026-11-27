@@ -116,6 +116,12 @@ void main() {
     expect(basemapBackgroundColor(BasemapSource.ours, dark: false, look: BasemapLook.topo), const Color(0xFFE9E2CE));
     expect(basemapBackgroundColor(BasemapSource.ours, dark: true, look: BasemapLook.topo), const Color(0xFF161A15));
     expect(basemapBackgroundColor(BasemapSource.ours, dark: true, look: BasemapLook.labels), isNull);
+    // Build 77: the data-first map keeps the paper ground; its base half has it, a names pass has none.
+    expect(basemapBackgroundColor(BasemapSource.ours, dark: true, look: BasemapLook.data), const Color(0xFF121417));
+    expect(basemapBackgroundColor(BasemapSource.ours, dark: false, look: BasemapLook.dataBase), const Color(0xFFFAFAFA));
+    expect(basemapBackgroundColor(BasemapSource.ours, dark: false, look: BasemapLook.topoBase), const Color(0xFFE9E2CE));
+    expect(basemapBackgroundColor(BasemapSource.ours, dark: true, look: BasemapLook.dataLabels), isNull);
+    expect(basemapBackgroundColor(BasemapSource.ours, dark: false, look: BasemapLook.topoLabels), isNull);
     expect(parseStyleColor('rgb(18, 20, 23)'), const Color(0xFF121417));
     expect(parseStyleColor('hsl(0,0%,0%)'), isNull);
   });
@@ -187,5 +193,35 @@ void main() {
     await tester.pumpWidget(labelsAt(const LatLng(51.5, -0.12)));
     await tester.pump();
     expect(drawn, isEmpty, reason: 'London is outside the extract: imagery only, no names');
+  });
+
+  testWidgets('build 77 names above coverage: on our tiles the base and the names pass both draw; on the OpenFreeMap fallback only the base (its own names inside)', (tester) async {
+    BasemapHealth.instance = BasemapHealth(client: () => throw StateError('offline test'));
+    final drawn = <(BasemapSource, BasemapLook, bool)>[];
+    BasemapLayer.debugBuilder = (s, dark) {
+      drawn.add((s, BasemapLayer.debugLook ?? BasemapLook.road, dark));
+      return const SizedBox.shrink();
+    };
+    addTearDown(() {
+      BasemapLayer.debugBuilder = null;
+      BasemapLayer.debugLook = null;
+      BasemapHealth.instance = BasemapHealth();
+    });
+    for (final (base, names) in [(BasemapLook.dataBase, BasemapLook.dataLabels), (BasemapLook.topoBase, BasemapLook.topoLabels)]) {
+      Widget at(LatLng c) => MaterialApp(
+        home: SizedBox(
+          width: 300,
+          height: 200,
+          child: FlutterMap(key: ValueKey((c, base)), options: MapOptions(initialCenter: c, initialZoom: 12), children: [BasemapLayer(look: base, dark: false), BasemapLayer(look: names, dark: false)]),
+        ),
+      );
+      drawn.clear();
+      await tester.pumpWidget(at(const LatLng(39.96, -83.0)));
+      expect(drawn, [(BasemapSource.ours, base, false), (BasemapSource.ours, names, false)]);
+      drawn.clear();
+      await tester.pumpWidget(at(const LatLng(51.5, -0.12)));
+      await tester.pump();
+      expect(drawn.toSet(), {(BasemapSource.openFreeMap, base, false)}, reason: 'no names-only pass on the fallback: OpenFreeMap has no such style');
+    }
   });
 }
