@@ -312,7 +312,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
         ? 'Targets unknown'
         : v.complete
             ? 'Complete: all $total hop${total == 1 ? '' : 's'} answered'
-            : 'Got through ${v.completed} of $total hops';
+            : 'Got through ${v.completed} of $total hop${total == 1 ? '' : 's'}';
     return [
       ToolCard(
         key: const Key('trace-summary'),

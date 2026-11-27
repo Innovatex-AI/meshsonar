@@ -106,7 +106,7 @@ class _PulseChipState extends State<PulseChip> {
             PulseChipState.noFeed => (Icons.portable_wifi_off, mc.textMuted, 'No packet feed', 'Pulse: no packet feed'),
             PulseChipState.unusual => (
                 top!.severity == 'alert' ? Icons.error_outline : Icons.warning_amber_rounded,
-                top.severity == 'alert' ? t.colorScheme.error : mc.beacon,
+                top.severity == 'alert' ? t.colorScheme.error : mc.warning,
                 'Unusual: ${top.title}${open.length > 1 ? ' +${open.length - 1}' : ''}',
                 'Pulse: ${open.length} open ${open.length == 1 ? 'event' : 'events'}. ${top.title}',
               ),
@@ -318,7 +318,7 @@ class _PulseSheet extends StatelessWidget {
     final (IconData icon, Color color, String headline) = switch (state) {
       PulseChipState.unusual => (
           Icons.warning_amber_rounded,
-          mc.beacon,
+          mc.warning,
           events.length == 1 ? '1 thing is unusual right now' : '${events.length} things are unusual right now',
         ),
       PulseChipState.noFeed => (Icons.portable_wifi_off, mc.textMuted, 'No packets from this region lately'),

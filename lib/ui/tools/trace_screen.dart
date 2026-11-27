@@ -526,7 +526,7 @@ class _ResultCard extends StatelessWidget {
       if (start != null) MapPin(point: start, label: 'Your position', icon: Icons.person_pin_circle, color: t.colorScheme.primary),
       for (var i = 0; i < r.hops.length; i++)
         if (r.hops[i].stop.hasPosition)
-          MapPin(point: LatLng(r.hops[i].stop.lat!, r.hops[i].stop.lon!), label: 'Hop ${i + 1}, ${r.hops[i].stop.name}', child: NumberDot(i + 1, color: mc.beacon)),
+          MapPin(point: LatLng(r.hops[i].stop.lat!, r.hops[i].stop.lon!), label: 'Hop ${i + 1}, ${r.hops[i].stop.name}', child: NumberDot(i + 1, color: mc.repeater)),
     ];
     final lines = <MapLine>[];
     LatLng? prev = start;
@@ -630,7 +630,7 @@ class _ResultCard extends StatelessWidget {
               if (dist != null) Text('$dist from the previous point', style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
               if (h.ambiguous)
                 Row(children: [
-                  Icon(Icons.warning_amber_rounded, size: 18, color: t.colorScheme.tertiary),
+                  Icon(Icons.warning_amber_rounded, size: 18, color: MeshSonarColors.of(context).warning),
                   const SizedBox(width: Gap.xs),
                   const Flexible(child: Text('Ambiguous hash: another repeater shares it')),
                 ]),

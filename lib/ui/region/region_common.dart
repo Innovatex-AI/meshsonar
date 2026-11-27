@@ -33,7 +33,7 @@ class RegionStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final m = MeshSonarColors.of(context);
+    // Amber is for warnings only (build 77): "Partly ready" and "Out of date" are neutral, the word says it.
     final (label, bg, fg, icon) = switch (status.state) {
       RegionDataState.ready => (
         'Up to date',
@@ -43,7 +43,7 @@ class RegionStatusChip extends StatelessWidget {
       ),
       RegionDataState.partial => (
         'Partly ready',
-        m.beacon.withValues(alpha: .22),
+        c.surfaceContainerHigh,
         c.onSurface,
         Icons.timelapse,
       ),
@@ -55,7 +55,7 @@ class RegionStatusChip extends StatelessWidget {
       ),
       RegionDataState.stale => (
         'Out of date',
-        m.beacon.withValues(alpha: .22),
+        c.surfaceContainerHigh,
         c.onSurface,
         Icons.history,
       ),

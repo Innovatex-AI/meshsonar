@@ -351,7 +351,7 @@ class _SectionState<T extends Object> extends State<_Section<T>> {
         color: isErr
             ? c.errorContainer
             : isStale
-            ? MeshSonarColors.of(context).beacon.withValues(alpha: .18)
+            ? c.surfaceContainerHigh
             : c.surfaceContainerLow,
         borderRadius: BorderRadius.circular(Corners.chip),
         border: Border.all(color: isErr ? c.error : c.outlineVariant),
@@ -600,7 +600,7 @@ class _FindingsBody extends StatelessWidget {
     final m = MeshSonarColors.of(context);
     Color tone(String s) => switch (s) {
       'alert' => t.colorScheme.error,
-      'warn' => m.beacon,
+      'warn' => m.warning,
       _ => t.colorScheme.outline,
     };
     return Column(

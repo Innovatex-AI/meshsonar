@@ -510,6 +510,41 @@ void main() {
       await t.pumpWidget(const SizedBox());
     });
 
+    testWidgets('Round 2 N-U3, N-U5, N-U1: tool links next to the data; a private channel has one name; Replay on map passes the copy', (t) async {
+      tall(t);
+      final s = Server();
+      // A trace: "Open in Trace Viewer" under its hops.
+      await open(t, s, '50b835a910da5aac');
+      expect(find.byKey(const Key('packet-open-trace-viewer')), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      // A private channel: "Private channel" in the title, its ID only under "More about this packet"; the region tag
+      // row offers "Who passes this on".
+      await open(t, s, '1c26c203910896f0');
+      final title = t.widget<Text>(find.byKey(const Key('packet-detail-title'))).data!;
+      expect(title, 'Private channel message');
+      expect(find.byKey(const ValueKey('packet-more-Region tag')), findsOneWidget);
+      expect(find.byKey(const ValueKey('packet-more-Channel ID')), findsOneWidget);
+      expect(find.byKey(const Key('packet-scope-audit')), findsOneWidget);
+      expect(find.textContaining('Unknown channel'), findsNothing);
+      // Replay on map: the copy's observation id goes to the Live map's entry (W2-A's openLiveReplay, wired by the lead).
+      final calls = <(String, String)>[];
+      liveReplayOpener = (context, {required packetHash, required observationId}) => calls.add((packetHash, observationId));
+      addTearDown(() => liveReplayOpener = null);
+      await t.pumpWidget(const SizedBox());
+      await open(t, s, 'c4b06ee8fc39b187');
+      final row = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-observer-row-')).first;
+      await t.ensureVisible(row);
+      await t.tap(row);
+      await t.pumpAndSettle();
+      final replay = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-obs-replay-')).first;
+      await t.ensureVisible(replay);
+      await t.tap(replay);
+      expect(calls, hasLength(1));
+      expect(calls.single.$1, 'c4b06ee8fc39b187');
+      expect('packet-obs-replay-${calls.single.$2}', (t.widget(replay).key! as ValueKey<String>).value);
+      await t.pumpWidget(const SizedBox());
+    });
+
     testWidgets('public message with ambiguous path: the text, says-it-is sender, candidates, likely score, unknown', (t) async {
       tall(t);
       final s = Server();

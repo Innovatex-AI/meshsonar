@@ -494,7 +494,7 @@ class ToolMap extends StatelessWidget {
                     point: p.point,
                     width: 40,
                     height: 40,
-                    child: p.child ?? (p.icon == Icons.cell_tower && p.color == null ? const Center(child: NodeSymbol(role: 'repeater')) : Icon(p.icon, color: p.color ?? m.beacon, size: 28)),
+                    child: p.child ?? (p.icon == Icons.cell_tower && p.color == null ? const Center(child: NodeSymbol(role: 'repeater')) : Icon(p.icon, color: p.color ?? m.repeater, size: 28)),
                   ),
               ]),
             ],
@@ -531,7 +531,7 @@ class ToolMap extends StatelessWidget {
           overlays: [
             MarkerLayer(markers: [
               for (final p in pathPins)
-                Marker(point: p.point, width: 40, height: 40, child: p.child ?? Icon(p.icon, color: p.color ?? m.beacon, size: 28)),
+                Marker(point: p.point, width: 40, height: 40, child: p.child ?? Icon(p.icon, color: p.color ?? m.repeater, size: 28)),
             ]),
           ],
         ),

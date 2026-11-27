@@ -272,7 +272,7 @@ class PacketDetailBody extends StatelessWidget {
       if (d.size != null) ('Size', '${d.size} bytes'),
       if (d.hashSize != null && d.hashSize! > 0) ('Hop code size', '${d.hashSize} byte${d.hashSize == 1 ? '' : 's'}'),
       ('Source', sourceText),
-      if (d.scope != null) ('Scope', d.scope!.label),
+      if (d.scope != null) ('Region tag', d.scope!.label),
       // The one-byte channel ID tells two private channels apart and nothing else: it lives here, not in the title.
       if (_channelId != null) ('Channel ID', _channelId!),
       if (_groupMac != null) ('MAC', _groupMac!),

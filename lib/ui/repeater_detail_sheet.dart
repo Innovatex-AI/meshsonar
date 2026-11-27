@@ -122,8 +122,8 @@ class RepeaterDetailSheet extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: mc.beacon.withValues(alpha: 0.16)),
-            child: Icon(Icons.cell_tower, color: mc.beacon),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: mc.repeaterTint),
+            child: Icon(Icons.cell_tower, color: mc.repeater),
           ),
           const SizedBox(width: Gap.m),
           Expanded(
