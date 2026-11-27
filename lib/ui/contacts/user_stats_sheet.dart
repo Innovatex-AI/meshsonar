@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator, CupertinoButton, CupertinoSwitch;
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../chat/models.dart';
 import '../../radio/inbound.dart' show RadioContact;
 import '../../radio/tools/telemetry_tool.dart';
@@ -290,15 +291,8 @@ class _UserStatsBodyState extends State<UserStatsBody> {
     ];
   }
 
-  static String _ago(int ms) {
-    if (ms < 90000) return 'just now';
-    final m = ms ~/ 60000;
-    if (m < 60) return '$m min ago';
-    final h = ms ~/ 3600000;
-    if (h < 24) return '$h h ago';
-    final d = ms ~/ 86400000;
-    return d == 1 ? 'yesterday' : '$d days ago';
-  }
+  /// "just now", "5 min ago", "3 h ago", "4 d ago" (the one app time formatter).
+  static String _ago(int ms) => tf.relativeDuration(Duration(milliseconds: ms));
 }
 
 class _Header extends StatelessWidget {

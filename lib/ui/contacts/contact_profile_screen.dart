@@ -5,11 +5,16 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:flutter/cupertino.dart' show CupertinoButton, CupertinoNavigationBar;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../map/layers/registry.dart' show kPlanLayerId;
+import '../map/main_map_focus.dart';
+import '../nodes/node_actions.dart' show shellControllerFor;
+import '../../core/time_format.dart' as tf;
 import '../../chat/contact_manager.dart';
 import '../../chat/contact_port.dart';
 import '../../chat/models.dart';
@@ -24,7 +29,6 @@ import '../design/tokens.dart';
 import '../meshtrack/ask_location_card.dart';
 import '../nodes/node_actions.dart' show NodeActionEnv, NodeActionId, nodeActions, runNodeAction;
 import '../nodes/node_ref.dart';
-import '../shell/shell_controller.dart';
 import '../tools/ping_result_sheet.dart';
 import 'contact_edit_sheet.dart';
 import 'contact_map.dart';
@@ -219,14 +223,9 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
                   ),
                 if (c.type == ContactType.repeater)
                   Padding(padding: const EdgeInsets.fromLTRB(Layout.screenMargin, 0, Layout.screenMargin, Gap.l), child: widget.claimBuilder(context, c)),
+                // C-V5 (build 77): the route is said once, in the header; the Route tile opens it. (A Route row here said
+                // it a third time.)
                 ProfileGroup(rows: [
-                  ProfileRow(
-                    key: const Key('contact-route-row'),
-                    label: 'Route',
-                    value: routeCaption(c),
-                    chevron: true,
-                    onTap: () => _route(c),
-                  ),
                   if (delivery != null) ProfileRow(key: const Key('contact-last-delivery'), label: 'Last delivery', value: delivery),
                   ProfileRow(
                     key: const Key('contact-radio-row'),
@@ -260,16 +259,16 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
                 ]),
                 // MeshTrack MT-13: ask a person's radio where it is (people only; see ask_location_card.dart).
                 if (c.type == ContactType.companion && !c.blocked) AskLocationCard(contact: c, env: widget.askLocation),
-                ProfileGroup(rows: [
-                  if (c.type == ContactType.companion || c.type == ContactType.room)
+                // C-V5: Share is the button in the bar; the second Share row at the bottom is gone.
+                if (c.type == ContactType.companion || c.type == ContactType.room)
+                  ProfileGroup(rows: [
                     AppSwitchTile(
                       switchKey: const Key('contact-mute'),
                       title: 'Mute notifications',
                       value: muted,
                       onChanged: (v) => _c.chat.setNotifyMode(c.radioId, conv, v ? NotifyMode.muted : NotifyMode.all),
                     ),
-                  ProfileRow(key: const Key('contact-share'), label: 'Share contact', chevron: true, onTap: () => _share(c)),
-                ]),
+                  ]),
               ],
             ),
           ),
@@ -307,14 +306,14 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     final when = adv == null ? 'when they last announced themselves' : 'when they last announced themselves, ${_ago(now - adv * 1000)}';
     return Semantics(
       button: true,
-      label: 'Location on map. Opens the Map tab. Position from $when',
-      onTap: () => _openMap(),
+      label: 'Location on map. Opens the map at ${c.displayName}. Position from $when',
+      onTap: () => _openMap(c),
       onLongPress: () => _copyCoords(coords),
       child: ExcludeSemantics(
         child: GestureDetector(
           key: const Key('contact-location'),
           behavior: HitTestBehavior.opaque,
-          onTap: _openMap,
+          onTap: () => _openMap(c),
           onLongPress: () => _copyCoords(coords),
           child: Padding(
             padding: const EdgeInsets.all(Layout.screenMargin),
@@ -356,15 +355,8 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     );
   }
 
-  static String _ago(int ms) {
-    if (ms < 90000) return 'just now';
-    final m = ms ~/ 60000;
-    if (m < 60) return '$m min ago';
-    final h = ms ~/ 3600000;
-    if (h < 24) return '$h h ago';
-    final d = ms ~/ 86400000;
-    return d == 1 ? 'yesterday' : '$d days ago';
-  }
+  /// "just now", "5 min ago", "3 h ago", "4 d ago" (the one app time formatter).
+  static String _ago(int ms) => tf.relativeDuration(Duration(milliseconds: ms));
 
   /// "2 min ago · 1.8 s" for the newest message to them that was acknowledged, else null.
   String? _lastDelivery(String conv, int now) {
@@ -436,11 +428,14 @@ class _ContactProfileScreenState extends State<ContactProfileScreen> {
     _say('Position copied');
   }
 
-  void _openMap() {
-    final shell = ShellScope.maybeOf(context);
-    if (shell == null) return;
-    shell.select(AppTab.drive);
-    Navigator.of(context).popUntil((r) => r.isFirst);
+  /// C-U3: the map opens AT the contact, with a target there named after them (build 76 only switched to the Drive tab).
+  void _openMap(Contact c) {
+    final shell = shellControllerFor(context);
+    if (shell == null || !c.hasPosition) return;
+    Navigator.maybeOf(context, rootNavigator: true)?.popUntil((r) => r.isFirst);
+    final at = LatLng(c.lat!, c.lon!);
+    MainMapFocus.request(at, 15, showLayers: const {kPlanLayerId}, targets: [MapFocusTarget(id: 'contact-${c.publicKey}', at: at, label: c.displayName)]);
+    shell.openDrive();
   }
 
   Future<void> _share(Contact c) {
