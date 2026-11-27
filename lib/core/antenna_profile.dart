@@ -9,13 +9,18 @@ enum AntennaMount {
   handheld('Handheld', 'internal'),
   insideCar('Inside car', 'internal'),
   roofMagMount('Roof mag-mount', 'external'),
-  fixedMast('Fixed mast', 'external');
+  fixedMast('Fixed mast', 'external'),
+
+  /// Build 77 (round 5 decision 4): Start drive no longer waits for the antenna question. A radio that was never set up
+  /// records "Don't know" when its first drive starts; nothing about the antenna goes on the wire (type, gain and height are
+  /// null, as the Drive Format allows). Not one of the sheet's choices: the sheet is where it is answered later.
+  unknown('Don\'t know', null);
 
   /// What people see.
   final String label;
 
-  /// Drive Format v1 `antenna.type` for this mount.
-  final String wireType;
+  /// Drive Format v1 `antenna.type` for this mount; null for [unknown].
+  final String? wireType;
   const AntennaMount(this.label, this.wireType);
 }
 
@@ -28,10 +33,19 @@ class AntennaProfile {
   /// Null = "Don't know".
   final double? gainDbi;
 
-  /// Height of the antenna above the ground, in metres.
-  final double heightM;
+  /// Height of the antenna above the ground, in metres. Null only for [AntennaMount.unknown].
+  final double? heightM;
   final DateTime updatedAt;
-  const AntennaProfile({required this.mount, this.gainDbi, required this.heightM, required this.updatedAt});
+  const AntennaProfile({required this.mount, this.gainDbi, required double this.heightM, required this.updatedAt});
+
+  /// "Don't know" (round 5 decision 4): recorded when a drive starts on a radio whose antenna was never set up.
+  const AntennaProfile.unknown({required this.updatedAt})
+      : mount = AntennaMount.unknown,
+        gainDbi = null,
+        heightM = null;
+
+  /// The person has not said how this radio's antenna is set up (the Drive panel's Antenna row offers to fix it).
+  bool get isUnknown => mount == AntennaMount.unknown;
 
   static bool validGain(double v) => v.isFinite && v >= minGainDbi && v <= maxGainDbi;
   static bool validHeight(double v) => v.isFinite && v >= minHeightM && v <= maxHeightM;
@@ -43,11 +57,13 @@ class AntennaProfile {
   String get summary => summaryIn(Units.metric);
 
   /// [summary] with the height in the person's units ("Roof mag-mount · 5.8 dBi · 6 ft").
-  String summaryIn(Units units) => [
-    mount.label,
-    if (gainDbi != null) '${formatAntennaNumber(gainDbi!)} dBi',
-    units.height(heightM),
-  ].join(' · ');
+  String summaryIn(Units units) => isUnknown
+      ? mount.label
+      : [
+          mount.label,
+          if (gainDbi != null) '${formatAntennaNumber(gainDbi!)} dBi',
+          if (heightM != null) units.height(heightM!),
+        ].join(' · ');
 
   Map<String, dynamic> toJson() => {
     'mount': mount.name,
@@ -57,7 +73,8 @@ class AntennaProfile {
   };
 
   /// A profile from settings JSON, or null when anything in it is unknown or out of range (that profile is dropped,
-  /// never the rest of the settings).
+  /// never the rest of the settings). A "Don't know" profile (mount `unknown`, build 77) has no height; builds before 77 do
+  /// not know that mount and drop it, so they ask the antenna question again.
   static AntennaProfile? tryParse(Object? json) {
     if (json is! Map) return null;
     final mount = AntennaMount.values.asNameMap()[json['mount']];
@@ -65,6 +82,7 @@ class AntennaProfile {
     final height = json['height_m'];
     final updated = json['updated_at'] is String ? DateTime.tryParse(json['updated_at'] as String) : null;
     if (mount == null || updated == null) return null;
+    if (mount == AntennaMount.unknown) return AntennaProfile.unknown(updatedAt: updated.toUtc());
     if (height is! num || !validHeight(height.toDouble())) return null;
     if (gain != null && (gain is! num || !validGain(gain.toDouble()))) return null;
     return AntennaProfile(

@@ -58,11 +58,13 @@ class _AntennaSheetState extends State<_AntennaSheet> {
     _units = s.units;
     final key = widget.radioKey;
     final saved = key == null ? s.antennaProfile : s.settings.antennaProfiles[key];
-    if (saved != null) {
+    if (saved != null && !saved.isUnknown) {
       _mount = saved.mount;
       _gainUnknown = saved.gainDbi == null;
       _gain.text = saved.gainDbi == null ? '' : formatAntennaNumber(saved.gainDbi!);
-      _height.text = _units.heightNumber(saved.heightM);
+      _height.text = _units.heightNumber(saved.heightM!);
+    } else if (saved != null) {
+      // "Don't know" (recorded when a drive started without an answer, round 5 decision 4): the sheet starts empty.
     } else if (s.legacyAntenna case final a?) {
       _legacy = a;
       _gainUnknown = a.gainDbi == null;
@@ -93,12 +95,14 @@ class _AntennaSheetState extends State<_AntennaSheet> {
   bool get _valid => _mount != null && _heightValue != null && (_gainUnknown || _gainValue != null);
 
   /// Mounts in the order offered: the ones matching the 0.3.x choice first.
+  /// "Don't know" is not a mount to pick here: it is what Start records when the sheet was never answered.
   List<AntennaMount> get _mounts {
     final legacy = _legacy;
-    if (legacy == null) return AntennaMount.values;
+    final all = AntennaMount.values.where((m) => m != AntennaMount.unknown);
+    if (legacy == null) return all.toList();
     return [
-      ...AntennaMount.values.where((m) => m.wireType == legacy.type),
-      ...AntennaMount.values.where((m) => m.wireType != legacy.type),
+      ...all.where((m) => m.wireType == legacy.type),
+      ...all.where((m) => m.wireType != legacy.type),
     ];
   }
 

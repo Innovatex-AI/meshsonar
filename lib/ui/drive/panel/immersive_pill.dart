@@ -6,9 +6,8 @@ import 'package:flutter/semantics.dart';
 
 import '../../../app/app_state.dart';
 import '../../../core/startup_location.dart' show LocationAccess;
-import '../../antenna_sheet.dart' show showAntennaSheet;
 import '../../design/tokens.dart';
-import '../drive_controls.dart' show openConnect;
+import '../drive_controls.dart' show openConnect, startDriveNow;
 import '../radio_link_status.dart';
 import 'drive_panel_controller.dart';
 import 'panel_physics.dart' show PanelDetent;
@@ -29,14 +28,14 @@ class ImmersivePill extends StatelessWidget {
     final link = RadioLinkStatus.of(s);
     // Approximate location still starts a drive, as on the Dock (the pill used to refuse it: build 76 fix).
     final locationBlocks = s.locationNote != null && s.locationAccess != LocationAccess.approximate;
-    final canStart = !s.busy && !s.connecting && !(s.connected && (s.needsAntennaSetup || locationBlocks));
+    final canStart = !s.busy && !s.connecting && !(s.connected && locationBlocks);
     // Same words and glyphs as the Dock (RadioLinkStatus): "Connect radio", "Connecting…", "Reconnecting…", "Start drive".
     // Build 76: when Start cannot run the pill says why and does the next step itself, instead of a grey "Start drive"
-    // that did nothing: "Set antenna" opens the antenna sheet, "Location is off" brings the Dock back (its strip has the fix).
-    final needAntenna = s.connected && !link.working && s.needsAntennaSetup;
-    final needLocation = s.connected && !link.working && !needAntenna && locationBlocks;
-    final label = needAntenna ? 'Set antenna' : (needLocation ? 'Location is off' : link.label);
-    final enabled = link.working ? false : (canStart || !s.connected || needAntenna || needLocation);
+    // that did nothing: "Location is off" brings the Dock back (its strip has the fix). Build 77 (round 5 decision 4): the
+    // antenna no longer stops Start ("Set antenna" is gone from the pill); a radio never set up records "Don't know".
+    final needLocation = s.connected && !link.working && locationBlocks;
+    final label = needLocation ? 'Location is off' : link.label;
+    final enabled = link.working ? false : (canStart || !s.connected || needLocation);
     return Semantics(
       container: true,
       explicitChildNodes: true,
@@ -56,11 +55,11 @@ class ImmersivePill extends StatelessWidget {
               key: const Key('pill-nub'),
               behavior: HitTestBehavior.opaque,
               onTap: () => controller.settleTo(PanelDetent.dock),
-              // A visible "bring the controls back" chevron on its own chip, 72 x 36 to hit (build 76; it was a faint 36 x 5 bar
-              // that vanished on a busy map).
+              // A visible "bring the controls back" chevron on its own chip (build 76; it was a faint 36 x 5 bar that vanished on
+              // a busy map). Build 77 (Round 1 F8): 72 x 44 to hit (it was 36 tall); the drawn chip is unchanged.
               child: SizedBox(
                 width: 72,
-                height: 36,
+                height: 44,
                 child: Center(
                   child: Container(
                     width: 48,
@@ -90,9 +89,7 @@ class ImmersivePill extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (needAntenna)
-                        Icon(Icons.settings_input_antenna_rounded, size: 22, color: c.onAccent)
-                      else if (needLocation)
+                      if (needLocation)
                         Icon(Icons.location_off_rounded, size: 22, color: c.onAccent)
                       else if (s.connected)
                         Icon(Icons.play_arrow_rounded, size: 24, color: c.onAccent)
@@ -114,12 +111,10 @@ class ImmersivePill extends StatelessWidget {
   void _start(BuildContext context) {
     if (!state.connected) {
       openConnect(context);
-    } else if (state.needsAntennaSetup) {
-      showAntennaSheet(context);
     } else if (state.locationNote != null && state.locationAccess != LocationAccess.approximate) {
       controller.settleTo(PanelDetent.dock);
     } else {
-      state.startDrive();
+      startDriveNow(state);
     }
   }
 }

@@ -10,6 +10,7 @@ import 'dart:async';
 
 import '../radio/radio_api.dart';
 import 'region_lookup.dart';
+import 'time_format.dart' show relativeTime;
 import 'region_pick.dart';
 
 /// A fix older than this is "stale" (Andy, Oct 24 2026: 72 hours). It is labelled with its age ("Last known location,
@@ -43,21 +44,11 @@ class PhoneFix {
   bool isLive(DateTime now) => live && age(now) <= liveFixAge;
 }
 
-/// "Last known location, 2 d ago" style label for a fix that is not live; null for a live one.
+/// "Last known location, 2 d ago" style label for a fix that is not live; null for a live one. The age is the app's one
+/// relative-time wording (time_format.dart relativeTime, build 77).
 String? phoneFixLabel(PhoneFix? p, DateTime now) {
   if (p == null || p.isLive(now)) return null;
-  final d = p.age(now);
-  final String ago;
-  if (d.inMinutes < 1) {
-    ago = 'just now';
-  } else if (d.inMinutes < 60) {
-    ago = '${d.inMinutes} min ago';
-  } else if (d.inHours < 48) {
-    ago = '${d.inHours} h ago';
-  } else {
-    ago = '${d.inDays} d ago';
-  }
-  return 'Last known location, $ago';
+  return 'Last known location, ${relativeTime(p.fix.at, now: now)}';
 }
 
 /// One GPS fix within [timeout]. Never throws: an error, a timeout or "no fix" all come back as null ([onError] hears

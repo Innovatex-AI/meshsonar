@@ -25,6 +25,15 @@ void openConnect(BuildContext context) {
 /// Finished-dock hook point: "View drive report". The dock (and the mini bar) call this, never `openDriveReport` ad hoc.
 Future<void> openFinishedDriveReport(BuildContext context, String sessionId) => openDriveReport(context, sessionId);
 
+/// Start drive (round 5 decision 4: two fewer taps to a first drive). Start no longer waits for the antenna question: a radio
+/// whose antenna was never set up records "Don't know" ([AntennaProfile.unknown]) and the drive starts; the Antenna row in
+/// the Drive panel stays, so it can be answered later. The Dock, the finished Dock's New drive and the collapsed pill all
+/// start a drive through here.
+Future<void> startDriveNow(AppState s) async {
+  if (s.needsAntennaSetup) await s.saveAntennaProfile(AntennaProfile.unknown(updatedAt: s.services.clock().toUtc()));
+  await s.startDrive();
+}
+
 /// Asks "Stop this drive?" and, on confirm, stops it. The Start/Stop button and the mini bar both go through here.
 Future<bool> confirmAndStopDrive(BuildContext context, AppState s) async {
   // Build 76: "Stop and view report" does in one tap what took three (Stop, confirm, then find View report).
@@ -91,7 +100,8 @@ class LiveDot extends StatelessWidget {
 
 /// The connected radio's antenna ("Roof mag-mount · 5.8 dBi · 1.8 m"); tap to change it before a drive. While driving
 /// it is locked and shows what the drive records ("External · 5.8 dBi · 1.8 m"). A radio that hasn't been set up
-/// shows [AntennaSetupHint] instead, and Start drive waits for it.
+/// shows [AntennaSetupHint] instead; Start drive no longer waits for it (it records "Don't know", round 5 decision 4),
+/// and a "Don't know" radio keeps this row ("Don't know", with its chevron) so it can be fixed later.
 class AntennaChip extends StatelessWidget {
   final AppState state;
   const AntennaChip({super.key, required this.state});
@@ -105,7 +115,7 @@ class AntennaChip extends StatelessWidget {
     if (recorded != null) {
       text = recordedAntennaSummary(recorded, s.units);
     } else if (profile != null) {
-      text = profile.summaryIn(s.units);
+      text = profile.isUnknown ? 'Don\'t know' : profile.summaryIn(s.units);
     } else {
       return s.needsAntennaSetup ? const AntennaSetupHint() : const SizedBox.shrink();
     }
@@ -232,13 +242,15 @@ extension on RegionChip {
 }
 
 /// "External · 5.8 dBi · 1.8 m": the Drive Format v1 antenna a drive records (the mount itself isn't recorded).
-String recordedAntennaSummary(Antenna a, [Units units = Units.metric]) => [
-  a.type == 'external' ? 'External' : 'Internal',
+String recordedAntennaSummary(Antenna a, [Units units = Units.metric]) => a.type == null && a.gainDbi == null && a.heightM == null
+    ? 'Don\'t know'
+    : [
+  if (a.type != null) a.type == 'external' ? 'External' : 'Internal',
   if (a.gainDbi != null) '${formatAntennaNumber(a.gainDbi!)} dBi',
   if (a.heightM != null) units.height(a.heightM!),
 ].join(' · ');
 
-/// "Set up this radio's antenna": shown where Start drive is, while it waits for the connected radio's antenna.
+/// "Set up this radio's antenna": the Antenna row of a radio that was never set up (Start drive does not wait for it).
 class AntennaSetupHint extends StatelessWidget {
   const AntennaSetupHint({super.key = const Key('antenna-setup')});
 
