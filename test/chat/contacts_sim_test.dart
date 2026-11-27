@@ -29,7 +29,8 @@ Future<void> until(bool Function() test, {int ms = 4000, String? why}) async {
   }
 }
 
-const fast = RetryPolicy(timeoutFactor: 0.05, slackMs: 20, jitterMs: 0, minWaitMs: 120, maxWaitMs: 400, minGapMs: 0, busyBaseMs: 30, notConnectedRecheckMs: 50);
+// The simulator estimates 1200 ms (direct) and 2500 ms (flood); x 0.08 keeps the waits near 100-200 ms.
+const fast = RetryPolicy(ackWaitFactor: 0.08, minGapMs: 0, busyBaseMs: 30, notConnectedRecheckMs: 50);
 
 class Rig {
   final SimulatedRadioScanner scanner;

@@ -4,8 +4,9 @@
 //  - Every DM and channel message the radio receives is appended to a RAM queue (addToOfflineQueue, MyMesh.cpp 224) and
 //    announced with PUSH_MSG_WAITING (0x83), a one-byte push that goes through the same lossy BLE queue as everything else
 //    (4 frames deep on ESP32, a full queue DROPS frames: SerialBLEInterface). So PUSH_MSG_WAITING can be lost: besides
-//    draining on the push, on connect, on return to the front and after every send, a backup "safety poll" asks now and
-//    then. Build 70 (battery plan A7): its interval comes from the battery mode, PowerSettings.radioPollFrontS in front and
+//    draining on the push, on connect and on return to the front, a backup "safety poll" asks now and then. Build 77:
+//    no drain after a send any more (round 3 rule 13), and the backup poll holds off while a direct message waits for
+//    its confirmation ([holdPoll]). Build 70 (battery plan A7): its interval comes from the battery mode, PowerSettings.radioPollFrontS in front and
 //    radioPollBackS in the background (0 = no backup poll, push only); Balanced = 30 s / 120 s, Max data = 5 s.
 //  - SYNC_NEXT_MESSAGE (10) is destructive: it pops the head and sends it. If the frame is lost on the way or the app dies
 //    with it in memory, the message is gone. So every frame is handed to the persister and that is AWAITED before the next
@@ -66,6 +67,11 @@ class MessageSync {
 
   /// Time on air in ms of a packet of [bytes] on this radio's settings; null when unknown. The link wires it.
   int? Function(int bytes)? airMsFor;
+
+  /// Return true to skip one backup poll: a direct message is waiting for its confirmation push and the radio's Bluetooth
+  /// queue (4 frames on ESP32) must not be fed a poll's reply just then (round 3, defect M5). A drain asked for by the
+  /// radio's own MSG_WAITING push, on connect or by the person is never held.
+  bool Function()? holdPoll;
 
   int? _air(RxFacts? f) => f == null || f.rawLength <= 0 ? null : airMsFor?.call(f.rawLength);
 
@@ -133,7 +139,7 @@ class MessageSync {
       _poll?.cancel();
       _pollEvery = every;
       _poll = Timer.periodic(every, (_) {
-        if (source.isConnected && _run == null) {
+        if (source.isConnected && _run == null && !(holdPoll?.call() ?? false)) {
           PowerCounters.inc(PowerCounters.blePoll);
           unawaited(drain());
         }

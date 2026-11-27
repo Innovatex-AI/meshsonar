@@ -3,8 +3,9 @@
 // server.
 //
 //   * opens the chat store and builds ChatService + ChatController (retention applied at startup);
-//   * follows the radio session: on connect it binds the adapter, syncs channel slots, drains the radio's queue; on a drop
-//     it unbinds and the outbox keeps waiting; a reconnect (a new session object) binds again and resumes;
+//   * follows the radio session: on connect it binds the adapter (which also starts the message log's link side), syncs
+//     channel slots, drains the radio's queue; on a drop it unbinds and the outbox keeps waiting; a reconnect (a new
+//     session object) binds again and resumes;
 //   * counts the pings this phone sent on the System (wardrive) channel row;
 //   * publishes the controller in [ChatWiring.controller] and, through lib/ui/chat/chat_tab_provider.dart, the Chat tab
 //     in [ChatTabHost.provider].
@@ -29,7 +30,6 @@ import '../platform/photo_picker.dart';
 import '../ui/chat/chat_tab_provider.dart';
 import '../ui/chat/conversation_screen.dart';
 import '../ui/shell/chat_tab_host.dart';
-import 'app_flags.dart';
 import 'app_state.dart';
 import 'chat_controller.dart';
 import 'photo_controller.dart';
@@ -61,8 +61,6 @@ class ChatWiring {
       nowMs: () => app.services.clock().millisecondsSinceEpoch,
       // A full contact download holds the radio's command queue for its whole length: not while pings are going out.
       deferContactSync: () => app.driving,
-      // The set-path radio write stays off until Andy's real-radio test (AppFlags.routeWriteVerified).
-      routeWriteEnabled: () => AppFlags.routeWriteVerified,
     );
     ctl = ChatController(
       store: store,

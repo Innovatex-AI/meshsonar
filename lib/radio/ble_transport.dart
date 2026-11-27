@@ -3,8 +3,8 @@
 //
 // Mirrors MeshCore Open (MIT, © 2025 zjs81), lib/connector/meshcore_connector.dart + meshcore_uuids.dart:
 // scan filtered on the Nordic-UART-style MeshCore service UUID, connect, request MTU 185 where the platform supports it,
-// discover services, subscribe to TX notifications, write frames to RX (without response when the characteristic
-// allows it). UUIDs also in MeshCore firmware docs/companion_protocol.md "BLE Connection".
+// discover services, subscribe to TX notifications, write frames to RX with response (confirmed) whenever the
+// characteristic allows it (radio_api.dart planBleWrite). UUIDs also in MeshCore firmware docs/companion_protocol.md "BLE Connection".
 // One BLE write = one companion frame; one notification = one frame.
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -128,15 +128,14 @@ class BleRadioScanner implements RadioScanner {
 
     try {
       await connected.future.timeout(const Duration(seconds: 20));
-      if (Platform.isAndroid) {
-        try {
-          await _ble.requestMtu(
-            deviceId: device.id,
-            mtu: 185,
-          ); // iOS negotiates its own MTU
-        } catch (_) {
-          // keep the default MTU
-        }
+      // The size one write may have. Android: ask for a large MTU (the radio offers 176, MAX_FRAME_SIZE); a write carries
+      // MTU - 3 bytes. iOS negotiates by itself; the plugin's requestMtu then only REPORTS the largest write it allows.
+      int? maxWrite;
+      try {
+        final got = await _ble.requestMtu(deviceId: device.id, mtu: 185);
+        if (got > 0) maxWrite = Platform.isAndroid ? got - 3 : got;
+      } catch (_) {
+        // unknown: frames go out as they are
       }
       await _ble.discoverAllServices(device.id);
       final services = await _ble.getDiscoveredServices(device.id);
@@ -152,7 +151,7 @@ class BleRadioScanner implements RadioScanner {
       if (rx == null || tx == null) {
         throw StateError('Not a MeshCore companion (UART service not found)');
       }
-      final t = _BleTransport(rx, tx, sub, state);
+      final t = _BleTransport(rx, tx, sub, state, maxWrite);
       t._init();
       return t;
     } catch (_) {
@@ -172,7 +171,10 @@ class _BleTransport implements ByteTransport {
   StreamSubscription<bool>? _stateSub;
   bool _connected = true;
 
-  _BleTransport(this._rx, this._tx, this._connection, this._state);
+  /// Largest frame one write carries on this link; null when the platform did not say.
+  final int? _maxWrite;
+
+  _BleTransport(this._rx, this._tx, this._connection, this._state, this._maxWrite);
 
   void _init() {
     _notifySub = _tx.subscribe().listen((v) {
@@ -200,7 +202,14 @@ class _BleTransport implements ByteTransport {
   @override
   Future<void> send(Uint8List frame) async {
     if (!_connected) throw StateError('radio disconnected');
-    await _rx.write(frame, withResponse: !_rx.isWritableWithoutResponse);
+    // Confirmed writes (round 3 rule 3): build 76 wrote without response whenever the radio allowed it, so a frame the
+    // link dropped was never noticed. A frame longer than the link carries is refused here instead of vanishing.
+    final confirmed = planBleWrite(
+        frameBytes: frame.length,
+        canWriteWithResponse: _rx.isWritableWithResponse,
+        canWriteWithoutResponse: _rx.isWritableWithoutResponse,
+        maxWriteBytes: _maxWrite);
+    await _rx.write(frame, withResponse: confirmed);
   }
 
   @override

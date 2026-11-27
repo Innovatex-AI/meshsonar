@@ -11,6 +11,7 @@ import 'dart:typed_data';
 import 'claim_radio.dart';
 import 'command_queue.dart' show CommandPriority;
 import 'inbound.dart';
+import 'link_log.dart';
 import 'ping_gate.dart';
 import 'radio_api.dart';
 
@@ -32,8 +33,32 @@ enum LinkState {
   handedOver,
 }
 
-/// Longest text one packet carries, bytes (BaseChatMesh.h MAX_TEXT_LEN = 10 x CIPHER_BLOCK_SIZE).
+/// Longest text one packet carries, bytes (BaseChatMesh.h MAX_TEXT_LEN = 10 x CIPHER_BLOCK_SIZE). A direct message's
+/// fifth try and later carry two bytes less (protocol.dart maxDmTextBytesFor).
 const int maxDirectTextBytes = 160;
+
+/// What message delivery needs from a session beyond [RadioSession] (build 77, round 3). A separate interface so a test
+/// double of RadioSession does not have to know about it: the chat adapter asks `session is DeliveryLink`.
+abstract interface class DeliveryLink {
+  /// The message log's link side: every command, reply code, timeout, discarded stray frame and delivery push
+  /// (link_log.dart). Null stops it. Lines never carry message text or a secret.
+  set onLinkLog(void Function(LinkLogEntry entry)? sink);
+
+  /// The radio's clock minus the phone's in seconds as found on connect (0 = the radio took the phone's time; positive =
+  /// it refused to go back because it is ahead). Null when unknown.
+  int? get radioClockAheadSecs;
+
+  /// A direct message is waiting for its confirmation push right now (the radio's estimate x 1.2 after its SENT).
+  /// Background reads that can wait should wait.
+  bool get awaitingConfirmation;
+
+  /// What the radio does with nodes it hears, from the SELF_INFO this session already holds: no APP_START is sent (the
+  /// contact sync on every connect uses this; [RadioSession.getContactPolicy] reads it fresh for a settings screen).
+  Future<ContactPolicy> cachedContactPolicy();
+
+  /// Reply frames discarded because they answered no command in flight (late replies after a timeout).
+  int get strayFrames;
+}
 
 abstract class RadioSession implements ClaimRadio {
   /// This session's current link state (a session object lives as long as one link; the manager hands out a new session
@@ -81,8 +106,10 @@ abstract class RadioSession implements ClaimRadio {
 
   /// Sends a direct message to the contact [publicKeyHex] (64 hex chars; the radio must have the contact, see
   /// [addOrUpdateContact]). The result carries the ack tag; a [SendConfirmedEvent] with that tag on [events] means
-  /// delivered. [attempt] is 0-3 (only attempt & 3 is in the packet); a retry reuses [timestamp] of the first try so
-  /// the receiver can tell it is the same message.
+  /// delivered. [attempt] is the try number 0..7 and goes to the radio untouched (the radio makes each try its own
+  /// packet); a retry reuses [timestamp] of the first try so the receiver can tell it is the same message. From
+  /// attempt 4 on the text may be 158 bytes at most. [SendStatus.queued] = the radio did not answer the command (its
+  /// reply was lost or late): it may still have sent the packet.
   Future<SendResult> sendContactMessage(String publicKeyHex, String text, {int attempt = 0, int? timestamp, FloodScope? scope});
 
   // ------------------------------------------------------------ contacts and channels
