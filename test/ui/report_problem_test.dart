@@ -146,7 +146,7 @@ void main() {
       });
     }
 
-    testWidgets('drive detail → "Report a problem with this drive" sends only that drive\'s id, never its pings',
+    testWidgets('drive detail → "Report a problem" (Round 5 D-7 drive menu) sends only that drive\'s id, never its pings',
         (tester) async {
       useTallScreen(tester);
       final h = M1Harness()..approveKey();
@@ -158,7 +158,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('detail-more')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Report a problem with this drive'));
+      // Round 5 D-7: one drive menu on the card and the detail screen; the row reads "Report a problem" (key kept).
+      expect(find.text('Report a problem with this drive'), findsNothing);
+      await tester.tap(find.byKey(const Key('detail-more-report')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('report-screen')), findsOneWidget);
       await pickCategory(tester, 'map');

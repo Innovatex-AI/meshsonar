@@ -75,13 +75,15 @@ void main() {
     });
 
     test('predicted styles: fill o x 0.35 with a 2 px hatch at o x 0.6; band 0 is a 1 px grey hatch only and no dot', () {
+      // Build 77 Round 1 F14: the hatch is 2 px on a dark map and 1.4 px on a light one.
+      expect(predictedStyles(CoverageBandColors.of(ColourPalette.standard, Brightness.dark))[predictedStyleIndex(4, 0.6)].hatchWidth, 2);
       final c = CoverageBandColors.of(ColourPalette.standard, Brightness.light);
       final st = predictedStyles(c);
       expect(st, hasLength(60));
       final good = st[predictedStyleIndex(4, 0.6)];
       expect(good.fill.a, closeTo(0.6 * 0.35, 0.01));
       expect(good.hatch!.a, closeTo(0.6 * 0.6, 0.01));
-      expect(good.hatchWidth, 2);
+      expect(good.hatchWidth, 1.4, reason: 'Round 1 F14: the Predicted hatch is tuned for light');
       final none = st[predictedStyleIndex(0, 0.4)];
       expect(none.fill.a, 0);
       expect(none.hatch!.a, closeTo(0.4 * 0.5, 0.01));
