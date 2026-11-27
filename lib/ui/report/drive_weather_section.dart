@@ -18,7 +18,8 @@ import '../../core/units.dart';
 import '../app.dart';
 import '../charts/chart_frame.dart';
 import '../charts/time_line_chart.dart';
-import '../widgets.dart';
+import '../../core/time_format.dart' as tf;
+import 'drive_report_sections.dart' show timesCaption;
 import 'drive_context_section.dart' show AppStateLike, loadDriveContextReport;
 import '../design/app_surfaces.dart';
 
@@ -26,7 +27,7 @@ import '../design/app_surfaces.dart';
 final Uri openMeteoUrl = Uri.parse('https://open-meteo.com');
 
 const _minLine = 3;
-String _hm(DateTime t) => formatTime(t).substring(0, 5);
+String _hm(DateTime t) => tf.timeOfDay(t, showZone: false);
 
 /// What the section loaded: the answer, plus the phone barometer series to compare with.
 class _Loaded {
@@ -344,7 +345,7 @@ class _WeatherBody extends StatelessWidget {
     out.add(
       Text(
         'Looked up by the server for a cell of about 5 km around where you drove: a model value, not a measurement '
-        'at your position. One value per hour, shown in your phone\'s local time.',
+        'at your position. One value per hour. ${timesCaption()}',
         style: t.textTheme.bodySmall,
       ),
     );
@@ -428,7 +429,7 @@ class _WeatherBody extends StatelessWidget {
       );
     }
 
-    DateTime local(WeatherSnapshot e) => e.at.toLocal();
+    DateTime local(WeatherSnapshot e) => e.at; // the instant; labels go through the time formatter
     // Temperature and dew point.
     final temps = [
       for (final e in snaps)
@@ -582,7 +583,7 @@ class _WeatherBody extends StatelessWidget {
                   name: 'Phone barometer',
                   points: [
                     for (final p in phone)
-                      (p.$1.toLocal(), u.pressureValue(p.$2)),
+                      (p.$1, u.pressureValue(p.$2)),
                   ],
                   color: pal[0],
                 ),
@@ -668,7 +669,7 @@ class _HourlyTable extends StatelessWidget {
                   for (final e in snaps)
                     DataRow(
                       cells: [
-                        DataCell(Text(_hm(e.at.toLocal()))),
+                        DataCell(Text(_hm(e.at))),
                         DataCell(Text(v(e.temperatureC, u.temperature))),
                         DataCell(Text(v(e.dewPointC, u.temperature))),
                         DataCell(
