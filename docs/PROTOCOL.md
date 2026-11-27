@@ -1021,6 +1021,9 @@ official app had this bug twice (v1.11.0 "adding contacts manually would set pat
   only places a frame becomes log text (tested with hostile payloads).
 - `MessageLog.recent()`, `MessageLog.forMessage(id)` (everything logged while that message was being delivered, the link's
   frames in between included) and `ChatService.exportMessageLog({messageId, formatTime, header})` (plain text to share).
+- Times: the export is UTC with milliseconds and says "Times in UTC" (a diagnostics log stays UTC whatever the Time zone
+  setting, `lib/core/time_format.dart`); a screen that lists lines uses `MessageLog.lineTime(ms)` (the app's own time).
+  The tries in message details use `timeOfDay(seconds: true)` from the same formatter.
 
 Example (a message with settings 1 direct + 1 flood that nobody confirmed):
 

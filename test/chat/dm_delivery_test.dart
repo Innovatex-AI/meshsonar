@@ -13,6 +13,7 @@ import 'package:meshsonar/chat/delivery_state.dart';
 import 'package:meshsonar/chat/delivery_text.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
+import 'package:meshsonar/core/time_format.dart' as tf;
 
 import 'support.dart';
 
@@ -291,6 +292,23 @@ void main() {
       final t = h.service.deliveryTries(m.id).single;
       expect(describeTryRoute(t), 'route not reported');
       expect(describeTryOutcome(t, get(m.id), last: true), 'the radio did not answer; it may have gone out');
+    });
+
+    test('a try\'s time goes through the one app time formatter: the phone\'s time by default, UTC and labelled when set', () {
+      h.bob();
+      final m = sendDm('hi');
+      const a = DeliveryAttempt(messageId: 'x', attempt: 1, sentAtMs: 1762798445000, route: Route.direct, outcome: TryOutcome.waiting); // 2025-11-10 18:14:05 UTC
+      addTearDown(() {
+        tf.activeTimeZone = tf.TimeZonePreference.phone;
+        tf.use24HourClock = false;
+        tf.debugLocalClock = null;
+      });
+      tf.debugLocalClock = (utc) => (wall: utc.subtract(const Duration(hours: 5)), abbr: 'EST');
+      expect(describeAttempt(a, 1, get(m.id), last: true).text, 'Try 1 · direct · 1:14:05 PM · waiting for confirmation');
+      tf.use24HourClock = true;
+      expect(describeAttempt(a, 1, get(m.id), last: true).text, 'Try 1 · direct · 13:14:05 · waiting for confirmation');
+      tf.activeTimeZone = tf.TimeZonePreference.utc;
+      expect(describeAttempt(a, 1, get(m.id), last: true).text, 'Try 1 · direct · 18:14:05 UTC · waiting for confirmation');
     });
 
     test('rows stored before build 77 (no outcome) still read sensibly', () {

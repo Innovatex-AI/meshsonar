@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/chat_service.dart';
 import 'package:meshsonar/chat/db/outbox_repository.dart';
 import 'package:meshsonar/chat/delivery_settings.dart';
+import 'package:meshsonar/chat/message_log.dart';
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/outbox.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
@@ -433,6 +434,10 @@ void main() {
     expect(text, contains('it had been marked not delivered'));
     expect(text, contains('again for an already delivered message'));
     expect(text, contains('Delivery settings: 4 direct tries, 4 flood tries, flood fallback on'));
+    expect(text, contains('Times in UTC'), reason: 'an exported diagnostics log is UTC whatever the Time zone setting, and says so');
+    expect(text, contains('2025-10-09 '), reason: 'the fake clock starts at 1760000000000 = 2025-10-09 08:53:20 UTC');
+    expect(MessageLog.utcStamp(1760000000123), '2025-10-09 08:53:20.123');
+    expect(h.service.exportMessageLog(messageId: m.id, formatTime: (ms) => 'T$ms'), contains('Times as shown in the app'));
     expect(text, isNot(contains('SECRET-WORDS-123')));
     expect(h.service.exportMessageLog(), isNot(contains('SECRET-WORDS-123')));
     expect(h.service.log.forMessage('no-such-message'), isEmpty);

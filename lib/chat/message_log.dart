@@ -11,6 +11,7 @@
 //
 // Kept in the chat database (table message_log, newest [keepRows]); lines are buffered and written in batches so a busy
 // link does not cost a database write per frame. Pure Dart.
+import '../core/time_format.dart' as tf;
 import '../radio/link_log.dart';
 import 'db/chat_database.dart';
 
@@ -120,11 +121,12 @@ class MessageLog {
   }
 
   /// The log as plain text for sharing: a short header, then one line per entry with its time. [messageId] limits it to
-  /// one message ([forMessage]). [formatTime] turns unix ms into the time shown; the app passes the one time formatter
-  /// (local time by default), the fallback here is local time with milliseconds. [header] lines are added as given (app
-  /// build, radio firmware): the caller must not put a secret in them.
+  /// one message ([forMessage]). Times are UTC and the header says so: a diagnostics log stays UTC whatever the Time zone
+  /// setting (lib/core/time_format.dart), so two people's logs line up. [formatTime] overrides that (unix ms in, text
+  /// out) for a screen that shows lines in the app's own time; use [lineTime] there. [header] lines are added as given
+  /// (app build, radio firmware): the caller must not put a secret in them.
   String exportText({String? messageId, int limit = 2000, String Function(int ms)? formatTime, List<String> header = const []}) {
-    final fmt = formatTime ?? _localTime;
+    final fmt = formatTime ?? utcStamp;
     final lines = messageId == null ? recent(limit: limit) : forMessage(messageId, limit: limit);
     final b = StringBuffer()
       ..writeln('MeshSonar message log')
@@ -133,6 +135,7 @@ class MessageLog {
       b.writeln(h);
     }
     b
+      ..writeln(formatTime == null ? 'Times in UTC' : 'Times as shown in the app')
       ..writeln('Key: > command to the radio, < its reply, ! no reply, ~ stray frame discarded, * push from the radio, # note, = message step')
       ..writeln('No message text, keys or passwords are in this log.')
       ..writeln();
@@ -142,9 +145,13 @@ class MessageLog {
     return b.toString();
   }
 
-  static String _localTime(int ms) {
-    final d = DateTime.fromMillisecondsSinceEpoch(ms);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}:${two(d.second)}.${d.millisecond.toString().padLeft(3, '0')}';
+  /// A log line's time for the export: "2026-11-27 17:16:32.660" (UTC, with milliseconds: replies come a few ms apart).
+  static String utcStamp(int ms) {
+    final d = DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+    return '${tf.utcLogStamp(d)}.${d.millisecond.toString().padLeft(3, '0')}';
   }
+
+  /// A log line's time for a screen: the app's own time of day with seconds (the phone's time by default, UTC when the
+  /// Time zone setting says so).
+  static String lineTime(int ms) => tf.timeOfDay(DateTime.fromMillisecondsSinceEpoch(ms), seconds: true);
 }

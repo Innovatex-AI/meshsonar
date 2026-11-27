@@ -4,6 +4,7 @@
 // Build 77: whether a try went direct or by flood is what the RADIO reported for that try (rule 11), never a guess from
 // the phone's copy of the route; "Probably delivered" and the "saved route was cleared" wording are gone with the
 // features they described.
+import '../core/time_format.dart' as tf;
 import 'db/outbox_repository.dart';
 import 'models.dart';
 
@@ -77,11 +78,9 @@ String describeRoute(Contact c) {
   return 'Via $hops ${hops == 1 ? 'repeater' : 'repeaters'}$via';
 }
 
-String _clock(int ms) {
-  final d = DateTime.fromMillisecondsSinceEpoch(ms);
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
-}
+/// The time of a try, through the one app time formatter: the phone's own time by default, UTC (and labelled) when
+/// Settings > Time zone says so; 12 or 24 hour as the phone is set. (Build 76 hard-coded 24-hour local time here.)
+String _clock(int ms) => tf.timeOfDay(DateTime.fromMillisecondsSinceEpoch(ms), seconds: true);
 
 /// How a try went out, in the radio's own words: "direct" / "flood", or "route not reported" when its reply was lost.
 String describeTryRoute(DeliveryAttempt a) => !a.routeKnown ? 'route not reported' : (a.route == Route.flood ? 'flood' : 'direct');
@@ -116,8 +115,9 @@ String describeTryOutcome(DeliveryAttempt a, ChatMessage m, {required bool last}
 }
 
 /// One line of the tries list in the message details: "Try 2 · direct · 09:41:19 · confirmed after 1.8 s". [n] is the
-/// number to show when the row has none of its own (rows before build 77); [formatTime] is the app's time formatter (the
-/// fallback is 24-hour local time). [acked] is true for the try the confirmation was for.
+/// number to show when the row has none of its own (rows before build 77); [formatTime] overrides how the time is
+/// written (the default is lib/core/time_format.dart `timeOfDay` with seconds). [acked] is true for the try the
+/// confirmation was for.
 ({String text, bool acked}) describeAttempt(DeliveryAttempt a, int n, ChatMessage m, {required bool last, String Function(int ms)? formatTime}) {
   final outcome = describeTryOutcome(a, m, last: last);
   final acked = a.outcome == TryOutcome.confirmed || (a.outcome == null && outcome.startsWith('confirmed'));
