@@ -354,7 +354,7 @@ void main() {
       await tester.scrollUntilVisible(find.byKey(const Key('chart-ctx-radio-battery')), 300, scrollable: list());
       await tester.scrollUntilVisible(find.byKey(const Key('ctx-err-flags')), 300, scrollable: list());
       expect(tester.widget<Text>(find.byKey(const Key('ctx-err-flags'))).data, 'channel-activity check (CAD) timed out');
-      expect(tester.widget<Text>(find.byKey(const Key('ctx-packets'))).data, '3 / 30');
+      expect(tester.widget<Text>(find.byKey(const Key('ctx-packets'))).data, '3 sent, 30 heard');
       expect(tester.widget<Text>(find.byKey(const Key('ctx-storage'))).data, '120 of 1984 KB');
       expect(tester.widget<Text>(find.byKey(const Key('ctx-airtime'))).data, '5.0%');
       expect(tester.widget<Text>(find.byKey(const Key('ctx-device'))).data, 'iPhone, iOS 18.6');

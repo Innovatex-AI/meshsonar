@@ -109,7 +109,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('report-hops')), findsOneWidget);
     expect(find.textContaining('Direct'), findsWidgets);
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('report-rep-e5f6')), 200, scrollable: list);
+    // Repeaters and spots come before Radio details: scroll back up to them.
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('report-rep-e5f6')), -200, scrollable: list);
     expect(find.text('Westerville North'), findsWidgets);
     expect(tester.widget<Text>(find.byKey(const ValueKey('report-rep-count-a1b2'))).data, '2×');
     expect(find.byKey(const ValueKey('report-new-e5f6')), findsOneWidget);
@@ -117,6 +118,8 @@ void main() {
     expect(find.byKey(const ValueKey('report-unknown-e5f6')), findsOneWidget);
     expect(find.byKey(const ValueKey('report-unknown-a1b2')), findsNothing);
     await tester.scrollUntilVisible(find.byKey(const Key('report-worst-spot')), 200, scrollable: list);
+    await tester.ensureVisible(find.byKey(const Key('report-worst-spot')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('report-best-spot')), findsOneWidget);
     // D-8: Show on map instead of raw coordinates.
     expect(find.byKey(const Key('report-best-spot-map')), findsOneWidget);
@@ -131,13 +134,13 @@ void main() {
     expect(find.byKey(const Key('report-csv-button')), findsNothing);
     expect(find.text('Report (PDF)'), findsOneWidget);
     expect(find.text('Drive file (for re-upload)'), findsOneWidget);
-    await tester.runAsync(() async {
-      await tester.tap(find.byKey(const Key('report-export-text')));
-      for (var i = 0; i < 20 && h.shared.isEmpty; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      }
-    });
+    // The sheet closes on frames (pumped here); the file is then written with real IO outside the fake clock.
+    await tester.tap(find.byKey(const Key('report-export-text')));
     await tester.pumpAndSettle();
+    for (var i = 0; i < 80 && h.shared.isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await tester.pump();
+    }
     expect(h.shared, hasLength(1));
     expect(h.shared.single.path, endsWith('.txt'));
     final text = await tester.runAsync(() => h.shared.single.readAsString());

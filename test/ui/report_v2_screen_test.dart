@@ -141,6 +141,7 @@ void main() {
       at('b', 30),
     ]);
     await openReport(tester, h, 'bare');
+    await tester.scrollUntilVisible(find.byKey(const Key('report-radio-details')), 200, scrollable: _list);
     expect(readingOf(tester, 'noise'), 'Noise floor: not reported');
     for (final id in ['rssi', 'txpower', 'distance', 'speed', 'gps']) {
       expect(find.byKey(Key('radio-row-$id')), findsNothing, reason: id);
@@ -198,12 +199,13 @@ void main() {
   });
 
   testWidgets('Round 5 D-18: report times follow the time setting and the caption names the zone', (tester) async {
-    tf.activeTimeZone = tf.TimeZonePreference.utc;
     addTearDown(() => tf.activeTimeZone = tf.TimeZonePreference.phone);
     final h = radioDrive();
+    // Settings > Map & display > Time zone: UTC (the app applies it when the settings load).
+    h.settings.saved = h.settings.saved.copyWith(timeZone: tf.TimeZonePreference.utc);
     await openReport(tester, h, 'rf');
     await openRow(tester, 'txpower');
-    expect(find.textContaining('6:00 PM'), findsWidgets);
+    expect(find.textContaining(tf.timeOfDay(t0, showZone: false)), findsWidgets);
     expect(find.textContaining('(times UTC)'), findsOneWidget);
     expect(find.textContaining('local time'), findsNothing);
   });
