@@ -286,6 +286,10 @@ class _BasemapLayerState extends State<BasemapLayer> {
   }
 }
 
+/// The short credit every map shows on its pill (build 77, Round 1 decision 5): OpenStreetMap is the data; Protomaps and
+/// OpenFreeMap (who draw it) are named in the credits sheet behind the (i). The full line is `BasemapSource.attribution`.
+const String kOsmCreditShort = '© OpenStreetMap';
+
 /// The base-map credit for the small maps: a pill in the bottom-right corner with the credit of the source drawn.
 /// Put it last in a FlutterMap's children. Key 'mini-map-credit'.
 class BasemapCredit extends StatelessWidget {

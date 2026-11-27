@@ -13,7 +13,9 @@ import '../../core/colour_palette.dart';
 import '../../core/coverage_v2.dart' show CoverageMeta;
 import '../../core/map_definition.dart';
 import '../app.dart' show AppScope;
+import '../design/anchored_sheet.dart' show MapPanelHostController;
 import '../design/app_symbols.dart';
+import '../design/map_panel.dart' show MapPanel;
 import '../theme.dart';
 import 'active_map_definition.dart';
 import 'coverage_bands.dart';
@@ -22,6 +24,8 @@ import 'layers/m3_layers.dart' show SnrLinkStyle, redundancyColour;
 import 'layers/registry.dart' show definitionLayerId;
 import 'layers/plan_layer.dart' show planLegendKey;
 import 'layers/repeater_sprites.dart' show RepeaterSymbolStyle;
+import 'legend_sheet.dart' show showMapLegend;
+import 'map_layers.dart' show PingColorMode;
 import 'sheets/coverage_cell_sheet.dart' show CoverageBandSwatch;
 
 /// Standard | Colour-blind safe, from the definition's `palettes` (names and order). Writes Settings > Colour palette.
@@ -189,7 +193,10 @@ class LegendCard extends StatefulWidget {
   /// The short chip of the Drive map (build 76): the band ramp and "Weak → strong", no chevron, so it takes a third less of
   /// the map, and as tall as the region chip above it (36 pt; it was 28).
   final bool compact;
-  const LegendCard({super.key, required this.on, this.meta, this.local = false, this.drivePanel = true, this.initiallyOpen = false, this.onOpen, this.asPanel = false, this.compact = false});
+
+  /// Which map the legend is for: it decides the extra entries (Live: packet colours and line styles; Plan: plan markers).
+  final MapLegendPage page;
+  const LegendCard({super.key, required this.on, this.meta, this.local = false, this.drivePanel = true, this.initiallyOpen = false, this.onOpen, this.asPanel = false, this.compact = false, this.page = MapLegendPage.drive});
 
   @override
   State<LegendCard> createState() => _LegendCardState();
@@ -323,3 +330,65 @@ class _LegendCardState extends State<LegendCard> {
 
 /// The transient panel id of the legend on a map.
 const String kLegendPanelId = 'drive.legend';
+
+/// The map a legend is shown on (build 77: one Legend panel for Drive, Live and Plan).
+enum MapLegendPage { drive, live, plan }
+
+/// The ONE Legend panel of every full map (Drive, Network > Live, Plan): the map's transient panel `drive.legend`, opened by the
+/// legend chip; a second tap on the chip closes it. Build 77 (Round 1 F1): Drive and Live each had a copy of this and they had
+/// drifted apart ("Full guide" on Live). The getters are read on every rebuild, so the panel follows the layers as they change;
+/// [listenable] is what tells it to rebuild (the layers model and the app state).
+///
+/// Keys: the panel is `map-panel-drive.legend` (MapPanel), 'legend-open-guide' is the "Map guide" button.
+void toggleMapLegendPanel({
+  required MapPanelHostController host,
+  required Listenable listenable,
+  required Set<String> Function() on,
+  CoverageMeta? Function()? meta,
+  bool Function()? local,
+  bool Function()? drivePanel,
+  PingColorMode Function()? pingColors,
+  MapLegendPage page = MapLegendPage.drive,
+}) {
+  if (host.currentId == kLegendPanelId) return host.close(kLegendPanelId);
+  host.show(
+    id: kLegendPanelId,
+    builder: (context) => ListenableBuilder(
+      listenable: listenable,
+      builder: (context, _) => MapPanel(
+        id: kLegendPanelId,
+        title: 'Legend',
+        leading: const Icon(Icons.palette_outlined, size: 18),
+        bottomSafe: false,
+        onClose: () => host.close(kLegendPanelId),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Flexible(
+              child: LegendCard(
+                asPanel: true,
+                on: on(),
+                meta: meta?.call(),
+                local: local?.call() ?? false,
+                drivePanel: drivePanel?.call() ?? page == MapLegendPage.drive,
+                page: page,
+              ),
+            ),
+            // "Map guide" on every map, as a full-width 48 pt button.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.s),
+              child: OutlinedButton.icon(
+                key: const Key('legend-open-guide'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: () => showMapLegend(context, pingColors: pingColors?.call() ?? PingColorMode.snr),
+                icon: const Icon(Icons.help_outline_rounded),
+                label: const Text('Map guide'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
