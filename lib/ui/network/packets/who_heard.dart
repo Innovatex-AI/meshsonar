@@ -13,6 +13,7 @@
 // shared, "Work out the likely route" (Path Inspector with the copy's hops and observer).
 // The detail inlines the first 50 receptions only; when more exist, opening an observer fetches that observer's own
 // copies (`/v1/packets/{hash}/observations?observer=`).
+import '../../design/app_surfaces.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/time_format.dart';
@@ -442,16 +443,15 @@ Future<void> showSharedHopSheet(BuildContext context, PacketHop h, {void Functio
   final units = AppScope.unitsOf(context);
   final total = h.candidatesTotal > 0 ? h.candidatesTotal : h.candidates.length;
   final list = h.candidates.take(sharedHopCandidatesShown).toList();
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (sheet) {
+  return showAppSheet<void>(
+    context,
+    builder: (sheet, controller) {
       final t = Theme.of(sheet);
       final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
       return SafeArea(
         child: SingleChildScrollView(
           key: const Key('hop-candidates-sheet'),
+          controller: controller,
           padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.l),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             Text('${h.prefix} · one of ${total > 1 ? total : 'several'} repeaters', style: t.textTheme.titleMedium),

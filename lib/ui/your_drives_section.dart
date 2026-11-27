@@ -193,7 +193,7 @@ class _CellMap extends StatelessWidget {
         key: const Key('your-drives-map'),
         borderRadius: BorderRadius.circular(Corners.small),
         child: SizedBox(
-          height: 170,
+          height: MapPreview.compactHeight,
           child: MapPreview(
             fit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(18), maxZoom: 15),
             tiles: tiles,

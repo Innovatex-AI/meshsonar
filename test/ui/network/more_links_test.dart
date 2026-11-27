@@ -3,6 +3,7 @@
 // unreachable now (the reachability test below walks every entry the old More list had).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/account/devices_screen.dart';
 import 'package:meshsonar/app/chat_controller.dart';
 import 'package:meshsonar/app/chat_wiring.dart';
 import 'package:meshsonar/ui/chat/chat_tab_provider.dart';
@@ -106,10 +107,13 @@ void main() {
     // Build 76: set-up and the region check sit above the radio card and the repeaters, not under them.
     expect(tester.getTopLeft(find.byKey(const Key('more-radioSetup'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('network-radio-card'))).dy));
     final list = find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first;
-    for (final k in ['more-radioSettings', 'more-radioSetup', 'more-noiseFloor', 'more-telemetry']) {
+    for (final k in ['more-radioSettings', 'more-radioSetup']) {
       await tester.scrollUntilVisible(find.byKey(Key(k)), 200, scrollable: list);
       expect(find.byKey(Key(k)), findsOneWidget, reason: k);
     }
+    // Build 77 (round 5 M3): Noise floor and Telemetry left More > Radio; they stay under Tools on the radio card.
+    expect(find.byKey(const Key('more-noiseFloor')), findsNothing);
+    expect(find.byKey(const Key('more-telemetry')), findsNothing);
     // Chat has no Radio segment any more.
     await tapShellTab(tester, 'Chat');
     await settleLive(tester);
@@ -124,7 +128,13 @@ void main() {
     for (final name in oldMoreEntries) {
       if (await inMore(tester, 'more-$name')) stayed.add(name);
     }
-    expect(stayed.toSet(), {'radio', 'devices', 'leaderboard', 'observerJoin', 'settings', 'about'});
+    // Build 77 (round 5 decision 2): Devices and keys is in Settings > Account only; MoreItem.devices still opens the page.
+    expect(stayed.toSet(), {'radio', 'leaderboard', 'observerJoin', 'settings', 'about'});
+    shell.openMore(MoreItem.devices);
+    await tester.pumpAndSettle();
+    expect(find.byType(DevicesScreen), findsOneWidget, reason: 'devices is still reachable');
+    shell.select(AppTab.more);
+    await tester.pumpAndSettle();
 
     Future<void> back() async {
       shell.select(AppTab.more); // tapping More again returns to its list
@@ -191,9 +201,12 @@ void main() {
       await tester.pumpAndSettle();
     }
     final list = find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first;
-    for (final k in ['more-radioSettings', 'more-radioSetup', 'more-noiseFloor', 'more-telemetry']) {
+    for (final k in ['more-radioSettings', 'more-radioSetup']) {
       await tester.scrollUntilVisible(find.byKey(Key(k)), 200, scrollable: list);
       expect(find.byKey(Key(k)), findsOneWidget, reason: k);
     }
+    // Build 77 (round 5 M3): Noise floor and Telemetry left More > Radio; they stay under Tools on the radio card.
+    expect(find.byKey(const Key('more-noiseFloor')), findsNothing);
+    expect(find.byKey(const Key('more-telemetry')), findsNothing);
   });
 }
