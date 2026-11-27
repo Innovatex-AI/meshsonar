@@ -21,6 +21,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../../core/network_request.dart';
 import '../../../core/time_format.dart' show TimeZonePreference, activeTimeZone;
 import '../../../platform/open_url.dart';
+import '../../app.dart' show AppScope;
 import '../../design/state_views.dart';
 import '../../shell/shell_controller.dart' show ShellScope;
 import '../nodes/node_routes.dart';
@@ -156,7 +157,11 @@ class _SitePageViewState extends State<SitePageView> {
   /// The theme and time setting the loaded page was given; null before the first load.
   SiteLook? _look;
 
-  SiteLook _lookNow() => SiteLook(dark: Theme.of(context).brightness == Brightness.dark, utc: activeTimeZone == TimeZonePreference.utc);
+  SiteLook _lookNow() {
+    // Depending on the app's state means a change of the time setting reaches didChangeDependencies.
+    AppScope.maybeOf(context);
+    return SiteLook(dark: Theme.of(context).brightness == Brightness.dark, utc: activeTimeZone == TimeZonePreference.utc);
+  }
   SiteWebEngine? _engine;
   bool _noEngine = false;
   bool _loading = true;
@@ -313,7 +318,7 @@ class _SitePageViewState extends State<SitePageView> {
       if (await e.canGoBack()) {
         await e.goBack();
       } else {
-        await e.load(start);
+        await e.load(withEmbed(withoutEmbed(start), _look ?? _lookNow()));
       }
     } catch (_) {}
   }
