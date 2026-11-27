@@ -278,8 +278,10 @@ void main() {
       for (final m in planModes) {
         expect(find.bySemanticsLabel('${m.label} mode'), findsOneWidget, reason: m.label);
       }
-      expect(find.bySemanticsLabel(RegExp('Coverage from my location')), findsOneWidget);
-      expect(find.bySemanticsLabel(RegExp('Add a repeater from the network')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('How far would a radio here reach')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Will two places connect')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Where should I drive next')), findsWidgets);
+      expect(find.bySemanticsLabel(RegExp('Opens Saved plans')), findsOneWidget, reason: 'the name chip says what it does');
       expect(find.byTooltip('Plan options'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('^Plan map')), findsOneWidget);
       expect(tester.getSize(find.byKey(const Key('plan-menu'))).height, greaterThanOrEqualTo(44));

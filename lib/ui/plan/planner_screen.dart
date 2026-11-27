@@ -60,10 +60,11 @@ import '../map/layers/map_layer.dart' show LongPressHit, PlanNodeHit, MapLayerSt
 import '../map/layers/plan_node_sheet.dart' show showPlanNodeSheet;
 import '../map/layers/plan_overlay.dart';
 import '../map/layers/layers_model.dart' show PageLayersModel;
-import '../map/layers/layers_sheet.dart' show showGeneratedLayersSheet;
+import '../map/layers/layers_sheet.dart' show kLayersPanelId, showGeneratedLayersSheet;
 import '../map/layers/registry.dart' show kPlanLayerId;
-import '../map/legend_card.dart' show LegendCard, kLegendPanelId;
+import '../map/legend_card.dart' show LegendCard, MapLegendPage, kLegendPanelId, toggleMapLegendPanel;
 import '../map/legend_sheet.dart' show showMapLegend;
+import '../map/parts/map_chips.dart' show MapChip;
 import '../map/map_layers.dart' show PingColorMode;
 import '../map/layers/repeater_map_source.dart';
 import '../map/main_map_focus.dart' show MainMapFocus;
@@ -180,6 +181,7 @@ class PlannerScreenState extends State<PlannerScreen> {
       mapName: 'the Plan map',
       alwaysOn: const {kPlanLayerId},
     )..addListener(_onLayersChanged);
+    _host.addListener(_onHost);
     unawaited(_load());
   }
 
@@ -189,6 +191,7 @@ class PlannerScreenState extends State<PlannerScreen> {
     _c?.removeListener(_onPlan);
     unawaited(_c?.dispose());
     _layersModel.dispose();
+    _host.removeListener(_onHost);
     _host.dispose();
     _source?.dispose();
     _feed?.dispose();
@@ -784,38 +787,25 @@ class PlannerScreenState extends State<PlannerScreen> {
     if (mounted) setState(() {});
   }
 
-  /// The legend as the map's transient panel (a second tap on the chip closes it).
+  /// The shared Legend panel as the map's transient panel (a second tap on the chip closes it; Round 1 F1, W2-A).
   void _toggleLegend() {
-    if (_host.currentId == kLegendPanelId) return _host.close(kLegendPanelId);
     final s = _s;
-    _host.show(
-      id: kLegendPanelId,
-      builder: (context) => ListenableBuilder(
-        listenable: Listenable.merge([_layersModel, s]),
-        builder: (context, _) => MapPanel(
-          id: kLegendPanelId,
-          title: 'Legend',
-          leading: const Icon(Icons.palette_outlined, size: 18),
-          bottomSafe: false,
-          onClose: () => _host.close(kLegendPanelId),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Flexible(child: LegendCard(asPanel: true, on: _layers.on, meta: s.coverageV2 ? s.coverageMeta : null, drivePanel: false)),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  key: const Key('legend-open-guide'),
-                  onPressed: () => showMapLegend(context, pingColors: PingColorMode.snr),
-                  child: const Text('Full guide'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    toggleMapLegendPanel(
+      host: _host,
+      listenable: Listenable.merge([_layersModel, s]),
+      on: () => _layers.on,
+      meta: () => s.coverageV2 ? s.coverageMeta : null,
+      drivePanel: () => false,
+      page: MapLegendPage.plan,
     );
+  }
+
+  /// Layers or the Legend is open: the Plan panel steps aside the way Live's does (Round 1 F5).
+  bool _hostOpen = false;
+
+  void _onHost() {
+    final open = _host.currentId == kLayersPanelId || _host.currentId == kLegendPanelId;
+    if (mounted && open != _hostOpen) setState(() => _hostOpen = open);
   }
 
   @override
@@ -859,6 +849,8 @@ class PlannerScreenState extends State<PlannerScreen> {
                   on: _layers.on,
                   meta: s.coverageV2 ? s.coverageMeta : null,
                   drivePanel: false,
+                  compact: true,
+                  page: MapLegendPage.plan,
                   onOpen: _toggleLegend,
                 ),
                 openLegend: () => showMapLegend(context, pingColors: PingColorMode.snr),
@@ -875,20 +867,34 @@ class PlannerScreenState extends State<PlannerScreen> {
                 topClearance: topInset,
                 // At Full the map is behind the sheet: its controls and credit stay at the Medium line, clear of the status bar.
                 bottomClearance: _mapSheetHeight,
+                // The credit at one fixed spot just above the collapsed sheet (Round 1 decision 5).
+                creditClearance: _available <= 0 ? null : PlannerSheetMetrics.heightOf(PlannerDetent.dock, _available, context),
+                panelInset: _hostOpen ? MediaQuery.paddingOf(context).bottom : null,
+                takesFocusRequests: true,
+                focusTarget: 'plan',
                 topLeading: _titlePill(context, c),
               ),
             ),
           ),
           if (_moving != null || _adding) ..._moveUi(context, box, sheetH),
-          PlannerSheet(
-            detent: _detent,
-            onDetent: (d) => setState(() => _detent = d),
-            availableHeight: box.maxHeight,
-            scroll: _sheetScroll,
-            dock: _chips(context),
-            children: c == null
-                ? [ConstrainedBox(constraints: const BoxConstraints(minHeight: 160), child: AppLoadingView(key: Key('planner-loading'), label: 'Opening your plan…'))]
-                : _body(context, c),
+          // Kept in the tree (its state stays), not drawn and not touchable while Layers or the Legend is open.
+          Positioned.fill(
+            child: Offstage(
+              key: const Key('planner-sheet-offstage'),
+              offstage: _hostOpen,
+              child: Stack(children: [
+                PlannerSheet(
+                  detent: _detent,
+                  onDetent: (d) => setState(() => _detent = d),
+                  availableHeight: box.maxHeight,
+                  scroll: _sheetScroll,
+                  dock: _chips(context),
+                  children: c == null
+                      ? [ConstrainedBox(constraints: const BoxConstraints(minHeight: 160), child: AppLoadingView(key: Key('planner-loading'), label: 'Opening your plan…'))]
+                      : _body(context, c),
+                ),
+              ]),
+            ),
           ),
         ]);
       }),
@@ -900,31 +906,16 @@ class PlannerScreenState extends State<PlannerScreen> {
   /// The plan's name, said once (round 4 P-V5): the pill on the map, which opens Saved plans (P-U5: two taps to reopen
   /// a plan). Until the saved plans have loaded it reads "Plan" and does nothing.
   Widget _titlePill(BuildContext context, PlanController? c) {
-    final t = Theme.of(context);
     final name = c?.plan.name;
+    // The same chip as the Drive map's region chip (Round 1 F4, W2-A), carrying the plan name.
     return Semantics(
       header: true,
-      button: c != null,
-      hint: c == null ? null : 'Opens Saved plans',
-      child: Material(
+      child: MapChip(
         key: const Key('planner-title-pill'),
-        color: t.colorScheme.surface.withValues(alpha: 0.92),
-        shape: const StadiumBorder(),
-        elevation: 2,
-        child: InkWell(
-          customBorder: const StadiumBorder(),
-          onTap: c == null ? null : () => unawaited(_openSavedList()),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Gap.m, vertical: Gap.s),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Flexible(child: Text(name ?? 'Plan', key: const Key('planner-title'), style: t.textTheme.titleSmall, overflow: TextOverflow.ellipsis)),
-              if (c != null) ...[
-                const SizedBox(width: Gap.xs),
-                AppSymbolIcon(AppSymbols.chevronDown, size: 14, color: t.colorScheme.onSurfaceVariant),
-              ],
-            ]),
-          ),
-        ),
+        leading: const AppSymbolIcon(AppSymbols.map, size: 16),
+        label: Text(name ?? 'Plan', key: const Key('planner-title')),
+        semanticsLabel: name == null ? 'Plan' : 'Plan $name. Opens Saved plans',
+        onTap: c == null ? null : () => unawaited(_openSavedList()),
       ),
     );
   }

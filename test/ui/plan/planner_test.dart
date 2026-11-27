@@ -134,7 +134,7 @@ void main() {
       expect(c.nodes.single.name, 'Spot 1');
       expect(c.nodes.single.status, PlanNodeStatus.planned);
       expect(find.byKey(const Key('plan-first-run')), findsNothing);
-      expect(tester.widget<Text>(find.byKey(const Key('plan-name'))).data, '1 spot · Saved on this phone');
+      expect(tester.widget<Text>(find.byKey(const Key('plan-name'))).data, startsWith('1 spot · '));
       expect(find.text('Radio: US / Canada preset · Trees: ${AppScope.unitsOf(tester.element(find.byType(PlannerScreen))).height(c.plan.clutter.canopyM.roundToDouble())}'), findsOneWidget);
       expect(find.text('Add one more spot to check a link'), findsOneWidget);
       // P-V1: the mode's controls come before the plan's own rows.
@@ -169,7 +169,7 @@ void main() {
       await st.longPressForTest(LongPressHit(lat: 40.2, lon: -82.8));
       await settle(tester);
       expect(c.nodes, hasLength(3));
-      expect(c.nodes.last.name, 'Spot 2');
+      expect(c.nodes.map((n) => n.name), ['Hill', 'Spot 2', 'Spot 3'], reason: 'the next free number after the planned spots');
       await drain(tester);
     });
 

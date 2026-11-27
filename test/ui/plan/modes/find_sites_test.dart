@@ -148,7 +148,7 @@ void main() {
       await settle(tester);
       expect(h.client.planSuggestAsks, hasLength(2));
       expect(h.client.planSuggestAsks.last.goal, PlanGoal.redundancy);
-      expect(find.textContaining('sites for Redundancy'), findsOneWidget);
+      expect(find.textContaining('sites for Backup paths'), findsOneWidget);
       await drain(tester);
     });
 
@@ -164,7 +164,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.byKey(const Key('sites-verify')));
       await tester.pump(const Duration(milliseconds: 50));
-      expect(find.textContaining('Verifying 1 of 5'), findsOneWidget);
+      expect(find.textContaining('Double-checking 1 of 5'), findsOneWidget);
       for (var i = 0; i < 12; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
@@ -179,8 +179,8 @@ void main() {
         expect(find.byKey(Key('site-check-${s.id}')), findsOneWidget, reason: s.id);
       }
       expect(find.byKey(Key('site-check-${sites[5].id}')), findsNothing, reason: 'only the top 5');
-      expect(find.textContaining('Model (Verify): 39.1 km² covered, +39.0 km² new, heard by 1 live repeater'), findsNWidgets(5));
-      expect(find.textContaining('Verify top 5 again'), findsOneWidget);
+      expect(find.textContaining('Double-checked: 39.1 km² covered, +39.0 km² new, heard by 1 live repeater'), findsNWidgets(5));
+      expect(find.textContaining('Double-check the top 5 again'), findsOneWidget);
       await drain(tester);
     });
 
@@ -198,13 +198,13 @@ void main() {
       for (var i = 0; i < 12; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
-      expect(find.textContaining('Could not verify: The site is outside the region.'), findsOneWidget);
+      expect(find.textContaining('Could not double-check: The site is outside the region.'), findsOneWidget);
       h.slow.failLats.clear();
-      await tapIn(tester, find.text('Verify again'));
+      await tapIn(tester, find.text('Double-check again'));
       for (var i = 0; i < 4; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
-      expect(find.textContaining('Could not verify'), findsNothing);
+      expect(find.textContaining('Could not double-check'), findsNothing);
       expect(h.client.planVerifyAsks, hasLength(6));
       await drain(tester);
     });
@@ -220,7 +220,7 @@ void main() {
       await tapIn(tester, find.byKey(Key('site-add-${sites[0].id}')));
       await settle(tester);
       final n = st.controller!.nodes.single;
-      expect(n.name, 'Site 1');
+      expect(n.name, 'Spot 1');
       expect((n.lat, n.lon), (sites[0].at.lat, sites[0].at.lon));
       expect(n.heightM, 6);
       expect(n.mount, PlanMount.ground);
@@ -229,7 +229,7 @@ void main() {
       expect(st.hooksForTest.onNodeTap!('site-${sites[2].id}'), isTrue);
       expect(st.hooksForTest.onNodeTap!('site-${sites[2].id}'), isTrue);
       await settle(tester);
-      expect(st.controller!.nodes.map((x) => x.name), ['Site 1', 'Site 3']);
+      expect(st.controller!.nodes.map((x) => x.name), ['Spot 1', 'Spot 3']);
       await tapIn(tester, find.descendant(of: find.byKey(Key('site-nav-${sites[1].id}')), matching: find.byKey(const Key('drive-target-navigate'))));
       await settle(tester);
       final u = h.openedUrls.last;

@@ -241,7 +241,11 @@ void main() {
       expect(st.overlayForTest.targets, isNotEmpty);
       // Round 4 P-V3: no small map in the panel; a tap on a row centres the big map on that place.
       expect(find.byKey(const Key('plan-drive-next-map')), findsNothing);
-      await tapKey(tester, 'plan-target-0');
+      // The row itself (its words), not its Navigate button.
+      final row = find.byKey(const Key('plan-target-0'));
+      await tester.ensureVisible(row);
+      await settle(tester);
+      await tester.tap(find.descendant(of: row, matching: find.byType(Text)).first);
       await settle(tester);
       final centre = st.mapCentreForTest!;
       expect(centre.latitude, closeTo(40.136, 0.002));

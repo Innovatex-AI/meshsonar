@@ -44,7 +44,8 @@ void main() {
       expect(find.text('Works (Estimate)'), findsOneWidget);
       expect(find.byKey(const Key('link-disagree')), findsOneWidget, reason: 'model margin -126 dB says Unlikely; 41 packets say it works');
       expect(find.textContaining('41 packets heard'), findsOneWidget);
-      expect(find.textContaining('mean SNR 2.5 dB'), findsOneWidget);
+      expect(find.text('Measured mean SNR'), findsOneWidget, reason: 'the figure is under The numbers');
+      expect(find.textContaining('mean SNR 2.5 dB'), findsNothing);
       expect(find.byKey(const Key('link-confidence')), findsOneWidget);
       expect(find.textContaining('Confidence: Measured'), findsOneWidget);
       expect(find.byKey(const Key('link-profile')), findsOneWidget);
@@ -76,7 +77,17 @@ void main() {
 
       expect(find.text('Unlikely (Estimate)'), findsOneWidget);
       expect(find.byKey(const Key('link-raise')), findsOneWidget);
-      expect(find.textContaining('Raise Walker by'), findsOneWidget, reason: 'B is the lower antenna, the raise goes there');
+      expect(find.textContaining(RegExp(r'^Raise Walker .+ to clear (the hill|the ground in between)\.$')), findsOneWidget,
+          reason: 'B is the lower antenna, the raise goes there; plain words (round 4 P-U4)');
+      expect(find.textContaining('Fresnel zone.'), findsNothing, reason: 'the 60 % figure is under The numbers');
+      expect(find.byKey(const Key('link-margin')), findsOneWidget, reason: 'the link margin is under The numbers');
+      expect(tester.getTopLeft(find.byKey(const Key('link-raise'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('link-margin'))).dy),
+          reason: 'advice before the figures');
+      // Link no longer repeats the radio and tree settings (they live in Radio and trees).
+      for (final gone in const ['link-radio', 'link-canopy', 'link-clutter']) {
+        expect(find.byKey(Key(gone)), findsNothing, reason: gone);
+      }
+      expect(find.byKey(const Key('link-receiver')), findsOneWidget);
       expect(find.byKey(const Key('link-ridge')), findsOneWidget);
       expect(find.byKey(const Key('link-relay-find')), findsOneWidget);
       expect(find.byKey(const Key('link-snap-a')), findsOneWidget, reason: 'a planned end can snap to high ground');
@@ -182,15 +193,19 @@ void main() {
   });
 
   group('states', () {
-    testWidgets('empty: no nodes / one node asks for ends with icon and words and offers the network picker', (tester) async {
+    testWidgets('empty: no spots shows the first-run card only; one spot asks for the other end with Add a spot and the network picker', (tester) async {
       phone(tester);
       final h = Harness();
       final st = await openPlanner(tester, h);
-      expect(find.text('Add two nodes to check a link'), findsOneWidget);
+      expect(find.byKey(const Key('plan-first-run')), findsOneWidget);
+      expect(find.text('Add two spots to check a link'), findsNothing, reason: 'round 4 P-V2: one empty state');
       st.controller!.addNode(name: 'Only', lat: 40.1, lon: -82.9);
       await settle(tester);
-      expect(find.text('Add one more node to check a link'), findsOneWidget);
+      expect(find.text('Add one more spot to check a link'), findsOneWidget);
+      expect(find.text('Add a spot'), findsWidgets);
       expect(find.text('Add from the network'), findsWidgets);
+      // The ends use the app's pick field, not a Material dropdown (P-V4).
+      expect(find.byType(DropdownButtonFormField<String>), findsNothing);
       await drain(tester);
     });
 
@@ -279,7 +294,7 @@ void main() {
         await settle(tester);
         await tapIn(tester, find.byKey(const Key('link-relay-find')));
         await settle(tester);
-        await tester.ensureVisible(find.byKey(const Key('link-clutter')));
+        await tester.ensureVisible(find.byKey(const Key('link-receiver')));
         await settle(tester);
         expect(tester.takeException(), isNull, reason: 'link mode at ${scale}x');
         await tapIn(tester, find.byKey(const Key('link-glossary')));
