@@ -1,10 +1,11 @@
-// The dock row (72 pt) in its three states (Drive plan 4.2, 4.4, 5.2):
-//   idle      status line + subtitle on the left, Start drive 148x52 at the Stop position
-//   driving   three elements only: hero block (repeaters that heard the last ping + time since), Ping circle (64, draining
-//             ring, seconds to the next automatic ping), Stop 104x52 always labelled
-//   finished  summary + View report + Start new
-// Every state carries the MeshTrack button (56 x 52, panel_meshtrack.dart) left of its main button, tinted while sharing.
-// Start, Ping and Stop are opaque 48+ pt hit boxes that never scroll.
+// The dock row (72 pt) in its four states (Drive plan 4.2, 4.4, 5.2):
+//   idle        status line + subtitle on the left, Start drive 148x52 at the Stop position
+//   connecting  spinner + "Connecting…" / "Reconnecting…" + the radio's name, Cancel
+//   driving     three elements only: hero block (repeaters that heard the last ping + time since), Ping circle (64, draining
+//               ring, seconds to the next automatic ping), Stop 116x56 always labelled
+//   finished    "Drive saved" + its counts (or the upload note), View report + New drive at their full text size
+// Every state carries the MeshTrack button (56 x 52, 48 x 52 under 400 pt; panel_meshtrack.dart) left of its main button,
+// tinted while sharing. Start, Ping and Stop are opaque 48+ pt hit boxes that never scroll.
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -17,8 +18,9 @@ import '../../../core/model.dart';
 import '../../../core/startup_location.dart' show LocationAccess;
 import '../../../radio/radio_api.dart';
 import '../../antenna_sheet.dart' show showAntennaSheet;
+import '../../settings/drives_section.dart' show uploadSetupNote;
 import '../../design/tokens.dart';
-import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport;
+import '../drive_controls.dart' show confirmAndStopDrive, openConnect, openFinishedDriveReport, startDriveNow;
 import '../radio_link_status.dart';
 import '../drive_clock.dart';
 import 'panel_meshtrack.dart';
@@ -119,11 +121,13 @@ class _IdleDock extends StatelessWidget {
     final locationOff = s.locationNote != null;
     // Build 76: the lines are short enough for the 130 pt an iPhone SE leaves them ("Location is off for MeshSonar" and
     // "Set your antenna first (open the panel)" were cut off), and the antenna line opens the antenna sheet itself.
-    final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (s.needsAntennaSetup ? 'Set antenna' : (locationOff ? 'Location is off' : 'Ready'));
+    // Build 77 (round 5 decision 4): the antenna no longer blocks Start, so a radio that was never set up reads "Ready" with
+    // "Antenna not set" under it (a tap opens the sheet); Start records "Don't know".
+    final String title = !s.connected ? RadioLinkStatus.of(s).statusLabel : (locationOff ? 'Location is off' : 'Ready');
     final String? sub = !s.connected
         ? RadioLinkStatus.detailOf(s)
-        : (s.needsAntennaSetup ? 'Tap to set it up' : (locationOff ? 'Allow it to start' : s.connectionLabel));
-    final antennaTap = s.connected && s.needsAntennaSetup;
+        : (locationOff ? 'Allow it to start' : (s.needsAntennaSetup ? 'Antenna not set · tap to set' : s.connectionLabel));
+    final antennaTap = s.connected && s.needsAntennaSetup && !locationOff;
     Widget text = _dockText(
       context,
       Column(
@@ -170,7 +174,7 @@ class _IdleDock extends StatelessWidget {
 /// Start is disabled with a reason when the phone cannot place pings at all (denied / not asked); approximate still starts, the strip warns.
 bool _locationUsable(AppState s) => s.locationNote == null || s.locationAccess == LocationAccess.approximate;
 
-/// Start drive / Connect radio (idle) or Stop (driving): the one button at the thumb corner. 148x52 idle, 104x52 driving.
+/// Start drive / Connect radio (idle) or Stop (driving): the one button at the thumb corner. 148x52 idle, 116x56 driving.
 class _StartStopButton extends StatelessWidget {
   final AppState state;
   final bool busy;
@@ -198,7 +202,8 @@ class _StartStopButton extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           minimumSize: const Size(0, 52),
         ),
-        onPressed: busy || (!driving && (s.needsAntennaSetup || (s.connected && s.locationNote != null && !_locationUsable(s))))
+        // The antenna question no longer blocks Start (round 5 decision 4): startDriveNow records "Don't know".
+        onPressed: busy || (!driving && s.connected && s.locationNote != null && !_locationUsable(s))
             ? null
             : () async {
                 if (driving) {
@@ -206,7 +211,7 @@ class _StartStopButton extends StatelessWidget {
                 } else if (!s.connected) {
                   openConnect(context);
                 } else {
-                  s.startDrive();
+                  await startDriveNow(s);
                 }
               },
         child: FittedBox(
@@ -310,62 +315,121 @@ class _FinishedDock extends StatelessWidget {
   final bool ax;
   const _FinishedDock({required this.state, required this.sessionId, this.ax = false});
 
+  static const TextStyle _titleStyle = TextStyle(fontSize: 17, fontWeight: FontWeight.w600);
+  static const TextStyle _buttonStyle = TextStyle(fontSize: 15, fontWeight: FontWeight.w600);
+  static const double _buttonPad = 12;
+
   @override
   Widget build(BuildContext context) {
     final s = state;
     final c = AppColors.fromTheme(Theme.of(context));
     final heard = s.heardCount, total = s.pingCount;
-    final text = _dockText(
-      context,
-      Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text('Drive saved', key: Key('status-line'), maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600))),
-          const SizedBox(height: 2),
-          Text(total == 0 ? 'No pings this drive' : '$total ${total == 1 ? 'ping' : 'pings'}, $heard heard', key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
-        ],
-      ),
-    );
+    final counts = total == 0 ? 'No pings this drive' : '$total ${total == 1 ? 'ping' : 'pings'}, $heard heard';
+    // Round 5 O5: drives wait on a phone that has no driver key yet; the row says so instead of the counts.
+    final note = uploadSetupNote(s);
+    final sub = note ?? counts;
+    void report() => openFinishedDriveReport(context, sessionId);
+    final VoidCallback? next = s.busy ? null : () => s.connected ? startDriveNow(s) : openConnect(context);
+    final nextLabel = s.connected ? 'New drive' : 'Connect radio';
     if (ax) {
+      final text = _dockText(
+        context,
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Drive saved', key: Key('status-line'), maxLines: 1, overflow: TextOverflow.ellipsis, style: _titleStyle),
+            const SizedBox(height: 2),
+            Text(sub, key: const Key('dock-subtitle'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.textMuted)),
+          ],
+        ),
+      );
       return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         SizedBox(height: 64, child: Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: text)), const MeshTrackDockButton()])),
         Row(children: [
-          Expanded(child: SizedBox(height: 56, child: OutlinedButton(key: const Key('view-report'), onPressed: () => openFinishedDriveReport(context, sessionId), child: const Text('View report', maxLines: 1)))),
+          Expanded(child: SizedBox(height: 56, child: OutlinedButton(key: const Key('view-report'), onPressed: report, child: const Text('View report', maxLines: 1)))),
           const SizedBox(width: 8),
-          Expanded(child: SizedBox(height: 56, child: FilledButton(key: const Key('start-stop'), onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context), child: Text(s.connected ? 'New drive' : 'Connect radio', maxLines: 1)))),
+          Expanded(child: SizedBox(height: 56, child: FilledButton(key: const Key('start-stop'), onPressed: next, child: Text(nextLabel, maxLines: 1)))),
         ]),
       ]);
     }
-    return Row(
-      children: [
-        // With the MeshTrack button the row is full on an iPhone SE: the two buttons shrink their labels before the
-        // summary gives way (flex 3 : 2 : 3), so nothing overflows at any width.
-        // Build 76: the two buttons say what they do ("View report", "New drive"; they were "Report" and "Start new") and
-        // are the same width, 52 pt tall.
-        Expanded(flex: 3, child: text),
-        const MeshTrackDockButton(),
-        const SizedBox(width: 8),
-        Flexible(flex: 3, child: SizedBox(
-          height: 52,
-          child: OutlinedButton(
-            key: const Key('view-report'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 8)),
-            onPressed: () => openFinishedDriveReport(context, sessionId),
-            child: const FittedBox(fit: BoxFit.scaleDown, child: Text('View report', maxLines: 1)),
+    // Build 77 (Round 1 F7): nothing in this row shrinks its text any more (the labels were scaled down to fit, visibly tight
+    // on an iPhone SE). The two buttons keep their words at the dock's text size; the LEFT text gives way instead, by
+    // measuring what is left of the row: "Drive saved" over the counts (two lines) > "Drive saved" stacked on two lines >
+    // "Report" for "View report" (the 300 pt landscape card). Should even that not fit (very large text on a narrow card),
+    // a button's words wrap to a second line; they are never scaled down. The words and counts are always in the VoiceOver
+    // label. MeshTrack stays (it is the "you are sharing" indicator).
+    return _dockText(
+      context,
+      LayoutBuilder(builder: (context, box) {
+        final scaler = MediaQuery.textScalerOf(context);
+        double w(String t, TextStyle st) {
+          final p = TextPainter(text: TextSpan(text: t, style: st), maxLines: 1, textDirection: TextDirection.ltr, textScaler: scaler)..layout();
+          final out = p.width;
+          p.dispose();
+          return out;
+        }
+
+        final mt = (MeshTrackDockButton.compactFor(context) ? MeshTrackDockButton.compactWidth : MeshTrackDockButton.width) + 8;
+        double buttonW(String label) => w(label, _buttonStyle) + 2 * _buttonPad + 2;
+        double buttonsFor(String report) => buttonW(report) + buttonW(nextLabel) + 8 + 8;
+        final full = w('Drive saved', _titleStyle);
+        final word = [w('Drive', _titleStyle), w('saved', _titleStyle)].reduce((a, b) => a > b ? a : b);
+        final reportLabel = box.maxWidth - mt - buttonsFor('View report') >= word ? 'View report' : 'Report';
+        final room = box.maxWidth - mt - buttonsFor(reportLabel);
+        // Not even the shorter row fits: the buttons share what is left and wrap their words instead of overflowing.
+        final squeezed = room < 0;
+        final oneLine = room >= full;
+        final text = Semantics(
+          container: true,
+          label: 'Drive saved. $sub',
+          excludeSemantics: true,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Stacks to two lines ("Drive" / "saved") when the row is narrow.
+              Text('Drive saved', key: const Key('status-line'), maxLines: oneLine ? 1 : 2, overflow: TextOverflow.ellipsis, style: _titleStyle.copyWith(height: 1.15)),
+              if (oneLine) ...[
+                const SizedBox(height: 2),
+                // Two lines when needed ("12 pings," / "8 heard"), never cut.
+                Text(sub, key: const Key('dock-subtitle'), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.15, color: c.textMuted)),
+              ],
+            ],
           ),
-        )),
-        const SizedBox(width: 8),
-        Flexible(flex: 3, child: SizedBox(
-          height: 52,
-          child: FilledButton(
-            key: const Key('start-stop'),
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 8)),
-            onPressed: s.busy ? null : () => s.connected ? s.startDrive() : openConnect(context),
-            child: FittedBox(fit: BoxFit.scaleDown, child: Text(s.connected ? 'New drive' : 'Connect radio', maxLines: 1)),
-          ),
-        )),
-      ],
+        );
+        ButtonStyle pad(ButtonStyle? base) => (base ?? const ButtonStyle()).copyWith(
+              minimumSize: const WidgetStatePropertyAll(Size(0, 52)),
+              padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: _buttonPad)),
+            );
+        Widget fit(Widget b) => squeezed ? Flexible(child: b) : b;
+        return Row(
+          children: [
+            if (squeezed) Flexible(child: text) else Expanded(child: text),
+            const MeshTrackDockButton(),
+            const SizedBox(width: 8),
+            fit(SizedBox(
+              height: 52,
+              child: OutlinedButton(
+                key: const Key('view-report'),
+                style: pad(OutlinedButton.styleFrom()),
+                onPressed: report,
+                child: Text(reportLabel, maxLines: squeezed ? 2 : 1, softWrap: squeezed, textAlign: TextAlign.center, style: _buttonStyle),
+              ),
+            )),
+            const SizedBox(width: 8),
+            fit(SizedBox(
+              height: 52,
+              child: FilledButton(
+                key: const Key('start-stop'),
+                style: pad(FilledButton.styleFrom()),
+                onPressed: next,
+                child: Text(nextLabel, maxLines: squeezed ? 2 : 1, softWrap: squeezed, textAlign: TextAlign.center, style: _buttonStyle),
+              ),
+            )),
+          ],
+        );
+      }),
     );
   }
 }

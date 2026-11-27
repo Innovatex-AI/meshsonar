@@ -178,13 +178,15 @@ void main() {
     await settleAnim(tester);
     expect(insets.publishCount, before + 1, reason: 'one write at settle');
     expect(insets.value.bottom, greaterThanOrEqualTo(874 - panelTop(tester) - 2), reason: 'bottom inset covers the panel');
-    expect(insets.value.bottom - insetDock, closeTo(680 - panelTop(tester), 2), reason: 'and moved with the panel top');
+    // The credit pill no longer rides with the panel (Round 1 decision 5): at the Dock the inset also holds the pill above the
+    // panel, at Medium only the panel, so the inset moves by the panel's move less the pill.
+    expect(insets.value.bottom - insetDock, inInclusiveRange(680 - panelTop(tester) - 26, 680 - panelTop(tester) + 2), reason: 'and moved with the panel top');
     expect(panelTop(tester), closeTo(366, 2));
     expect(CellRasterLayer.totalPaints, paints);
     await end(tester, h);
   });
 
-  testWidgets('collapsing Medium to Dock does not move the map and moves the attribution once', (tester) async {
+  testWidgets('collapsing Medium to Dock does not move the map, and the credit stays at its one spot (Round 1 decision 5)', (tester) async {
     final h = await pumpDrive(tester, size: const Size(402, 874), navBar: 106, safeBottom: 34, drive: true);
     final map = tester.getRect(find.byType(CoverageMap));
     final attrDock = tester.getBottomRight(find.byType(AttributionLine));
@@ -194,7 +196,7 @@ void main() {
     await settleAnim(tester);
     expect(panelTop(tester), closeTo(366, 2), reason: 'the tap opened Medium');
     final attrMed = tester.getBottomRight(find.byType(AttributionLine));
-    expect(attrMed.dy, lessThanOrEqualTo(366));
+    expect(attrMed, attrDock, reason: 'the credit never rides up with the panel; the open panel covers it');
     await tester.tapAt(Offset(200, 376));
     await settleAnim(tester);
     await settleAnim(tester); // the 0.95-ratio spring settles in about 1.5 s; the clearance is written at settle
@@ -268,7 +270,8 @@ void main() {
       expect(find.text('Drive saved'), findsOneWidget);
       expect(find.byKey(const Key('view-report')), findsOneWidget);
       expect(find.text('New drive'), findsOneWidget);
-      expect(find.text('View report'), findsOneWidget);
+      // "View report", or "Report" where the row is too narrow for it (Round 1 F7; the test font is far wider than iOS's).
+      expect(find.descendant(of: find.byKey(const Key('view-report')), matching: find.textContaining('eport')), findsOneWidget);
       await tester.pump(const Duration(seconds: 25));
     });
   });

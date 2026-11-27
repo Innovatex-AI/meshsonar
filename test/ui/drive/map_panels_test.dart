@@ -1,6 +1,7 @@
 // Build 71, "One shared panel" on the Drive map: the Drive panel is the persistent panel, and the layers, the legend and the
-// inspector are the ONE transient MapPanel directly above it. Never modal, one open at a time, closed by the X or a tap on
-// empty map; nothing hides under the tab bar.
+// inspector are the ONE transient MapPanel. Never modal, one open at a time, closed by the X or a tap on empty map; nothing
+// hides under the tab bar. Build 77 (Round 1 F5): on a phone Layers and the Legend REPLACE the Drive panel (they sit on the
+// tab bar); an inspector still sits directly above the Drive panel.
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,7 @@ import '../fakes.dart';
 
 const _size = Size(402, 874);
 const _dockTop = 680.0; // 874 - (106 tab bar zone + 88 dock)
+const _barTop = 768.0; // 874 - 106 tab bar zone: where Layers and the Legend sit (Round 1 F5)
 
 Future<Harness> _pump(WidgetTester tester) async {
   tester.view.physicalSize = _size;
@@ -55,15 +57,16 @@ void main() {
     expect(DrivePanel.stateOf(PanelDetent.medium), MapPanelState.open);
   });
 
-  testWidgets('Layers: a non-modal panel directly above the Dock, above the tab bar; X closes it', (tester) async {
+  testWidgets('Layers: a non-modal panel in the Drive panel\'s place, on the tab bar; X closes it and the Drive panel is back', (tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('drive-map-layers')));
     await _settle(tester);
     expect(_p('drive.layers'), findsOneWidget);
     expect(find.byKey(const Key('layers-sheet')), findsOneWidget);
     final r = tester.getRect(_p('drive.layers'));
-    expect(r.bottom, closeTo(_dockTop, 1), reason: 'sits on the Drive panel, nothing under the tab bar');
-    expect(r.height, lessThanOrEqualTo(_dockTop * 0.6 + 1), reason: 'Open is at most 60 % of the height above the Dock');
+    expect(r.bottom, closeTo(_barTop, 1), reason: 'replaces the Drive panel, nothing under the tab bar');
+    expect(find.byKey(const Key('drive-panel')), findsNothing);
+    expect(r.height, lessThanOrEqualTo(_barTop * 0.6 + 1), reason: 'Open is at most 60 % of the height above the tab bar');
     // Never modal: no dimming barrier, no route, and the map above the panel still takes a drag.
     expect(Navigator.of(tester.element(find.byType(DriveScreen))).canPop(), isFalse);
     expect(find.byType(ModalBarrier).evaluate().where((e) => (e.widget as ModalBarrier).color != null && (e.widget as ModalBarrier).color != Colors.transparent), isEmpty);
@@ -77,7 +80,7 @@ void main() {
     expect(_driveTop(tester), closeTo(_dockTop, 1), reason: 'the Drive panel never moved');
   });
 
-  testWidgets('one open panel: opening the legend sends the Drive panel from Open back to Collapsed, and the other way round', (tester) async {
+  testWidgets('one open panel: opening the legend sends the Drive panel from Open back to Collapsed and puts the legend in its place', (tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('drive-panel-grabber')));
     await _settle(tester);
@@ -87,17 +90,12 @@ void main() {
     await _settle(tester);
     expect(_p('drive.legend'), findsOneWidget);
     expect(find.byKey(const Key('map-panel-drive.legend-body')), findsOneWidget);
-    expect(_driveTop(tester), closeTo(_dockTop, 1), reason: 'one open panel per map');
-    expect(tester.getRect(_p('drive.legend')).bottom, closeTo(_dockTop, 1), reason: 'the transient panel followed the Drive panel down');
-
-    await tester.tap(find.byKey(const Key('drive-panel-grabber')));
+    expect(find.byKey(const Key('drive-panel')), findsNothing, reason: 'the legend replaced the Drive panel');
+    expect(tester.getRect(_p('drive.legend')).bottom, closeTo(_barTop, 1));
+    await tester.tap(find.byKey(const Key('map-panel-drive.legend-close')));
     await _settle(tester);
-    await _settle(tester);
-    expect(_driveTop(tester), lessThan(_dockTop - 100));
-    expect(find.byKey(const Key('map-panel-drive.legend-body')), findsNothing, reason: 'opening the Drive panel collapses the transient panel to its header');
-    expect(_p('drive.legend'), findsOneWidget, reason: 'collapsed, not closed');
-    await tester.tap(find.byKey(const Key('drive-panel-grabber')));
-    await _settle(tester);
+    expect(_p('drive.legend'), findsNothing);
+    expect(_driveTop(tester), closeTo(_dockTop, 1), reason: 'the Drive panel is back, Collapsed (one open panel per map)');
   });
 
   testWidgets('the legend chip opens the legend as the transient panel (it never grows over the map); a tap on empty map closes it', (tester) async {
@@ -110,7 +108,7 @@ void main() {
     expect(_p('drive.legend'), findsOneWidget);
     expect(find.byKey(const Key('legend-card-body')), findsOneWidget);
     expect(tester.getSize(find.byKey(const Key('legend-card'))), before, reason: 'the chip on the map stays one line');
-    expect(tester.getRect(_p('drive.legend')).bottom, closeTo(_dockTop, 1));
+    expect(tester.getRect(_p('drive.legend')).bottom, closeTo(_barTop, 1));
     // Layers replaces it: one transient panel at a time.
     await tester.tap(find.byKey(const Key('drive-map-layers')), warnIfMissed: false);
     await _settle(tester);

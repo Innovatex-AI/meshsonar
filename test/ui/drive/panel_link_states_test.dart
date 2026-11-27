@@ -244,7 +244,7 @@ void main() {
     }
   });
 
-  testWidgets('location off: the 28 pt strip does not come and go with every reconnect try (the panel never jumps)', (tester) async {
+  testWidgets('location off: the strip does not come and go with every reconnect try (the panel never jumps)', (tester) async {
     const p = (name: 'iPhone 393x852', size: Size(393, 852), safeBottom: 34.0);
     final rects = <_Link, Rect>{};
     for (final link in _Link.values) {

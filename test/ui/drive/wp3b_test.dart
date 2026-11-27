@@ -1,4 +1,4 @@
-// Drive WP3b on the real Drive screen (flag driveRedesign on): StatusCapsule, the always-present RegionChip, the 28 pt strip, the
+// Drive WP3b on the real Drive screen (flag driveRedesign on): StatusCapsule, the always-present RegionChip, the 44 pt strip (28 before build 77), the
 // connecting / idle / AX docks, the fixed-slot control column, opaque map buttons, Cancel.
 import 'dart:async';
 
@@ -108,14 +108,14 @@ void main() {
     await end(tester, h);
   });
 
-  testWidgets('strip: location denied shows the 28 pt strip with Allow location; Start is disabled; panel buttons do not move', (tester) async {
+  testWidgets('strip: location denied shows the 44 pt strip with Allow location; Start is disabled; panel buttons do not move', (tester) async {
     final h = Harness();
     h.locationAccess = FakeLocationAccess(LocationAccess.notAsked, LocationAccess.granted);
     final base = await pump(tester, connect: true, harness: h);
     await h.state.refreshLocationAccess();
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.byKey(const Key('drive-panel-strip')), findsOneWidget);
-    expect(tester.getSize(find.byKey(const Key('drive-panel-strip'))).height, 28);
+    expect(tester.getSize(find.byKey(const Key('drive-panel-strip'))).height, 44);
     expect(find.text('Location is off'), findsWidgets);
     expect(find.byKey(const Key('dock-strip-action')), findsOneWidget);
     final btn = tester.getTopLeft(find.byKey(const Key('start-stop')));

@@ -1,6 +1,11 @@
-// Medium's content (Drive plan 4.5, 5.2) as a list of widgets for the panel's scroll view, in order: unsaved warning, location
-// note, the ratio line, the 2x3 stat grid, "Heard last ping" (2 rows), then the list rows (antenna,
-// ping settings, log, map guide). WP3b finishes this content; this is the shell with every old footer function kept.
+// Medium's content (Drive plan 4.5, 5.2) as a list of widgets for the panel's scroll view, in order: the ratio line, the 2x3
+// stat grid, "Heard last ping" (2 rows), nearby repeaters, MeshTrack, then the list rows (antenna, ping settings, log and,
+// when no drive runs, "Where to drive next" and "Drives").
+//
+// Build 77 (Round 1 F6, one message in one place): the "pings not saved" banner and the location note are the strip's alone
+// (dock_strip.dart), the second "Set up this radio's antenna" hint is gone (the Antenna row is the one), and the "Map guide"
+// row is gone (the Legend panel, the Layers sheet and More > Help keep it). Round 4 P-U1: "Where to drive next" opens Plan
+// in Where to drive mode in one tap. Round 5 M4: "Drives" (past drives and their reports; Drives stays in More too).
 import 'package:flutter/material.dart';
 
 import '../../../app/app_state.dart';
@@ -10,7 +15,6 @@ import '../../../core/region_repeaters_api.dart' show RegionRepeater;
 import '../../../radio/radio_api.dart' show GeoFix;
 import '../../design/tokens.dart';
 import '../../drive_stats.dart' show formatDuration;
-import '../../location_status.dart';
 import '../../theme.dart';
 import '../../widgets.dart';
 import '../drive_controls.dart';
@@ -52,9 +56,10 @@ class MediumContent {
     required AppState state,
     required DriveLiveStats liveStats,
     required GeoFix? fix,
-    required VoidCallback openGuide,
     List<NearbyRepeater> nearby = const [],
     ValueChanged<String>? onPickNearby,
+    VoidCallback? onWhereToDrive,
+    VoidCallback? onDrives,
   }) {
     final s = state;
     final t = Theme.of(context);
@@ -109,9 +114,6 @@ class MediumContent {
     }
 
     return [
-      if (s.unsavedCount > 0) Padding(padding: const EdgeInsets.only(bottom: 8), child: ErrorBanner('${s.unsavedCount} ping(s) not yet saved to this device. Retrying.')),
-      if (s.locationNote != null && !driving) Padding(padding: const EdgeInsets.only(bottom: 8), child: LocationNoteBanner(state: s)),
-      if (s.needsAntennaSetup && !driving) const Padding(padding: EdgeInsets.only(bottom: 8), child: AntennaSetupHint()),
       if (driving) ...[
         Text(
           s.pingCount == 0 ? 'No pings yet' : '${s.heardCount} of ${s.pingCount} pings heard${pct == null ? '' : ' ($pct%)'}',
@@ -162,7 +164,22 @@ class MediumContent {
         AntennaChip(state: s),
         PingSettingsChip(state: s),
         LogButton(state: s),
-        DrivePanelRow(key: const Key('medium-guide'), icon: Icons.help_outline_rounded, label: 'Map guide', onTap: openGuide),
+        if (!driving && onWhereToDrive != null)
+          DrivePanelRow(
+            key: const Key('medium-where-to-drive'),
+            icon: Icons.explore_outlined,
+            label: 'Where to drive next',
+            semanticsHint: 'Opens Plan in Where to drive mode',
+            onTap: onWhereToDrive,
+          ),
+        if (!driving && onDrives != null)
+          DrivePanelRow(
+            key: const Key('medium-drives'),
+            icon: Icons.list_alt,
+            label: 'Drives',
+            semanticsHint: 'Opens your saved drives',
+            onTap: onDrives,
+          ),
       ]),
     ];
   }

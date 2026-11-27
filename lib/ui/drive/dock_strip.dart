@@ -1,6 +1,9 @@
-// The reserved 28 pt strip at the top of the Drive panel (plan 4.12, R20): ONE plain sentence at a time, by priority, with the
+// The reserved strip at the top of the Drive panel (plan 4.12, R20): ONE plain sentence at a time, by priority, with the
 // one fix as a real button. It replaces the full-width GPS banner and the location-note banner row. The dock row below it never
 // grows; the strip is shown or hidden without moving Stop / Ping.
+//
+// Build 77 (Round 1 F6): the strip is the ONE place for these messages (the half-open panel no longer repeats "pings not
+// saved" or the location note), 44 pt tall (it was 28: a 28 pt tap target) and its sentence wraps to two lines.
 //
 // Priority: GPS lost > Radio lost > Precise Location > permissions > unsynced pings > weak GPS (battery / storage warnings are
 // not available from AppState yet; they join this list when they are).
@@ -41,7 +44,7 @@ StripInfo? stripFor(AppState s, GpsHealth h) {
     if (h.kind == GpsHealthKind.noPermission) {
       return StripInfo(StripKind.permission, 'Location is off', actionLabel: 'Open Settings', action: gpsAction(), severe: true);
     }
-    if (s.unsavedCount > 0) return StripInfo(StripKind.unsynced, '${s.unsavedCount} ping${s.unsavedCount == 1 ? '' : 's'} not saved yet - retrying');
+    if (s.unsavedCount > 0) return StripInfo(StripKind.unsynced, '${s.unsavedCount} ping${s.unsavedCount == 1 ? '' : 's'} not yet saved to this phone - retrying');
     if (h.kind == GpsHealthKind.weak) {
       final acc = h.accuracyM;
       return StripInfo(StripKind.gpsWeak, acc == null ? 'GPS signal weak' : 'GPS signal weak (+/-${s.units.shortLength(acc)})',
@@ -52,7 +55,7 @@ StripInfo? stripFor(AppState s, GpsHealth h) {
   }
   // Idle: location trouble has its one-tap fix here (the old banner row is gone).
   // Shown whatever the radio is doing (build 76). It used to hide while a connect try ran, so with location off the panel grew
-  // and shrank by 28 pt on every try of the automatic reconnect (eight tries in two minutes).
+  // and shrank by the strip's height on every try of the automatic reconnect (eight tries in two minutes).
   final note = s.locationNote;
   if (note != null) {
     final isPrecise = note.access == LocationAccess.approximate;
@@ -60,10 +63,13 @@ StripInfo? stripFor(AppState s, GpsHealth h) {
         actionLabel: note.action == null ? null : (note.action == LocationAction.ask ? 'Allow location' : 'Open Settings'),
         action: note.action == null ? null : () => unawaited(s.resolveLocationNote()));
   }
+  // Idle: pings a write could not save yet (the Medium banner that said it a second time is gone, Round 1 F6). Same order
+  // as while driving: after the location messages.
+  if (s.unsavedCount > 0) return StripInfo(StripKind.unsynced, '${s.unsavedCount} ping${s.unsavedCount == 1 ? '' : 's'} not yet saved to this phone - retrying');
   return null;
 }
 
-/// The strip row: icon + one line + optional button. Opaque, 28 pt, text capped at 1.3x (the dock rule).
+/// The strip row: icon + up to two lines + optional button. Opaque, 44 pt, text capped at 1.3x (the dock rule).
 class DockStripView extends StatelessWidget {
   final StripInfo info;
   const DockStripView({super.key, required this.info});
@@ -73,7 +79,10 @@ class DockStripView extends StatelessWidget {
     final c = AppColors.fromTheme(Theme.of(context));
     final color = info.severe ? c.danger : c.warning;
     final scale = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
+    // A location strip keeps the key of the location note it replaced in the Drive panel (Round 1 F6): 'location-note'.
+    final location = info.kind == StripKind.permission || info.kind == StripKind.preciseOff;
     return MediaQuery(
+      key: location ? const Key('location-note') : null,
       data: MediaQuery.of(context).copyWith(textScaler: scale),
       child: Semantics(
         container: true,
@@ -81,7 +90,7 @@ class DockStripView extends StatelessWidget {
         label: info.text,
         child: ExcludeSemantics(
           excluding: info.action == null,
-          // The whole strip runs its one fix (build 76): the words "Open Settings" alone were a 28 pt target.
+          // The whole strip runs its one fix (build 76), and it is 44 pt tall (build 77).
           child: GestureDetector(
             key: info.action == null ? null : const Key('dock-strip-hit'),
             behavior: HitTestBehavior.opaque,
@@ -94,7 +103,7 @@ class DockStripView extends StatelessWidget {
                 children: [
                   Icon(info.severe ? Icons.error_outline_rounded : Icons.warning_amber_rounded, size: 16, color: color),
                   const SizedBox(width: 6),
-                  Expanded(child: Text(info.text, key: const Key('dock-strip-text'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color))),
+                  Expanded(child: Text(info.text, key: const Key('dock-strip-text'), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w600, color: color))),
                   if (info.action != null)
                     Semantics(
                       button: true,
