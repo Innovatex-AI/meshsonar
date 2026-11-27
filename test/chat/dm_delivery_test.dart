@@ -1,20 +1,22 @@
-// DM delivery state machine (fix round, Nov 8 2026, Andy's field report on 0.29.0+49: messages 511 answered showed
-// "Not delivered"). Covers: late acks in every state, retries that change the expected ack, the ack/send race,
-// reply-implies-delivered, the link dropping during the ack wait, path-aware waits and the wording.
+// DM delivery state machine. First written for the Nov 8 2026 fix round (Andy's field report on 0.29.0+49: messages that
+// were answered showed "Not delivered"); rewritten for build 77 (redesign round 3), where delivery follows the official
+// MeshCore flow. Covers: late confirmations in every state, a retry (a new send) with confirmations of the old send, the
+// confirmation/send race, the link dropping during the wait, the removal of "Probably delivered", and the wording.
+// The tries themselves (4 direct, one reset, 4 flood; try numbers; waits) are in outbox_test.dart and, against the
+// scripted lossy radio, in delivery_lossy_test.dart.
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/chat/conversation_row.dart';
+import 'package:meshsonar/chat/db/outbox_repository.dart';
 import 'package:meshsonar/chat/delivery_state.dart';
 import 'package:meshsonar/chat/delivery_text.dart';
 import 'package:meshsonar/chat/models.dart';
-import 'package:meshsonar/chat/outbox.dart';
 import 'package:meshsonar/chat/radio_bridge.dart';
 
 import 'support.dart';
 
-/// A sink whose next send can be held open, so an ack can arrive while a try is being handed to the radio.
+/// A sink whose next send can be held open, so a confirmation can arrive while a try is being handed to the radio.
 class HoldingSink extends FakeSink {
   Completer<void>? hold;
   @override
@@ -49,40 +51,31 @@ void main() {
     await h.service.pump();
   }
 
-  group('path-aware waits', () {
-    test('flood: at least 12 s per try, at least 30 s after the last try, then Not delivered', () async {
+  group('waits', () {
+    test('each try waits the radio\'s estimate x 1.2, the last one too, then Not delivered', () async {
       h.bob();
+      h.sink.estTimeoutMs = 10000; // the radio's own estimate for a slow flood
       final m = sendDm('hi');
-      await h.service.pump();
-      final first = h.store.outbox.get(m.id)!.dueAtMs - h.clock.ms;
-      expect(first, greaterThanOrEqualTo(12000));
-      await runFor(40000);
-      expect(h.sink.directs.length, 3, reason: 'three flood tries within 40 s');
-      expect(get(m.id).state, MessageState.sent, reason: 'the last try still has its grace period');
-      final grace = h.store.outbox.get(m.id)!.dueAtMs - h.store.outbox.attemptsFor(m.id).last.sentAtMs;
-      expect(grace, greaterThanOrEqualTo(30000));
-      await runFor(40000);
+      await runFor(11000);
+      expect(h.sink.directs.length, 1, reason: 'the wait is 12 s: no second try at 11 s');
+      await runFor(2000);
+      expect(h.sink.directs.length, 2);
+      await runFor(6 * 12000 + 1000);
+      expect(h.sink.directs.length, 8);
+      expect(get(m.id).state, MessageState.sent, reason: 'the last try has its wait too');
+      final wait = h.store.outbox.get(m.id)!.dueAtMs - h.store.outbox.attemptsFor(m.id).last.sentAtMs;
+      expect(wait, 12000, reason: 'the same rule for the last try: no extra grace of our own');
+      await runFor(13000);
       expect(get(m.id).state, MessageState.failed);
       expect(get(m.id).failReason, FailReason.noAck);
     });
-
-    test('policy: direct waits are shorter than flood waits, everything is capped', () {
-      const p = RetryPolicy(jitterMs: 0);
-      final direct = p.ackWaitMs(2000, Random());
-      final flood = p.ackWaitMs(2000, Random(), flood: true);
-      expect(direct, 6000); // 2000 * 1.5 + 1500 = 4500, floor 6000
-      expect(flood, 12000); // 2000 * 2 + 1500 = 5500, floor 12000
-      expect(p.ackWaitMs(20000, Random(), flood: true), 41500); // 40000 + 1500
-      expect(p.ackWaitMs(20000, Random(), flood: true, lastTry: true), 83000);
-      expect(p.ackWaitMs(200000, Random(), flood: true), 120000);
-    });
   });
 
-  group('late acks', () {
-    test('an ack after Not delivered upgrades to Delivered, with the radio trip time', () async {
+  group('late confirmations', () {
+    test('a confirmation after Not delivered upgrades to Delivered, with the radio trip time', () async {
       h.bob();
       final m = sendDm('hi');
-      await runFor(120000);
+      await runFor(60000);
       expect(get(m.id).state, MessageState.failed);
       h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1001, tripMs: 41234)); // try 2's code
       final a = get(m.id);
@@ -92,10 +85,10 @@ void main() {
       expect(a.failReason, isNull);
     });
 
-    test('a late ack for round 1 while the manual Retry is still queued confirms it and sends nothing more', () async {
+    test('a late confirmation of the first send while the manual retry is still queued confirms it and sends nothing more', () async {
       h.bob();
       final m = sendDm('hi');
-      await runFor(120000);
+      await runFor(60000);
       expect(get(m.id).state, MessageState.failed);
       final sends = h.sink.directs.length;
       h.sink.connected = false; // Retry while the radio is away: it waits in the queue
@@ -109,19 +102,21 @@ void main() {
       expect(h.sink.directs.length, sends, reason: 'no duplicate after the confirmation');
     });
 
-    test('retry with a changed expected ack: the old code and the new code both confirm', () async {
+    test('after a retry the codes of the old send and of the new send both confirm', () async {
       h.bob();
       final m = sendDm('hi');
-      await runFor(120000); // codes 1000, 1001, 1002
+      await runFor(60000); // codes 1000..1007
+      h.clock.advance(1000);
       expect(h.service.retryFailed(m.id), isTrue);
-      await h.service.pump(); // round 2, try 1: code 1003
-      expect(get(m.id).expectedAck, 1003);
-      h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1002)); // round 1, try 3
+      await h.service.pump(); // the new send, try 1: code 1008
+      expect(h.sink.directs.last.attempt, 0);
+      h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1007)); // first send, try 8
       expect(get(m.id).state, MessageState.acked);
       expect(h.store.outbox.count(), 0);
+      expect(h.store.outbox.attemptsFor(m.id).where((t) => t.outcome == TryOutcome.confirmed).single.round, 0);
     });
 
-    test('an ack arriving while the next try is being handed to the radio is not overwritten', () async {
+    test('a confirmation arriving while the next try is being handed to the radio is not overwritten', () async {
       final sink = HoldingSink();
       h = Harness.withSink(sink);
       h.bob();
@@ -137,124 +132,100 @@ void main() {
       await pumping;
       expect(get(m.id).state, MessageState.acked, reason: 'was overwritten with sent and left waiting forever');
       expect(h.store.outbox.count(), 0);
-      expect(h.store.outbox.attemptsFor(m.id).length, 2, reason: 'the try that went out is still logged');
-      h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1001)); // the second try's ack: harmless
+      final tries = h.store.outbox.attemptsFor(m.id);
+      expect(tries.length, 2, reason: 'the try that went out is still logged');
+      expect(tries.map((t) => t.outcome), [TryOutcome.confirmed, TryOutcome.noConfirmation]);
+      h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1001)); // the second try's confirmation: harmless
       expect(get(m.id).state, MessageState.acked);
+    });
+
+    test('a confirmation that arrives BEFORE the radio answered the send is matched (the code is computed on the phone)', () async {
+      final sink = HoldingSink();
+      h = Harness.withSink(sink);
+      h.bob();
+      final m = sendDm('hi');
+      sink.hold = Completer<void>();
+      final pumping = h.service.pump();
+      await Future<void>.delayed(Duration.zero);
+      final t = h.store.outbox.attemptsFor(m.id).single;
+      expect(t.outcome, TryOutcome.sending);
+      expect(t.expectedAck, isNotNull);
+      h.service.handleInbound(InboundAck(radioId: radioA, ackCode: t.expectedAck!));
+      expect(get(m.id).state, MessageState.acked);
+      sink.hold!.complete();
+      await pumping;
+      expect(get(m.id).state, MessageState.acked);
+      expect(h.store.outbox.attemptsFor(m.id).single.outcome, TryOutcome.confirmed);
     });
   });
 
-  group('reply implies delivered', () {
-    test('a reply while we wait: Probably delivered, no further tries', () async {
+  group('"Probably delivered (they replied)" is gone (decision D2)', () {
+    test('a reply while we wait changes nothing: the message is still tried, and only a confirmation delivers it', () async {
       h.bob();
-      final m = sendDm('Sounds like our network is working lol');
+      final m = sendDm('you there?');
       await h.service.pump();
-      h.clock.advance(5000);
-      h.service.handleInbound(fromBob('Yes, yes it is.'));
-      expect(get(m.id).state, MessageState.likelyDelivered);
-      expect(h.store.outbox.count(), 0);
-      await runFor(120000);
-      expect(h.sink.directs.length, 1, reason: 'no duplicate for a message they answered');
-      final ui = deliveryUi(get(m.id), radioConnected: true, nowMs: h.clock.ms);
-      expect(ui.stage, DeliveryStage.likely);
-      expect(ui.word, 'Probably delivered (they replied)');
-      expect(deliveryLabel(get(m.id)), 'Probably delivered (they replied)');
-    });
-
-    test('a reply after Not delivered (no ack) turns it into Probably delivered; Retry all skips it', () async {
-      h.bob();
-      final m = sendDm('Ok see a bug in messaging');
-      await runFor(120000);
-      expect(get(m.id).state, MessageState.failed);
-      h.service.handleInbound(fromBob('Copy that.'));
-      expect(get(m.id).state, MessageState.likelyDelivered);
-      expect(get(m.id).failReason, isNull);
-      expect(h.store.messages.byState(const [MessageState.failed]), isEmpty, reason: 'the Retry all banner lists failed only');
-      expect(h.service.retryFailed(m.id), isFalse);
-    });
-
-    test('a real ack still upgrades Probably delivered to Delivered', () async {
-      h.bob();
-      final m = sendDm('hi');
-      await h.service.pump();
-      h.service.handleInbound(fromBob('yo'));
-      expect(get(m.id).state, MessageState.likelyDelivered);
+      h.clock.advance(2000);
+      h.service.handleInbound(fromBob('yes'));
+      expect(get(m.id).state, MessageState.sent);
+      await runFor(6000);
+      expect(h.sink.directs.length, 2, reason: 'the next try goes out as planned');
       h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1000));
       expect(get(m.id).state, MessageState.acked);
     });
 
-    test('never-sent messages and non-ack failures stay as they are', () async {
-      h.bob();
-      h.sink.connected = false;
-      final queued = sendDm('still queued');
-      await h.service.pump();
-      h.service.handleInbound(fromBob('hello'));
-      expect(get(queued.id).state, MessageState.queued, reason: 'never went out: they cannot have it');
-      h.sink.connected = true;
-      h.service.notifyRadioReady();
-      await h.service.pump();
-      expect(get(queued.id).state, MessageState.sent);
-    });
-
-    test('a message given up because the radio was away (never sent) stays Not delivered after a reply', () async {
-      h.bob();
-      h.sink.connected = false;
-      final m = sendDm('never went out');
-      h.clock.advance(7 * 3600 * 1000);
-      await h.service.pump();
-      expect(get(m.id).failReason, FailReason.notConnected);
-      h.service.handleInbound(fromBob('hi?'));
-      expect(get(m.id).state, MessageState.failed);
-    });
-
-    test('a reply older than our message, or far later, proves nothing', () async {
+    test('a reply after Not delivered leaves it Not delivered', () async {
       h.bob();
       final m = sendDm('hi');
-      await runFor(120000);
-      h.clock.advance(31 * 60 * 1000);
-      h.service.handleInbound(fromBob('much later'));
+      await runFor(60000);
+      h.service.handleInbound(fromBob('hello'));
       expect(get(m.id).state, MessageState.failed);
+      expect(get(m.id).failReason, FailReason.noAck);
     });
 
-    test('a room post is not a reply from the room', () async {
-      h.bob(type: ContactType.room);
-      final m = h.service.send(radioId: radioA, convKey: ConvKey.room(bobKey.substring(0, 12)), text: 'post');
-      await h.service.pump();
-      h.service.handleInbound(
-        InboundDirectText(
-          radioId: radioA,
-          senderPrefix: bobKey.substring(0, 12),
-          timestamp: 1760000200,
-          text: 'someone else',
-          txtType: 2,
-          signerPrefix: 'ca01ca01',
-        ),
-      );
-      expect(get(m.id).state, MessageState.sent);
-    });
-
-    test('conversation list shows the soft state', () {
-      expect(deliveryFor(const LastMessageInfo(direction: Direction.outgoing, state: MessageState.likelyDelivered), isChannel: false), RowDelivery.likely);
+    test('an old row that still says likelyDelivered reads as Not delivered everywhere', () {
+      h.bob();
+      final m = sendDm('hi');
+      h.store.db.raw.execute("UPDATE messages SET state = 'likelyDelivered' WHERE id = ?", [m.id]);
+      final ui = deliveryUi(get(m.id), radioConnected: true, nowMs: h.clock.ms);
+      expect(ui.word, 'Not delivered');
+      expect(ui.stage, DeliveryStage.failed);
+      expect(deliveryLabel(get(m.id)), 'Not delivered');
+      expect(deliveryFor(const LastMessageInfo(direction: Direction.outgoing, state: MessageState.likelyDelivered), isChannel: false), RowDelivery.failed);
     });
   });
 
   group('radio link drops during the wait', () {
-    test('the last try\'s wait ending while disconnected is not Not delivered; one more try after reconnect', () async {
+    test('a wait that ends while disconnected is not counted: no confirmation can arrive while the phone is away', () async {
       h.bob();
       final m = sendDm('hi');
-      await runFor(40000); // three tries out
-      expect(h.sink.directs.length, 3);
+      await runFor(36000); // all eight tries are out (4.8 s each); the eighth is still waiting
+      expect(h.sink.directs.length, 8);
       h.sink.connected = false;
       await runFor(120000);
-      expect(get(m.id).state, isNot(MessageState.failed), reason: 'the ack may have come while the phone was away');
+      expect(get(m.id).state, MessageState.sent, reason: 'not Not delivered while the phone cannot hear the radio');
       h.sink.connected = true;
       h.service.notifyRadioReady();
-      await runFor(15000);
-      expect(h.sink.directs.length, 4);
-      h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1003));
+      h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1007));
       expect(get(m.id).state, MessageState.acked);
     });
 
-    test('an ack after a reconnect for a try sent before it still matches (state is persisted)', () async {
+    test('back on the link with tries left: the next try goes out with the next try number', () async {
+      h.bob();
+      final m = sendDm('hi');
+      await runFor(6000); // two tries
+      expect(h.sink.directs.length, 2);
+      h.sink.connected = false;
+      await runFor(60000);
+      expect(h.sink.directs.length, 2);
+      h.sink.connected = true;
+      h.service.notifyRadioReady();
+      await runFor(11000);
+      expect(h.sink.directs.map((d) => d.attempt).take(3), [0, 1, 2]);
+      expect(h.sink.directs.map((d) => d.ts).toSet().length, 1);
+      expect(get(m.id).state, isNot(MessageState.failed));
+    });
+
+    test('a confirmation after a reconnect for a try sent before it still matches (state is persisted)', () async {
       h.bob();
       final m = sendDm('hi');
       await h.service.pump();
@@ -275,9 +246,59 @@ void main() {
       expect(deliveryUi(get(m.id), radioConnected: true, nowMs: h.clock.ms).word, 'Sending');
       h.store.messages.update(m.id, state: MessageState.queued, attempt: 0);
       await h.service.pump();
-      final ui = deliveryUi(get(m.id), radioConnected: true, nowMs: h.clock.ms, maxAttempts: 3);
+      final ui = deliveryUi(get(m.id), radioConnected: true, nowMs: h.clock.ms, maxAttempts: 8);
       expect(ui.word, 'Waiting for confirmation');
       expect(ui.stage, DeliveryStage.sent);
+      expect(ui.pending, isTrue, reason: 'a message still retrying can be cancelled');
+    });
+
+    test('"try n of m" from the second try on, with the real numbers; no "wider search" guess on the last try', () async {
+      h.bob(path: true);
+      final m = sendDm('hi');
+      await runFor(5000);
+      var ui = deliveryUi(get(m.id), radioConnected: true, nowMs: h.clock.ms, maxAttempts: h.store.outbox.get(m.id)!.maxAttempts);
+      expect(ui.word, 'Waiting for confirmation (try 2 of 8)');
+      expect(deliveryLabel(get(m.id), maxAttempts: 8), 'Waiting for confirmation (try 2 of 8)');
+      await runFor(30000);
+      ui = deliveryUi(get(m.id), radioConnected: true, nowMs: h.clock.ms, maxAttempts: 8);
+      expect(ui.word, 'Waiting for confirmation (try 8 of 8)');
+      expect(ui.detail, isNot(contains('wider')));
+    });
+
+    test('message details: each try with the route the radio reported and its outcome', () async {
+      h.bob(path: true);
+      final m = sendDm('hi');
+      await runFor(60000);
+      final tries = h.service.deliveryTries(m.id);
+      final lines = [for (var i = 0; i < tries.length; i++) describeAttempt(tries[i], i + 1, get(m.id), last: i == tries.length - 1, formatTime: (_) => 'T').text];
+      expect(lines.first, 'Try 1 · direct · T · no confirmation');
+      expect(lines[4], 'Try 5 · flood · after reset path · T · no confirmation');
+      expect(lines.last, 'Try 8 · flood · T · no confirmation');
+      expect(describeFailure(get(m.id), tries),
+          startsWith('No confirmation came back after 8 tries: 4 direct along the route your radio had, then 4 by flood to everyone nearby.'));
+      h.service.handleInbound(const InboundAck(radioId: radioA, ackCode: 1005, tripMs: 2100));
+      final after = h.service.deliveryTries(m.id);
+      final hit = describeAttempt(after[5], 6, get(m.id), last: false, formatTime: (_) => 'T');
+      expect(hit.text, 'Try 6 · flood · T · confirmed after 2.1 s');
+      expect(hit.acked, isTrue);
+    });
+
+    test('a try whose reply was lost says so and claims no route', () async {
+      h.bob();
+      h.sink.failNext = const RadioNoAnswer();
+      final m = sendDm('hi');
+      await h.service.pump();
+      final t = h.service.deliveryTries(m.id).single;
+      expect(describeTryRoute(t), 'route not reported');
+      expect(describeTryOutcome(t, get(m.id), last: true), 'the radio did not answer; it may have gone out');
+    });
+
+    test('rows stored before build 77 (no outcome) still read sensibly', () {
+      h.bob();
+      final m = sendDm('hi');
+      h.store.messages.update(m.id, state: MessageState.failed, failReason: FailReason.noAck, attempt: 1);
+      const old = DeliveryAttempt(messageId: 'x', attempt: 1, sentAtMs: 0, route: Route.flood, expectedAck: 5);
+      expect(describeAttempt(old, 1, get(m.id), last: true, formatTime: (_) => 'T').text, 'Try 1 · flood · T · no confirmation');
     });
   });
 }

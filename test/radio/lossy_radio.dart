@@ -119,6 +119,9 @@ class LossyRadio implements ByteTransport {
   /// GET_CONTACTS stops sending after this many contacts (the link's idle timeout then ends the read); null = never.
   int? stallContactsAfter;
 
+  /// How long after the stall the next contact frame still arrives (a stray by then).
+  Duration stalledContactDelay = const Duration(milliseconds: 250);
+
   /// Messages waiting in the radio's offline queue (whole reply frames).
   final List<Uint8List> offlineQueue = [];
 
@@ -238,7 +241,7 @@ class LossyRadio implements ByteTransport {
           if (stallContactsAfter != null && n >= stallContactsAfter!) {
             stallContactsAfter = null;
             // the rest arrive late, after the app gave up: strays
-            _emit(_contactFrame(c), const Duration(milliseconds: 250));
+            _emit(_contactFrame(c), stalledContactDelay);
             return;
           }
           _emit(_contactFrame(c));

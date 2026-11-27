@@ -96,6 +96,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   int? get radioClockAheadSecs => _clockAheadAtStart;
   int? _clockAheadAtStart;
 
+  /// Confirmation codes of direct messages whose SENT reply did not come in time (see [_onFrame]).
+  final Set<int> _orphanAcks = <int>{};
+
   /// Until when a direct message is waiting for its confirmation push (the radio's estimate x 1.2 after the last SENT). The
   /// backup message poll stays quiet meanwhile: the radio's Bluetooth queue is 4 frames on ESP32 and the confirmation is
   /// one of them (defect M5).
@@ -278,6 +281,17 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       return;
     }
     final p = _pending;
+    // A SENT whose confirmation code belongs to a direct message that already timed out is that message's late reply,
+    // whatever command is waiting now (another send, a login): it must not answer it.
+    if (data[0] == Resp.sent && data.length >= 6 && _orphanAcks.isNotEmpty) {
+      final tag = ByteData.sublistView(data).getUint32(2, Endian.little);
+      if (_orphanAcks.contains(tag) && p?.ownAck != tag) {
+        _orphanAcks.remove(tag);
+        strayFrames++;
+        _log(LinkLogKind.stray, '${describeReplyForLog(data)} discarded: the late reply to a send that already timed out', code: data[0]);
+        return;
+      }
+    }
     if (p != null && !p.done.isCompleted && p.takes(data)) {
       _pending = null;
       _log(LinkLogKind.reply, '${describeReplyForLog(data)} for ${commandName(p.command)} after ${_clock().difference(p.sentAt).inMilliseconds}ms', code: data[0]);
@@ -362,9 +376,9 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
   /// Writes one command and waits for ITS reply: a frame whose code the command can be answered with
   /// ([expectedReplyCodes]; ERR always can) and, when [match] is given, that [match] accepts (a CONTACT reply must be the
   /// key that was asked for). Anything else that arrives meanwhile is a stray and is discarded by [_onFrame].
-  Future<Frame> _send(Uint8List frame, {bool Function(Uint8List reply)? match}) async {
+  Future<Frame> _send(Uint8List frame, {bool Function(Uint8List reply)? match, int? ownAck}) async {
     if (!isConnected) throw StateError('radio not connected');
-    final p = _PendingReply(frame[0], expectedReplyCodes(frame), match, _clock());
+    final p = _PendingReply(frame[0], expectedReplyCodes(frame), match, _clock(), ownAck: ownAck);
     _pending = p;
     PowerCounters.inc(PowerCounters.bleCommand);
     _log(LinkLogKind.command, describeCommandForLog(frame), code: frame[0]);
@@ -379,6 +393,12 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
       return await p.done.future.timeout(timeout);
     } on TimeoutException {
       if (identical(_pending, p)) _pending = null;
+      if (ownAck != null) {
+        _orphanAcks.add(ownAck);
+        while (_orphanAcks.length > 16) {
+          _orphanAcks.remove(_orphanAcks.first);
+        }
+      }
       _log(LinkLogKind.timeout, 'no reply to ${commandName(frame[0])} after ${timeout.inMilliseconds}ms', code: frame[0]);
       throw TimeoutException('radio did not answer command ${frame[0]}', timeout);
     }
@@ -546,7 +566,11 @@ class MeshCoreCompanionLink implements CompanionLink, RadioStatsSource, ClaimRad
         _lastSentTs = ts;
       }
       _lastAttemptTs = ts;
-      final f = await _send(encodeSendTxt(txtTypePlain, attempt, ts, fromHex(pubkeyHex), text));
+      // The confirmation code this send will get (computed as the radio does). If the radio's SENT for it comes late,
+      // after the timeout, that code is how the late frame is recognised and kept away from the next command.
+      final self = _self?.publicKey;
+      final own = (self == null || self.length != 64) ? null : expectedDmAck(sha256, timestamp: ts, attempt: attempt, text: text, senderPublicKey: fromHex(self));
+      final f = await _send(encodeSendTxt(txtTypePlain, attempt, ts, fromHex(pubkeyHex), text), ownAck: own);
       // The confirmation push is due within the radio's estimate (x 1.2, what the outbox waits): keep the backup poll off
       // the link until then.
       if (f is SentFrame) _confirmDue = _clock().add(Duration(milliseconds: (f.estTimeoutMs * 1.2).round()));
@@ -1254,8 +1278,11 @@ class _PendingReply {
   final Set<int>? accept;
   final bool Function(Uint8List reply)? match;
   final DateTime sentAt;
+
+  /// For a direct message: the confirmation code its own SENT reply will carry.
+  final int? ownAck;
   final Completer<Frame> done = Completer<Frame>();
-  _PendingReply(this.command, this.accept, this.match, this.sentAt);
+  _PendingReply(this.command, this.accept, this.match, this.sentAt, {this.ownAck});
 
   bool takes(Uint8List reply) {
     final code = reply[0];

@@ -26,6 +26,10 @@ class SentDirect {
   /// What the fake radio reported in its SENT reply: true = flood (it had no route), false = direct.
   final bool flood;
   SentDirect(this.key, this.text, this.ts, this.attempt, this.flood);
+
+  /// The build-76 name, kept because test/ui/chat/cr2_delivery_send_test.dart (another package's file) reads it. It now
+  /// means "the radio flooded this try". Remove with that test's use.
+  bool get forceFlood => flood;
 }
 
 /// A sink that behaves like a radio as far as delivery cares: it decides direct or flood from ITS route ([hasRoute]),

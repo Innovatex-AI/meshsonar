@@ -99,7 +99,8 @@ RowDelivery deliveryFor(LastMessageInfo? last, {required bool isChannel}) {
       // Channels have no delivery receipts: the most they can show is Heard.
       return isChannel ? RowDelivery.heard : RowDelivery.delivered;
     case MessageState.likelyDelivered:
-      return isChannel ? RowDelivery.sent : RowDelivery.likely;
+      // Removed in build 77 (decision D2): never set any more; an old row is shown as what was proved.
+      return isChannel ? RowDelivery.sent : RowDelivery.failed;
     case MessageState.failed:
       return RowDelivery.failed;
     case MessageState.received:

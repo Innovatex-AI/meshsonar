@@ -373,6 +373,9 @@ class Outbox {
       final route = r.flood ? Route.flood : Route.direct;
       final ack2 = (r.expectedAck != 0 && r.expectedAck != predicted) ? r.expectedAck : null;
       final wait = policy.ackWaitMs(r.estTimeoutMs, rnd);
+      // The wait starts when the radio answered, not when the command was queued: the command may have stood behind a
+      // long read (a contact list) in the radio's one-at-a-time queue.
+      final answeredMs = max(now, nowMs());
       _say('try $attemptNo sent ${route.name} (the radio said so), est ${r.estTimeoutMs}ms, waiting ${wait}ms${ack2 == null ? '' : ', radio ack=${MessageLog.code(ack2)}'}', id: m.id);
       // While this try was being handed to the radio, a confirmation for an earlier try (or a cancel) may have settled the
       // message. Record what the radio said, but never overwrite a settled state with "sent".
@@ -395,7 +398,7 @@ class Outbox {
           sentHashSize: used?.pathHashBytes,
           clearSentPath: used == null,
         );
-        store.outbox.reschedule(m.id, now + wait, busyRetries: 0);
+        store.outbox.reschedule(m.id, answeredMs + wait, busyRetries: 0);
       });
     } on RadioNotConnected {
       store.outbox.removeAttempt(tryId);
