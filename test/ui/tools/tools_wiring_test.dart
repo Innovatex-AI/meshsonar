@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/radio/session.dart' show LinkState;
 import 'package:meshsonar/ui/app.dart';
+import 'package:meshsonar/ui/network/tools/tools_section.dart';
 import 'package:meshsonar/ui/tools/tool_kit.dart';
 import 'package:meshsonar/ui/tools/tools_host.dart';
 
@@ -25,12 +26,31 @@ Future<void> showRow(WidgetTester tester, String key) async {
 void main() {
   // Build 71: the radio tools live once in Network > Tools (test/ui/network/tools); More keeps one Radio row whose
   // screen holds the radio's own settings and the tools that need no network (layout: test/ui/network/more_links_test.dart).
+  // Build 77 (Round 5 M3): More > Radio has no "More tools" group any more; Noise floor and Telemetry are under Tools on the
+  // radio card (Network > Tools, keys tool-row-noise / tool-row-telemetry) and in My radio's settings > All device settings >
+  // Radio tools (keys tool-noise / tool-telemetry). Radio setup stays in More > Radio.
+  testWidgets('Radio setup opens from More > Radio; with no radio it says so and offers to connect', (tester) async {
+    useTallScreen(tester);
+    final h = Harness();
+    await h.pumpApp(tester);
+    await openMore(tester);
+    await showRow(tester, 'more-radio');
+    await tester.tap(find.byKey(const Key('more-radio')));
+    await tester.pumpAndSettle();
+    final row = find.byKey(const Key('more-radioSetup'));
+    await tester.scrollUntilVisible(row, 200, scrollable: find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tool-radio-setup')), findsOneWidget);
+    expect(find.text('Radio not connected'), findsOneWidget);
+    expect(find.byKey(const Key('tool-connect')), findsOneWidget);
+  });
+
   for (final (item, id, title) in [
     ('noiseFloor', 'noise', 'Noise floor and health'),
     ('telemetry', 'telemetry', 'Telemetry'),
-    ('radioSetup', 'radio-setup', 'Radio setup'),
   ]) {
-    testWidgets('$title opens from More > Radio; with no radio it says so and offers to connect', (tester) async {
+    testWidgets('$title is no longer in More > Radio (Round 5 M3); it opens from Network > Tools, and with no radio it says so and offers to connect', (tester) async {
       useTallScreen(tester);
       final h = Harness();
       await h.pumpApp(tester);
@@ -38,8 +58,13 @@ void main() {
       await showRow(tester, 'more-radio');
       await tester.tap(find.byKey(const Key('more-radio')));
       await tester.pumpAndSettle();
-      final row = find.byKey(Key('more-$item'));
-      await tester.scrollUntilVisible(row, 200, scrollable: find.descendant(of: find.byKey(const Key('more-radio-list')), matching: find.byType(Scrollable)).first);
+      expect(find.byKey(Key('more-$item')), findsNothing, reason: 'Round 5 M3: More > Radio drops its More tools group');
+      final ctx = tester.element(find.byKey(const Key('more-radio-list')).first);
+      Navigator.of(ctx, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => const Scaffold(key: Key('network-tools-page'), body: ToolsSection(baseUrl: 'https://cmh.meshsonar.com', regionSlug: 'cmh'))));
+      await tester.pumpAndSettle();
+      final row = find.byKey(Key('tool-row-$id'));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
       await tester.tap(row);
       await tester.pumpAndSettle();
       expect(find.byKey(Key('tool-$id')), findsOneWidget);

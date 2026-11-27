@@ -365,7 +365,7 @@ void main() {
       await openReport(tester, h);
       await toWeather(tester);
       expect(h.weather.askedSessions, hasLength(2));
-      expect(text(tester, 'weather-offline'), 'Offline - as of 7h ago. The server could not be reached.');
+      expect(text(tester, 'weather-offline'), 'Offline - as of 7 h ago. The server could not be reached.', reason: 'one wording for ages (lib/core/time_format.dart relativeTime), Round 2 N-U8');
       expect(text(tester, 'weather-tile-temp'), '11 °C to 13 °C');
       expect(find.byKey(const Key('weather-credit')), findsOneWidget);
     });

@@ -22,7 +22,6 @@ const Map<String, String> kColourAllowlist = {
   'lib/ui/map/map_health_overlay.dart': 'black pill with white text over the map (a status chip)',
   'lib/ui/map/parts/map_markers.dart': 'black marker shadow',
   'lib/ui/network/live/live_map_view.dart': 'Live map dot ink (white or black87 by theme); moves into the definition with the Live slice',
-  'lib/ui/shell/drive_next_card.dart': 'white rings of the target dots and the me dot on the Where-to-drive-next card preview (the me dot itself is the theme primary since build 76)',
   'lib/ui/tools/tool_kit.dart': 'white ring and white number of the numbered pin in the radio tools',
 };
 
