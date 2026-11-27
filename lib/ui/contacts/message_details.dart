@@ -207,7 +207,7 @@ class _MessageDetailsState extends State<MessageDetails> {
             padding: EdgeInsets.zero,
             minimumSize: Size.square(Hit.of(context)),
             onPressed: () {
-              if (!openPathInspector(context, info.nodes)) showAppToast(context, 'Open Network, then Tools, then Path Inspector to work this out.');
+              if (!openPathInspector(context, info.nodes)) showAppToast(context, 'Open the Network tab, then Tools, to work out the likely route.');
             },
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               AppSymbolIcon(AppSymbols.route, size: 18, color: c.accent),

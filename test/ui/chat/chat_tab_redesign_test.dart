@@ -448,6 +448,7 @@ void main() {
       expect(find.text('Ridge 6'), findsOneWidget);
       expect(find.text('Show fewer'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('SENSORS'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.scrollUntilVisible(find.text('Garage temp'), 200, scrollable: find.byType(Scrollable).first);
       expect(find.text('Garage temp'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('ROOMS'), -300, scrollable: find.byType(Scrollable).first);
       expect(find.text('North room'), findsOneWidget);

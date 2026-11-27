@@ -199,12 +199,12 @@ class _ComposerState extends State<Composer> {
     final flood = await showAppActionSheet<bool>(
       context,
       sheetKey: const Key('send-route-sheet'),
-      title: 'Send this message direct or by flood?',
-      message: 'Direct uses the route your radio already has. Flood clears that route first, so the message goes to '
-          'everyone nearby and your radio learns a new route. Flood uses more airtime.',
+      title: 'How should this message go?',
+      message: 'The known route uses the way your radio already reaches them. Everyone nearby clears that route first, so the '
+          'message goes to everyone in range and your radio learns a new way to them. It uses more airtime.',
       actions: const [
-        AppAction('Send direct', false, isDefault: true, key: Key('send-normal')),
-        AppAction('Send by flood', true, key: Key('send-flood')),
+        AppAction('By the known route', false, isDefault: true, key: Key('send-normal')),
+        AppAction('To everyone nearby', true, key: Key('send-flood')),
       ],
     );
     if (flood != null && mounted) _send(forceFlood: flood);

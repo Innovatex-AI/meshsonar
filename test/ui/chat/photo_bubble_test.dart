@@ -11,7 +11,7 @@ import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/photo_prefs.dart';
 import 'package:meshsonar/core/photo_api.dart';
 import 'package:meshsonar/core/photo_cache.dart';
-import 'package:meshsonar/ui/chat/chat_settings_screen.dart';
+import 'package:meshsonar/ui/settings/messages_section.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/chat/message_menu.dart';
 import 'package:meshsonar/ui/theme.dart';
@@ -189,12 +189,12 @@ void main() {
   testWidgets('More > Chat: "Load photos automatically" is on, says it contacts the server, and switches the bubbles', (tester) async {
     setSize(tester);
     final photos = fakePhotos(kit.store, transport: transport, source: source);
-    await tester.pumpWidget(darkIphone(ChatSettingsScreen(controller: kit.controller, photos: photos)));
+    await tester.pumpWidget(darkIphone(Scaffold(body: ListView(children: [MessagesChatRows(controller: kit.controller, photos: photos)]))));
     await tester.pump();
     expect(find.text('Load photos automatically'), findsOneWidget);
     expect(find.textContaining('contacts the MeshSonar server'), findsOneWidget);
     final sw = find.byKey(const Key('chat-photos-autoload'));
-    expect(tester.widget<CupertinoSwitch>(sw).value, isTrue);
+    expect(tester.widget<SwitchListTile>(sw).value, isTrue);
     await tester.tap(sw);
     await tester.pump();
     expect(photos.autoLoad, isFalse);

@@ -33,7 +33,7 @@ import 'settings_test_kit.dart';
 class Setup {
   final fake = FakeLocalNotifications();
   final prefs = AlertPrefs();
-  final log = BleLifecycleLog(clock: () => DateTime(2026, 11, 1, 10, 0, 0));
+  final log = BleLifecycleLog(clock: () => DateTime.utc(2026, 11, 1, 10, 0, 0));
   final queue = RadioQueueWatch();
   final store = SavedRadiosStore(initial: const [SavedRadio(id: 'id-1', name: 'Radio One')]);
   late final AlertCoordinator coordinator = AlertCoordinator(notifications: fake, prefs: prefs);

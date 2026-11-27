@@ -1193,7 +1193,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                   nowMs: now.millisecondsSinceEpoch,
                       // How it went is what the radio reported for the try that got through (rule 11).
                   viaText: m.state == MessageState.acked && m.convKind != ConvKind.channel
-                      ? (m.route == models.Route.flood ? 'by flood' : (contact != null && contact.hasPath ? dmRouteText(contact).toLowerCase() : null))
+                      ? (m.route == models.Route.flood ? 'to everyone nearby' : (contact != null && contact.hasPath ? dmRouteText(contact).toLowerCase() : null))
                       : null);
             }
             final expanded = _expandedId == m.id;

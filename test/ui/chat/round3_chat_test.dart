@@ -202,7 +202,7 @@ void main() {
       await tester.pump();
       await tester.longPress(find.byKey(const Key('composer-send')));
       await tester.pumpAndSettle();
-      expect(find.text('Send this message direct or by flood?'), findsOneWidget);
+      expect(find.text('How should this message go?'), findsOneWidget);
       expect(find.textContaining('search'), findsNothing);
       await tester.tap(find.byKey(const Key('send-normal')));
       await tester.pumpAndSettle();

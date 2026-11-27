@@ -13,7 +13,7 @@ import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/core/plan/airtime_calc.dart';
 import 'package:meshsonar/radio/caps.dart';
 import 'package:meshsonar/radio/rx_facts.dart';
-import 'package:meshsonar/ui/chat/chat_settings_screen.dart';
+import 'package:meshsonar/ui/settings/messages_section.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/chat/message_bubble.dart';
 import 'package:meshsonar/ui/contacts/profile_tiles.dart';
@@ -131,10 +131,10 @@ void main() {
   group('More > Chat', () {
     testWidgets('Return sends is stored, Quick replies shows the count, Haptics switch is there', (tester) async {
       setSize(tester);
-      await tester.pumpWidget(host(ChatSettingsScreen(controller: kit.controller)));
+      await tester.pumpWidget(host(Scaffold(body: ListView(children: [MessagesChatRows(controller: kit.controller)]))));
       await tester.pump();
       expect(find.text('Quick replies'), findsOneWidget);
-      expect(find.text('${defaultQuickReplies.length} saved'), findsOneWidget);
+      expect(find.textContaining('${defaultQuickReplies.length} saved'), findsOneWidget);
       expect(loadReturnSends(kit.store), isFalse);
       await tester.tap(find.byKey(const Key('chat-return-sends')));
       await tester.pump();

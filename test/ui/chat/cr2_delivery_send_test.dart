@@ -121,8 +121,8 @@ void main() {
       await tester.longPress(find.byKey(const Key('composer-send')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('send-route-sheet')), findsOneWidget);
-      expect(find.text('Send direct'), findsOneWidget);
-      expect(find.text('Send by flood'), findsOneWidget);
+      expect(find.text('By the known route'), findsOneWidget);
+      expect(find.text('To everyone nearby'), findsOneWidget);
       expect(find.textContaining('search for a new route'), findsNothing, reason: 'build 76 wording');
       await tester.tap(find.byKey(const Key('send-flood')));
       await tester.pumpAndSettle();

@@ -277,11 +277,11 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('blelog');
       addTearDown(() => dir.delete(recursive: true));
       final f = File('${dir.path}/ble.log');
-      final a = BleLifecycleLog(file: f, clock: () => DateTime(2026, 11, 1, 9, 30, 5));
+      final a = BleLifecycleLog(file: f, clock: () => DateTime.utc(2026, 11, 1, 9, 30, 5));
       a.add('lifecycle', 'paused');
       a.setForeground(false);
       a.add('inbound', 'message persisted');
-      final b = BleLifecycleLog(file: f, clock: () => DateTime(2026, 11, 1, 9, 40));
+      final b = BleLifecycleLog(file: f, clock: () => DateTime.utc(2026, 11, 1, 9, 40));
       await b.load();
       b.add('launch', 'process started');
       expect(b.entries.map((e) => e.kind), ['lifecycle', 'inbound', 'launch']);

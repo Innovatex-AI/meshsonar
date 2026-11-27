@@ -108,7 +108,7 @@ void main() {
     await open(tester, m.id);
     expect(find.text('Not delivered'), findsWidgets);
     expect(find.textContaining('No confirmation came back after 3 tries'), findsOneWidget);
-    expect(find.textContaining('all by flood to everyone nearby'), findsOneWidget);
+    expect(find.textContaining('all to everyone nearby'), findsOneWidget);
     expect(find.textContaining('may not have you as a contact'), findsOneWidget);
     await tester.tap(find.byKey(const Key('details-copy')));
     await tester.pump();
@@ -129,7 +129,7 @@ void main() {
       rig.store.outbox.addAttempt(DeliveryAttempt(messageId: 'f2', attempt: i, sentAtMs: 1760000000000 + i, route: i < 5 ? Route.direct : Route.flood));
     }
     await open(tester, 'f2');
-    expect(find.textContaining('4 direct along the route your radio had, then 1 by flood to everyone nearby'), findsOneWidget);
+    expect(find.textContaining('4 along the route your radio had, then 1 to everyone nearby'), findsOneWidget);
     expect(find.textContaining('may have changed'), findsNothing, reason: 'build 76 guessed this');
   });
 
@@ -186,7 +186,7 @@ void main() {
     expect(find.byKey(const Key('details-likely-route')), findsOneWidget);
     await tester.tap(find.byKey(const Key('details-likely-route')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Path Inspector'), findsOneWidget, reason: 'no app shell in this test: it says where to find it');
+    expect(find.textContaining('Open the Network tab, then Tools'), findsOneWidget, reason: 'no app shell in this test: it says where to find it');
   });
 
   tw('other failure reasons use their own sentence', (tester) async {
