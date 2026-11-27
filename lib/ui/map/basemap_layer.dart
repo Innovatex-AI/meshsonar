@@ -68,8 +68,8 @@ BasemapSource basemapSourceAt(MapCamera camera, {BasemapHealth? health}) {
   return (health ?? BasemapHealth.instance).sourceFor(inside: inside);
 }
 
-/// The background a style paints under its tiles: what the map shows where a tile is not (yet) drawn. Null for the names-only
-/// look. Build 72: the map's own background was the app theme's, so a Dark map with tiles missing on a light iPad was a pale
+/// The background a style paints under its tiles: what the map shows where a tile is not (yet) drawn. Null for a names-only
+/// look ([BasemapLook.isLabelsOnly]). Build 72: the map's own background was the app theme's, so a Dark map with tiles missing on a light iPad was a pale
 /// sheet that looked like another basemap.
 Color? basemapBackgroundColor(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) {
   for (final l in basemapStyle(source, dark: dark, look: look)['layers'] as List) {
@@ -128,8 +128,9 @@ class BasemapLayer extends StatefulWidget {
   /// An event re-asks for every tile (the network came back, a pack was installed or removed).
   final Stream<void>? reset;
 
-  /// Road / Light / Dark ([BasemapLook.road]), the Topo palette, or only the town and road names over Satellite imagery
-  /// ([BasemapLook.labels]: drawn only while OUR tiles are the source, since OpenFreeMap has no label-only look).
+  /// Road / Light / Dark ([BasemapLook.road]), the Topo palette, the data-first map drawn under coverage, a map without its
+  /// names, or only the names ([BasemapLook.isLabelsOnly]: drawn only while OUR tiles are the source, since OpenFreeMap has no
+  /// names-only look; on the fallback the base layer draws OpenFreeMap's whole map, names included).
   final BasemapLook look;
   const BasemapLayer({super.key, this.dark, this.tiles, this.reset, this.look = BasemapLook.road});
 
@@ -262,8 +263,9 @@ class _BasemapLayerState extends State<BasemapLayer> {
     final source = basemapSourceAt(camera, health: _health);
     if (source == BasemapSource.openFreeMap && BasemapLayer.enabled) unawaited(_health.resolveOpenFreeMap());
     final dark = widget.dark ?? Theme.of(context).brightness == Brightness.dark;
-    // Satellite names come from our tiles only (inside the extract, while our server answers); never from OpenFreeMap.
-    if (widget.look == BasemapLook.labels && source != BasemapSource.ours) return const SizedBox.shrink();
+    // A names-only pass (over Satellite imagery, or above coverage) comes from our tiles only (inside the extract, while our
+    // server answers); never from OpenFreeMap, whose one style already carries its names in the base layer.
+    if (widget.look.isLabelsOnly && source != BasemapSource.ours) return const SizedBox.shrink();
     final debug = BasemapLayer.debugBuilder;
     if (debug != null) {
       BasemapLayer.debugLook = widget.look;
