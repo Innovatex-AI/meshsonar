@@ -33,16 +33,42 @@ String deliveryCaption(DeliverySettings d) {
   return '$direct, then ${d.effectiveFloodTries} by flood.';
 }
 
-/// The first rows of Messages: the delivery page and the three chat rows.
-List<Widget> messagesChatRows(BuildContext context) => const [MessagesChatRows()];
+/// The first rows of Messages: the delivery page and the three chat rows (one widget each, so the section draws its line
+/// between them).
+List<Widget> messagesChatRows(BuildContext context) => [
+      for (final row in MessagesChatRows.rows) MessagesChatRows(only: row),
+    ];
 
+/// The delivery row and the chat rows, built against the chat controller of the moment (null until a radio connected
+/// once). With [only] one of them ([rows]); without, all four in a column (tests).
 class MessagesChatRows extends StatelessWidget {
+  static const List<String> rows = ['page-delivery', 'chat-quick-replies', 'chat-return-sends', 'chat-photos-autoload'];
+
   /// Tests inject a controller; the app reads [ChatWiring.controller].
   final ChatController? controller;
 
   /// Tests inject a photo controller; the app reads [PhotoWiring.controller].
   final PhotoController? photos;
-  const MessagesChatRows({super.key, this.controller, this.photos});
+  final String? only;
+  const MessagesChatRows({super.key, this.controller, this.photos, this.only});
+
+  Widget _row(BuildContext context, String id, ChatController? c, PhotoController? p) => switch (id) {
+        'page-delivery' => SettingsAnchor(
+            id: 'page-delivery',
+            child: ListTile(
+              key: const Key('page-delivery'),
+              leading: Icon(settingsPage('delivery').icon),
+              title: Text(settingsPage('delivery').title),
+              subtitle: Text(c == null ? settingsPage('delivery').summary : deliveryCaption(c.deliverySettings),
+                  key: const Key('page-delivery-caption')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsPageScreen(pageId: 'delivery'))),
+            ),
+          ),
+        'chat-quick-replies' => SettingsAnchor(id: id, child: _QuickRepliesRow(controller: c)),
+        'chat-return-sends' => SettingsAnchor(id: id, child: _ReturnSendsRow(controller: c)),
+        _ => SettingsAnchor(id: id, child: _PhotosRow(photos: p)),
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -53,29 +79,9 @@ class MessagesChatRows extends StatelessWidget {
         final p = photos ?? PhotoWiring.controller.value;
         return ListenableBuilder(
           listenable: Listenable.merge([?c]),
-          builder: (context, _) => Column(children: [
-            SettingsAnchor(
-              id: 'page-delivery',
-              child: ListTile(
-                key: const Key('page-delivery'),
-                leading: Icon(settingsPage('delivery').icon),
-                title: Text(settingsPage('delivery').title),
-                subtitle: Text(c == null ? settingsPage('delivery').summary : deliveryCaption(c.deliverySettings),
-                    key: const Key('page-delivery-caption')),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SettingsPageScreen(pageId: 'delivery'))),
-              ),
-            ),
-            SettingsAnchor(id: 'chat-quick-replies', child: _QuickRepliesRow(controller: c)),
-            SettingsAnchor(
-              id: 'chat-return-sends',
-              child: _ReturnSendsRow(controller: c),
-            ),
-            SettingsAnchor(
-              id: 'chat-photos-autoload',
-              child: _PhotosRow(photos: p),
-            ),
-          ]),
+          builder: (context, _) => only != null
+              ? _row(context, only!, c, p)
+              : Column(children: [for (final id in rows) _row(context, id, c, p)]),
         );
       },
     );

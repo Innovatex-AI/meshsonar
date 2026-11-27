@@ -262,7 +262,7 @@ class _BodyState extends State<_Body> with WidgetsBindingObserver {
           InsetRow(key: const Key('row-telemetry'), title: 'Who can request my telemetry', value: _telemetrySummary(tel), onTap: () => _telemetry(tel)),
         ]),
         InsetGroup(header: 'Tools', rows: [
-          InsetRow(key: const Key('row-tools'), title: 'Radio tools', subtitle: 'Trace path, Discover, Rx log, Noise floor', onTap: () => _push(const _ToolsList())),
+          InsetRow(key: const Key('row-tools'), title: 'Radio tools', subtitle: 'Send a trace, Discover, Rx log, Noise floor', onTap: () => _push(const _ToolsList())),
         ]),
         InsetGroup(header: 'Security', rows: [
           InsetRow(key: const Key('row-pin'), title: 'Bluetooth PIN', onTap: _pin),
@@ -457,7 +457,7 @@ class _ToolsList extends StatelessWidget {
         child: ListView(padding: const EdgeInsets.only(top: Gap.m), children: [
           InsetGroup(rows: [
             // Build 76: each tool says what it is for, in the same words as Network > Tools (tools_section.dart).
-            InsetRow(key: const Key('tool-trace'), title: 'Trace path', subtitle: 'Send a test packet along repeaters you choose', onTap: () => open(const TraceScreen())),
+            InsetRow(key: const Key('tool-trace'), title: 'Send a trace', subtitle: 'Send a test packet along repeaters you choose', onTap: () => open(const TraceScreen())),
             InsetRow(key: const Key('tool-discover'), title: 'Discover', subtitle: 'Find repeaters in direct range of your radio', onTap: () => open(const DiscoverScreen())),
             InsetRow(key: const Key('tool-adverts'), title: 'Adverts', subtitle: 'Announce your radio and see who else announced', onTap: () => open(const AdvertsScreen())),
             InsetRow(key: const Key('tool-rxlog'), title: 'Rx log', subtitle: 'Every packet your radio hears, live', onTap: () => open(const RxLogScreen())),

@@ -30,6 +30,7 @@ void main() {
   testWidgets('a phone whose driver key is not made yet says so on More > Drives and in Uploads (O5)', (tester) async {
     useTallScreen(tester);
     final h = Harness();
+    h.settings.autoKeyOn = true;
     h.client.requestError = Exception('offline'); // the automatic key cannot be made (no network at first launch)
     await h.pumpApp(tester);
     await tester.pumpAndSettle();
@@ -88,7 +89,7 @@ void main() {
     await openSettingsTab(tester);
     await openSettingsPageRow(tester, 'sharing');
     final where = contextDestinationLine(h.state);
-    expect(find.descendant(of: find.byKey(const Key('settings-page-help')), matching: find.textContaining(where)), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('settings-page-help'))).data, contains(where));
     expect(find.descendant(of: find.byKey(const Key('settings-page-sharing')), matching: find.textContaining(where)), findsOneWidget,
         reason: 'said once on the page, not under every switch');
   });
