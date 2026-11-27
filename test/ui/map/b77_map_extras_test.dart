@@ -172,7 +172,7 @@ void main() {
         },
       )));
       await t.pump();
-      final tip = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('map-tip-'));
+      final tip = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('map-tip-') && (w.key! as ValueKey<String>).value != 'map-tip-close');
       expect(tip, findsOneWidget);
       await t.tap(find.byKey(const Key('map-tip-close')));
       await t.pump();
@@ -188,8 +188,11 @@ void main() {
       final view = MapViewController();
       await t.pumpWidget(_app(CoverageMap(viewController: view, pings: const [], showTiles: false, fallbackCenter: const LatLng(39.96, -83.0), onLayers: () {}, rotatable: false)));
       await t.pump();
+      await t.pump();
       view.map.rotate(30);
       await t.pump();
+      await t.pump();
+      expect(view.rotation.value.abs(), greaterThan(1), reason: 'the map turned');
       expect(t.widget<MapControlButton>(find.byKey(const Key('map-compass'))).visible, isTrue);
     });
   });

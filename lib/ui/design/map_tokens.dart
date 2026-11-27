@@ -12,9 +12,9 @@ abstract final class MapTokens {
   /// Fresh (heard <= 24 h): the repeater colour at full strength (build 77 colour language: a neutral slate, never amber).
   static Color repeaterFresh(Brightness b) => ColourLanguage.of(b).repeater;
 
-  /// Recent (<= 7 d): the same repeater colour, faded toward the map (30 % of the way to the land / chart colour), solid so it
-  /// keeps 3:1 against the map (build 77: freshness is not a warning, so it is no longer amber).
-  static Color repeaterAging(Brightness b) => b == Brightness.dark ? const Color(0xFF8A98A1) : const Color(0xFF74838B);
+  /// Recent (<= 7 d): the same repeater colour, faded toward the map (15 % toward the land colour in light, 30 % toward the chart colour in dark), solid so it
+  /// keeps 3:1 against the map and a 4.5:1 cluster count (build 77: freshness is not a warning, so it is no longer amber).
+  static Color repeaterAging(Brightness b) => b == Brightness.dark ? const Color(0xFF8A98A1) : const Color(0xFF596C77);
 
   /// Stale (> 7 d or never): hollow, dashed ring. Light `#6B7280`, dark `#9CA3AF`.
   static Color repeaterStale(Brightness b) => b == Brightness.dark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);

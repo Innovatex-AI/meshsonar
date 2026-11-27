@@ -2110,6 +2110,10 @@ class _CoverageMapState extends State<CoverageMap> {
                   ? InteractiveFlag.none
                   : (widget.rotatable ? InteractiveFlag.all : (InteractiveFlag.all & ~InteractiveFlag.rotate)),
             ),
+            // A rotation alone (heading-up, the compass) does not call onPositionChanged: the compass follows every rotate event.
+            onMapEvent: (e) {
+              if (e.camera.rotation != _rotationN.value) _rotationN.value = e.camera.rotation;
+            },
             onPointerDown: (_, _) => _fc.pointerDown(),
             onPointerUp: (_, _) => _fc.pointerUp(),
             onPointerCancel: (_, _) => _fc.pointerUp(),

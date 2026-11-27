@@ -29,7 +29,7 @@ void main() {
     }
 
     test('light: fills vs land #F2EFE9', () {
-      table(Brightness.light, MapTokens.landLight, [6.72, 3.41, 4.21]);
+      table(Brightness.light, MapTokens.landLight, [6.72, 4.77, 4.21]);
     });
 
     test('dark: fills vs #2B2F36', () {
@@ -38,7 +38,7 @@ void main() {
 
     test('the exact palette (build 77 colour language)', () {
       // Build 77 colour language: the neutral repeater slate, faded for recent; amber only for warnings.
-      expect([for (final f in RepeaterFreshness.values) freshnessColor(f, Brightness.light).toARGB32()], [0xFF3F5663, 0xFF74838B, 0xFF6B7280]);
+      expect([for (final f in RepeaterFreshness.values) freshnessColor(f, Brightness.light).toARGB32()], [0xFF3F5663, 0xFF596C77, 0xFF6B7280]);
       expect([for (final f in RepeaterFreshness.values) freshnessColor(f, Brightness.dark).toARGB32()], [0xFFB4C6D0, 0xFF8A98A1, 0xFF9CA3AF]);
     });
 
