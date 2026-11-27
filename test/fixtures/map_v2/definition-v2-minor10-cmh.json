@@ -1873,14 +1873,14 @@
       ],
       "colours": {
         "light": {
-          "line": "#1D4ED8",
-          "disc": "#1D4ED8",
+          "line": "#0B7F70",
+          "disc": "#0B7F70",
           "number": "#FFFFFF",
           "halo": "#FFFFFF"
         },
         "dark": {
-          "line": "#7FB0FF",
-          "disc": "#7FB0FF",
+          "line": "#3CE8C8",
+          "disc": "#3CE8C8",
           "number": "#0D1117",
           "halo": "#0D1117"
         }
@@ -1996,8 +1996,8 @@
             "dark": "#E6EDF3"
           },
           "gain": {
-            "light": "#1D4ED8",
-            "dark": "#7FB0FF"
+            "light": "#0B7F70",
+            "dark": "#3CE8C8"
           },
           "lose": {
             "light": "#C2410C",
@@ -2013,8 +2013,8 @@
       "pick": {
         "label": "The point you picked",
         "fill": {
-          "light": "#1D4ED8",
-          "dark": "#7FB0FF"
+          "light": "#0B7F70",
+          "dark": "#3CE8C8"
         },
         "edge": {
           "light": "#FFFFFF",
@@ -3332,5 +3332,5 @@
       }
     }
   },
-  "version": "7fa69de3"
+  "version": "6cb9656d"
 }
