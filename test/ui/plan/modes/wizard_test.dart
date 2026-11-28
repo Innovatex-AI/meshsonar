@@ -276,7 +276,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 200));
       }
       expect(h.client.planVerifyAsks.map((a) => a.site), [for (final s in sites.take(5)) s.at]);
-      expect(find.textContaining('Model (Verify)'), findsNWidgets(5));
+      expect(find.textContaining('Double-checked: '), findsNWidgets(5));
       h.goal.preparing = true;
       await tapIn(tester, find.byKey(const Key('wizard-run')));
       await settle(tester);

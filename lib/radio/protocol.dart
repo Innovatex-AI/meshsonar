@@ -317,12 +317,171 @@ Uint8List encodeAddUpdateContact(
   return out;
 }
 
-/// CMD_SEND_TXT_MSG: [2][txt_type][attempt][timestamp u32][pub_key_prefix x6][text...] (MyMesh.cpp ~1132). With
-/// [txtTypeCliData] the radio expects no ack; reply RESP_CODE_SENT (type CLI_COMMAND gets ERR on a real companion).
+/// CMD_SEND_TXT_MSG: [2][txt_type][attempt][timestamp u32][pub_key_prefix x6][text...] (MyMesh.cpp 1132-1177, companion
+/// v1.18.0). With [txtTypeCliData] the radio expects no ack; reply RESP_CODE_SENT (type CLI_COMMAND gets ERR on a real
+/// companion).
+///
+/// [attempt] is the try number, passed through UNTOUCHED (0, 1, 2 ... 7). The radio itself puts `attempt & 3` in the
+/// packet and, for attempt > 3, appends the whole attempt byte after the text "to make packethash unique"
+/// (BaseChatMesh::composeMsgPacket, BaseChatMesh.cpp 451-471). Cutting it to 0-3 here (build 76 and earlier) made try 5 the
+/// same packet as try 1, which every node that had seen try 1 dropped as a duplicate.
 Uint8List encodeSendTxt(int txtType, int attempt, int epochSecs, List<int> prefix6, String text) {
   if (prefix6.length < 6) throw ArgumentError('prefix must be 6 bytes');
-  return Uint8List.fromList([Cmd.sendTxtMsg, txtType, attempt & 3, ..._u32(epochSecs), ...prefix6.take(6), ...utf8.encode(text)]);
+  return Uint8List.fromList([Cmd.sendTxtMsg, txtType, attempt & 0xff, ..._u32(epochSecs), ...prefix6.take(6), ...utf8.encode(text)]);
 }
+
+/// Longest text of a direct message, bytes: MAX_TEXT_LEN = 160 (BaseChatMesh.h), and 158 once the try number is above 3
+/// because the radio then appends two bytes to the packet (`if (attempt > 3 && text_len > MAX_TEXT_LEN-2) return NULL`).
+const int maxDmTextBytes = 160;
+const int maxDmTextBytesLateTry = 158;
+
+/// The highest try number one message may use: tries 0..7 share one timestamp (the ack code only has `attempt & 3`, so 8
+/// would repeat packet 0 exactly).
+const int maxDmWireAttempt = 7;
+
+/// Text bytes a direct message may have on try number [wireAttempt] (0-based, as sent in CMD_SEND_TXT_MSG).
+int maxDmTextBytesFor(int wireAttempt) => wireAttempt > 3 ? maxDmTextBytesLateTry : maxDmTextBytes;
+
+/// The 4-byte code the radio expects back for a direct message, as RESP_CODE_SENT bytes 2-5 and PUSH_CODE_SEND_CONFIRMED
+/// bytes 1-4 carry it (little-endian u32): the first 4 bytes of SHA-256 over
+/// `timestamp LE32 | attempt & 3 | text | sender public key` (BaseChatMesh::composeMsgPacket, BaseChatMesh.cpp 462).
+/// Tries 4-7 give the same code as 0-3. Computed on the phone so a confirmation can be matched even when the radio's SENT
+/// reply was lost. [sha256] is passed in (lib/radio/crypto.dart) to keep this file free of imports.
+int expectedDmAck(Uint8List Function(List<int>) sha256, {required int timestamp, required int attempt, required String text, required List<int> senderPublicKey}) {
+  final h = sha256([..._u32(timestamp), attempt & 3, ...utf8.encode(text), ...senderPublicKey]);
+  return ByteData.sublistView(h).getUint32(0, Endian.little);
+}
+
+// ------------------------------------------------------------------ reply matching (companion_protocol.md "Command Sequencing")
+
+/// The reply codes the radio may answer [command] with, besides RESP_CODE_ERR (always possible). Taken from
+/// handleCmdFrame (MyMesh.cpp 1055-2062, companion v1.18.0). Null = a command this table does not know: any reply is taken
+/// (the behaviour before build 77). An empty set = the command is answered by a push or not at all; only ERR is a reply.
+///
+/// The link uses this to match each reply to its command: a frame whose code is not in the set is a stray (the late reply
+/// to a command that already timed out) and is discarded, never handed to the command that is waiting now.
+Set<int>? expectedReplyCodes(Uint8List command) {
+  if (command.isEmpty) return null;
+  switch (command[0]) {
+    case Cmd.appStart:
+      return const {Resp.selfInfo};
+    case Cmd.sendTxtMsg:
+    case Cmd.sendLogin:
+    case Cmd.sendStatusReq:
+    case Cmd.sendBinaryReq:
+    case Cmd.sendAnonReq:
+    case 36: // CMD_SEND_TRACE_PATH
+    case 52: // CMD_SEND_PATH_DISCOVERY_REQ
+      return const {Resp.sent};
+    case Cmd.sendTelemetryReq:
+      // With a key: SENT. The 3-byte "self" form is answered by PUSH_CODE_TELEMETRY_RESPONSE only.
+      return command.length == 4 ? const <int>{} : const {Resp.sent};
+    case Cmd.sendChannelTxtMsg:
+      return const {Resp.ok, Resp.sent};
+    case Cmd.getContacts:
+      return const {Resp.contactsStart, Resp.contact, Resp.endOfContacts};
+    case Cmd.getDeviceTime:
+      return const {Resp.currTime};
+    case Cmd.syncNextMessage:
+      return const {
+        Resp.contactMsgRecv,
+        Resp.channelMsgRecv,
+        Resp.contactMsgRecvV3,
+        Resp.channelMsgRecvV3,
+        Resp.channelDataRecv,
+        Resp.noMoreMessages,
+      };
+    case Cmd.exportContact:
+      return const {Resp.exportContact};
+    case Cmd.getBattAndStorage:
+      return const {Resp.battAndStorage};
+    case Cmd.deviceQuery:
+      return const {Resp.deviceInfo};
+    case Cmd.exportPrivateKey:
+      return const {Resp.privateKey, Resp.disabled};
+    case Cmd.importPrivateKey:
+      return const {Resp.ok, Resp.disabled};
+    case Cmd.getContactByKey:
+      return const {Resp.contact};
+    case Cmd.getChannel:
+      return const {Resp.channelInfo};
+    case Cmd.signStart:
+      return const {Resp.signStart};
+    case Cmd.signFinish:
+      return const {Resp.signature};
+    case Cmd.getStats:
+      return const {Resp.stats};
+    case Cmd.getAutoAddConfig:
+      return const {Resp.autoAddConfig};
+    case Cmd.runCliCommand:
+      return const {Resp.cliReply};
+    case Cmd.setDeviceTime:
+    case Cmd.addUpdateContact:
+    case Cmd.resetPath:
+    case Cmd.removeContact:
+    case Cmd.shareContact:
+    case Cmd.importContact:
+    case Cmd.logout:
+    case Cmd.setChannel:
+    case Cmd.signData:
+    case Cmd.setDevicePin:
+    case Cmd.setOtherParams:
+    case Cmd.factoryReset:
+    case Cmd.setFloodScopeKey:
+    case Cmd.sendControlData:
+    case Cmd.setAutoAddConfig:
+    case Cmd.setPathHashMode:
+    case 7: // CMD_SEND_SELF_ADVERT
+    case 8: // CMD_SET_ADVERT_NAME
+    case 11: // CMD_SET_RADIO_PARAMS
+    case 12: // CMD_SET_RADIO_TX_POWER
+    case 14: // CMD_SET_ADVERT_LATLON
+      return const {Resp.ok};
+    default:
+      return null;
+  }
+}
+
+/// Plain name of a command code for the message log ("SEND_TXT_MSG"); the number when unknown.
+String commandName(int code) => _cmdNames[code] ?? 'CMD_$code';
+
+/// Plain name of a reply or push code for the message log ("SENT", "SEND_CONFIRMED"); the number when unknown.
+String replyName(int code) => _replyNames[code] ?? (code >= 0x80 ? 'PUSH_0x${code.toRadixString(16)}' : 'RESP_$code');
+
+/// Plain name of an ERR code ("NOT_FOUND").
+String errName(int? code) => switch (code) {
+      ErrCode.unsupportedCmd => 'UNSUPPORTED_CMD',
+      ErrCode.notFound => 'NOT_FOUND',
+      ErrCode.tableFull => 'TABLE_FULL',
+      ErrCode.badState => 'BAD_STATE',
+      ErrCode.fileIoError => 'FILE_IO_ERROR',
+      ErrCode.illegalArg => 'ILLEGAL_ARG',
+      null => 'no code',
+      _ => 'code $code',
+    };
+
+const Map<int, String> _cmdNames = {
+  1: 'APP_START', 2: 'SEND_TXT_MSG', 3: 'SEND_CHANNEL_TXT_MSG', 4: 'GET_CONTACTS', 5: 'GET_DEVICE_TIME', 6: 'SET_DEVICE_TIME',
+  7: 'SEND_SELF_ADVERT', 8: 'SET_ADVERT_NAME', 9: 'ADD_UPDATE_CONTACT', 10: 'SYNC_NEXT_MESSAGE', 11: 'SET_RADIO_PARAMS',
+  12: 'SET_RADIO_TX_POWER', 13: 'RESET_PATH', 14: 'SET_ADVERT_LATLON', 15: 'REMOVE_CONTACT', 16: 'SHARE_CONTACT',
+  17: 'EXPORT_CONTACT', 18: 'IMPORT_CONTACT', 19: 'REBOOT', 20: 'GET_BATT_AND_STORAGE', 22: 'DEVICE_QUERY',
+  23: 'EXPORT_PRIVATE_KEY', 24: 'IMPORT_PRIVATE_KEY', 26: 'SEND_LOGIN', 27: 'SEND_STATUS_REQ', 29: 'LOGOUT',
+  30: 'GET_CONTACT_BY_KEY', 31: 'GET_CHANNEL', 32: 'SET_CHANNEL', 33: 'SIGN_START', 34: 'SIGN_DATA', 35: 'SIGN_FINISH',
+  36: 'SEND_TRACE_PATH', 37: 'SET_DEVICE_PIN', 38: 'SET_OTHER_PARAMS', 39: 'SEND_TELEMETRY_REQ', 50: 'SEND_BINARY_REQ',
+  51: 'FACTORY_RESET', 52: 'SEND_PATH_DISCOVERY_REQ', 54: 'SET_FLOOD_SCOPE_KEY', 55: 'SEND_CONTROL_DATA', 56: 'GET_STATS',
+  57: 'SEND_ANON_REQ', 58: 'SET_AUTOADD_CONFIG', 59: 'GET_AUTOADD_CONFIG', 61: 'SET_PATH_HASH_MODE', 66: 'RUN_CLI_COMMAND',
+};
+
+const Map<int, String> _replyNames = {
+  0: 'OK', 1: 'ERR', 2: 'CONTACTS_START', 3: 'CONTACT', 4: 'END_OF_CONTACTS', 5: 'SELF_INFO', 6: 'SENT', 7: 'CONTACT_MSG_RECV',
+  8: 'CHANNEL_MSG_RECV', 9: 'CURR_TIME', 10: 'NO_MORE_MESSAGES', 11: 'EXPORT_CONTACT', 12: 'BATT_AND_STORAGE', 13: 'DEVICE_INFO',
+  14: 'PRIVATE_KEY', 15: 'DISABLED', 16: 'CONTACT_MSG_RECV_V3', 17: 'CHANNEL_MSG_RECV_V3', 18: 'CHANNEL_INFO', 19: 'SIGN_START',
+  20: 'SIGNATURE', 24: 'STATS', 25: 'AUTOADD_CONFIG', 27: 'CHANNEL_DATA_RECV', 29: 'CLI_REPLY',
+  0x80: 'ADVERT', 0x81: 'PATH_UPDATED', 0x82: 'SEND_CONFIRMED', 0x83: 'MSG_WAITING', 0x84: 'RAW_DATA', 0x85: 'LOGIN_SUCCESS',
+  0x86: 'LOGIN_FAIL', 0x87: 'STATUS_RESPONSE', 0x88: 'LOG_RX_DATA', 0x89: 'TRACE_DATA', 0x8A: 'NEW_ADVERT',
+  0x8B: 'TELEMETRY_RESPONSE', 0x8C: 'BINARY_RESPONSE', 0x8D: 'PATH_DISCOVERY_RESPONSE', 0x8E: 'CONTROL_DATA',
+  0x8F: 'CONTACT_DELETED', 0x90: 'CONTACTS_FULL',
+};
 
 /// CMD_SIGN_START: [33] -> RESP_CODE_SIGN_START [19][reserved][max_len u32 = 8192].
 Uint8List encodeSignStart() => Uint8List.fromList([Cmd.signStart]);

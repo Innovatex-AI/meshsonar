@@ -12,6 +12,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/time_format.dart' show utcLogStamp;
+
 class BleLogEntry {
   final DateTime at;
   final String kind;
@@ -22,7 +24,7 @@ class BleLogEntry {
   static String two(int v) => v.toString().padLeft(2, '0');
 
   String get line =>
-      '${at.year}-${two(at.month)}-${two(at.day)} ${two(at.hour)}:${two(at.minute)}:${two(at.second)} ${foreground ? 'fg' : 'bg'} $kind $detail';
+      '${utcLogStamp(at)} ${foreground ? 'fg' : 'bg'} $kind $detail'; // build 77: diagnostics stay UTC (lib/core/time_format.dart)
 }
 
 class BleLifecycleLog extends ChangeNotifier {
@@ -48,7 +50,7 @@ class BleLifecycleLog extends ChangeNotifier {
         final m = RegExp(r'^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d) (fg|bg) (\S+) ?(.*)$').firstMatch(l);
         if (m == null) continue;
         _entries.add(BleLogEntry(
-          DateTime(int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!), int.parse(m[4]!), int.parse(m[5]!), int.parse(m[6]!)),
+          DateTime.utc(int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!), int.parse(m[4]!), int.parse(m[5]!), int.parse(m[6]!)),
           m[8]!,
           m[9]!,
           m[7] == 'fg',

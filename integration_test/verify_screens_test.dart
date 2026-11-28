@@ -41,6 +41,12 @@ void main() {
       await t.tap(find.byKey(const Key('onboarding-next')));
       await pumpFor(t, const Duration(seconds: 1));
     }
+    // Build 77 (round 5 O1): the intro ends on "What MeshSonar collects"; Keep sharing closes it.
+    if (await waitFor(t, find.byKey(const Key('telemetry-keep')), timeout: const Duration(seconds: 6))) {
+      await shot(t, 'onboarding-collects');
+      await t.tap(find.byKey(const Key('telemetry-keep')));
+      await pumpFor(t, const Duration(seconds: 1));
+    }
     expect(await waitFor(t, find.byWidgetPredicate((w) => w.key == const Key('shell-tabs') || w.key == const Key('shell-rail'))), isTrue, reason: 'home shell');
 
     for (final s in screens) {
@@ -61,5 +67,6 @@ void main() {
     }
     // ignore: avoid_print
     print('VERIFY_DONE');
-  }, timeout: const Timeout(Duration(minutes: 40))); // build 71: the tour also walks the eight Network sections against the live site
+  }, timeout: const Timeout(Duration(minutes: 60))); // build 71: the tour also walks the eight Network sections against the live site;
+  // build 77: plus the Plan results (server answers of up to two minutes each), the Chat thread screens and the Drives upload states
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/ui/map/parts/ping_dots_layer.dart';
 import 'package:meshsonar/app/app_state.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
@@ -73,8 +74,7 @@ void main() {
     await openDrivePanel(tester); // the Last SNR number is in the Medium panel
 
     final c = MeshSonarColors.of(tester.element(find.byKey(const Key('drive-map'))));
-    Color dot(String id) =>
-        (tester.widget<DecoratedBox>(find.byKey(ValueKey('map-ping-$id'))).decoration as BoxDecoration).color!;
+    Color dot(String id) => PingDotsLayer.debugColorOf(id)!;
     expect(dot('good'), c.snrStrong);
     expect(dot('bad'), c.silent);
     expect(tester.widget<Text>(find.byKey(const Key('stat-snr'))).data, 'none');

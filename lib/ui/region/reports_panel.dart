@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' show dateOnly, relativeTime, shortDateTime, utcDayLabel, utcLabel;
 import '../../core/region_reports_api.dart';
 import '../app.dart' show AppScope;
 import '../charts/bar_strip.dart';
@@ -182,19 +183,21 @@ class _ReportsPanelState extends State<ReportsPanel> {
       child: trend.isEmpty
           ? const _Muted('No daily activity recorded yet.', key: Key('trend-empty'))
           : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _Muted('Packets per ${d.activityBucket}, last ${trend.length} ${d.activityBucket == 'hour' ? 'hours' : 'days'}'),
+              _Muted(d.activityBucket == 'hour'
+                  ? 'Packets per hour, last ${trend.length} hours'
+                  : utcLabel('Packets per day, last ${trend.length} days')),
               const SizedBox(height: Gap.xs),
               BarStrip(
                 key: const Key('bars-trend'),
                 values: [for (final p in trend) p.n],
                 summary: barStripSummary([for (final p in trend) p.n],
-                    what: 'Packets per ${d.activityBucket}', labelOf: (i) => _dayLabel(trend[i].at)),
+                    what: 'Packets per ${d.activityBucket}', labelOf: (i) => _bucketLabel(trend[i].at, d.activityBucket)),
               ),
               const SizedBox(height: Gap.xs),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                _Muted(_dayLabel(trend.first.at)),
+                _Muted(_bucketLabel(trend.first.at, d.activityBucket)),
                 _Muted('${_n(trend.fold<int>(0, (a, b) => a + b.n))} total'),
-                _Muted(_dayLabel(trend.last.at)),
+                _Muted(_bucketLabel(trend.last.at, d.activityBucket)),
               ]),
             ]),
     ));
@@ -523,17 +526,11 @@ String _n(int? v) {
   return v < 0 ? '-$b' : b.toString();
 }
 
-String _ago(DateTime t, DateTime now) {
-  final d = now.difference(t);
-  if (d.isNegative || d.inSeconds < 60) return 'just now';
-  if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-  if (d.inHours < 24) return '${d.inHours} h ago';
-  if (d.inDays < 60) return '${d.inDays} d ago';
-  return _dayLabel(t);
-}
+/// The app's one wording for an age (Round 2 N-U8); past 60 days the date, in the zone the app shows.
+String _ago(DateTime t, DateTime now) => now.difference(t).inDays < 60 ? relativeTime(t, now: now) : dateOnly(t, year: false);
 
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-String _dayLabel(DateTime t) => '${_months[t.month - 1]} ${t.day}';
+/// A bucket of the server's activity trend: hours in the zone the app shows, days as the server's UTC days.
+String _bucketLabel(DateTime t, String bucket) => bucket == 'hour' ? shortDateTime(t) : utcDayLabel(t, label: false);
 
 IconData _eventIcon(String type) {
   if (type.startsWith('repeater')) return Icons.cell_tower;

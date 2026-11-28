@@ -75,7 +75,7 @@ String siteGoalWords(PlanGoal g) => switch (g) {
       PlanGoal.overall => 'Best overall',
       PlanGoal.coverage => 'Coverage',
       PlanGoal.links => 'Links',
-      PlanGoal.redundancy => 'Redundancy',
+      PlanGoal.redundancy => 'Backup paths',
     };
 
 /// The most pins a list shows (the server caps a request at the same number).
@@ -168,7 +168,7 @@ String confidenceWords(PlanProvenance p) {
     PlanConfidenceLevel.calibrated => 'calibrated on measured data',
     PlanConfidenceLevel.estimate => 'estimate only, not observed here',
   };
-  return 'Confidence: $level${p.confidenceNote == null ? '' : ' (${p.confidenceNote})'}.';
+  return 'Confidence: $level${p.confidenceNote == null ? '' : ' (${planNoteWords(p.confidenceNote!)})'}.';
 }
 
 /// What the real model said about one site (plan-verify, or the coverage painter when plan-verify is not on the server).
@@ -282,7 +282,7 @@ class SiteChecks {
 /// True when the plan already has a node on [s].
 bool siteInPlan(PlanController c, PlanSite s) => c.nodes.any((n) => (n.lat - s.at.lat).abs() < 1e-6 && (n.lon - s.at.lon).abs() < 1e-6);
 
-/// Adds [s] as a planned node named [name] (made unique in the plan), selects it and offers Undo.
+/// Adds [s] as a planned spot named [name] (made unique in the plan), selects it and offers Undo.
 void addSiteToPlan(BuildContext context, PlanModeContext ctx, PlanSite s, String name) {
   final c = ctx.controller;
   var n = name;
@@ -387,12 +387,12 @@ class SiteRow extends StatelessWidget {
         if (s.deadZoneDrives > 0)
           PlanLine(AppSymbols.car, '${s.deadZoneDrives} ${s.deadZoneDrives == 1 ? 'drive' : 'drives'} heard nothing near here (measured).'),
         if (checking)
-          const PlanLine(AppSymbols.clock, 'Running the full model on this site…')
+          const PlanLine(AppSymbols.clock, 'Double-checking this place with the full model…')
         else if (c != null && c.ok)
           _model(context, c, units)
         else if (c != null)
           Column(key: Key('$keyBase-check-${s.id}'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            PlanLine(AppSymbols.exclamationTriangle, 'Could not verify: ${c.error}', color: cs.error),
+            PlanLine(AppSymbols.exclamationTriangle, 'Could not double-check: ${c.error}', color: cs.error),
             if (onRetryCheck != null)
               Align(
                 alignment: Alignment.centerLeft,
@@ -400,7 +400,7 @@ class SiteRow extends StatelessWidget {
                   style: TextButton.styleFrom(minimumSize: const Size(Hit.min, Hit.min)),
                   onPressed: onRetryCheck,
                   icon: const AppSymbolIcon(AppSymbols.arrowUpCircleFill, size: 18),
-                  label: Text('Verify again', semanticsLabel: 'Verify pin $pin again'),
+                  label: Text('Double-check again', semanticsLabel: 'Double-check pin $pin again'),
                 ),
               ),
           ]),
@@ -444,7 +444,7 @@ class SiteRow extends StatelessWidget {
       d.heardBy == 0 ? 'no live repeater hears it' : 'heard by ${d.heardBy} live ${d.heardBy == 1 ? 'repeater' : 'repeaters'}',
     ];
     return Column(key: Key('$keyBase-check-${site.id}'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      PlanLine(AppSymbols.checkmarkCircleFill, 'Model (Verify): ${parts.join(', ')}.', color: t.colorScheme.primary, style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+      PlanLine(AppSymbols.checkmarkCircleFill, 'Double-checked: ${parts.join(', ')}.', color: t.colorScheme.primary, style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
       if (r.offlineAsOf != null) const PlanLine(AppSymbols.wifi, 'Offline: the saved model run for this site.'),
       if (d.provenance != null) Text(confidenceWords(d.provenance!), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
     ]);
@@ -527,7 +527,7 @@ class _FindSitesBodyState extends State<FindSitesBody> {
     if (!id.startsWith('site-')) return false;
     final i = _sites.indexWhere((x) => 'site-${x.id}' == id);
     if (i < 0) return false;
-    if (!siteInPlan(ctx.controller, _sites[i])) addSiteToPlan(context, ctx, _sites[i], 'Site ${i + 1}');
+    if (!siteInPlan(ctx.controller, _sites[i])) addSiteToPlan(context, ctx, _sites[i], 'Spot ${i + 1}');
     return true;
   }
 
@@ -702,15 +702,15 @@ class _FindSitesBodyState extends State<FindSitesBody> {
       sitesPrimaryButton(
         key: const Key('sites-verify'),
         label: c.busy
-            ? 'Verifying ${c.step} of ${c.of}…'
+            ? 'Double-checking ${c.step} of ${c.of}…'
             : verified
-                ? 'Verify top $kVerifyTop again'
-                : 'Verify top ${_sites.length < kVerifyTop ? _sites.length : kVerifyTop} with the full model',
+                ? 'Double-check the top $kVerifyTop again'
+                : 'Double-check the top ${_sites.length < kVerifyTop ? _sites.length : kVerifyTop}',
         symbol: AppSymbols.antenna,
         busy: c.busy,
         onPressed: () => unawaited(_verify()),
       ),
-      if (c.busy) const PlanLine(AppSymbols.clock, 'One site at a time. Each can take up to a minute.'),
+      if (c.busy) const PlanLine(AppSymbols.clock, 'One place at a time. Each can take up to a minute.'),
       const SizedBox(height: Gap.xs),
       sitesSecondaryButton(
         key: const Key('sites-drive-map'),
@@ -723,12 +723,12 @@ class _FindSitesBodyState extends State<FindSitesBody> {
           SiteRow(
             keyBase: 'site',
             pin: '#${i + 1}',
-            name: 'Site ${i + 1}',
+            name: 'Spot ${i + 1}',
             site: _sites[i],
             check: c.results[_sites[i].id],
             checking: c.running.contains(_sites[i].id),
             inPlan: siteInPlan(ctx.controller, _sites[i]),
-            onAdd: () => addSiteToPlan(context, ctx, _sites[i], 'Site ${i + 1}'),
+            onAdd: () => addSiteToPlan(context, ctx, _sites[i], 'Spot ${i + 1}'),
             onShow: () => ctx.focusMap(_sites[i].at, zoom: 14),
             onRetryCheck: () => unawaited(c.retry(context, ctx, _sites[i], changed: () {
               if (mounted) setState(() {});

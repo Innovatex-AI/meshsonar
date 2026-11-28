@@ -16,7 +16,7 @@ import '../../design/tokens.dart';
 import '../../map/still/path_layer.dart' show PathKey, activePathStyle;
 import '../../map/still/path_map.dart' show StillPathMap;
 import '../../map/still/still_nodes.dart';
-import '../../region/region_common.dart' show agoText, clockUtc;
+import '../../../core/time_format.dart' show relativeTime, timeOfDay;
 import '../nodes/node_routes.dart';
 import '../packets/packet_detail_screen.dart' show openNetworkPacket;
 import '../packets/packet_ui.dart' show HopConfidenceBadge;
@@ -269,14 +269,14 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
       if (recent != null && recent.isEmpty)
         Padding(
           padding: const EdgeInsets.only(top: Gap.s),
-          child: Text('No traces were heard here in the last 7 days. Send one with Trace path (Tools, With your radio), or paste a trace ID above.',
+          child: Text('No traces were heard here in the last 7 days. Send one with Send a trace (Tools, With your radio), or paste a trace ID above.',
               key: const Key('trace-recent-none'), style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ),
       if (recent != null)
         for (final r in recent)
           Semantics(
             button: true,
-            label: 'Trace from ${agoText(r.firstSeen, now: now)}, ${r.hops} hop${r.hops == 1 ? '' : 's'}${r.observations == null ? '' : ', heard by ${r.observations}'}. Opens it.',
+            label: 'Trace from ${relativeTime(r.firstSeen, now: now)}, ${r.hops} hop${r.hops == 1 ? '' : 's'}${r.observations == null ? '' : ', heard by ${r.observations}'}. Opens it.',
             excludeSemantics: true,
             child: InkWell(
               key: Key('trace-recent-${r.hash}'),
@@ -289,7 +289,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                         Text(
-                          '${agoText(r.firstSeen, now: now)} · ${r.hops} hop${r.hops == 1 ? '' : 's'}${r.observations == null ? '' : ' · heard by ${r.observations}'}',
+                          '${relativeTime(r.firstSeen, now: now)} · ${r.hops} hop${r.hops == 1 ? '' : 's'}${r.observations == null ? '' : ' · heard by ${r.observations}'}',
                           style: t.textTheme.bodyLarge,
                         ),
                         Text(r.hash, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.textTheme.bodySmall?.copyWith(fontFamily: 'monospace', color: t.colorScheme.onSurfaceVariant)),
@@ -312,7 +312,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
         ? 'Targets unknown'
         : v.complete
             ? 'Complete: all $total hop${total == 1 ? '' : 's'} answered'
-            : 'Got through ${v.completed} of $total hops';
+            : 'Got through ${v.completed} of $total hop${total == 1 ? '' : 's'}';
     return [
       ToolCard(
         key: const Key('trace-summary'),
@@ -405,7 +405,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
     final t = Theme.of(context);
     final name = o.observerName ?? (o.observerId.length > 12 ? '${o.observerId.substring(0, 12)}…' : o.observerId);
     final facts = [
-      if (o.at != null) '${clockUtc(o.at)} UTC',
+      if (o.at != null) timeOfDay(o.at, seconds: true),
       if (o.hopsCompleted != null) 'after ${o.hopsCompleted} hop${o.hopsCompleted == 1 ? '' : 's'}',
       if (o.rssi != null) '${o.rssi!.round()} dBm',
       if (o.observerKind == 'outside') 'outside source',
@@ -452,8 +452,6 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
       TraceStatus.tooSoon => 'One moment',
       TraceStatus.invalid => 'Check the path',
     };
-    final l = r.at.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
     final km = r.totalKm;
     return [
       ToolCard(
@@ -465,7 +463,7 @@ class _TraceViewerScreenState extends State<TraceViewerScreen> {
           const SizedBox(height: Gap.xs),
           Text(
             [
-              'Sent ${two(l.hour)}:${two(l.minute)}:${two(l.second)}',
+              'Sent ${timeOfDay(r.at, seconds: true)}',
               if (r.elapsed != null) 'answered in ${(r.elapsed!.inMilliseconds / 1000).toStringAsFixed(1)} s',
               '${r.hashSize}-byte hashes',
               if (km != null) distanceText(context, km),

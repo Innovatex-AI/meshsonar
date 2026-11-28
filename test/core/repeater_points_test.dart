@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/time_format.dart' as tf;
 import 'package:meshsonar/core/repeater_points.dart';
 
 final now = DateTime.utc(2026, 10, 24, 12);
@@ -23,11 +24,13 @@ void main() {
 
   test('advertText (website wording)', () {
     expect(advertText(null, now), 'No advert time reported');
-    expect(advertText(now.subtract(const Duration(seconds: 10)), now), 'Last advert 1 min ago (2026-10-24)');
-    expect(advertText(now.subtract(const Duration(minutes: 42)), now), 'Last advert 42 min ago (2026-10-24)');
-    expect(advertText(now.subtract(const Duration(hours: 3)), now), 'Last advert 3 h ago (2026-10-24)');
-    expect(advertText(now.subtract(const Duration(days: 3)), now), 'Last advert 3 days ago (2026-10-21)');
-    expect(advertText(now.subtract(const Duration(hours: 3)), now, verb: 'Last heard'), 'Last heard 3 h ago (2026-10-24)');
+    // Build 77: the one time formatter (relative words, the person's own day).
+    String day(Duration d) => tf.dateOnly(now.subtract(d));
+    expect(advertText(now.subtract(const Duration(seconds: 10)), now), 'Last advert just now (${day(const Duration(seconds: 10))})');
+    expect(advertText(now.subtract(const Duration(minutes: 42)), now), 'Last advert 42 min ago (${day(const Duration(minutes: 42))})');
+    expect(advertText(now.subtract(const Duration(hours: 3)), now), 'Last advert 3 h ago (${day(const Duration(hours: 3))})');
+    expect(advertText(now.subtract(const Duration(days: 3)), now), 'Last advert 3 d ago (${day(const Duration(days: 3))})');
+    expect(advertText(now.subtract(const Duration(hours: 3)), now, verb: 'Last heard'), 'Last heard 3 h ago (${day(const Duration(hours: 3))})');
   });
 
   test('placeable: the website validRow position rules', () {

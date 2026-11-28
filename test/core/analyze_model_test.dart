@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/analyze_model.dart';
+import 'package:meshsonar/core/time_format.dart';
 import 'package:meshsonar/core/zone_time.dart';
 
 Map<String, dynamic> fx(String n) =>
@@ -167,16 +168,28 @@ void main() {
     });
   });
 
-  group('region time zone', () {
-    test('EST in November, EDT in July, abbreviation shown', () {
-      expect(formatInZone(DateTime.utc(2026, 11, 11, 3, 50), 'America/New_York'), 'Nov 10, 2026, 10:50 PM EST');
-      expect(formatInZone(DateTime.utc(2026, 7, 4, 16), 'America/New_York'), 'Jul 4, 2026, 12:00 PM EDT');
-      expect(zoneAbbr('America/New_York', DateTime.utc(2026, 11, 11)), 'EST');
+  group('Findings times follow the Time zone setting (build 77; the region zone is no longer used)', () {
+    ({DateTime wall, String abbr}) est(DateTime utc) {
+      final w = utc.subtract(const Duration(hours: 5));
+      return (wall: DateTime(w.year, w.month, w.day, w.hour, w.minute), abbr: 'EST');
+    }
+
+    setUp(() => debugLocalClock = est);
+    tearDown(() {
+      debugLocalClock = null;
+      activeTimeZone = TimeZonePreference.phone;
     });
-    test('missing or unknown zone says UTC, never the phone zone', () {
-      expect(formatInZone(DateTime.utc(2026, 11, 11, 3, 50), null), 'Nov 11, 2026, 3:50 AM UTC');
-      expect(formatInZone(DateTime.utc(2026, 11, 11, 3, 50), 'Nowhere/Land'), 'Nov 11, 2026, 3:50 AM UTC');
+    test('the phone\'s time by default, abbreviation shown, whatever the region zone is', () {
+      expect(formatInZone(DateTime.utc(2026, 11, 11, 3, 50), 'America/New_York'), 'Nov 10, 2026, 10:50 PM EST');
+      expect(formatInZone(DateTime.utc(2026, 11, 11, 3, 50), 'Nowhere/Land'), 'Nov 10, 2026, 10:50 PM EST');
+      expect(formatInZone(DateTime.utc(2026, 11, 11, 3, 50), null), 'Nov 10, 2026, 10:50 PM EST');
+      expect(zoneAbbr('America/New_York', DateTime.utc(2026, 11, 11)), 'EST');
       expect(formatInZone(null, 'America/New_York'), '—');
+    });
+    test('UTC when the setting is UTC, and it says so', () {
+      activeTimeZone = TimeZonePreference.utc;
+      expect(formatInZone(DateTime.utc(2026, 11, 11, 3, 50), 'America/New_York'), 'Nov 11, 2026, 3:50 AM UTC');
+      expect(zoneAbbr('America/New_York', DateTime.utc(2026, 11, 11)), 'UTC');
     });
   });
 }

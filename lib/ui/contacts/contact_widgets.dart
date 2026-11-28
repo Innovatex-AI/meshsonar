@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../chat/models.dart';
+import '../../core/time_format.dart' as tf;
 import '../design/app_symbols.dart';
 import '../design/avatar_style.dart';
 import '../design/tokens.dart';
@@ -21,27 +22,18 @@ AppSymbol contactTypeSymbol(ContactType t) => switch (t) {
     };
 
 /// How messages reach the contact, in the app-wide words (plan 2.1): "Direct" (no repeater between), "Via 2 repeaters"
-/// (a saved route), "Searching" (every message goes to everyone nearby), "No route yet".
+/// (the route the radio holds), "No route yet". The radio decides direct or flood for each message (build 77).
 String routeCaption(Contact c) {
-  if (c.forceFlood) return 'Searching';
   if (!c.hasPath) return 'No route yet';
   final n = c.pathHops ?? 0;
   if (n == 0) return 'Direct';
   return 'Via $n ${n == 1 ? 'repeater' : 'repeaters'}';
 }
 
-/// "just now", "5 min ago", "3 h ago", "yesterday", "12 days ago", "never heard".
+/// "Heard just now", "Heard 5 min ago", "Heard 3 h ago", "Heard 12 d ago", "Not heard yet" (the one app time formatter).
 String heardText(int? ms, int nowMs) {
   if (ms == null || ms <= 0) return 'Not heard yet';
-  final d = nowMs - ms;
-  if (d < 90 * 1000) return 'Heard just now';
-  final min = d ~/ 60000;
-  if (min < 60) return 'Heard $min min ago';
-  final h = d ~/ 3600000;
-  if (h < 24) return 'Heard $h h ago';
-  final days = d ~/ 86400000;
-  if (days == 1) return 'Heard yesterday';
-  return 'Heard $days days ago';
+  return 'Heard ${tf.relativeTime(DateTime.fromMillisecondsSinceEpoch(ms), now: DateTime.fromMillisecondsSinceEpoch(nowMs))}';
 }
 
 /// Initials on a coloured disc (colour from the key via [avatarStyle], so a contact keeps its colour and the initials

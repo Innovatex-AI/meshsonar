@@ -138,7 +138,8 @@ abstract interface class InboundMessageSource {
   Stream<InboundEvent> get events;
 }
 
-/// What the radio said about an accepted send (RESP_CODE_SENT).
+/// What the radio said about an accepted send (RESP_CODE_SENT): whether it went by flood or direct (the radio alone
+/// decides that), the confirmation code it expects back, and its estimate of the round trip.
 class SendReceipt {
   final bool flood;
   final int expectedAck;
@@ -158,9 +159,15 @@ class RadioNotConnected extends OutboundFailure {
   const RadioNotConnected([super.message = 'radio not connected']);
 }
 
-/// The radio's queue is full or it answered NOT_FOUND on a known-good target. Worth retrying shortly.
+/// The radio answered "busy" (ERR TABLE_FULL: no free packet). The packet did NOT go out. Worth retrying shortly.
 class RadioBusy extends OutboundFailure {
   const RadioBusy([super.message = 'radio busy']);
+}
+
+/// The radio did not answer the send command in time (its reply was lost or late). The packet MAY have gone out: the try
+/// counts as made, and its confirmation is still matched (the phone computes the confirmation code itself).
+class RadioNoAnswer extends OutboundFailure {
+  const RadioNoAnswer([super.message = 'no answer from the radio']);
 }
 
 /// The radio refused for a reason that will not change (bad arguments, too long).
@@ -173,7 +180,8 @@ class RadioTargetMissing extends OutboundFailure {
   const RadioTargetMissing([super.message = 'target not on the radio']);
 }
 
-/// The radio's contact table is full and nothing could be taken off it to make room for the recipient.
+/// The radio's contact table is full, so it cannot take the recipient (decision D1: nothing is taken off the radio to
+/// make room; the person is told the list is full).
 class RadioContactsFull extends OutboundFailure {
   const RadioContactsFull([super.message = 'the radio\'s contact list is full']);
 }
@@ -189,14 +197,34 @@ abstract interface class OutboundMessageSink {
   /// True when a send would be attempted now (linked and past setup).
   bool get canSend;
 
-  /// CMD_SEND_TXT_MSG. [forceFlood] must make the radio flood even if it holds a path. [attempt] is 0-based (only the low 2
-  /// bits go on air). Throws an [OutboundFailure].
+  /// CMD_SEND_TXT_MSG, and nothing else: no contact write, no reset path, no sync afterwards. [attempt] is the try number
+  /// 0..7 and reaches the radio untouched; [timestamp] is the same on every try of a message. Throws an [OutboundFailure]:
+  /// [RadioTargetMissing] = the radio says "not a contact", [RadioBusy] = no free packet, [RadioNoAnswer] = the reply was
+  /// lost, [RadioRejected] = too long or refused.
+  ///
+  /// The app never decides direct or flood (build 77); a flood chosen by the person is one [DeliveryRadioControl.resetPath]
+  /// before the first try.
   Future<SendReceipt> sendDirect(
-      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood});
+      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt});
 
   /// CMD_SEND_CHANNEL_TXT_MSG. Channel messages have no ack: success is just "accepted". [text] is the body; the firmware
   /// prepends "name: ". Returns the timestamp that went into the packet (a session may stamp its own; chat adopts it so
   /// echo recognition and receivers' dedupe agree). [priority] is the radio command queue class ([CommandPriority]): a
   /// message the person typed goes at user priority; MeshTrack's silent sends at ping priority. Throws an [OutboundFailure].
   Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user});
+}
+
+/// The two radio commands besides the send itself that delivery uses (build 77). A sink that also implements this lets the
+/// outbox do them; one that does not (a plain test double) simply sends.
+abstract interface class DeliveryRadioControl {
+  /// CMD_RESET_PATH for the contact: the radio forgets its route, so the next sends flood and it learns a fresh one. Sent
+  /// at most once per message: after the direct tries are used up, or before the first try when the person chose flood.
+  /// False when the radio does not hold the contact. Throws an [OutboundFailure] when the radio cannot be asked.
+  Future<bool> resetPath({required String radioId, required String contactPublicKey});
+
+  /// The radio answered "not a contact" to a send: put the contact on the radio as a NEW contact (route unknown; the
+  /// radio's copy is read first and left alone when it is there after all). Throws [RadioContactsFull] when the radio's
+  /// list is full, [RadioTargetMissing] when the phone does not know the contact either, [RadioNotConnected] /
+  /// [RadioNoAnswer] when the radio cannot be asked.
+  Future<void> addContactToRadio({required String radioId, required String contactPublicKey});
 }

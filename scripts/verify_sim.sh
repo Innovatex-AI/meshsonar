@@ -22,6 +22,9 @@
 #      Planner flows A-E and J1-J8 against the deployed server; its OPENURL lines are opened with simctl openurl). The
 #      screen tour needs it too: Start drive is off until location is allowed, so without the grant drive-live could not
 #      start a drive and drive-report / drive-detail had nothing to show. GRANT_LOCATION=0 runs a flow with location not asked.
+# Build 77: the tour ends with the steps plan-results, chat-thread, leaderboard, progress and drive-sync-states (screenshots
+# plan-*, chat-*, leaderboard*, progress*, drive-card-*, drive-detail-*, drive-delete-confirm-*, drives-*). They need the
+# location grant and the debug Simulator radio like the drive steps. Run once per theme: TOUR_APPEARANCE=dark (default) | light.
 # For each device: boot, `flutter build ios --simulator`, install + launch com.meshsonar.app, then run
 # integration_test/verify_screens_test.dart (screens listed in integration_test/screens.dart) and screenshot every
 # "SCREEN <name>" it prints. Prints screenshot paths and the app's installed version. Talks to production, no sign-in.

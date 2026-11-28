@@ -108,7 +108,7 @@ void main() {
     });
 
     test('every mount round-trips through JSON', () {
-      for (final m in AntennaMount.values) {
+      for (final m in AntennaMount.values.where((m) => m != AntennaMount.unknown)) {
         final x = prof(m, gain: 2.5, height: 4);
         final back = AntennaProfile.tryParse(jsonDecode(jsonEncode(x.toJson())));
         expect(back!.mount, m);
@@ -117,6 +117,28 @@ void main() {
         expect(back.updatedAt, t0);
       }
       expect(prof(AntennaMount.handheld).toJson().keys.toSet(), {'mount', 'gain_dbi', 'height_m', 'updated_at'});
+    });
+  });
+
+  group('"Don\'t know" (build 77, round 5 decision 4: Start records it for a radio never set up)', () {
+    final unknown = AntennaProfile.unknown(updatedAt: t0);
+    test('nothing about the antenna goes on the wire, and it reads "Don\'t know"', () {
+      expect(unknown.isUnknown, isTrue);
+      expect(unknown.toAntenna().toJson(), {'type': null, 'gain_dbi': null, 'height_m': null});
+      expect(unknown.summary, 'Don\'t know');
+    });
+    test('round-trips through settings JSON with no height', () {
+      final j = jsonDecode(jsonEncode(unknown.toJson()));
+      expect(j, {'mount': 'unknown', 'gain_dbi': null, 'height_m': null, 'updated_at': '2026-10-17T12:00:00.000Z'});
+      final back = AntennaProfile.tryParse(j)!;
+      expect(back.isUnknown, isTrue);
+      expect(back.updatedAt, t0);
+    });
+    test('old saved profiles still load unchanged', () {
+      final back = AntennaProfile.tryParse({'mount': 'insideCar', 'gain_dbi': null, 'height_m': 1.2, 'updated_at': '2026-10-16T17:00:00.000Z'})!;
+      expect(back.mount, AntennaMount.insideCar);
+      expect(back.heightM, 1.2);
+      expect(back.isUnknown, isFalse);
     });
   });
 

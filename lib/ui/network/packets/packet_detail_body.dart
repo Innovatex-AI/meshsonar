@@ -3,13 +3,15 @@
 // fields by type, the resolved path with per-hop confidence said honestly, "show on map", the observations table, the
 // byte inspector, and the source attribution. Screens wrap it (packet_detail_screen.dart, decode_packet_screen.dart).
 // Small screen order (build 71): the first screen answers what, when, who heard it and how far: header facts, the
-// message, then "Who heard it" (the first [packetObserversShown], the rest behind "Show all"). The long parts (every
+// message, then "Who heard it" grouped by observer (who_heard.dart; the first [packetObserversShown] observers, the
+// rest behind "Show all"; each copy shows its whole route and "Replay on map"). The long parts (every
 // hop of every path, the byte inspector) sit behind tappable headers, closed until asked for ([expandSections] opens
 // them from the start, for "Decode a packet" where the bytes are the point).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/time_format.dart' as tf;
 import '../../../core/v1/packets_api.dart';
 import '../../app.dart' show AppScope;
 import '../../design/app_surfaces.dart' show showAppToast;
@@ -18,11 +20,14 @@ import '../../map/main_map_focus.dart';
 import '../../map/still/path_layer.dart';
 import '../../map/still/path_map.dart';
 import '../../map/still/still_nodes.dart' show stillRepeatersOf;
-import '../../region/region_common.dart' show RegionOfflineAsOf, clockUtc, dayUtc;
+import '../../region/region_common.dart' show RegionOfflineAsOf;
 import '../../shell/shell_controller.dart' show ShellController;
 import '../../theme.dart';
 import 'byte_inspector.dart';
 import 'packet_ui.dart';
+import 'who_heard.dart';
+
+export 'who_heard.dart' show packetObserversShown;
 
 /// The path of [d] to draw on its small map: the path with the most placed hops (the first on a tie), its hops numbered in order.
 /// A unique hop is certain and a likely one is likely; ambiguous, unknown and other hops have no position and are not drawn.
@@ -66,8 +71,7 @@ class PacketCrossSource {
   const PacketCrossSource({this.radio, this.networkObservers, this.onOpenNetwork});
 }
 
-/// Observers listed before "Show all", and candidates listed under a hop several nodes share.
-const int packetObserversShown = 5;
+/// Candidates listed under a hop several nodes share.
 const int packetHopCandidatesShown = 3;
 
 /// A long section of the packet page behind a tappable header (at least 48 pt), closed until asked for.
@@ -101,71 +105,27 @@ class PacketFold extends StatelessWidget {
   }
 }
 
-/// "Who heard it": the first [packetObserversShown] observers, the rest behind "Show all N".
-class _ObserverList extends StatefulWidget {
-  final PacketDetail d;
-  final VoidCallback? onLoadMore;
-  final bool loadingMore;
-  const _ObserverList({required this.d, this.onLoadMore, this.loadingMore = false});
-  @override
-  State<_ObserverList> createState() => _ObserverListState();
-}
+/// What the packet page links out to (Round 2 N-U1, N-U3). Every one is optional: a null callback hides its link
+/// (a pasted packet or one from the phone's own radio has no network copy to replay or look up).
+class PacketLinks {
+  /// "Replay on map" on one copy: Network > Live draws and plays that one reception.
+  final void Function(PacketObservation copy)? onReplay;
 
-class _ObserverListState extends State<_ObserverList> {
-  bool _all = false;
+  /// "Work out the likely route" under a copy with an unnamed or shared hop: Path Inspector with its hops and observer.
+  final void Function(PacketObservation copy)? onInspectRoute;
 
-  @override
-  Widget build(BuildContext context) {
-    final d = widget.d;
-    final t = Theme.of(context);
-    final muted = t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant);
-    final rows = _all ? d.observations : d.observations.take(packetObserversShown).toList();
-    final hidden = d.observations.length - rows.length;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      PacketSectionTitle('Who heard it (${d.observationCount})'),
-      if (d.observationsExpired)
-        const PacketNote('The per-observer rows of this packet are older than 14 days and were removed; the counts above are kept.'),
-      for (final o in rows)
-        Container(
-          key: ValueKey('packet-obs-${o.id}'),
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: t.colorScheme.outlineVariant.withValues(alpha: 0.5)))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(
-                child: Text('${o.observer.name}${o.observer.kind == 'outside' ? ' (outside feed)' : (o.observer.kind == 'phone' ? ' (phone)' : '')}',
-                    style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-              ),
-              if (o.snr != null) Text(snrText(o.snr), style: t.textTheme.labelLarge?.copyWith(color: snrColor(context, o.snr!))),
-            ]),
-            Text(
-              [
-                clockUtc(o.at),
-                if (o.rssi != null) '${o.rssi!.round()} dBm',
-                // a long path would fill the row: say how far it came; the hops themselves are under Paths
-                o.path.isEmpty ? 'heard direct' : (o.path.length > 6 ? 'after ${o.path.length} hops' : 'path ${o.path.join(' > ')}'),
-              ].join(' · '),
-              style: muted,
-            ),
-          ]),
-        ),
-      if (hidden > 0)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(key: const Key('packet-obs-all'), onPressed: () => setState(() => _all = true), child: Text('Show all ${d.observations.length} listed')),
-        ),
-      if ((_all || hidden == 0) && d.observationsNext != null && widget.onLoadMore != null)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            key: const Key('packet-obs-more'),
-            onPressed: widget.loadingMore ? null : widget.onLoadMore,
-            child: Text(widget.loadingMore ? 'Loading…' : 'Show more observers'),
-          ),
-        ),
-    ]);
-  }
+  /// "See who shares 5e" on a shared-ID hop: the Prefix Tool with that ID.
+  final void Function(String prefix)? onSharedId;
+
+  /// "Open in Trace Viewer" under Trace hops (a TRACE packet).
+  final VoidCallback? onTraceViewer;
+
+  /// "Who passes this on" beside the region tag: Scope Audit for that tag.
+  final void Function(PacketScope scope)? onScopeAudit;
+
+  /// Every copy of one observer (the copies past the 50 the detail inlines).
+  final Future<List<PacketObservation>> Function(String observerId)? fetchObserver;
+  const PacketLinks({this.onReplay, this.onInspectRoute, this.onSharedId, this.onTraceViewer, this.onScopeAudit, this.fetchObserver});
 }
 
 class PacketDetailBody extends StatelessWidget {
@@ -195,7 +155,11 @@ class PacketDetailBody extends StatelessWidget {
 
   /// Start with Paths and Bytes open (the decode tool, and tests that read them).
   final bool expandSections;
+
+  /// The tools and the Live replay this page links to.
+  final PacketLinks links;
   const PacketDetailBody({
+    this.links = const PacketLinks(),
     this.onShowOnMap,
     this.regionSlug,
     this.expandSections = false,
@@ -225,7 +189,7 @@ class PacketDetailBody extends StatelessWidget {
         _header(context),
         if (cross.radio != null)
           PacketNote(
-            'Your radio heard this too: ${snrText(cross.radio!.snr)}${cross.radio!.rssi == null ? '' : ', ${cross.radio!.rssi!.round()} dBm'}, at ${clockUtc(cross.radio!.at)}.',
+            'Your radio heard this too: ${snrText(cross.radio!.snr)}${cross.radio!.rssi == null ? '' : ', ${cross.radio!.rssi!.round()} dBm'}, at ${tf.timeOfDay(cross.radio!.at, seconds: true)}.',
             key: const Key('packet-radio-heard'),
             icon: Icons.settings_input_antenna,
           ),
@@ -296,7 +260,7 @@ class PacketDetailBody extends StatelessWidget {
     };
     // What people look for first stays in view; the rest (size, route kind, hop code size, source, scope) is one tap away.
     final facts = <(String, String)>[
-      if (d.firstSeen != null) ('Heard', '${ageText(d.firstSeen!, now)} ago · ${dayUtc(d.firstSeen)}'),
+      if (d.firstSeen != null) ('Heard', '${tf.relativeTime(d.firstSeen, now: now)} · ${tf.shortDateTime(d.firstSeen, seconds: true)}'),
       ('Hops', d.type == 9 ? '${(d.decodedFields['hopsCompleted'] ?? d.hops)} completed' : (d.hops == 0 ? 'none (heard direct)' : '${d.hops}')),
       if (d.source == PacketSource.v1 || d.source == PacketSource.legacy) ('Heard by', '${d.observerCount} observer${d.observerCount == 1 ? '' : 's'}'),
       if (d.localSnr != null) ('Signal here', snrText(d.localSnr)),
@@ -308,7 +272,10 @@ class PacketDetailBody extends StatelessWidget {
       if (d.size != null) ('Size', '${d.size} bytes'),
       if (d.hashSize != null && d.hashSize! > 0) ('Hop code size', '${d.hashSize} byte${d.hashSize == 1 ? '' : 's'}'),
       ('Source', sourceText),
-      if (d.scope != null) ('Scope', d.scope!.label),
+      if (d.scope != null) ('Region tag', d.scope!.label),
+      // The one-byte channel ID tells two private channels apart and nothing else: it lives here, not in the title.
+      if (_channelId != null) ('Channel ID', _channelId!),
+      if (_groupMac != null) ('MAC', _groupMac!),
     ];
     Widget fact((String, String) f) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
@@ -343,15 +310,45 @@ class PacketDetailBody extends StatelessWidget {
         title: 'More about this packet',
         subtitle: [packetTypeLabel(d.typeName), packetRouteLabel(d.route), if (d.size != null) '${d.size} bytes'].join(' · '),
         initiallyExpanded: expandSections,
-        children: [for (final f in more) fact(f)],
+        children: [
+          for (final f in more) KeyedSubtree(key: ValueKey('packet-more-${f.$1}'), child: fact(f)),
+          if (d.scope != null && links.onScopeAudit != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const Key('packet-scope-audit'),
+                style: TextButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: Gap.s)),
+                icon: const Icon(Icons.hub_outlined, size: 18),
+                label: const Text('Who passes this on'),
+                onPressed: () => links.onScopeAudit!(d.scope!),
+              ),
+            ),
+        ],
       ),
     ]);
+  }
+
+  /// The one-byte ID of the packet's channel: the private channel's own, else the decoded field.
+  String? get _channelId {
+    final own = d.channel?.privateId;
+    if (own != null) return own;
+    final f = (d.decoded.isNotEmpty ? d : (bytesFrom ?? d)).decodedFields;
+    final v = (d.decodedKind ?? bytesFrom?.decodedKind) == 'group' ? f['channelHash'] : null;
+    return v is String && v.isNotEmpty ? v : null;
+  }
+
+  String? get _groupMac {
+    final src = d.decoded.isNotEmpty ? d : (bytesFrom ?? d);
+    final v = src.decodedKind == 'group' ? src.decodedFields['mac'] : null;
+    return v is String && v.isNotEmpty ? v : null;
   }
 
   String _title() {
     final t = packetTypeLabel(d.typeName);
     if (d.origin?.name != null) return '$t: ${d.origin!.name}';
-    if (d.channel != null && (d.typeName == 'GRP_TXT' || d.typeName == 'GRP_DATA')) return '$t on ${d.channel!.label}';
+    final group = d.typeName == 'GRP_TXT' || d.typeName == 'GRP_DATA';
+    if (d.channel != null && group && d.channel!.isPrivate) return 'Private channel ${t.substring(8)}';
+    if (d.channel != null && group) return '$t on ${d.channel!.label}';
     return t;
   }
 
@@ -387,7 +384,7 @@ class PacketDetailBody extends StatelessWidget {
           ('Role', s('role') ?? 'unknown'),
           if (s('publicKey') != null) ('Public key', s('publicKey')!),
           ('Position', pos == null ? 'not advertised' : '${pos['lat']}, ${pos['lon']}'),
-          if (s('timestamp') != null) ('Advert time', dayUtc(DateTime.tryParse(s('timestamp')!))),
+          if (s('timestamp') != null) ('Advert time', tf.shortDateTime(DateTime.tryParse(s('timestamp')!), seconds: true, ifNull: 'unknown')),
           ('Signature', sig['checked'] == true ? (sig['valid'] == true ? 'Valid' : 'Not valid') : 'Not checked on the phone'),
           if (f['clockSkewS'] is num) ('Clock', '${(f['clockSkewS'] as num).round()} s ${(f['clockSkewS'] as num) >= 0 ? 'ahead' : 'behind'}'),
           if (f['battery'] is num) ('Battery', '${f['battery']} mV'),
@@ -398,9 +395,9 @@ class PacketDetailBody extends StatelessWidget {
         rows.addAll([
           ('Status', byteValueText(s('decodeStatus'))),
           if (s('keySource') != null) ('Key', switch (s('keySource')) { 'builtin_public' => 'The Public channel key', 'hashtag_list' => 'Hashtag channel key (from its name)', _ => s('keySource')! }),
-          if (s('channelHash') != null) ('Channel hash', s('channelHash')!),
-          if (s('mac') != null) ('MAC', s('mac')!),
-          if (pt != null && pt['timestamp'] is String) ('Sent (sender clock)', dayUtc(DateTime.tryParse(pt['timestamp'] as String))),
+          // The channel ID and MAC are under "More about this packet" (Round 2 N-U5).
+          if (pt != null && pt['timestamp'] is String)
+            ('Sent (sender clock)', tf.shortDateTime(DateTime.tryParse(pt['timestamp'] as String), seconds: true, ifNull: 'unknown')),
           if (pt != null && pt['data'] is String) ('Data', pt['data'] as String),
           if (s('note') != null) ('Note', s('note')!),
         ]);
@@ -478,6 +475,17 @@ class PacketDetailBody extends StatelessWidget {
           if (d.paths.isEmpty) const PacketNote('No hops: the packet was heard straight from its sender.'),
         ],
       ),
+      if (d.type == 9 && links.onTraceViewer != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('packet-open-trace-viewer'),
+            style: TextButton.styleFrom(minimumSize: const Size(44, 44), padding: const EdgeInsets.symmetric(horizontal: Gap.s)),
+            icon: const Icon(Icons.timeline, size: 18),
+            label: const Text('Open in Trace Viewer'),
+            onPressed: links.onTraceViewer,
+          ),
+        ),
       ..._pathMap(context),
       const SizedBox(height: Gap.s),
       if (onShowOnMap != null)
@@ -603,7 +611,23 @@ class PacketDetailBody extends StatelessWidget {
     );
   }
 
-  Widget _observations(BuildContext context) => _ObserverList(d: d, onLoadMore: onLoadMoreObservations, loadingMore: loadingMore);
+  Widget _observations(BuildContext context) => WhoHeard(
+        key: ValueKey('who-heard-${d.hash}'),
+        hash: d.hash,
+        observations: d.observations,
+        paths: d.paths,
+        origin: d.origin,
+        observationCount: d.observationCount,
+        observerCount: d.observerCount,
+        expired: d.observationsExpired,
+        moreOnServer: d.observationsNext != null,
+        onLoadMore: onLoadMoreObservations,
+        loadingMore: loadingMore,
+        fetchObserver: links.fetchObserver,
+        onReplay: links.onReplay,
+        onInspectRoute: links.onInspectRoute,
+        onSharedId: links.onSharedId,
+      );
 
   Widget _attribution(BuildContext context) {
     final t = Theme.of(context);

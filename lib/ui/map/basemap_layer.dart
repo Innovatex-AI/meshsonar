@@ -8,11 +8,16 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
 
 import '../../core/basemap.dart';
+import '../../core/map_styles.dart' show BaseMapStyle;
+import '../design/map_tokens.dart';
+import 'active_map_definition.dart';
+import 'satellite_layers.dart' show satelliteCredit;
 import 'basemap_cache.dart';
 import 'tile_source.dart';
 
@@ -68,8 +73,8 @@ BasemapSource basemapSourceAt(MapCamera camera, {BasemapHealth? health}) {
   return (health ?? BasemapHealth.instance).sourceFor(inside: inside);
 }
 
-/// The background a style paints under its tiles: what the map shows where a tile is not (yet) drawn. Null for the names-only
-/// look. Build 72: the map's own background was the app theme's, so a Dark map with tiles missing on a light iPad was a pale
+/// The background a style paints under its tiles: what the map shows where a tile is not (yet) drawn. Null for a names-only
+/// look ([BasemapLook.isLabelsOnly]). Build 72: the map's own background was the app theme's, so a Dark map with tiles missing on a light iPad was a pale
 /// sheet that looked like another basemap.
 Color? basemapBackgroundColor(BasemapSource source, {required bool dark, BasemapLook look = BasemapLook.road}) {
   for (final l in basemapStyle(source, dark: dark, look: look)['layers'] as List) {
@@ -128,8 +133,9 @@ class BasemapLayer extends StatefulWidget {
   /// An event re-asks for every tile (the network came back, a pack was installed or removed).
   final Stream<void>? reset;
 
-  /// Road / Light / Dark ([BasemapLook.road]), the Topo palette, or only the town and road names over Satellite imagery
-  /// ([BasemapLook.labels]: drawn only while OUR tiles are the source, since OpenFreeMap has no label-only look).
+  /// Road / Light / Dark ([BasemapLook.road]), the Topo palette, the data-first map drawn under coverage, a map without its
+  /// names, or only the names ([BasemapLook.isLabelsOnly]: drawn only while OUR tiles are the source, since OpenFreeMap has no
+  /// names-only look; on the fallback the base layer draws OpenFreeMap's whole map, names included).
   final BasemapLook look;
   const BasemapLayer({super.key, this.dark, this.tiles, this.reset, this.look = BasemapLook.road});
 
@@ -181,15 +187,25 @@ class _BasemapLayerState extends State<BasemapLayer> {
   }
 
   /// Before the tiles are asked again: Flutter's image cache keeps a tile image that FAILED (its stream reported an error)
-  /// as a live, pending entry under the tile's key, and hands that same failed stream to the next widget that asks for the
-  /// key. A new layer alone would therefore get the old error back and fetch nothing (seen on the simulator: 2 tiles loaded
-  /// after the network came back, the rest stayed blank). The renderer's key type is private, so the failed entries cannot
-  /// be evicted one by one: the image cache is emptied. Drawn tiles come back from the renderer's disk cache.
+  /// as a pending entry under the tile's key, and hands that same failed stream to the next widget that asks for the key. A new
+  /// layer alone would therefore get the old error back and fetch nothing (seen on the simulator: 2 tiles loaded after the
+  /// network came back, the rest stayed blank). Builds up to 76 emptied the WHOLE image cache here, which also dropped every
+  /// avatar and photo in the app (Round 1 F12). Since build 77 the layer is taken off the map for one frame instead: the
+  /// tile layer, as it is disposed, evicts its own failed tiles from the cache (the renderer sets EvictErrorTileStrategy), and
+  /// the next frame mounts a new layer that asks for them again. Drawn tiles stay in the cache and come straight back.
   void _forgetFailedTiles() {
-    final ic = PaintingBinding.instance.imageCache;
-    ic.clear();
-    ic.clearLiveImages();
+    _detached = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _detached = false;
+        _generation++;
+      });
+    });
   }
+
+  /// True for the one frame the layer is off the map during a recovery.
+  bool _detached = false;
 
   void _onRecovered() {
     if (!mounted || _reaskTimer != null) return;
@@ -198,8 +214,7 @@ class _BasemapLayerState extends State<BasemapLayer> {
       _reaskTimer = null;
       if (!mounted) return;
       _reask.done(DateTime.now());
-      _forgetFailedTiles();
-      setState(() => _generation++);
+      setState(_forgetFailedTiles);
     });
   }
 
@@ -219,8 +234,7 @@ class _BasemapLayerState extends State<BasemapLayer> {
     _resetSub?.cancel();
     _resetSub = widget.reset?.listen((_) {
       if (!mounted) return;
-      _forgetFailedTiles();
-      setState(() => _generation++); // a new layer key: tiles that failed are asked for again
+      setState(_forgetFailedTiles); // off for a frame, then a new layer key: tiles that failed are asked for again
     });
   }
 
@@ -262,8 +276,10 @@ class _BasemapLayerState extends State<BasemapLayer> {
     final source = basemapSourceAt(camera, health: _health);
     if (source == BasemapSource.openFreeMap && BasemapLayer.enabled) unawaited(_health.resolveOpenFreeMap());
     final dark = widget.dark ?? Theme.of(context).brightness == Brightness.dark;
-    // Satellite names come from our tiles only (inside the extract, while our server answers); never from OpenFreeMap.
-    if (widget.look == BasemapLook.labels && source != BasemapSource.ours) return const SizedBox.shrink();
+    // A names-only pass (over Satellite imagery, or above coverage) comes from our tiles only (inside the extract, while our
+    // server answers); never from OpenFreeMap, whose one style already carries its names in the base layer.
+    if (widget.look.isLabelsOnly && source != BasemapSource.ours) return const SizedBox.shrink();
+    if (_detached) return const SizedBox.shrink(key: Key('basemap-recovering'));
     final debug = BasemapLayer.debugBuilder;
     if (debug != null) {
       BasemapLayer.debugLook = widget.look;
@@ -284,24 +300,31 @@ class _BasemapLayerState extends State<BasemapLayer> {
   }
 }
 
-/// The base-map credit for the small maps: a pill in the bottom-right corner with the credit of the source drawn.
-/// Put it last in a FlutterMap's children. Key 'mini-map-credit'.
+/// The short credit every map shows on its pill (build 77, Round 1 decision 5): OpenStreetMap is the data; Protomaps and
+/// OpenFreeMap (who draw it) are named in the credits sheet behind the (i). The full line is `BasemapSource.attribution`.
+const String kOsmCreditShort = '© OpenStreetMap';
+
+/// The base-map credit for the small maps (build 77, Round 1 N6 and decision 5): the same pill as the full map's credit, "©
+/// OpenStreetMap" (the imagery credit on Satellite), dark on a dark map and light on a light one. [style] is the base map the
+/// small map draws. Put it last in a FlutterMap's children. Key 'mini-map-credit'.
 class BasemapCredit extends StatelessWidget {
-  const BasemapCredit({super.key});
+  final BaseMapStyle style;
+  const BasemapCredit({super.key, this.style = BaseMapStyle.chart});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final text = basemapSourceAt(MapCamera.of(context)).attribution;
+    final darkMap = style.isDark(appDark: t.brightness == Brightness.dark);
+    final text = style.isSatellite ? satelliteCredit(ActiveMapDefinition.current) : kOsmCreditShort;
     return Align(
       alignment: Alignment.bottomRight,
       child: IgnorePointer(
         child: Container(
           key: const Key('mini-map-credit'),
-          margin: const EdgeInsets.all(3),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          decoration: BoxDecoration(color: t.colorScheme.surface.withValues(alpha: 0.78), borderRadius: BorderRadius.circular(3)),
-          child: Text(text, style: (t.textTheme.labelSmall ?? const TextStyle()).copyWith(fontSize: 10, height: 1.2, color: t.colorScheme.onSurface)),
+          margin: const EdgeInsets.all(4),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(color: MapTokens.creditPill(darkMap: darkMap), borderRadius: BorderRadius.circular(9)),
+          child: Text(text, style: (t.textTheme.labelSmall ?? const TextStyle()).copyWith(fontSize: 10, height: 1.2, color: MapTokens.creditInk(darkMap: darkMap))),
         ),
       ),
     );

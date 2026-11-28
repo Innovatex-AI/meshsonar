@@ -221,7 +221,7 @@ void main() {
     expect(keyNextStep(DriverKeyStatus.pending), 'Pull down to check again.');
     expect(keyNextStep(DriverKeyStatus.approved), isNull);
     expect(keyLine(DriverKeyStatus.approved, createdAt: DateTime(2026, 10, 1), lastSeenAt: DateTime(2026, 10, 30), keyHint: '1234'),
-        'Works · last upload 30 Oct 2026 · made 1 Oct 2026 · ends in 1234');
+        'Works · last upload Oct 30, 2026 · made Oct 1, 2026 · ends in 1234');
   });
 
   testWidgets('devices: 375 pt wide at 2x text lays out with no overflow, and every button is at least 44 pt', (tester) async {
@@ -359,7 +359,7 @@ void main() {
     await tester.tap(find.byKey(const Key('server-drive-name-save')));
     await tester.pumpAndSettle();
     expect(h.ac.calls.last, 'update:s1::', reason: 'an empty name clears the label');
-    expect(tester.widget<Text>(find.descendant(of: find.byType(AppBar), matching: find.byType(Text))).data, startsWith('Fri 30 Oct 2026'));
+    expect(tester.widget<Text>(find.descendant(of: find.byType(AppBar), matching: find.byType(Text))).data, startsWith('Oct 30, 2026'));
   });
 
   testWidgets('server drive: a failed load has Try again; a drive the server dropped has Back instead', (tester) async {
@@ -416,7 +416,7 @@ void main() {
     expect(find.text('No fix in the tunnel'), findsOneWidget);
     expect(find.textContaining('triaged'), findsNothing, reason: 'the server\'s status code is not shown, only its plain words');
     expect(find.text('1 report · kept for 90 days'), findsOneWidget);
-    expect(find.textContaining('Sent Sat 31 Oct 2026').evaluate().isNotEmpty || find.textContaining('Sent Fri 30 Oct 2026').evaluate().isNotEmpty, isTrue);
+    expect(find.textContaining('Sent Oct 31, 2026').evaluate().isNotEmpty || find.textContaining('Sent Oct 30, 2026').evaluate().isNotEmpty, isTrue);
   });
 
   testWidgets('my reports: empty has Check again; a failed load has Try again; both ask the server again', (tester) async {
@@ -471,6 +471,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(paths.last, '/api/cmh/network-leaderboard?period=all');
     expect(find.byKey(const Key('leaderboard-not-listed')), findsNothing, reason: 'this phone\'s name is on the list');
+    expect(find.byKey(const Key('leaderboard-join')), findsNothing, reason: 'already on it');
     expect(tester.getSize(find.byKey(const Key('leaderboard-period'))).width, greaterThan(380), reason: 'the switches span the page');
     expect(tester.getSize(find.byKey(const Key('leaderboard-period'))).height, greaterThanOrEqualTo(44));
   });
@@ -490,6 +491,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: '375 pt wide at 2x text: no overflow');
     expect(find.byKey(const Key('leaderboard-not-listed')), findsOneWidget);
+    // Round 5 D-9: a way onto the list, with what it needs and shows.
+    expect(find.byKey(const Key('leaderboard-join')), findsOneWidget);
+    expect(find.text('It needs an approved driver key, and it shows your callsign and your distance.'), findsOneWidget);
     expect(find.text('30 days'), findsOneWidget);
     fail = true;
     await tester.tap(find.text('All time'));

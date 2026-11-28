@@ -22,7 +22,8 @@ import '../../core/region_cache.dart' show asOfLabel;
 import '../../core/v1/network_api.dart';
 import '../design/app_surfaces.dart' show AppAction, showAppActionSheet, showAppSheet;
 import '../design/app_symbols.dart';
-import '../region/region_common.dart' show groupInt, agoText;
+import '../../core/time_format.dart' show relativeTime;
+import '../region/region_common.dart' show groupInt;
 import '../shell/shell_controller.dart' show ShellScope;
 import '../theme.dart';
 
@@ -105,7 +106,7 @@ class _PulseChipState extends State<PulseChip> {
             PulseChipState.noFeed => (Icons.portable_wifi_off, mc.textMuted, 'No packet feed', 'Pulse: no packet feed'),
             PulseChipState.unusual => (
                 top!.severity == 'alert' ? Icons.error_outline : Icons.warning_amber_rounded,
-                top.severity == 'alert' ? t.colorScheme.error : mc.beacon,
+                top.severity == 'alert' ? t.colorScheme.error : mc.warning,
                 'Unusual: ${top.title}${open.length > 1 ? ' +${open.length - 1}' : ''}',
                 'Pulse: ${open.length} open ${open.length == 1 ? 'event' : 'events'}. ${top.title}',
               ),
@@ -317,7 +318,7 @@ class _PulseSheet extends StatelessWidget {
     final (IconData icon, Color color, String headline) = switch (state) {
       PulseChipState.unusual => (
           Icons.warning_amber_rounded,
-          mc.beacon,
+          mc.warning,
           events.length == 1 ? '1 thing is unusual right now' : '${events.length} things are unusual right now',
         ),
       PulseChipState.noFeed => (Icons.portable_wifi_off, mc.textMuted, 'No packets from this region lately'),
@@ -361,7 +362,7 @@ class _PulseTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final link = pulseLinkOf(e);
-    final when = e.endedAt != null && showState ? 'Ended ${agoText(e.endedAt)}' : (e.startedAt != null ? 'Since ${agoText(e.startedAt)}' : null);
+    final when = e.endedAt != null && showState ? 'Ended ${relativeTime(e.endedAt)}' : (e.startedAt != null ? 'Since ${relativeTime(e.startedAt)}' : null);
     return ListTile(
       key: ValueKey('pulse-item-${e.id}'),
       contentPadding: EdgeInsets.zero,

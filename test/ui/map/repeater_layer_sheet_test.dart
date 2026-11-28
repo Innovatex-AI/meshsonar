@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshsonar/core/time_format.dart' as tf;
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/cluster_index.dart';
@@ -220,7 +221,8 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Alpha Tower'), findsOneWidget);
       expect(find.text('Repeater'), findsOneWidget);
-      expect(find.text('3 h ago (2026-10-24)'), findsOneWidget);
+      // Build 77: the one time formatter (the person's own day).
+      expect(find.text('3 h ago (${tf.dateOnly(now.subtract(const Duration(hours: 3)))})'), findsOneWidget);
       expect(find.text('Last advert'), findsOneWidget);
       expect(find.text('1.1 km'), findsOneWidget);
       expect(find.text(attribution), findsOneWidget);

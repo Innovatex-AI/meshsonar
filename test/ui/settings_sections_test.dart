@@ -26,17 +26,17 @@ void main() {
       ('radio', null, 'saved-radios'),
       ('radio', null, 'antenna-profile-abcdef0123'), // 0.4.0: one row per radio replaces the global type and gain
       ('wardriving', null, 'send-pings'),
-      ('wardriving', null, 'channel'),
       ('wardriving', null, 'interval'),
       ('wardriving', null, 'min-distance'),
       ('wardriving', null, 'ping-feedback'),
       ('wardriving', null, 'battery-mode'),
       ('wardriving', 'uploads', 'auto-sync'),
-      ('wardriving', 'uploads', 'sync-during-drive'),
       ('wardriving', 'uploads', 'sync-every'),
       ('wardriving', 'uploads', 'last-upload'),
       ('wardriving', 'battery', 'battery-running'),
       ('wardriving', 'battery', 'battery-gps'),
+      ('wardriving', 'driving-advanced', 'channel'), // build 77: set once, one level down
+      ('wardriving', 'driving-advanced', 'heard-hold'), // build 77: "Keep repeaters lit", was Map & display > Heard list hold
       ('wardriving', 'driving-advanced', 'listen-window'),
       ('wardriving', 'driving-advanced', 'ping-message'),
       ('wardriving', 'driving-advanced', 'ping-airtime'),
@@ -45,7 +45,6 @@ void main() {
       ('display', null, 'map-follow-options'),
       ('display', null, 'units-tile'),
       ('display', null, 'colour-palette'),
-      ('display', null, 'heard-hold'),
       ('display', 'units', 'unit-distance'),
       ('privacy', null, 'telemetry-toggle'),
       ('privacy', null, 'privacy-location'),
@@ -55,7 +54,17 @@ void main() {
       ('privacy', 'observer', 'mqtt-add-feed'),
       ('privacy', 'sharing', 'collect-motion-toggle'),
       ('privacy', 'sharing', 'privacy-what-shared'),
+      ('notifications', null, 'page-delivery'), // build 77: Messages, delivery and the chat rows first
+      ('notifications', null, 'chat-quick-replies'),
+      ('notifications', null, 'chat-return-sends'),
+      ('notifications', null, 'chat-photos-autoload'),
+      ('notifications', null, 'notif-enabled'),
+      ('notifications', 'delivery', 'delivery-direct'),
+      ('notifications', 'delivery', 'delivery-flood'),
+      ('notifications', 'delivery', 'delivery-fallback'),
+      ('notifications', 'delivery', 'delivery-confirm-twice'),
       ('storage', null, 'diagnostics-log'),
+      ('storage', null, 'message-log'), // build 77: directly under the diagnostic log
       ('storage', null, 'report-problem'),
       ('storage', 'storage-items', 'storage-drives'),
       ('storage', 'storage-items', 'storage-region'),
@@ -63,7 +72,6 @@ void main() {
       ('storage', 'diagnostics-advanced', 'map-health-overlay'),
       ('storage', 'diagnostics-advanced', 'diagnostics-power-counters'),
       ('about-section', null, 'about'),
-      ('about-section', null, 'show-intro'),
       ('about-section', null, 'terms-of-service-link'),
     ]) {
       if (page == null) {
@@ -85,16 +93,21 @@ void main() {
       }
     }
     await closeSettingsPage(tester);
-    final titles = ['ACCOUNT', 'RADIO', 'DRIVING', 'MAP & DISPLAY', 'SHARING & PRIVACY', 'NOTIFICATIONS', 'STORAGE & DIAGNOSTICS', 'ABOUT'];
+    final titles = ['ACCOUNT', 'RADIO', 'DRIVING', 'MAP & DISPLAY', 'SHARING & PRIVACY', 'MESSAGES', 'STORAGE & DIAGNOSTICS', 'ABOUT'];
     await tester.scrollUntilVisible(find.text(titles.first), -120, scrollable: settingsList);
     for (final title in titles) {
       await tester.scrollUntilVisible(find.text(title), 120, scrollable: settingsList);
       expect(find.text(title), findsOneWidget);
     }
     // The removed features left no row behind.
-    for (final gone in ['Offline maps', 'Simple basemap while driving']) {
+    for (final gone in ['Offline maps', 'Simple basemap while driving', 'Show the welcome tour', 'Heard list hold']) {
       expect(find.textContaining(gone), findsNothing);
     }
+    // Build 77: the message log sits directly under the diagnostic log.
+    await tester.ensureVisible(find.byKey(const Key('message-log')));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.byKey(const Key('message-log'))).dy, greaterThan(tester.getTopLeft(find.byKey(const Key('diagnostics-log'))).dy));
+    expect(tester.getTopLeft(find.byKey(const Key('message-log'))).dy, lessThan(tester.getTopLeft(find.byKey(const Key('report-problem'))).dy));
   });
 
   testWidgets('key status is a coloured badge', (tester) async {
@@ -115,21 +128,26 @@ void main() {
     expect(revoked, isNot(approved));
   });
 
-  testWidgets('welcome tour can be reopened from Settings', (tester) async {
+  testWidgets('build 77: the intro again is in Help only; searching Settings for it opens Help, and it replays from there', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     await h.pumpApp(tester);
     await openSettingsTab(tester);
     await tester.pumpAndSettle();
-    final scroll = find.descendant(of: find.byKey(const Key('settings-list')), matching: find.byType(Scrollable)).first;
-    await tester.scrollUntilVisible(find.byKey(const Key('show-intro')), 300, scrollable: scroll);
+    expect(find.byKey(const Key('show-intro')), findsNothing, reason: 'no Settings row');
+    await tester.enterText(find.byKey(const Key('settings-search')), 'welcome tour');
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('show-intro')));
+    expect(find.byKey(const Key('search-result-show-intro')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('search-result-show-intro')), matching: find.textContaining('More > Help')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('search-result-show-intro')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('more-help-list')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('more-tour')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('onboarding')), findsOneWidget);
     await tester.tap(find.byKey(const Key('onboarding-skip')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('onboarding')), findsNothing);
-    expect(find.byKey(const Key('settings-list')), findsOneWidget);
+    expect(find.byKey(const Key('more-help-list')), findsOneWidget);
   });
 }

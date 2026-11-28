@@ -36,6 +36,11 @@ void main() {
         await pumpFor(t, const Duration(milliseconds: 600));
       }
     }
+    // Build 77 (round 5 O1): the intro ends on "What MeshSonar collects"; Keep sharing closes it.
+    if (await waitFor(t, find.byKey(const Key('telemetry-keep')), timeout: const Duration(seconds: 6))) {
+      await t.tap(find.byKey(const Key('telemetry-keep')));
+      await pumpFor(t, const Duration(seconds: 1));
+    }
     expect(await waitFor(t, find.byWidgetPredicate((w) => w.key == const Key('shell-tabs') || w.key == const Key('shell-rail'))), isTrue);
     final keep = find.byKey(const Key('telemetry-keep'));
     if (await waitFor(t, keep, timeout: const Duration(seconds: 4))) {

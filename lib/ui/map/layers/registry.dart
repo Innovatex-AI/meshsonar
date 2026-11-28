@@ -4,6 +4,7 @@
 //
 // Website layers deliberately NOT ported (planner/GIS, shelved or token-gated there): model, reach, sites, candidates,
 // population, gaps, hillshade. `model`/`reach` links still parse (core/map_view_state.dart) and are ignored here.
+import '../../../core/time_format.dart' as tf;
 import '../../../core/map_basemaps.dart' show capLayerEstimated, capLayerRedundancy, capLayerSnrLinks;
 import '../../../core/map_definition.dart' show MapDefinition, MapGroupDef;
 import '../../../core/map_prefs.dart' show LayerPrefs;
@@ -282,7 +283,7 @@ LayerStatus layerStatus(String id, MapLayerInputs inputs, {RepeaterMapSource? re
         inputs.coverageCells,
         what: (n) => '$n ${n == 1 ? 'cell' : 'cells'} measured',
         none: 'Nothing measured here yet',
-        staleNote: inputs.coverageSavedAt == null ? null : 'Saved copy from ${_monthDay(inputs.coverageSavedAt!.toLocal())}',
+        staleNote: inputs.coverageSavedAt == null ? null : 'Saved copy from ${tf.calendarDay(inputs.coverageSavedAt!)}',
       );
     case 'predicted':
       if (!inputs.coverageV2) return const LayerStatus(LayerAvailability.unsupported, detail: 'Not available on this server yet');
@@ -312,8 +313,6 @@ LayerStatus layerStatus(String id, MapLayerInputs inputs, {RepeaterMapSource? re
   }
 }
 
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-String _monthDay(DateTime d) => '${_months[d.month - 1]} ${d.day}';
 
 LayerStatus _feedStatus(MapFeedState s, int count, {required String Function(int) what, required String none, String? staleNote}) {
   switch (s) {

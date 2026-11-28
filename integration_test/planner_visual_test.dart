@@ -166,6 +166,11 @@ void main() {
         await pumpFor(t, const Duration(milliseconds: 700));
       }
     }
+    // Build 77 (round 5 O1): the intro ends on "What MeshSonar collects"; Keep sharing closes it.
+    if (await waitFor(t, find.byKey(const Key('telemetry-keep')), timeout: const Duration(seconds: 6))) {
+      await t.tap(find.byKey(const Key('telemetry-keep')));
+      await pumpFor(t, const Duration(seconds: 1));
+    }
     expect(await waitFor(t, find.byWidgetPredicate((w) => w.key == const Key('shell-tabs') || w.key == const Key('shell-rail'))), isTrue, reason: 'home shell');
     if (await waitFor(t, _key('telemetry-keep'), timeout: const Duration(seconds: 6))) {
       await t.tap(_key('telemetry-keep'));
@@ -361,7 +366,7 @@ void main() {
               await _show(t, _prefix('site-check-'));
               await shot(t, 'planner-15-find-sites-verify');
             } else {
-              _fail('C3: Verify top 5 showed no check on any site');
+              _fail('C3: Double-check the top 5 showed no check on any site');
             }
           }
           final add = _prefix('site-add-');

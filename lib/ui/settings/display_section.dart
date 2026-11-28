@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../design/app_surfaces.dart';
 import '../../core/colour_palette.dart';
 import '../map/active_map_definition.dart';
+import '../../core/time_format.dart';
 import '../../core/units.dart';
 import '../app.dart';
 import '../design/app_symbols.dart';
@@ -113,6 +114,7 @@ List<Widget> displaySectionRows(BuildContext context) {
   final st = s.settings;
   return [
     const SettingsAnchor(id: 'units-tile', child: UnitsTile()),
+    const SettingsAnchor(id: 'time-zone', child: TimeZoneTile()),
     const SettingsAnchor(id: 'colour-palette', child: ColourPaletteTile()),
     SettingsAnchor(
       id: 'ui-haptics',
@@ -123,22 +125,6 @@ List<Widget> displaySectionRows(BuildContext context) {
         subtitle: 'Small taps on switches, lists and sends.',
         value: st.haptics,
         onChanged: (v) => s.updateSettings(st.copyWith(haptics: v)),
-      ),
-    ),
-    SettingsAnchor(
-      id: 'heard-hold',
-      child: SliderTile(
-        key: const Key('heard-hold'),
-        sliderKey: const Key('heard-hold-slider'),
-        icon: Icons.cell_tower,
-        title: settingsEntry('heard-hold').title,
-        stops: holdStops,
-        value: st.heardHoldPings,
-        label: (v) => '$v ping${v == 1 ? '' : 's'}',
-        caption: 'A repeater stays bright this long after it was last heard, then greys out.',
-        minLabel: '1',
-        maxLabel: '10',
-        onChanged: (v) => s.updateSettings(s.settings.copyWith(heardHoldPings: v)),
       ),
     ),
   ];
@@ -214,6 +200,47 @@ class UnitsTile extends StatelessWidget {
                 child: const Text('All follow Units'),
               ),
           ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// Map & display > Time zone, directly under Units: the phone's own time (default) or UTC, with a line showing what
+/// that gives right now ("Showing 6:14 PM EST"). Every time in the app follows it through lib/core/time_format.dart.
+class TimeZoneTile extends StatelessWidget {
+  /// Tests set the moment the "Showing" line is worked out for.
+  final DateTime? now;
+  const TimeZoneTile({super.key, this.now});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppScope.of(context);
+    final pref = s.settings.timeZone;
+    return ListTile(
+      key: const Key('time-zone-tile'),
+      leading: const Icon(Icons.schedule),
+      title: const Text('Time zone'),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(showingTimeLine(pref, now: now), key: const Key('time-zone-showing')),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 6),
+            child: SegmentedButton<TimeZonePreference>(
+              key: const Key('time-zone-selector'),
+              showSelectedIcon: false,
+              segments: [
+                for (final z in TimeZonePreference.values)
+                  ButtonSegment(value: z, label: segmentLabel(z.label, key: Key('time-zone-${z.name}'))),
+              ],
+              selected: {pref},
+              onSelectionChanged: (v) => s.updateSettings(s.settings.copyWith(timeZone: v.first)),
+            ),
+          ),
         ],
       ),
     );

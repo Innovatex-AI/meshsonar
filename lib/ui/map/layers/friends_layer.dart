@@ -13,6 +13,7 @@
 // on the disc), 'map-friend-arrow-<channelId>-<name>', 'map-meet-<channelId>', 'map-friend-me', 'map-asked-<key 8 hex>'
 // (+ '-fresh' / '-faded' / '-grey').
 // Also: [showMeetHereMenu], the Drive map's long-press "Meet here".
+import '../../../core/time_format.dart' as tf;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ import 'package:latlong2/latlong.dart' show LatLng;
 import '../../../core/meshtrack/meshtrack_service.dart';
 import '../../design/app_surfaces.dart' show AppAction, AppToastKind, showAppActionSheet, showAppToast;
 import '../../design/map_tokens.dart';
+import '../../theme.dart' show MeshSonarColors;
 import '../../meshtrack/meshtrack_copy.dart' show askedPinMark, askedPinSemantics;
 
 /// The layer's id (registry, layer prefs, `meshsonar://` links).
@@ -47,12 +49,7 @@ String friendInitials(String name) {
 }
 
 /// "just now", "3 min ago", "2 h ago".
-String lastHeardText(DateTime lastHeard, DateTime now) {
-  final d = now.difference(lastHeard);
-  if (d.inMinutes < 1) return 'just now';
-  if (d.inHours < 1) return '${d.inMinutes} min ago';
-  return '${d.inHours} h ago';
-}
+String lastHeardText(DateTime lastHeard, DateTime now) => tf.relativeTime(lastHeard, now: now);
 
 /// One line of a trail: two points and how strongly it is drawn (1 = newest).
 typedef FriendTrailSegment = ({LatLng a, LatLng b, double strength, bool grey});
@@ -120,12 +117,13 @@ class FriendsColours {
     final t = Theme.of(context);
     final b = t.brightness;
     return FriendsColours(
-      pin: t.colorScheme.primary,
-      onPin: t.colorScheme.onPrimary,
+      // Friends have their own colour (Round 1 N4): teal is your own position only.
+      pin: MeshSonarColors.of(context).friend,
+      onPin: MeshSonarColors.of(context).onFriend,
       grey: MapTokens.repeaterStale(b),
       ink: MapTokens.mapInk(b),
       halo: MapTokens.mapHalo(b),
-      meet: t.colorScheme.tertiary,
+      meet: MeshSonarColors.of(context).friend,
     );
   }
 }

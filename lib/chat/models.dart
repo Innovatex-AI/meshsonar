@@ -26,16 +26,6 @@ enum ContactType {
 /// Where a contact row came from. The phone is the master copy; the radio's table is a cache.
 enum ContactSource { radio, discovered, imported, manual }
 
-/// A person, repeater, room server or sensor.
-/// How DMs to a contact are routed (plan 4.7): `auto` learns and relearns, `fixed` keeps the pinned route, `flood` always searches.
-enum PathMode {
-  auto,
-  fixed,
-  flood;
-
-  static PathMode parse(String? s) => PathMode.values.firstWhere((m) => m.name == s, orElse: () => PathMode.auto);
-}
-
 class Contact {
   final String radioId;
 
@@ -70,21 +60,19 @@ class Contact {
   /// Local time (ms) this phone last heard the contact: an advert, a message or an acknowledgement.
   final int? lastHeardMs;
 
-  /// How DMs are routed (see [PathMode]). `forceFlood` is `pathMode == flood`.
-  final PathMode pathMode;
-
-  /// The route kept by [PathMode.fixed]: comma separated hex hops ("a1,b2"), its hash size, and when a route was last learned.
-  final String? pinnedPath;
-  final int? pinnedHashSize;
+  /// When the radio last told us it learned a route to this contact (PUSH_CODE_PATH_UPDATED).
   final int? pathLearnedMs;
+
+  /// When the first delivery confirmation from this contact arrived; null = they have never confirmed a message from us.
+  /// A contact that has never confirmed may not have us in THEIR contact list, and then their radio cannot decrypt what
+  /// we send (round 3 rule 16: "They need to add you as a contact before they can receive this").
+  final int? confirmedMs;
+  bool get everConfirmed => confirmedMs != null;
 
   /// The last ping: when, round trip, success (null = never pinged).
   final int? lastPingMs;
   final int? lastPingRttMs;
   final bool? lastPingOk;
-
-  /// Send every DM to this contact by flood, never along a saved path.
-  bool get forceFlood => pathMode == PathMode.flood;
 
   const Contact({
     required this.radioId,
@@ -105,15 +93,12 @@ class Contact {
     this.onRadio = false,
     this.radioFlags = 0,
     this.lastHeardMs,
-    bool forceFlood = false,
-    PathMode? pathMode,
-    this.pinnedPath,
-    this.pinnedHashSize,
     this.pathLearnedMs,
     this.lastPingMs,
     this.lastPingRttMs,
     this.lastPingOk,
-  }) : pathMode = pathMode ?? (forceFlood ? PathMode.flood : PathMode.auto);
+    this.confirmedMs,
+  });
 
   /// First 6 bytes of the key as 12 hex characters: what DM frames carry.
   String get prefix => publicKey.substring(0, 12);
@@ -138,10 +123,6 @@ class Contact {
     bool? onRadio,
     int? radioFlags,
     Object? lastHeardMs = _keep,
-    bool? forceFlood,
-    PathMode? pathMode,
-    Object? pinnedPath = _keep,
-    Object? pinnedHashSize = _keep,
     Object? pathLearnedMs = _keep,
     Object? lastPingMs = _keep,
     Object? lastPingRttMs = _keep,
@@ -166,21 +147,15 @@ class Contact {
         onRadio: onRadio ?? this.onRadio,
         radioFlags: radioFlags ?? this.radioFlags,
         lastHeardMs: identical(lastHeardMs, _keep) ? this.lastHeardMs : lastHeardMs as int?,
-        pathMode: pathMode ??
-            (forceFlood == null ? this.pathMode : (forceFlood ? PathMode.flood : (this.pathMode == PathMode.flood ? PathMode.auto : this.pathMode))),
-        pinnedPath: identical(pinnedPath, _keep) ? this.pinnedPath : pinnedPath as String?,
-        pinnedHashSize: identical(pinnedHashSize, _keep) ? this.pinnedHashSize : pinnedHashSize as int?,
         pathLearnedMs: identical(pathLearnedMs, _keep) ? this.pathLearnedMs : pathLearnedMs as int?,
         lastPingMs: identical(lastPingMs, _keep) ? this.lastPingMs : lastPingMs as int?,
         lastPingRttMs: identical(lastPingRttMs, _keep) ? this.lastPingRttMs : lastPingRttMs as int?,
         lastPingOk: identical(lastPingOk, _keep) ? this.lastPingOk : lastPingOk as bool?,
+        confirmedMs: confirmedMs,
       );
 
-  /// This contact with the phone-only route settings of [o] (a fresh copy from the radio does not know them).
+  /// This contact with the phone-only route facts of [o] (a fresh copy from the radio does not know them).
   Contact withRouteOf(Contact o) => copyWith(
-      pathMode: o.pathMode,
-      pinnedPath: o.pinnedPath,
-      pinnedHashSize: o.pinnedHashSize,
       pathLearnedMs: o.pathLearnedMs,
       lastPingMs: o.lastPingMs,
       lastPingRttMs: o.lastPingRttMs,
@@ -288,9 +263,9 @@ enum Direction { incoming, outgoing }
 
 /// queued -> sending -> sent (radio accepted, expected ack known) -> acked (DM) | heard (channel: >= 1 repeat) | failed.
 /// retrying: an ack did not arrive in time and another attempt is scheduled.
-/// [likelyDelivered]: a DM that got no acknowledgement (or not yet), but the contact sent us a direct message after it was sent,
-/// so they almost certainly have it. A real acknowledgement still upgrades it to [acked]; it is never retried (DM delivery fix,
-/// Nov 8 2026).
+/// [likelyDelivered]: REMOVED in build 77 (decision D2: "Probably delivered (they replied)" is not in the official flow and
+/// hid lost confirmations). Nothing sets it any more and migration v6 turns stored rows into failed / no confirmation; the
+/// value stays only so old backups parse and build-76 screens compile. Delete with their `likelyDelivered` branches.
 enum MessageState { queued, sending, sent, retrying, heard, acked, likelyDelivered, failed, received }
 
 enum Route { flood, direct }
@@ -309,18 +284,25 @@ enum FailReason {
   cancelled;
 
   String describe() => switch (this) {
-        FailReason.noAck => 'No acknowledgement after every try. They may be out of range or switched off, or the route to them may have changed.',
+        FailReason.noAck => 'No confirmation came back after every try. They may be out of range or switched off, or they may not have you as a contact.',
         FailReason.radioRejected => 'The radio refused the message.',
-        FailReason.radioBusy => 'The radio stayed busy and the message could not be sent.',
+        FailReason.radioBusy => 'Your radio stayed busy and could not take the message.',
         FailReason.notConnected => 'The radio was not connected for too long.',
         FailReason.expired => 'The message waited too long and was dropped.',
         FailReason.textTooLong => 'The message is too long for one packet.',
-        FailReason.unknownContact => 'This contact is no longer known.',
+        FailReason.unknownContact => 'Your radio does not have this contact. Add them to your radio and send again.',
         FailReason.unknownChannel => 'This channel is no longer on the radio.',
-        FailReason.contactListFull => 'The radio\'s contact list is full, so it could not take this contact. Free a slot in Contacts and try again.',
+        FailReason.contactListFull => '$radioContactListFullText. Remove a contact from the radio to make room, then send again.',
         FailReason.cancelled => 'Cancelled.',
       };
 }
+
+/// The words for the contact-table-full state (decision D1): shown where the radio refused a contact, with a button to
+/// manage the radio's list. The app no longer takes another contact off the radio to make room.
+const String radioContactListFullText = 'Your radio\'s contact list is full';
+
+/// Rule 16 (official app v1.51.0): shown in a thread whose contact has never confirmed a message from us.
+const String needsToAddYouText = 'They need to add you as a contact before they can receive this';
 
 class ChatMessage {
   /// Local id (uuid-ish string).

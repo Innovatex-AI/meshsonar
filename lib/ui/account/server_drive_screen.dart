@@ -3,6 +3,7 @@
 // the server. For drives that are not on this phone, or to see what the server kept. The owner's view: untrimmed.
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' as tf;
 import '../../app/messages.dart';
 import '../../core/api.dart';
 import '../../core/driver_account.dart';
@@ -11,7 +12,6 @@ import '../../core/model.dart';
 import '../app.dart';
 import '../drive_detail_map.dart';
 import '../settings/settings_kit.dart' show confirmSettingsChange;
-import '../widgets.dart';
 import '../design/app_surfaces.dart';
 
 Future<void> openServerDrive(BuildContext context, ServerDrive drive) =>
@@ -108,7 +108,7 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
     final x = widget.drive;
     final name = _label ?? x.label ?? '';
     return Scaffold(
-      appBar: AppBar(title: Text(name.isEmpty ? formatDateTime(x.startedAt) : name)),
+      appBar: AppBar(title: Text(name.isEmpty ? tf.dateTime(x.startedAt) : name)),
       body: SafeArea(
         child: FutureBuilder<ServerDriveDetail>(
           future: _future,
@@ -161,7 +161,7 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
               if (pings.isNotEmpty) SizedBox(height: 240, child: ClipRRect(borderRadius: BorderRadius.circular(Corners.card), child: DriveDetailMap(pings: pings, showZones: false))),
               const SizedBox(height: Gap.m),
               Text(
-                '${formatDateTime(x.startedAt)}${x.endedAt == null ? '' : ' to ${formatDateTime(x.endedAt!)}'}',
+                '${tf.dateTime(x.startedAt)}${x.endedAt == null ? '' : ' to ${tf.dateTime(x.endedAt!)}'}',
                 style: t.textTheme.titleMedium,
               ),
               const SizedBox(height: Gap.xs),
@@ -220,7 +220,7 @@ class _ServerDriveScreenState extends State<ServerDriveScreen> {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(p.heard ? Icons.check_circle_outline : Icons.radio_button_unchecked, color: p.heard ? t.colorScheme.primary : t.colorScheme.onSurfaceVariant),
-                  title: Text(formatTime(p.at)),
+                  title: Text(tf.timeOfDay(p.at, seconds: true)),
                   subtitle: Text(p.echoes.isEmpty
                       ? 'Not heard'
                       : 'Heard by ${[

@@ -22,11 +22,16 @@ class FakeClock {
 class SentDirect {
   final String key, text;
   final int ts, attempt;
-  final bool forceFlood;
-  SentDirect(this.key, this.text, this.ts, this.attempt, this.forceFlood);
+
+  /// What the fake radio reported in its SENT reply: true = flood (it had no route), false = direct.
+  final bool flood;
+  SentDirect(this.key, this.text, this.ts, this.attempt, this.flood);
 }
 
-class FakeSink implements OutboundMessageSink {
+/// A sink that behaves like a radio as far as delivery cares: it decides direct or flood from ITS route ([hasRoute]),
+/// forgets the route on reset path, and reports what it did. It also records every reset and every contact add, in order
+/// with the sends ([log]).
+class FakeSink implements OutboundMessageSink, DeliveryRadioControl {
   bool connected = true;
   Object? failNext; // an OutboundFailure to throw once
   int nextAck = 1000;
@@ -37,19 +42,56 @@ class FakeSink implements OutboundMessageSink {
   final channelPriorities = <int>[];
   int estTimeoutMs = 4000;
 
+  /// The radio holds a route to the contact: sends go direct until a reset path.
+  bool hasRoute = false;
+
+  /// Contact keys RESET_PATH was sent for.
+  final resets = <String>[];
+
+  /// Contact keys the outbox asked to put on the radio after "not a contact".
+  final added = <String>[];
+
+  /// What [addContactToRadio] throws (once); null = it works.
+  Object? failAdd;
+
+  /// "send", "reset", "add" in the order they reached the radio.
+  final log = <String>[];
+
   @override
   bool get canSend => connected;
 
   @override
-  Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) async {
+  Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt}) async {
     if (!connected) throw const RadioNotConnected();
     final f = failNext;
     if (f != null) {
       failNext = null;
       throw f;
     }
-    directs.add(SentDirect(contactPublicKey, text, timestamp, attempt, forceFlood));
-    return SendReceipt(flood: forceFlood, expectedAck: nextAck++, estTimeoutMs: estTimeoutMs);
+    log.add('send');
+    directs.add(SentDirect(contactPublicKey, text, timestamp, attempt, !hasRoute));
+    return SendReceipt(flood: !hasRoute, expectedAck: nextAck++, estTimeoutMs: estTimeoutMs);
+  }
+
+  @override
+  Future<bool> resetPath({required String radioId, required String contactPublicKey}) async {
+    if (!connected) throw const RadioNotConnected();
+    log.add('reset');
+    resets.add(contactPublicKey);
+    hasRoute = false;
+    return true;
+  }
+
+  @override
+  Future<void> addContactToRadio({required String radioId, required String contactPublicKey}) async {
+    if (!connected) throw const RadioNotConnected();
+    log.add('add');
+    added.add(contactPublicKey);
+    final f = failAdd;
+    if (f != null) {
+      failAdd = null;
+      throw f;
+    }
   }
 
   @override
@@ -99,7 +141,9 @@ class Harness {
     );
   }
 
+  /// Bob in the phone's book. [path] also gives the fake RADIO a route to him (the radio decides direct or flood).
   Contact bob({bool path = false, ContactType type = ContactType.companion}) {
+    sink.hasRoute = path;
     final c = Contact(radioId: radioA, publicKey: bobKey, type: type, name: 'Bob', outPath: path ? Uint8List.fromList([1, 2]) : null, outPathLen: path ? 2 : -1);
     store.contacts.upsert(c);
     return c;

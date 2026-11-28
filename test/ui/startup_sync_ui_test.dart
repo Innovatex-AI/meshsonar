@@ -60,7 +60,8 @@ void main() {
       await tester.pumpAndSettle();
       await openDrivePanel(tester); // the note is a row of the Medium panel
       expect(find.byKey(const Key('location-note')), findsOneWidget);
-      expect(find.textContaining('Allow location so the map opens where you are.'), findsOneWidget);
+      // Build 77 (round 1 F6): the location message is said once, in the Drive strip.
+      expect(find.descendant(of: find.byKey(const Key('dock-strip-text')), matching: find.textContaining('location')).evaluate().isNotEmpty || find.textContaining('Allow location').evaluate().isNotEmpty, isTrue);
       expect(probe.requests, 0);
 
       await openRegionTab(tester);

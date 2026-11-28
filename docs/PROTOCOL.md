@@ -25,8 +25,8 @@ The line numbers are the ones cited in the code comments. They refer to the firm
 | TX characteristic (radio → app, notify) | `6e400003-b5a3-f393-e0a9-e50e24dcca9e` |
 | Framing | **One BLE write = one companion frame; one notification = one frame.** No length prefix. |
 | Scan | Filtered on the service UUID; 8 s timeout (`RadioScanner.scan`). Name = advertised name, else platform name, else device id. |
-| Connect | 15 s connection timeout. Then `requestMtu(185)` on Android only (iOS negotiates its own; failures ignored). Then service discovery, subscribe to TX notifications. |
-| Writes | `write(withoutResponse: rx.properties.writeWithoutResponse)` |
+| Connect | 15 s connection timeout. Then `requestMtu(185)`: on Android it negotiates (a write carries MTU - 3 bytes); on iOS, which negotiates by itself, the plugin only reports the largest write it allows. Failures ignored (size unknown). Then service discovery, subscribe to TX notifications. |
+| Writes | **Confirmed** (`withResponse: true`) whenever the RX characteristic allows a write with response; without response only when the radio offers nothing else (`planBleWrite`, `radio_api.dart`). Build 76 and earlier wrote without response whenever they could. A frame longer than the link carries in one write is refused with `FrameTooLongForLink` instead of being written and lost (the largest DM frame is 173 bytes; the radio offers MTU 176). |
 | Disconnect | Detected from `connectionState == disconnected`; the incoming stream closes, so the link fails its pending command and closes. |
 
 Any other byte pipe works as long as it keeps frame boundaries: `ByteTransport` in `radio_api.dart` is just
@@ -67,19 +67,36 @@ Codes ≥ 0x80 are unsolicited pushes. Anything below is the reply to the one ou
 
 ### 2.2 Command sequencing
 
-There is one command in flight at a time. The link waits up to **5 s** for the reply. A reply that arrives with no
-command waiting (for example, late after a timeout) is dropped. Malformed frames are ignored without killing the link.
+There is one command in flight at a time. The link waits up to **5 s** for the reply. Malformed frames are ignored without
+killing the link.
+
+**Each reply is matched to its command by reply code** (build 77). `expectedReplyCodes` (`protocol.dart`, from
+`handleCmdFrame`, companion v1.18.0) lists what may answer each command: `SEND_TXT_MSG` only `SENT`, `RESET_PATH` only `OK`,
+`GET_CONTACT_BY_KEY` only `CONTACT` (and only for the key that was asked), `SYNC_NEXT_MESSAGE` only a message frame or
+`NO_MORE_MESSAGES`, and so on; `ERR` may answer anything; a command the table does not know takes any reply. A frame that
+arrives with no command waiting, or whose code cannot answer the command that is waiting, is a **stray** (the late reply to a
+command that already timed out): it is discarded and counted (`MeshCoreCompanionLink.strayFrames`), never handed to the next
+command. A `SENT` is also recognised as stray by its confirmation code when it belongs to a direct message whose command
+already timed out. Before build 77 the next frame was taken as the reply to whatever was waiting, so after one timeout every
+reply shifted by one: a message the radio did send was marked failed and its `SENT` was swallowed by the next command.
+
+The start sequence is the official clients' (meshcore.js `onConnected`, meshcore_py): `DEVICE_QUERY` declaring protocol
+version 3 first, then `APP_START`, then the clock. If the radio refuses the clock (`ERR ILLEGAL_ARG`: it would go backwards,
+so the radio is ahead of the phone) the link reads the radio's time once with `GET_DEVICE_TIME`, keeps the difference
+(`radioClockAheadSecs`) and writes it to the message log; build 76 ignored that error.
 
 ```mermaid
 sequenceDiagram
   participant App as MeshCoreCompanionLink
   participant R as Companion radio
-  App->>R: 01 01 00×6 "MeshSonar"            (APP_START)
-  R-->>App: 05 … (SELF_INFO)
   App->>R: 16 03                              (DEVICE_QUERY, app_target_ver 3)
   R-->>App: 0D … (DEVICE_INFO)  [ERR tolerated: very old firmware]
+  App->>R: 01 01 00×6 "MeshSonar"            (APP_START)
+  R-->>App: 05 … (SELF_INFO)
   App->>R: 06 <epoch u32>                     (SET_DEVICE_TIME)
-  R-->>App: 00 OK  or 01 06 (ERR illegal arg = clock would go backwards; ignored)
+  R-->>App: 00 OK  or 01 06 (ERR illegal arg = the radio's clock is ahead)
+  App->>R: 05                                 (GET_DEVICE_TIME, only after that ERR)
+  R-->>App: 09 <epoch u32>
   App->>R: 0A (SYNC_NEXT_MESSAGE) … until 0A NO_MORE_MESSAGES (≤256)
   Note over App,R: ensureChannel at Start drive
   App->>R: 1F 00, 1F 01, …                    (GET_CHANNEL until ERR not-found or max_channels)
@@ -428,8 +445,11 @@ It's off because it adds airtime on every ping and repeaters rate-limit discover
 ### 6.3 Offline queue drain
 
 Now `MessageSync` (`lib/radio/message_sync.dart`). After `start()`, on every `PUSH_CODE_MSG_WAITING`, and (once something listens
-to the session's `inbound` stream) every 5 s as a safety poll, the link sends `SYNC_NEXT_MESSAGE` until `NO_MORE_MESSAGES`, an
-error or an unexpected frame (cap 512 per drain; the radio holds 16 or 256). Why the poll: `MSG_WAITING` is a one-byte push through
+to the session's `inbound` stream) on a backup poll whose interval comes from the battery mode, the link sends
+`SYNC_NEXT_MESSAGE` until `NO_MORE_MESSAGES`, an error or an unexpected frame (cap 512 per drain; the radio holds 16 or 256).
+Build 77: **no drain is started after a send** any more (the official flow reads on the push and on connect), and the backup
+poll holds off while a direct message waits for its confirmation (`MessageSync.holdPoll`, the radio's estimate x 1.2 after
+`SENT`): the confirmation is a push through the same 4-frame queue. Why the poll: `MSG_WAITING` is a one-byte push through
 the radio's BLE queue, which is 4 frames deep on ESP32 and DROPS frames when full (`SerialBLEInterface`), so it can be lost.
 Why persist-first: `SYNC_NEXT_MESSAGE` is destructive; each frame goes through the persister (awaited) before the next
 command and before the typed message is emitted. Channel and contact text frames become `InboundMessage`s; CLI replies
@@ -458,7 +478,7 @@ are in `test/radio/chat_frames_test.dart` (written from the firmware, not throug
 | `CONTACT` (3) | `[3][pub x32][type][flags][out_path_len][out_path x64][name x32][last_advert u32][lat i32 1e-6][lon i32 1e-6][lastmod u32]` = 148 B | `writeContactRespFrame` 171-193 |
 | `END_OF_CONTACTS` (4) | `[4][most recent lastmod u32]`, the next `since` | 2404-2408 |
 | `ADD_UPDATE_CONTACT` (9) | the CONTACT layout; the firmware reads lat/lon only if len >= 144 and lastmod only if len >= 148 | `updateContactFromFrame` 195-217 |
-| `SEND_TXT_MSG` (2) | `[2][txt_type][attempt][ts u32][pub prefix x6][text]` -> `SENT` `[6][flood][expected_ack u32][est_timeout u32]`; unknown recipient ERR(NOT_FOUND), bad type ERR(UNSUPPORTED), no pool ERR(TABLE_FULL); plain text expects an ACK, CLI types do not (`expected_ack` 0) | 1132-1177 |
+| `SEND_TXT_MSG` (2) | `[2][txt_type][attempt][ts u32][pub prefix x6][text]` -> `SENT` `[6][flood][expected_ack u32][est_timeout u32]`; unknown recipient ERR(NOT_FOUND), bad type ERR(UNSUPPORTED), no pool or text too long ERR(TABLE_FULL); plain text expects an ACK, CLI types do not (`expected_ack` 0). `attempt` is the try number **0..7, sent untouched** (section 16): the radio puts `attempt & 3` in the packet and, above 3, appends the whole byte ("to make packethash unique"), which costs 2 bytes of text | 1132-1177, BaseChatMesh 451-490 |
 | `SEND_CONFIRMED` (0x82) | `[0x82][ack u32][trip ms u32]` | `processAck` 417-436. The ack table holds 8; the entry is cleared after the first match |
 | `PATH_UPDATED` (0x81), `ADVERT` (0x80) | `[code][pub x32]` | 409-415, 358-407 |
 | `NEW_ADVERT` (0x8A) | a full contact frame under code 0x8A | 358-407 |
@@ -473,8 +493,8 @@ are in `test/radio/chat_frames_test.dart` (written from the firmware, not throug
 `hops x hash size` bytes (`pathByteLength`); 0xFF in a message frame means it came over a direct route, in a contact it
 means the path is unknown (OUT_PATH_UNKNOWN: the next DM floods and the radio learns the path).
 
-Sending (priority P0, `LinkRadioSession`): channel text is cut off at `160 - len("name: ")` bytes, a DM at 160. A channel send
-answers only OK, never an ack. ERR(NOT_FOUND) is the firmware's answer both for a bad slot and for a full packet pool
+Sending (priority P0, `LinkRadioSession`): channel text is cut off at `160 - len("name: ")` bytes, a DM at 160 (158 from the
+fifth try on, `maxDmTextBytesFor`). A channel send answers only OK, never an ack. ERR(NOT_FOUND) is the firmware's answer both for a bad slot and for a full packet pool
 (1190-1195): for a slot that exists the session retries once after 300 ms, then reports `noSuchChannel`. A command that gets no
 answer within 5 s is reported as `queued` ("may still send"), never as failed. The flood scope (`ScopeGuard`) is set inside the
 same queue slot, right before the send; a ping that follows a scoped chat message first clears the override, so a scope can
@@ -538,10 +558,10 @@ one equal to the Public key marks it `public`, anything else `private`.
 
 Chat is decoupled from frames by two interfaces in `lib/chat/radio_bridge.dart`; `lib/chat/session_adapter.dart` adapts
 `RadioSession` (lib/radio/session.dart) to them. Inbound texts arrive through `RadioSession.setInboundPersister`, so a message is
-in SQLite before the radio's destructive queue is asked for the next one. `SEND_CONFIRMED` becomes an ACK match on any attempt of
-a waiting DM. A `queued` send result (no answer from the radio in time) is retried with the SAME timestamp, which is safe because
-receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter writes the contact back with an
-unknown path (`ADD_UPDATE_CONTACT`, out_path_len 0xFF) first. DM frames of text type 1 (CLI data) are not chat and are ignored.
+in SQLite before the radio's destructive queue is asked for the next one. `SEND_CONFIRMED` becomes a match on any try of any
+DM that is not delivered yet. DM frames of text type 1 (CLI data) are not chat and are ignored. **How a direct message is
+delivered (tries, reset path, waits, confirmations) is section 16**; the adapter's `sendDirect` is `SEND_TXT_MSG` and nothing
+else.
 
 ### 10.1 Heard copies of channel messages (CR3, Nov 2026)
 `lib/chat/channel_copy_listener.dart` listens to every packet the radio logs (PUSH_CODE_LOG_RX_DATA 0x88, `RadioSession.rxPackets`). A flood GRP_TXT whose channel hash byte matches one of our chat channels (not the System/wardrive channel) is decrypted with that channel's key (`decryptGroupText`, the same check as the wardrive echo matcher in section 5.2), giving the sender timestamp and the on-air text `<name>: <body>`. It becomes `InboundRepeatHeard` with the path (hex, first hop first), hash size, hops, SNR, RSSI and the time heard. `ChatService` attaches it to the channel message with that timestamp and text (`findChannelCopyTarget`): for a sent message a copy with no path is our own transmission and ignored, any other path is a repeat and moves Sent to Heard; for a received message it is an arrival path. The radio logs a packet just BEFORE it hands the message over, and a sent message is re-stamped with the radio's timestamp after the send, so a copy that matches nothing yet is held for 60 s (max 64) and retried whenever a message is added or updated. Stored in `message_repeats` (DATA_MODEL section 7, v4). Direct messages are not covered: their TXT_MSG copies cannot be decrypted by the phone (the shared secret stays on the radio).
@@ -552,8 +572,6 @@ A channel's `region_scope` (from a `meshcore://channel/add?...&region_scope=` li
 with every flood of that channel through `ScopeGuard` (`SET_FLOOD_SCOPE_KEY` right before the send, cleared before the next ping).
 The 16-byte key is derived from the region name like a hashtag key: `sha256("#" + lower-case name)[0..16]`. **Assumption, not yet
 verified on a real radio against a region configured on a repeater**; no scope is set by default (whole mesh).
-
-receivers dedupe on (conversation, timestamp, text). The last DM attempt floods: the adapter sends `RESET_PATH` first (section 11). DM frames of text type 1 (CLI data) are not chat and are ignored.
 
 ## 11. Contacts: management frames, auto-add and the phone-is-master sync (M2, Nov 2026)
 
@@ -590,20 +608,23 @@ exercised on a real radio; everything else is **firmware-only** until Andy runs 
   stored one (replay check, BaseChatMesh 133). The app therefore stores the advert time with each node it offers and never
   writes the phone's clock there.
 
-**Sync** (`lib/chat/contact_manager.dart`): the phone is the master copy of the contact list; the radio's table (DEVICE_INFO says
-how big, 100 by default) is a cache of what it needs to send and receive DMs.
+**Sync** (`lib/chat/contact_manager.dart`): the phone is the master copy of the contact LIST; the radio's table (DEVICE_INFO says
+how big, 100 by default) holds the ones it can send to and receive from. The **route** to a contact belongs to the radio: the
+phone's copy is a mirror for display and is never written back (build 77, section 16.4).
 
 1. `GET_CONTACTS since <cursor - 1>`; a contact is merged into SQLite as its frame arrives (batches of 25), so a link that drops half way keeps what came. The cursor
    (`END_OF_CONTACTS` value) is stored only when a list ends properly; the `- 1` covers a contact that changed again in the same
    second as the cursor (the radio filters with `lastmod > since`).
 2. `CONTACTS_START` carries the **total** on the radio. If it differs from the number the phone believes are on the radio, the
    phone reads everything (`since 0`) and marks the rest "not on radio" (never deletes them).
-3. Then, in order: removals the user made while the radio was away; the favourite flag (`flags` bit 0) pushed for favourites; contacts the user added by hand, favourites and
-   anyone with a conversation uploaded with `ADD_UPDATE_CONTACT` while there is room (a reserve of 5 slots is kept free for the radio's own use,
-   except for contacts the user added on purpose).
-4. Before every DM the adapter makes sure the radio holds the recipient (`GET_CONTACT_BY_KEY`, then `ADD_UPDATE_CONTACT`); a full table frees ONE slot
-   by removing the least useful non-favourite contact with no conversation from the radio only, and the user is told.
-5. A flood retry uses `RESET_PATH` instead of rewriting the contact; `PATH_UPDATED` reads that one contact back (`GET_CONTACT_BY_KEY`).
+3. Then: removals the user made while the radio was away, and the edits the user made while it was away (a contact added by
+   hand, a favourite changed), each written as section 16.4 says. **Nothing else is written on connect** (build 76 pushed
+   the favourite flag for every favourite and filled the table with the phone's copies of contacts, routes included).
+4. A DM to a contact the radio does not hold: the radio answers `ERR NOT_FOUND` to the send; the contact is then written once
+   as a NEW contact (route unknown) and the same try is made again. A full table ends the message with "Your radio's contact
+   list is full"; nothing is taken off the radio to make room (decision D1; build 76 evicted a little-used contact).
+5. `PATH_UPDATED` reads that one contact back (`GET_CONTACT_BY_KEY`). The policy read at the end of a sync uses the
+   `SELF_INFO` the link already holds (no second `APP_START`).
 6. The download blocks the radio's command queue for its whole length (about 16 frames a second on BLE, so 350 contacts take about
    22 s). While a drive is running the automatic sync is held back (`ContactManager.shouldDefer`); a button press is not.
 
@@ -620,7 +641,7 @@ how big, 100 by default) is a cache of what it needs to send and receive DMs.
    (if the switches are hidden, the firmware is older and answered UNSUPPORTED_CMD).
 7. Message a person: the first message shows "flood", then "Delivered in N s"; open their details: a route with hops appears. The second message goes "direct". Proves
    SEND_TXT_MSG, SEND_CONFIRMED, PATH_UPDATED.
-8. Switch the other radio off and send: three tries, then "Not delivered" with the reason in words.
+8. Switch the other radio off and send: the tries of section 16 (4 direct, a reset, 4 flood by default), then "Not delivered" with the reason in words.
 9. Contact details > Reset route, then send: it floods again. Proves RESET_PATH.
 10. Remove a contact you added: it must also be gone from the official app's list. Proves REMOVE_CONTACT.
 11. Contact details > Send to radios nearby, with a second radio in range: it should offer the contact. Proves SHARE_CONTACT (needs a contact this radio heard itself).
@@ -690,8 +711,7 @@ Firmware-derived, with spikes S1 to S14 recorded in `docs/protocol/chat-spikes-2
   permissions, advert location, path hash size, PIN, backup export and import, companion CLI). Every write is read back.
 - **Remote requests.** Login, status, telemetry, neighbours, access list, CLI and anonymous requests share the per-radio `RemoteRequestQueue`
   (see ARCHITECTURE). A wrong password answers 0x86; a repeater that stays silent is `noReply`, shown as "No reply after N s".
-- **Set path.** ADD_UPDATE_CONTACT with a chosen route and the outbox rewrite of a forgotten path are implemented but gated by
-  `AppFlags.routeWriteVerified` (false) until step 7 of the checklist below passes on a real radio.
+- **Set path.** REMOVED in build 77 with the route modes (section 16.6): the app never writes a route to the radio.
 
 ## 14. MQTT feeds from the phone (release 0.38, `lib/core/mqtt/`)
 
@@ -852,12 +872,236 @@ Fourteen steps for a real radio (each says the expected result). Run in subsets 
 3. DM to a contact: first a search, then Delivered; the header says "Via N repeaters" (or "Direct") after the reply.
 4. Message details show repeaters, SNR and RSSI (RSSI on incoming) and Time on air, matching the Rx log entry.
 5. Ping a repeater (trace): a result card with per-repeater signal. With the repeater off or out of range: "Not heard" after the wait, never a raw code. Long-press Ping: Direct only and 2/3 byte IDs run.
-6. Ping a person (route search): route out and back shown; Use this route sets Keep this route.
-7. Choose repeaters yourself (Route > Advanced), Test route, Save; send a DM and confirm in the Rx log that only the listed repeaters retransmit; Reset route then send: it searches.
-8. Keep this route survives three failed sends (route not cleared); Automatic clears after a failure; Always search always searches. After three failed sends the card "This route may be broken" appears with Find a route now and Reset route. Back-swipe works from a conversation; photograph AX2 text on the Chats list and a conversation.
+6. Ping a person (route search): route out and back shown.
+7. (Removed in build 77: choosing repeaters yourself. The app never writes a route.) Reset route then send: it floods and the radio learns a route again.
+8. (Removed in build 77: route modes and the "This route may be broken" card. Delivery is checked with the list in section 16.8.) Back-swipe works from a conversation; photograph AX2 text on the Chats list and a conversation.
 9. Repeater login with the factory password: the warning appears; a wrong password says "not accepted" (or "No reply" on firmware that stays silent); a powered-down repeater says "No reply" after the wait.
 10. Guest login: only Overview, Neighbours, Telemetry. Admin: Settings, Access, Console as well.
 11. Overview numbers match the `get`-style CLI output (battery, uptime, airtime); sparklines grow after three refreshes; Neighbours match the official app.
 12. Person Stats shows battery and withholds location per their telemetry settings.
 13. Radio settings: change the PIN (reconnect with the new one), path hash size 1 to 2 to 1 warns about old repeaters, backup export and import round trip on a spare radio, reboot works, factory reset typed confirm (spare radio only).
 14. Background: a notification arrives with the app suspended (known unproven, HANDOFF section 81.3; record the result, do not claim it).
+
+## 16. Direct-message delivery (build 77): the official MeshCore flow
+
+Andy's ruling, 2026-11-27: message routing "needs to match meshcore official app nothing extra, nothing less". This section is
+what the app does. Reference: firmware companion-v1.18.0 (`examples/companion_radio/MyMesh.cpp`, `src/helpers/BaseChatMesh.cpp`),
+meshcore.js, meshcore_py 2.3.19 (`send_msg_with_retry`), MeshCore One (`MessageService+DMRetry.swift`, `DMSendBudget.swift`,
+`AckCodeBuilder.swift`) and the official app's changelog (through v1.51.1; the official app is closed source). Code:
+`lib/chat/outbox.dart`, `lib/chat/session_adapter.dart`, `lib/chat/contact_manager.dart`, `lib/radio/companion_link.dart`.
+Tests: `test/chat/delivery_lossy_test.dart`, `test/radio/reply_matching_test.dart`, `test/chat/outbox_test.dart`, against the
+scripted lossy radio in `test/radio/lossy_radio.dart`.
+
+### 16.1 The rules (the rebuild checklist, item for item)
+
+| # | Rule | Where |
+|---|---|---|
+| 1 | On connect: `DEVICE_QUERY` declaring version 3, then `APP_START` | `MeshCoreCompanionLink.start` |
+| 2 | One command at a time; each reply matched to its command by reply code; a late or stray frame is discarded; timeout 5 s | section 2.2 |
+| 3 | Confirmed Bluetooth writes; frame size checked against the link | section 1 |
+| 4 | Send: `SEND_TXT_MSG` with the try number passed through untouched (0..7), the same timestamp on every try, the 6-byte contact prefix, the text. Text limit 160 bytes, 158 from the fifth try on | `encodeSendTxt`, `Outbox._process` |
+| 5 | Read the radio's answer: direct or flood, the confirmation code, the estimated wait. `ERR NOT_FOUND` = not a contact; `ERR TABLE_FULL` = busy or too long | `RadioSessionChatAdapter.sendDirect` |
+| 6 | Wait for the confirmation for the radio's estimate x 1.2. No fixed minimums of our own | `RetryPolicy.ackWaitMs` |
+| 7 | On timeout, send again with the next try number | `Outbox._process` |
+| 8 | A confirmation for ANY try of a message means delivered, also one that arrives after the message was marked failed | `Outbox.onAck`, `OutboxRepository.findByAck` |
+| 9 | Tries: 4 direct, then one `RESET_PATH`, then 4 flood. With no route every try is a flood because the radio decides that, and no reset is sent | `Outbox._process` |
+| 10 | Settings: direct tries 1-4, flood tries 0-4, flood fallback on/off; Cancel on a message still retrying | `DeliverySettings`, `Outbox.cancel` |
+| 11 | Direct or flood is read from the radio's answer and shown as such; the app never decides or assumes it | `DeliveryAttempt.route` / `routeKnown` |
+| 12 | When the radio says a route changed (`PATH_UPDATED`), the app re-reads that contact | `ContactManager.pathUpdated` |
+| 13 | Incoming: on `MSG_WAITING` and on connect, read until the radio says no more. No sync loop after a send | section 6.3 |
+| 14 | Incoming duplicates (the other side's retries) are dropped by sender + timestamp + text | `MessageSync`, `messages.dedupe_key` |
+| 15 | A contact is written to the radio only when the user adds or edits one; the radio's route is read first and written back unchanged; a new contact is written as "unknown", never "direct" | section 16.4 |
+| 16 | The thread shows "They need to add you as a contact before they can receive this" when a contact has never confirmed a message from us | `Contact.everConfirmed`, `ChatService.needsToAddYou` |
+
+### 16.2 One message, try by try
+
+```mermaid
+sequenceDiagram
+  participant O as Outbox
+  participant R as Companion radio
+  Note over O: message stored: timestamp T, tries planned from DeliverySettings (4 + 4)
+  loop tries 1..4 (try numbers 0..3)
+    Note over O: confirmation code computed and stored BEFORE the send
+    O->>R: 02 00 <try> <T u32> <prefix x6> <text>
+    R-->>O: 06 <flood 0/1> <ack u32> <est u32>
+    Note over O: wait est x 1.2 for 82 <ack> <trip>
+  end
+  alt the radio reported at least one try as direct (or did not say)
+    O->>R: 0D <pub x32>          (RESET_PATH, once per message)
+    R-->>O: 00 OK
+  else every try was reported flood
+    Note over O: no reset: the radio has no route and floods already
+  end
+  loop tries 5..8 (try numbers 4..7)
+    O->>R: 02 00 <try> <T u32> <prefix x6> <text>
+    R-->>O: 06 01 <ack u32> <est u32>
+  end
+  Note over O: no confirmation: Not delivered. A confirmation that still comes makes it Delivered.
+```
+
+- **The try number.** The radio keeps `attempt & 3` in the packet and, for attempt > 3, appends the attempt byte after the
+  text ("to make packethash unique", BaseChatMesh.cpp 465-467). A packet's identity on the mesh is its type plus its contents,
+  so each try number is a different packet and nobody drops it as already seen. Builds up to 76 cut the try number to 0-3
+  before giving it to the radio: try 5, the rescue flood, was byte for byte try 1 (defect M1). The bytes of tries 1 to 8 are
+  asserted and printed by `delivery_lossy_test.dart`.
+- **Text limit.** 160 bytes; 158 once the try number is above 3 (the two appended bytes). A text of 159 or 160 bytes is
+  therefore planned with at most 4 tries (`OutboxEntry.maxAttempts`); the radio is never given a try it would refuse.
+  `ChatService.dmTextBytesForAllTries` (158) is the length that keeps every try.
+- **The confirmation code** is `SHA-256(timestamp LE32 | attempt & 3 | text | sender public key)[0..4]`
+  (`expectedDmAck`, the firmware's `composeMsgPacket`). The outbox computes it and stores it with the try before the command
+  goes out, so a confirmation is matched when it arrives before the radio's `SENT`, when `SENT` was lost, and when it comes
+  late. Tries n and n+4 share a code (the hash has `attempt & 3`). If the radio's own code ever differs it is stored as well
+  (`delivery_attempts.ack2`) and both match.
+- **The wait** is `est_timeout x 1.2`, counted from the radio's answer. Only when the radio gave no estimate at all (its
+  reply was lost and no earlier try has one) a fixed 5 s is used.
+- **No answer to the send command** (5 s): the packet may have gone out, so the try counts as made
+  (`TryOutcome.radioNoAnswer`, route not reported) and the next try uses the next try number. Build 76 called this "busy"
+  and resent the same try number up to 8 times.
+- **Busy** (`ERR TABLE_FULL`, no free packet): nothing went out; the same try is asked again after 0.5 s, 1 s, 2 s, then
+  the message fails with that reason (MeshCore One `withPoolBackoff`).
+- **Not a contact** (`ERR NOT_FOUND`): section 11, sync step 4.
+- **Not connected**: no try is used; the message waits. While the phone is not linked the wait of a try in flight does not
+  end either (the radio drops the confirmation push when no app is connected).
+- **Manual retry** ("Try again", "Retry all") is a NEW send, as in the official app: a new timestamp, try numbers from 0,
+  today's settings. The tries of the earlier send stay recorded (`delivery_attempts.round`) and a late confirmation for one
+  of them still marks the message delivered. Build 76 restarted at try 0 with the old timestamp: every retry was a packet the
+  mesh had already seen.
+- **Long-press Send, direct or flood for one message** (official v1.21.0). Flood = one `RESET_PATH` before the first try,
+  then the normal send (`ChatService.send(forceFlood: true)`); that is the message's one reset. Direct = the normal send.
+- **Cancel** stops a message that is queued, between tries or waiting; a confirmation for a try already made still counts.
+- **The clock.** Direct messages are stamped with phone time. When the radio's clock is ahead of the phone (it refuses to be
+  set back), room posts are stamped from the radio's clock (`ChatService.radioClockAheadSecs`), because a room server only
+  takes a post newer than the last thing the radio sent it.
+
+### 16.3 What the app no longer does (the "Removed" list, and decisions D1 to D3)
+
+- Route modes Automatic / Keep this route / Always search, the pinned route and the set-path write behind
+  `AppFlags.routeWriteVerified`. Migration v6 sets every contact to the one behaviour there is.
+- `RESET_PATH` before a send the PHONE classed as a flood; the forced flood on the last try; clearing the phone's route.
+- Contact write-backs on connect (favourite push, cache fill), which carried the phone's copy of the route, last-advert time
+  and position.
+- The message sync loop after every send; the arbiter's `GET_STATS` queue probe before a ping; `APP_START` again during the
+  contact sync.
+- "Try again" restarting at try 0 with the old timestamp.
+- D1: taking a little-used contact off the radio to make room. The state says "Your radio's contact list is full"
+  (`ContactSyncState.tableFull`, `ChatService.radioContactListFull`, `radioContactListFullText`).
+- D2: "Probably delivered (they replied)". A reply proves nothing; only a confirmation delivers. Migration v6 turns stored
+  rows into Not delivered / no confirmation (a late confirmation still upgrades them).
+- D3: the "This route may be broken" logic (`routeLooksBroken` is always false).
+
+### 16.4 Writing a contact to the radio (rule 15)
+
+`ADD_UPDATE_CONTACT` copies the route from the frame without question (`updateContactFromFrame`, MyMesh.cpp 194-217). The
+official app had this bug twice (v1.11.0 "adding contacts manually would set path as direct instead of flood", v1.51.1
+"contacts with a 3-byte path would always reset to flood"). So:
+
+- **Edit** (favourite on or off): `GET_CONTACT_BY_KEY` first, then `ADD_UPDATE_CONTACT` with THAT copy and only bit 0 of
+  the flags byte changed. Route, last-advert time, position, name, type and the other flag bits go back as the radio holds
+  them. If the flag already agrees nothing is written.
+- **Add** (by hand, link, scan, "New nodes nearby", "Add to radio", or a send the radio answered "not a contact" to):
+  `GET_CONTACT_BY_KEY` first; when the radio has it, its copy is taken and nothing is written; otherwise it is written with
+  `out_path_len` 0xFF (unknown), never 0 (direct) and never the phone's copy of a route. `last_advert` is the advert's own
+  timestamp (section 11).
+- An add or a favourite change made while the radio is away is remembered (settings `contacts.pendingAdds:<radio>`,
+  `contacts.pendingFlags:<radio>`) and done at the next sync, the same way.
+- Manual **Reset route** on the contact's route screen is kept: `RESET_PATH`.
+
+### 16.5 The message log (defect M12)
+
+`lib/chat/message_log.dart` (table `message_log`, the newest 6000 lines) with the link's side in `lib/radio/link_log.dart`.
+
+- One line per command given to the radio (`>`), per reply code (`<`), per timeout (`!`), per stray frame discarded (`~`),
+  per delivery push (`*`: SEND_CONFIRMED, PATH_UPDATED, MSG_WAITING, CONTACTS_FULL, CONTACT_DELETED) and per note (`#`: the
+  clock, link closed).
+- One line per step of a message (`=`): queued with its plan, each try with its number and expected code, what the radio
+  said (direct or flood, estimate, wait), the reset path, and every confirmation with its code and whether it matched
+  ("matched try 2 (an earlier try)", "NOT matched", "again for an already delivered message").
+- **Never in a line:** message text, channel secrets, passwords, PINs, private keys, names, positions. A contact is the first
+  4 hex characters of its key; a message the first 8 of its local id. `describeCommandForLog` / `describeReplyForLog` are the
+  only places a frame becomes log text (tested with hostile payloads).
+- `MessageLog.recent()`, `MessageLog.forMessage(id)` (everything logged while that message was being delivered, the link's
+  frames in between included) and `ChatService.exportMessageLog({messageId, formatTime, header})` (plain text to share).
+- Times: the export is UTC with milliseconds and says "Times in UTC" (a diagnostics log stays UTC whatever the Time zone
+  setting, `lib/core/time_format.dart`); a screen that lists lines uses `MessageLog.lineTime(ms)` (the app's own time).
+  The tries in message details use `timeOfDay(seconds: true)` from the same formatter.
+
+Example (a message with settings 1 direct + 1 flood that nobody confirmed):
+
+```
+= msg 76e75a48 queued: 2 tries (1 before the reset, fallback on), send 0
+= msg 76e75a48 try 1 of 2 (try number 0, ts 1795799492, 13b) expects ack=5d1c0a77
+> SEND_TXT_MSG(2) len=26 type=0 try=0 ts=1795799492 to=b0b0 text=13b
+< SENT(6) direct ack=5d1c0a77 est=40ms for SEND_TXT_MSG after 1ms
+= msg 76e75a48 try 1 sent direct (the radio said so), est 40ms, waiting 48ms
+= msg 76e75a48 try 1 of 2: no confirmation within the wait
+> RESET_PATH(13) len=33 key=b0b0
+< OK(0) len=1 for RESET_PATH after 0ms
+= msg 76e75a48 reset path before try 2: OK
+= msg 76e75a48 try 2 of 2 (try number 1, ts 1795799492, 13b) expects ack=0e41b2c9
+> SEND_TXT_MSG(2) len=26 type=0 try=1 ts=1795799492 to=b0b0 text=13b
+< SENT(6) flood ack=0e41b2c9 est=60ms for SEND_TXT_MSG after 0ms
+= msg 76e75a48 try 2 sent flood (the radio said so), est 60ms, waiting 72ms
+= msg 76e75a48 try 2 of 2: no confirmation within the wait
+= msg 76e75a48 not delivered: no confirmation after 2 tries
+```
+
+### 16.6 Engine API (what the chat screens and Settings call)
+
+Everything is on `ChatService` (`ChatWiring.controller.value!.service`) unless noted; `ChatController` forwards the ones
+marked (C).
+
+| Need | API |
+|---|---|
+| Delivery settings: direct tries 1-4 (default 4), flood tries 0-4 (default 4), flood fallback on/off (default on); persisted in the chat database (`settings` keys `delivery.direct_tries`, `delivery.flood_tries`, `delivery.flood_fallback`) | `DeliverySettings` (`lib/chat/delivery_settings.dart`; `copyWith`, `totalTries`, `effectiveFloodTries`, the `min*`/`max*` constants); `service.deliverySettings` get/set (C: `controller.deliverySettings`, which also notifies listeners). A message on its way keeps the plan it started with |
+| Cancel a message still retrying | `service.cancel(messageId)` -> bool. `DeliveryUi.pending` / `deliveryProgress(id).active` say when to offer it |
+| "Try n of m" | `service.deliveryProgress(messageId)` -> `DeliveryProgress { tryNumber, tryCount?, directTries?, tries, earlierTries, active }`; also `store.outbox.get(id)?.maxAttempts` (still works) and `deliveryUi(m, maxAttempts: ...)` / `deliveryLabel(m, maxAttempts: ...)`, which word it "Waiting for confirmation (try 3 of 8)" |
+| Per-try state for message details | `service.deliveryTries(messageId)` -> `List<DeliveryAttempt>`: `attempt` (the n, 1-based in its send), `wireAttempt` (0..7), `round` (0 first send, +1 per manual retry), `route` + `routeKnown` (direct / flood as the radio reported; `routeKnown` false = its reply was lost), `outcome` (`TryOutcome`: sending, waiting, confirmed, noConfirmation, radioNoAnswer, cancelled, interrupted; null on rows from before build 77), `estTimeoutMs`, `tripMs`, `resetBefore`, `sentAtMs`, `tsSender`. Wording: `describeAttempt(a, n, m, last:, formatTime:)`, `describeTryRoute(a)`, `describeTryOutcome(a, m, last:)`, `describeFailure(m, tries)` in `lib/chat/delivery_text.dart` |
+| "They need to add you as a contact" (rule 16) | `service.needsToAddYou(radioId, convKey)` (C: `controller.needsToAddYou(convKey)`); the flag itself is `Contact.everConfirmed` / `confirmedMs` (column `contacts.confirmed_ms`, set by the first confirmation, backfilled by migration v6); the words are `needsToAddYouText` |
+| Contact table full (D1) | `service.radioContactListFull` (C) / `service.contacts.state.tableFull` (stream `contacts.states`); a message that hit it fails with `FailReason.contactListFull`; `ContactManager.ensureOnRadio` and `addByKey` report it (`ContactTableFull`, `AddContactResult.note`); the words are `radioContactListFullText`; `contacts.cleanupSuggestions()` and `contacts.removeFromRadio(keys)` are the "manage" actions (the person chooses) |
+| Message log | `service.log.recent(limit:)`, `service.log.forMessage(messageId)` -> `List<MessageLogLine {tsMs, source, messageId?, text}>`; `service.exportMessageLog({messageId, formatTime, header})` (C) -> shareable text; `service.log.clear()` |
+| Manual retry | `service.retryFailed(messageId, {forceFlood})`: a new send with a new timestamp |
+| Long-press direct or flood | `service.send(..., forceFlood: true)` (C: `controller.send(convKey, text, forceFlood: true)`) = one reset path, then the normal send; `forceFlood: false` = direct = the normal send |
+| Manual Reset route | `service.contacts.resetPath(publicKey)` |
+
+Radio layer, for a session that is a `LinkRadioSession`: `DeliveryLink` (`lib/radio/session.dart`) with `onLinkLog`,
+`radioClockAheadSecs`, `awaitingConfirmation`, `cachedContactPolicy()`, `strayFrames`. Sinks: `OutboundMessageSink.sendDirect`
+(its `forceFlood` argument is ignored) plus the optional `DeliveryRadioControl` (`resetPath`, `addContactToRadio`).
+
+Leftovers kept only so build-76 screens compile, to delete with those screens: `PathMode`, `Contact.pathMode` / `forceFlood` /
+`pinnedPath`, `ContactManager.setRouteMode` / `keepCurrentRoute` / `setRoute` / `restorePinnedPath` / `restorePath` /
+`setForceFlood` / `routeWriteEnabled` / `notices`, `MessageState.likelyDelivered`, `DeliveryStage.likely`,
+`RowDelivery.likely`, `Outbox.onReply`, `lib/chat/route_health.dart`. None of them does anything.
+
+### 16.7 Chat database, migration v6
+
+`delivery_attempts` + `wire_attempt, round, ts_sender, outcome, route_known, ack2, reset_before, trip_ms`; `outbox` +
+`direct_tries, did_reset, round`; `contacts.confirmed_ms`; table `message_log (id, ts_ms, src, msg_id, line)`. Route modes and
+pins cleared; `likelyDelivered` rows become `failed` / `noAck`.
+
+### 16.8 Real-radio check list for Andy (TestFlight build)
+
+This Mac has no radio and a simulated radio cannot show mesh behaviour, so these are run on a real one. If a step fails:
+open the failed message > details > message log > export, and send it.
+
+1. **Direct.** Message a contact whose route the radio already knows (a route shows on their route screen). Expected:
+   Delivered; details show "Try 1 · direct".
+2. **Flood.** Contact > Reset route, then message them. Expected: Delivered; "Try 1 · flood"; a route appears again
+   afterwards (the radio learned it and the app read it back).
+3. **Fallback after the direct tries.** With a contact that has a route, switch off the repeater that route uses (or move
+   so the route is broken) and send. Expected: tries 1 to 4 direct with no confirmation, "after reset path" on try 5, tries
+   5 to 8 flood; Delivered if any flood gets through. The status line counts "try n of 8".
+4. **A route change in mid-conversation.** Send, get Delivered, move so that another repeater is the way through, send
+   again. Expected: Delivered within the eight tries, and the route screen shows the new route afterwards.
+5. **The recipient does not have us as a contact.** Message a radio that has not added yours. Expected: "They need to add
+   you as a contact before they can receive this" in the thread, eight tries, Not delivered. After they add you: Delivered,
+   and the note is gone for good.
+6. **Try again.** On a Not delivered message press Try again. Expected: it is tried again from try 1 (the log shows a new
+   timestamp) and can be delivered; with build 76 a retry never arrived.
+7. **Cancel.** Send to a radio that is switched off, press Cancel while it says "try 2 of 8". Expected: it stops; the log
+   shows no further SEND_TXT_MSG.
+8. **Settings.** Set direct tries 2, flood tries 1 and send to a radio that is off: three tries, a reset path before the
+   third. Turn flood fallback off: only the direct tries.
+9. **The official app afterwards.** Connect the official app to the same radio: the contacts still have their routes and
+   favourites (nothing was overwritten by MeshSonar connecting).
+10. **Contact list full.** Fill the radio's contact list, add one more in MeshSonar. Expected: "Your radio's contact list
+    is full", and no contact has disappeared from the radio.

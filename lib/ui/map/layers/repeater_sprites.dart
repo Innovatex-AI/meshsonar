@@ -95,14 +95,17 @@ class RepeaterSpriteSpec {
   final RepeaterFreshness freshness;
   final bool room;
   final SpriteVariant variant;
-  const RepeaterSpriteSpec(this.freshness, this.room, this.variant);
+
+  /// An estimated position (Round 1 F10): a dotted outline. Never in the atlas (estimates are drawn one by one).
+  final bool estimated;
+  const RepeaterSpriteSpec(this.freshness, this.room, this.variant, {this.estimated = false});
 
   int get index => (variant.index * 2 + (room ? 1 : 0)) * 3 + freshness.index;
 
   @override
-  bool operator ==(Object other) => other is RepeaterSpriteSpec && other.index == index;
+  bool operator ==(Object other) => other is RepeaterSpriteSpec && other.index == index && other.estimated == estimated;
   @override
-  int get hashCode => index;
+  int get hashCode => Object.hash(index, estimated);
 
   static const int count = 36;
   static RepeaterSpriteSpec ofIndex(int i) => RepeaterSpriteSpec(
@@ -226,7 +229,8 @@ void _dashed(Canvas canvas, Path path, Paint paint, double on, double off) {
   }
 }
 
-/// The definition's tower: a caret (mast and two legs) with a cross-bar, as the website draws it.
+/// The tower: a mast on two legs with antenna arcs either side of its top (build 77, Round 1 N4: the old caret with a cross-bar
+/// read as a letter "A" in a circle at 20 to 24 pt).
 void _glyph(Canvas canvas, Offset c, double d, Color color) {
   final gs = d * 0.46;
   final p = Paint()
@@ -235,10 +239,21 @@ void _glyph(Canvas canvas, Offset c, double d, Color color) {
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round
     ..color = color;
-  final top = Offset(c.dx, c.dy - gs * 0.5);
-  final l = Offset(c.dx - gs * 0.42, c.dy + gs * 0.5), r = Offset(c.dx + gs * 0.42, c.dy + gs * 0.5);
+  final top = Offset(c.dx, c.dy - gs * 0.38);
+  final l = Offset(c.dx - gs * 0.34, c.dy + gs * 0.55), r = Offset(c.dx + gs * 0.34, c.dy + gs * 0.55);
   canvas.drawPath(Path()..moveTo(l.dx, l.dy)..lineTo(top.dx, top.dy)..lineTo(r.dx, r.dy), p);
-  canvas.drawLine(Offset(c.dx - gs * 0.22, c.dy + gs * 0.08), Offset(c.dx + gs * 0.22, c.dy + gs * 0.08), p);
+  // The antenna tip and two arcs each side: a radio, not a letter.
+  canvas.drawCircle(top, math.max(0.8, gs * 0.08), Paint()..color = color);
+  final arc = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = math.max(1.1, gs * 0.12)
+    ..strokeCap = StrokeCap.round
+    ..color = color;
+  for (final rad in [gs * 0.32, gs * 0.56]) {
+    final box = Rect.fromCircle(center: top, radius: rad);
+    canvas.drawArc(box, -math.pi / 2 + 0.55, 0.9, false, arc); // right
+    canvas.drawArc(box, -math.pi / 2 - 0.55 - 0.9, 0.9, false, arc); // left
+  }
 }
 
 /// Paints one sprite centred on [c] at logical scale (the atlas calls this at DPR scale too). [scale] is the Icon size choice.
@@ -269,17 +284,20 @@ void paintRepeaterSprite(Canvas canvas, Offset c, RepeaterSpriteSpec spec, Repea
         ..color = sym.selection,
     );
   }
-  if (stale) canvas.saveLayer(Rect.fromCircle(center: c, radius: r + 4), Paint()..color = Color.fromRGBO(0, 0, 0, sym.staleOpacity));
-  // The disc with a 1 pt keyline in the ring colour (so a disc on a same-coloured map still has an edge).
+  // Stale (Round 1 F10): the disc and its outline stay at full strength (a stale repeater on a near-black map was a near-black
+  // disc at 45 % and vanished); only the glyph fades, and there is no ring.
   canvas.drawPath(_shape(c, discR, spec.room), Paint()..color = sym.disc);
-  canvas.drawPath(
-    _shape(c, discR, spec.room),
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = theme.highContrast ? 1.5 : 1
-      ..color = sym.ring.withValues(alpha: theme.highContrast ? 1 : 0.6),
-  );
-  if (!donut) _glyph(canvas, c, discR * 2, sym.icon);
+  final keyline = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = theme.highContrast ? 1.5 : (stale ? 1.3 : 1)
+    ..color = sym.ring.withValues(alpha: theme.highContrast || stale ? 1 : 0.6);
+  if (spec.estimated) {
+    // An estimated position: a dotted outline, so it never reads as a stale repeater (both used to be "paler").
+    _dashed(canvas, _shape(c, discR, spec.room), keyline..strokeWidth = 1.4, 1.2, 1.6);
+  } else {
+    canvas.drawPath(_shape(c, discR, spec.room), keyline);
+  }
+  if (!donut) _glyph(canvas, c, discR * 2, stale ? sym.icon.withValues(alpha: sym.icon.a * sym.staleOpacity) : sym.icon);
   final ringPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = ringW
@@ -291,9 +309,8 @@ void paintRepeaterSprite(Canvas canvas, Offset c, RepeaterSpriteSpec spec, Repea
     case RepeaterFreshness.recent:
       _dashed(canvas, ringPath, ringPaint, donut ? 2 : 2.4, donut ? 1.6 : 1.8);
     case RepeaterFreshness.stale:
-      break; // no ring; faded below
+      break; // no ring; the glyph is faded above
   }
-  if (stale) canvas.restore();
 
   if (v.hasTick) {
     // 8 pt green tick, top right, outlined in the disc colour so it reads on any map.

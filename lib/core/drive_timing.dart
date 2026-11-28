@@ -45,7 +45,7 @@ class DriveTimingSummary {
   String get line {
     if (sent == 0) return 'No pings were sent.';
     final parts = <String>['Sent $sent of $expected expected'];
-    if (gapP50S != null) parts.add('typical gap ${_s(gapP50S)}, worst ${_s(gapMaxS)}');
+    if (gapP50S != null) parts.add('Typical gap ${_s(gapP50S)}, worst ${_s(gapMaxS)}');
     return parts.join('. ');
   }
 

@@ -1,7 +1,8 @@
 // Visual check of DM delivery states (fix round, Nov 8 2026, Andy's 0.29.0+49 report: messages the contact answered showed
 // "Not delivered"). Runs the real app with the simulated radio: one DM confirmed (Delivered), then the radio drops acks
-// (as a lost flood PATH return does), so the next DM sits in "Waiting for confirmation"; the contact replies and it turns
-// "Probably delivered (they replied)" with no further tries. Prints "SCREEN <name>" for scripts/verify_sim.sh. Debug only.
+// (as a lost flood PATH return does), so the next DM sits in "Waiting for confirmation (try n of m)" with Cancel; the contact
+// replies and it STAYS waiting (build 77, decision D2: a reply proves nothing, "Probably delivered" is gone; only a
+// confirmation, even a late one, makes it Delivered). Prints "SCREEN <name>" for scripts/verify_sim.sh. Debug only.
 //
 //   FLOW_TEST=integration_test/dm_delivery_visual_test.dart scripts/verify_sim.sh
 //   (light/dark: xcrun simctl ui <udid> appearance dark; HOLD_SECONDS=<n> keeps each screen longer)
@@ -36,6 +37,11 @@ void main() {
         await t.tap(find.byKey(const Key('onboarding-next')));
         await pumpFor(t, const Duration(milliseconds: 600));
       }
+    }
+    // Build 77 (round 5 O1): the intro ends on "What MeshSonar collects"; Keep sharing closes it.
+    if (await waitFor(t, find.byKey(const Key('telemetry-keep')), timeout: const Duration(seconds: 6))) {
+      await t.tap(find.byKey(const Key('telemetry-keep')));
+      await pumpFor(t, const Duration(seconds: 1));
     }
     expect(await waitFor(t, find.byWidgetPredicate((w) => w.key == const Key('shell-tabs') || w.key == const Key('shell-rail'))), isTrue);
     final keep = find.byKey(const Key('telemetry-keep'));
@@ -93,7 +99,7 @@ void main() {
     await hold(t, 'dm-waiting-for-confirmation');
     radio.injectDirectMessage('Ann KE8ANN', 'Yes, yes it is.');
     await pumpFor(t, const Duration(seconds: 4));
-    await hold(t, 'dm-probably-delivered');
+    await hold(t, 'dm-still-waiting-after-reply');
     final shown = ctl.store.messages.page(dm.key, limit: 10).messages.where((m) => m.isOutgoing).map((m) => '${m.text} => ${m.state.name}').join(' | ');
     // ignore: avoid_print
     print('DM_STATES $shown');

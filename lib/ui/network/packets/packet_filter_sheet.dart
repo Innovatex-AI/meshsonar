@@ -155,7 +155,7 @@ class _PacketFilterSheetState extends State<PacketFilterSheet> {
         _channelError = null;
         _channel.clear();
       } else {
-        _channelError = 'Public, a #hashtag, or enc:<2 hex> for an unknown channel.';
+        _channelError = 'Public, a #hashtag, or enc: and the 2-character ID of a private channel.';
       }
     });
   }

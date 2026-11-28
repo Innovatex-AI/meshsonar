@@ -52,9 +52,13 @@ abstract final class MessageMenu {
     ChatMessage m, {
     bool hasMap = false,
     bool canResend = false,
+    bool? canCancel,
     bool photos = false,
     bool Function(String url)? isOwnPhoto,
   }) {
+    // A message still being tried can be stopped: waiting to go, or (build 77) a direct message that was sent and is
+    // waiting for its confirmation with tries left ([canCancel] from the delivery engine).
+    final cancel = canCancel ?? m.isPending;
     final shots = photos ? photoLinksOf(m.text) : const <String>[];
     final many = shots.length > 1;
     String n(int i) => many ? ' ${i + 1}' : '';
@@ -72,11 +76,11 @@ abstract final class MessageMenu {
       const MessageMenuEntry(MessageMenuId.details, 'Full details', AppSymbols.infoCircle),
       if (m.state == MessageState.failed) const MessageMenuEntry(MessageMenuId.retry, 'Try Again', AppSymbols.arrowUpCircleFill),
       if (canResend) const MessageMenuEntry(MessageMenuId.resend, 'Resend', AppSymbols.arrowUpCircleFill),
-      if (m.isPending) const MessageMenuEntry(MessageMenuId.cancel, 'Cancel sending', AppSymbols.xmarkCircleFill),
+      if (cancel) const MessageMenuEntry(MessageMenuId.cancel, 'Cancel sending', AppSymbols.xmarkCircleFill),
       for (var i = 0; i < shots.length; i++)
         if (isOwnPhoto?.call(shots[i]) ?? false)
           MessageMenuEntry(MessageMenuId.deletePhoto, 'Delete photo${n(i)}', AppSymbols.trash, destructive: true, link: shots[i], group: 1),
-      if (!m.isPending) const MessageMenuEntry(MessageMenuId.delete, 'Delete from this phone', AppSymbols.trash, destructive: true, group: 1),
+      if (!m.isPending && !cancel) const MessageMenuEntry(MessageMenuId.delete, 'Delete from this phone', AppSymbols.trash, destructive: true, group: 1),
     ];
   }
 
@@ -88,13 +92,14 @@ abstract final class MessageMenu {
     ChatMessage m, {
     bool hasMap = false,
     bool canResend = false,
+    bool? canCancel,
     bool photos = false,
     bool Function(String url)? isOwnPhoto,
   }) {
     return showAppActionSheet<MessageMenuEntry>(
       context,
       actions: [
-        for (final e in entries(m, hasMap: hasMap, canResend: canResend, photos: photos, isOwnPhoto: isOwnPhoto))
+        for (final e in entries(m, hasMap: hasMap, canResend: canResend, canCancel: canCancel, photos: photos, isOwnPhoto: isOwnPhoto))
           AppAction<MessageMenuEntry>(e.label, e, destructive: e.destructive, symbol: e.symbol, key: Key('act-${keyName(e.id)}')),
       ],
     );

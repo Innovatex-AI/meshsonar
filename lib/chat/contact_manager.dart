@@ -1,8 +1,16 @@
 // ContactManager: the phone's contact book and its sync with the radio. Pure Dart, no Flutter.
 //
-// The rules (design doc "phone is master", HANDOFF 71/74):
-//  * ChatStore holds EVERY contact the user has. The radio's table (100 entries by default, DEVICE_INFO says) is a cache of
-//    the ones it needs to send and receive DMs. Nothing is ever deleted from the phone because the radio ran out of room.
+// The rules (design doc "phone is master", HANDOFF 71/74; build 77 redesign round 3):
+//  * ChatStore holds EVERY contact the user has. The radio's table (100 entries by default, DEVICE_INFO says) holds the
+//    ones it can send to and receive from. Nothing is ever deleted from the phone because the radio ran out of room.
+//  * The ROUTE to a contact belongs to the radio. The phone's copy is a mirror for display: it is read from the radio and
+//    never written back. A contact is written to the radio ONLY when the person adds or edits one (add, favourite), and
+//    then the radio's own copy is read first and its route, last-advert time and position go back unchanged; a contact the
+//    radio does not have yet is written with route "unknown", never "direct" (round 3 rule 15; the official app had this
+//    bug twice, fixed in its v1.11.0 and v1.51.1). Nothing is written back on connect any more (build 76 pushed favourite
+//    flags and filled the radio's table with the phone's copies, routes included).
+//  * When the radio's table is full the person is told so ([ContactSyncState.tableFull], "Your radio's contact list is
+//    full"). No contact is taken off the radio to make room (decision D1).
 //  * A node heard advertising is NEVER added to the radio silently by this app. With the radio's "ask before adding" on it
 //    pushes NEW_ADVERT and the node waits in "New nodes nearby" until the user adds or ignores it.
 //  * Downloads are incremental (GET_CONTACTS since the last END_OF_CONTACTS cursor) and idempotent: the same list twice, or
@@ -16,7 +24,6 @@ import 'contact_port.dart';
 import 'db/misc_repositories.dart' show PathHistoryEntry, PingResultRow;
 import 'mesh_links.dart';
 import 'models.dart';
-import 'outbox.dart' show pinnedRouteOf;
 import 'store.dart';
 
 enum SyncPhase {
@@ -91,12 +98,6 @@ class ContactSyncState {
 
 const Object _keep = Object();
 
-/// One-off things worth telling the user about (a snackbar, not a state).
-class ContactNotice {
-  final String message;
-  const ContactNotice(this.message);
-}
-
 /// Result of adding a contact from a link, key or scan. Never an exception for user input.
 class AddContactResult {
   final Contact? contact;
@@ -135,19 +136,15 @@ class ContactManager {
   /// every automatic sync, never before one the user asked for.
   final bool Function()? shouldDefer;
 
-  /// Contacts the radio keeps free for new nodes when this app fills the cache on its own.
-  final int reserveSlots;
-
   ContactRadioPort? _port;
   String? _lastRadioId;
   ContactSyncState _state = const ContactSyncState();
   final _states = StreamController<ContactSyncState>.broadcast();
-  final _notices = StreamController<ContactNotice>.broadcast();
   Future<void>? _running;
   final Map<String, int> _refreshedMs = {};
   bool _disposed = false;
 
-  ContactManager({required this.store, int Function()? nowMs, void Function()? onChanged, this.shouldDefer, this.reserveSlots = 5})
+  ContactManager({required this.store, int Function()? nowMs, void Function()? onChanged, this.shouldDefer})
       : nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
         onChanged = onChanged ?? (() {}) {
     _lastRadioId = store.db.setting(_kLastRadio);
@@ -157,12 +154,17 @@ class ContactManager {
   static String _kCursor(String r) => 'contacts.cursor:$r';
   static String _kRemoved(String r) => 'contacts.removed:$r';
   static String _kPrompt(String r) => 'contacts.askPrompt:$r';
+  static String _kPendingAdds(String r) => 'contacts.pendingAdds:$r';
+  static String _kPendingFlags(String r) => 'contacts.pendingFlags:$r';
 
   // ------------------------------------------------------------------ state
 
   ContactSyncState get state => _state;
   Stream<ContactSyncState> get states => _states.stream;
-  Stream<ContactNotice> get notices => _notices.stream;
+
+  /// The radio refused a contact because its list is full and nothing has made room since (decision D1). The words to
+  /// show are [radioContactListFullText]; the place to send the person is the radio list (Contacts > Radio list).
+  bool get radioListFull => _state.tableFull;
 
   /// The radio whose contacts are shown: the linked one, else the last one used, else the only one the book has.
   String? get radioId {
@@ -186,7 +188,6 @@ class ContactManager {
   void dispose() {
     _disposed = true;
     unawaited(_states.close());
-    unawaited(_notices.close());
   }
 
   // ------------------------------------------------------------------ attach / detach (one per radio session)
@@ -237,9 +238,10 @@ class ContactManager {
         d = await _download(p, id, 0);
       }
       _afterList(id, d);
-      await _pushFavouriteFlags(p, id);
-      await _fillCache(p, id);
-      final policy = await _tryPolicy(p);
+      // What the person did while the radio was away (added a contact, changed a favourite) goes to the radio now, each as
+      // an edit: the radio's copy is read first and its route is left alone. Nothing else is written on connect.
+      await _flushPendingEdits(p, id);
+      final policy = await _tryPolicy(p, fresh: false);
       _set(_state.copyWith(phase: SyncPhase.idle, lastSyncMs: nowMs(), error: null, policy: policy ?? _state.policy));
     } on RadioUnavailable catch (e) {
       _set(_state.copyWith(phase: SyncPhase.failed, error: _plainFailure(e.reason)));
@@ -340,9 +342,6 @@ class ContactManager {
             customName: ex.customName,
             notes: ex.notes,
             source: ex.source,
-            pathMode: ex.pathMode,
-            pinnedPath: ex.pinnedPath,
-            pinnedHashSize: ex.pinnedHashSize,
             pathLearnedMs: ex.pathLearnedMs,
             lastPingMs: ex.lastPingMs,
             lastPingRttMs: ex.lastPingRttMs,
@@ -360,66 +359,94 @@ class ContactManager {
     return n.isEmpty ? key.substring(0, 8) : n;
   }
 
-  /// Favourites are the radio's "never replace me" flag (bit 0): keep it in step with the phone's favourite.
-  Future<void> _pushFavouriteFlags(ContactRadioPort p, String id) async {
-    for (final c in store.contacts.list(id)) {
-      if (!c.onRadio) continue;
-      if (((c.radioFlags & 1) != 0) == c.favourite) continue;
-      try {
-        await p.upload(_forRadio(c));
-        store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c)); // targeted: the user may have edited the contact meanwhile
-      } on ContactTableFull {
-        return;
-      }
-    }
-  }
-
   int _flagsFor(Contact c) => c.favourite ? (c.radioFlags | 1) : (c.radioFlags & ~1);
   Contact _forRadio(Contact c) => c.copyWith(radioFlags: _flagsFor(c));
 
-  /// Uploads the contacts the radio should have and does not: first the ones the user added on purpose, then favourites, then
-  /// anyone with a conversation. Stops at "full"; leaves [reserveSlots] free for the radio's own needs except for the
-  /// ones the user added on purpose.
-  Future<void> _fillCache(ContactRadioPort p, String id) async {
-    final cap = p.capacity;
-    var used = _state.radioCount ?? store.contacts.countOnRadio(id);
-    final convTs = _conversationTimes(id);
-    final missing = store.contacts.list(id).where((c) => !c.onRadio && !c.blocked).toList();
-    int rank(Contact c) {
-      if (c.source != ContactSource.radio) return 0;
-      if (c.favourite) return 1;
-      if (convTs.containsKey(c.prefix)) return 2;
-      return 9;
-    }
+  /// A contact for ADD_UPDATE_CONTACT when the radio does NOT have it yet: the phone's name, type and key, the favourite
+  /// flag, and NO route. The phone's copy of a route is never written to the radio (rule 15): a new contact starts as
+  /// "route unknown", so the first message floods and the radio learns the route itself.
+  Contact _asNewOnRadio(Contact c) => _forRadio(c).copyWith(outPath: null, outPathLen: -1);
 
-    final todo = missing.where((c) => rank(c) < 9).toList()
-      ..sort((a, b) {
-        final r = rank(a).compareTo(rank(b));
-        return r != 0 ? r : (convTs[b.prefix] ?? 0).compareTo(convTs[a.prefix] ?? 0);
-      });
-    for (final c in todo) {
-      final explicit = c.source != ContactSource.radio;
-      if (cap != null && used >= cap - (explicit ? 0 : reserveSlots)) {
-        if (explicit && used >= cap) _set(_state.copyWith(tableFull: true));
-        if (!explicit) break;
+  /// The only way this app writes a contact that the radio already has: [radioCopy] is what GET_CONTACT_BY_KEY just
+  /// returned, so its route, last-advert time and position go back exactly as the radio holds them; only the favourite
+  /// flag (bit 0 of the flags byte) follows the phone.
+  Contact _asEditOf(Contact radioCopy, Contact mine) =>
+      radioCopy.copyWith(radioFlags: mine.favourite ? (radioCopy.radioFlags | 1) : (radioCopy.radioFlags & ~1));
+
+  /// Writes the person's edit of [key] to the radio: read the radio's copy, change the flags, write it back. A contact the
+  /// radio does not have is left alone (nothing to edit there).
+  Future<void> _writeEdit(ContactRadioPort p, String id, String key) async {
+    final mine = store.contacts.get(id, key);
+    if (mine == null) return;
+    final there = await p.fetch(key);
+    if (there == null) {
+      if (mine.onRadio) store.contacts.setOnRadio(id, key, false);
+      return;
+    }
+    final edited = _asEditOf(there, mine);
+    if (edited.radioFlags != there.radioFlags) await p.upload(edited);
+    store.contacts.setOnRadio(id, key, true);
+    store.contacts.setRadioFlags(id, key, edited.radioFlags);
+  }
+
+  Set<String> _pendingSet(String settingKey) {
+    final raw = store.db.setting(settingKey);
+    if (raw == null) return <String>{};
+    try {
+      return {for (final k in (jsonDecode(raw) as List)) k as String};
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  void _savePending(String settingKey, Set<String> s) => store.db.putSetting(settingKey, s.isEmpty ? null : jsonEncode(s.toList()..sort()));
+
+  void _pendingAdd(String settingKey, String key) => _savePending(settingKey, _pendingSet(settingKey)..add(key));
+
+  void _pendingDone(String settingKey, String key) {
+    final s = _pendingSet(settingKey);
+    if (s.remove(key)) _savePending(settingKey, s);
+  }
+
+  /// Contacts the person added, and favourites they changed, while the radio was away. Done on the next sync, one by one.
+  Future<void> _flushPendingEdits(ContactRadioPort p, String id) async {
+    for (final key in _pendingSet(_kPendingAdds(id)).toList()) {
+      if (store.contacts.get(id, key) == null) {
+        _pendingDone(_kPendingAdds(id), key);
         continue;
       }
       try {
-        await p.upload(_forRadio(c));
-        store.contacts.setOnRadio(id, c.publicKey, true);
-        store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c));
-        used++;
+        await ensureOnRadio(key, force: true);
+        _pendingDone(_kPendingAdds(id), key);
       } on ContactTableFull {
-        _set(_state.copyWith(tableFull: true));
-        break;
+        break; // the state says "full"; it stays pending until there is room
+      } on RadioUnavailable {
+        rethrow;
+      } catch (_) {
+        // stays pending for the next sync
       }
     }
-    _set(_state.copyWith(radioCount: used));
+    for (final key in _pendingSet(_kPendingFlags(id)).toList()) {
+      try {
+        await _writeEdit(p, id, key);
+        _pendingDone(_kPendingFlags(id), key);
+      } on ContactTableFull {
+        _pendingDone(_kPendingFlags(id), key); // cannot happen for an update; never loop on it
+      } on RadioUnavailable {
+        rethrow;
+      } catch (_) {
+        // stays pending for the next sync
+      }
+    }
   }
 
-  Future<ContactPolicy?> _tryPolicy(ContactRadioPort p) async {
+  /// For tests: the keys whose add / favourite change waits for the radio.
+  Set<String> get pendingAdds => radioId == null ? <String>{} : _pendingSet(_kPendingAdds(radioId!));
+  Set<String> get pendingFlagEdits => radioId == null ? <String>{} : _pendingSet(_kPendingFlags(radioId!));
+
+  Future<ContactPolicy?> _tryPolicy(ContactRadioPort p, {bool fresh = true}) async {
     try {
-      return await p.getPolicy();
+      return await p.getPolicy(fresh: fresh);
     } catch (_) {
       return null;
     }
@@ -427,9 +454,12 @@ class ContactManager {
 
   // ------------------------------------------------------------------ one contact on the radio
 
-  /// Makes sure the radio can use [publicKey] (to send a DM to it). Fast when it is already there. Frees one slot by taking
-  /// the least useful contact off the RADIO (never off the phone) when the table is full. Throws [RadioUnavailable] when not
-  /// linked, [ContactTableFull] when nothing could be made to fit.
+  /// Puts [publicKey] on the radio because the person asked for it (they added the contact, pressed "Add to radio", or sent
+  /// a message the radio answered "not a contact" to). The radio's own copy is read first: when it has the contact, that
+  /// copy is taken as it is (its route wins) and nothing is written; when it does not, the contact is written as NEW with
+  /// route unknown. Throws [RadioUnavailable] when not linked and [ContactTableFull] when the radio's list is full: the
+  /// state then says so ([ContactSyncState.tableFull]) and NOTHING is taken off the radio to make room (decision D1).
+  /// [force] false returns at once when the phone already believes the contact is on the radio.
   Future<void> ensureOnRadio(String publicKey, {bool force = false}) async {
     final p = _port;
     final id = p?.radioId;
@@ -442,44 +472,25 @@ class ContactManager {
     if (there != null) {
       store.contacts.setOnRadio(id, key, true);
       store.contacts.setPath(id, key, there.hasPath ? there.outPath : null, there.hasPath ? there.outPathLen : -1);
-      store.contacts.setRadioFlags(id, key, there.radioFlags);
+      // The radio had it already: only the favourite flag may need to follow the phone (an edit of the radio's own copy,
+      // route untouched).
+      final edited = _asEditOf(there, c);
+      if (edited.radioFlags != there.radioFlags) await p.upload(edited);
+      store.contacts.setRadioFlags(id, key, edited.radioFlags);
       _changed();
       return;
     }
-    await _uploadWithRoom(p, id, c);
-  }
-
-  Future<void> _uploadWithRoom(ContactRadioPort p, String id, Contact c) async {
-    Future<void> put() async {
-      await p.upload(_forRadio(c));
-      store.contacts.setOnRadio(id, c.publicKey, true);
-      store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c));
-      final n = _state.radioCount;
-      _set(_state.copyWith(radioCount: n == null ? null : n + 1));
-    }
-
     try {
-      await put();
+      await p.upload(_asNewOnRadio(c));
     } on ContactTableFull {
-      final victim = _evictionCandidate(id, except: c.publicKey);
-      if (victim == null) {
-        _set(_state.copyWith(tableFull: true));
-        rethrow;
-      }
-      await p.remove(victim.publicKey);
-      store.contacts.setOnRadio(id, victim.publicKey, false);
-      final n = _state.radioCount;
-      _set(_state.copyWith(radioCount: n == null ? null : n - 1));
-      try {
-        await put();
-      } on ContactTableFull {
-        _set(_state.copyWith(tableFull: true));
-        rethrow;
-      }
-      if (!_notices.isClosed) {
-        _notices.add(ContactNotice('The radio\'s contact list was full, so ${victim.displayName} was taken off the radio to make room. They are still in your contacts on this phone.'));
-      }
+      _set(_state.copyWith(tableFull: true, radioCount: _state.capacity ?? _state.radioCount));
+      _changed();
+      rethrow;
     }
+    store.contacts.setOnRadio(id, key, true);
+    store.contacts.setRadioFlags(id, key, _flagsFor(c));
+    final n = _state.radioCount;
+    _set(_state.copyWith(radioCount: n == null ? null : n + 1));
     _changed();
   }
 
@@ -538,7 +549,10 @@ class ContactManager {
     store.contacts.touchHeard(id, key, nowMs());
     final known = store.contacts.get(id, key) != null;
     final last = _refreshedMs[key] ?? 0;
-    if (!known || nowMs() - last > 10 * 60 * 1000) await refreshOne(key);
+    // Not while a direct message waits for its confirmation: the read's reply would share the radio's 4-frame Bluetooth
+    // queue with that push (defect M5). The next advert of a known contact refreshes it.
+    final hold = known && (_port?.deliveryInFlight ?? false);
+    if (!hold && (!known || nowMs() - last > 10 * 60 * 1000)) await refreshOne(key);
     _changed();
   }
 
@@ -683,21 +697,26 @@ class ContactManager {
     _changed();
     final p = _port;
     if (p == null || !p.isConnected) {
+      _pendingAdd(_kPendingAdds(id), key);
       return AddContactResult(
           contact: c, created: ex == null, onRadio: false, note: 'Saved on this phone. It goes onto your radio the next time it connects.');
     }
     try {
       await ensureOnRadio(key, force: true);
+      _pendingDone(_kPendingAdds(id), key);
       return AddContactResult(contact: store.contacts.get(id, key), created: ex == null, onRadio: true);
     } on ContactTableFull {
+      _pendingAdd(_kPendingAdds(id), key);
       return AddContactResult(
           contact: c,
           created: ex == null,
           onRadio: false,
-          note: 'Saved on this phone, but your radio\'s contact list is full. Free a slot (Contacts > Radio list) and it will be added.');
+          note: 'Saved on this phone. $radioContactListFullText: remove a contact from the radio (Contacts > Radio list) and it will be added.');
     } on RadioUnavailable {
+      _pendingAdd(_kPendingAdds(id), key);
       return AddContactResult(contact: c, created: ex == null, onRadio: false, note: 'Saved on this phone. It goes onto your radio when it is back.');
     } catch (_) {
+      _pendingAdd(_kPendingAdds(id), key);
       return AddContactResult(contact: c, created: ex == null, onRadio: false, note: 'Saved on this phone. The radio did not take it yet; it will be tried again.');
     }
   }
@@ -709,11 +728,17 @@ class ContactManager {
     if (id == null) return;
     store.contacts.setFavourite(id, publicKey, v);
     _changed();
-    // The radio keeps favourites when it must replace one: tell it, when it is there.
-    final c = store.contacts.get(id, publicKey);
+    // The radio keeps favourites when it must replace a contact: tell it. This is an edit by the person, so the radio's
+    // copy is read first and written back with only the flag changed (its route is not touched). With the radio away the
+    // edit waits for the next sync.
+    final key = publicKey.toLowerCase();
     final p = _port;
-    if (c != null && c.onRadio && p != null && p.isConnected) {
-      unawaited(p.upload(_forRadio(c)).then((_) => store.contacts.setRadioFlags(id, c.publicKey, _flagsFor(c))).catchError((Object _) {}));
+    if (p != null && p.isConnected) {
+      unawaited(_writeEdit(p, id, key).then((_) => _pendingDone(_kPendingFlags(id), key)).catchError((Object _) {
+        _pendingAdd(_kPendingFlags(id), key);
+      }));
+    } else {
+      _pendingAdd(_kPendingFlags(id), key);
     }
   }
 
@@ -739,24 +764,14 @@ class ContactManager {
     _changed();
   }
 
-  /// true = every DM to this contact floods (never uses the saved route).
-  void setForceFlood(String publicKey, bool v) {
-    final id = radioId;
-    if (id == null) return;
-    store.contacts.setForceFlood(id, publicKey, v);
-    _changed();
-  }
-
   // ------------------------------------------------------------------ route, share, remove
 
-  /// Forgets the saved route: the next DM floods and the radio learns a fresh one. Phone and radio. A Keep-this-route pin is
-  /// dropped too (back to Automatic): a pinned route that was just cleared on purpose must not be written straight back.
+  /// Manual "Reset route" (kept: the official app has it): CMD_RESET_PATH, so the radio forgets its route, the next
+  /// message floods and the radio learns a fresh one. The phone's mirror of the route is cleared with it.
   Future<void> resetPath(String publicKey) async {
     final id = radioId;
     if (id == null) return;
-    final c = store.contacts.get(id, publicKey);
     store.contacts.setPath(id, publicKey, null, -1);
-    if (c != null && c.pathMode == PathMode.fixed) store.contacts.setPathMode(id, publicKey, PathMode.auto);
     store.contacts.setPathLearned(id, publicKey, null);
     store.pathHistory.add(PathHistoryEntry(contactKey: publicKey, tsMs: nowMs(), kind: 'reset'));
     _changed();
@@ -768,98 +783,18 @@ class ContactManager {
     }
   }
 
-  /// Undo of [resetPath]: puts the contact's saved route, mode and learned time back on the phone ([before] is the contact as it
-  /// was). When the radio is connected and route writes are enabled the route is written back there too; otherwise the radio
-  /// learns it again from the next message.
-  Future<void> restorePath(Contact before) async {
+  /// The radio answered OK to a RESET_PATH that message delivery sent (the one reset of a message): the phone's mirror of
+  /// the route follows what the radio now holds (none).
+  void noteRadioPathReset(String publicKey) {
     final id = radioId;
     if (id == null) return;
-    final key = before.publicKey;
-    store.contacts.setPath(id, key, before.outPath, before.outPathLen);
-    store.contacts.setPathMode(id, key, before.pathMode, pinnedPath: before.pinnedPath, pinnedHashSize: before.pinnedHashSize);
-    store.contacts.setPathLearned(id, key, before.pathLearnedMs);
-    _changed();
-    final p = _port;
-    if (before.hasPath && routeWriteEnabled() && p != null && p.isConnected) {
-      try {
-        final onRadio = await p.fetch(key) ?? before;
-        await p.upload(onRadio.copyWith(outPath: before.outPath, outPathLen: before.outPathLen));
-      } catch (_) {}
-    }
-  }
-
-  // ------------------------------------------------------------------ route mode (plan 4.7)
-
-  /// True when the set-path radio write may run (AppFlags.routeWriteVerified in the app; tests force it).
-  bool Function() routeWriteEnabled = () => false;
-
-  /// Automatic / Always search: plain mode change, nothing written to the radio. Returns false when [mode] is Keep this route
-  /// (use [keepCurrentRoute]).
-  bool setRouteMode(String publicKey, PathMode mode) {
-    final id = radioId;
-    if (id == null || mode == PathMode.fixed) return false;
-    store.contacts.setPathMode(id, publicKey, mode);
-    _changed();
-    return true;
-  }
-
-  /// Keep this route: pins the route the contact has now. False when there is none ("Find a route first").
-  bool keepCurrentRoute(String publicKey) {
-    final id = radioId;
-    final c = id == null ? null : store.contacts.get(id, publicKey);
-    if (id == null || c == null || !c.hasPath) return false;
-    final r = decodePath(c.outPathLen, c.outPath ?? const []);
-    if (r == null) return false;
-    store.contacts.setPathMode(id, publicKey, PathMode.fixed, pinnedPath: joinHexHops(r.hexHops), pinnedHashSize: r.hashSize);
-    _changed();
-    return true;
-  }
-
-  /// SET PATH (radio write): ADD_UPDATE_CONTACT with the chosen route, read-modify-write from the radio's own copy so name,
-  /// flags and position survive. Hidden behind [routeWriteEnabled] until a real radio proves it (spike S3). Returns a
-  /// plain-language error, or null on success. After a successful save the contact is in Keep this route mode.
-  Future<String?> setRoute(String publicKey, PathRoute route) async {
-    if (!routeWriteEnabled()) return 'Choosing repeaters yourself is not available yet.';
-    final id = radioId;
-    final p = _port;
-    if (id == null || p == null || !p.isConnected) return 'Connect your radio first.';
     final key = publicKey.toLowerCase();
-    final ex = store.contacts.get(id, key);
-    if (ex == null) return 'Unknown contact.';
-    try {
-      final onRadio = await p.fetch(key) ?? ex;
-      final enc = encodePath(route);
-      await p.upload(onRadio.copyWith(outPath: enc.path, outPathLen: enc.pathLen));
-      store.contacts.setPath(id, key, enc.path, enc.pathLen);
-      store.contacts.setPathMode(id, key, PathMode.fixed, pinnedPath: joinHexHops(route.hexHops), pinnedHashSize: route.hashSize);
-      store.contacts.setPathLearned(id, key, nowMs());
-      store.pathHistory.add(PathHistoryEntry(contactKey: key, tsMs: nowMs(), kind: 'set', hops: route.hexHops, hashSize: route.hashSize));
-      _changed();
-      return null;
-    } on ContactTableFull {
-      return 'The radio\'s contact list is full.';
-    } catch (_) {
-      return 'The radio did not accept the route. Nothing was changed.';
-    }
-  }
-
-  /// Outbox hook for Keep this route: writes the pinned route back when the radio lost it. Never throws; false = not done.
-  Future<bool> restorePinnedPath(Contact c) async {
-    if (!routeWriteEnabled()) return false;
-    final r = pinnedRouteOf(c);
-    if (r == null) return false;
-    final id = radioId;
-    final p = _port;
-    if (id == null || p == null || !p.isConnected) return false;
-    try {
-      final onRadio = await p.fetch(c.publicKey) ?? c;
-      final enc = encodePath(r);
-      await p.upload(onRadio.copyWith(outPath: enc.path, outPathLen: enc.pathLen));
-      store.contacts.setPath(id, c.publicKey, enc.path, enc.pathLen);
-      return true;
-    } catch (_) {
-      return false;
-    }
+    final c = store.contacts.get(id, key);
+    if (c == null || !c.hasPath) return;
+    store.contacts.setPath(id, key, null, -1);
+    store.contacts.setPathLearned(id, key, null);
+    store.pathHistory.add(PathHistoryEntry(contactKey: key, tsMs: nowMs(), kind: 'reset'));
+    _changed();
   }
 
   /// A finished ping or discovery: remembered on the contact and in the history list.
@@ -873,21 +808,12 @@ class ContactManager {
     _changed();
   }
 
-  /// The route found by a discovery adopted as the contact's route: Keep this route (pin) or Automatic. Phone side only;
-  /// the radio already learned it from the same exchange when the firmware stores it, otherwise it is written when the
-  /// set-path write is on.
+  /// A route found by a discovery, noted in the contact's route history. The radio learns and keeps the route by itself;
+  /// nothing is written to it and nothing is pinned ([keep] true returns why, in plain words).
   Future<String?> useDiscoveredRoute(String publicKey, PathRoute route, {required bool keep}) async {
     final id = radioId;
     if (id == null) return 'Connect your radio first.';
-    if (keep) {
-      if (routeWriteEnabled()) return setRoute(publicKey, route);
-      // Write disabled: pin what the radio holds now if it equals the discovered route, else keep the current mode.
-      final c = store.contacts.get(id, publicKey);
-      final cur = c == null ? null : decodePath(c.outPathLen, c.outPath ?? const []);
-      if (cur == route && keepCurrentRoute(publicKey)) return null;
-      return 'The route was found, but the radio has not stored it. Send a message and it learns one.';
-    }
-    store.contacts.setPathMode(id, publicKey, PathMode.auto);
+    if (keep) return 'A route cannot be kept by hand. The radio learns the route from the next message.';
     store.pathHistory.add(PathHistoryEntry(contactKey: publicKey, tsMs: nowMs(), kind: 'discovered', hops: route.hexHops, hashSize: route.hashSize));
     _changed();
     return null;
@@ -911,6 +837,8 @@ class ContactManager {
     if (id == null) return;
     final key = publicKey.toLowerCase();
     store.contacts.delete(id, key);
+    _pendingDone(_kPendingAdds(id), key);
+    _pendingDone(_kPendingFlags(id), key);
     _changed();
     // Even a contact the phone believes is not on the radio may be (the radio can add nodes by itself): always ask the radio.
     final p = _port;
@@ -989,13 +917,6 @@ class ContactManager {
                 ? 'Never heard on this phone'
                 : 'Last heard ${_ago(now - e.$2)}${e.$1.type == ContactType.repeater ? ', a repeater' : ''}')
     ];
-  }
-
-  Contact? _evictionCandidate(String id, {required String except}) {
-    for (final cand in cleanupSuggestions(limit: 100)) {
-      if (cand.contact.publicKey != except.toLowerCase()) return cand.contact;
-    }
-    return null;
   }
 
   static String _ago(int ms) {

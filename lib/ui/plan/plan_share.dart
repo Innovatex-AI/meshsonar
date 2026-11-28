@@ -197,7 +197,7 @@ class _PlanShareSheetState extends State<PlanShareSheet> {
       ),
       children: [
         Text(
-          '${plan.name}: ${plan.nodes.length} ${plan.nodes.length == 1 ? 'node' : 'nodes'}. Whoever opens the link gets their own copy. '
+          '${plan.name}: ${plan.nodes.length} ${plan.nodes.length == 1 ? 'spot' : 'spots'}. Whoever opens the link gets their own copy. '
           'Nothing is stored on a server.',
           style: t.textTheme.bodyMedium,
         ),
@@ -643,7 +643,7 @@ class _PlanImportSheetState extends State<PlanImportSheet> {
       children: [
         Text(nodes.summary, key: const Key('plan-import-summary'), style: t.textTheme.bodyMedium),
         Text(
-          open <= 0 ? 'This plan is full (${Plan.maxNodes} nodes). Remove a node first.' : 'Room left in the plan: $open ${open == 1 ? 'node' : 'nodes'}${widget.near == null ? '' : '; nearest to the map first'}.',
+          open <= 0 ? 'This plan is full (${Plan.maxNodes} spots). Remove one first.' : 'Room left in the plan: $open ${open == 1 ? 'spot' : 'spots'}${widget.near == null ? '' : '; nearest to the map first'}.',
           style: t.textTheme.bodySmall,
         ),
         if (_rows.isEmpty)

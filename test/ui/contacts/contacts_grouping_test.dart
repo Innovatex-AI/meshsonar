@@ -38,14 +38,13 @@ void main() {
     expect(letterOf('9lives'), '#');
   });
 
-  test('heardBars and heardShort', () {
+  test('heardWords: how recently heard, in words (C-V2; was a signal-bars glyph)', () {
     final now = 1000000000000;
-    Contact c(int? ago) => radioContact(1).copyWith(lastHeardMs: ago == null ? null : now - ago);
-    expect(heardBars(c(60000), now), 3);
-    expect(heardBars(c(3 * 3600000), now), 2);
-    expect(heardBars(c(3 * 86400000), now), 1);
-    expect(heardShort(c(120000), now), '2 min');
-    expect(heardShort(c(4 * 3600000), now), '4 h');
-    expect(heardShort(c(10000), now), 'now');
+    Contact c(int? ago) => radioContact(1).copyWith(lastHeardMs: ago == null ? null : now - ago, lastAdvertTs: null);
+    expect(heardWords(c(10000), now), 'just now');
+    expect(heardWords(c(5 * 60000), now), '5 min ago');
+    expect(heardWords(c(4 * 3600000), now), '4 h ago');
+    expect(heardWords(c(3 * 86400000), now), '3 d ago');
+    expect(heardWords(c(null), now), 'Not heard yet');
   });
 }

@@ -17,7 +17,7 @@ import 'contact_port.dart';
 import 'models.dart';
 import 'radio_bridge.dart';
 
-class RadioSessionChatAdapter implements OutboundMessageSink {
+class RadioSessionChatAdapter implements OutboundMessageSink, DeliveryRadioControl {
   final r.RadioSession session;
 
   /// Kept for source compatibility with Wave 1B callers; the adapter no longer needs it (ContactManager holds the book).
@@ -53,8 +53,20 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
       emit: chat.handleInbound,
     );
     _rxSub = session.rxPackets.listen((rx) => unawaited(copies.onPacket(rx).catchError((Object _) {})), onError: (Object _) {});
+    // The message log's link side: every command, reply code, timeout, stray frame and delivery push of this session.
+    final link = _delivery;
+    if (link != null) {
+      link.onLinkLog = chat.log.addLink;
+      final ahead = link.radioClockAheadSecs;
+      chat.radioClockAheadSecs = (ahead != null && ahead > 0) ? ahead : 0;
+    }
     chat.contacts.attach(SessionContactPort(session));
     unawaited(chat.contacts.syncNow(auto: true));
+  }
+
+  r.DeliveryLink? get _delivery {
+    final s = session;
+    return s is r.DeliveryLink ? s as r.DeliveryLink : null;
   }
 
   Future<void> dispose() async {
@@ -63,6 +75,8 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
     unawaited(_rxSub?.cancel());
     _rxSub = null;
     _chat?.contacts.detach();
+    _delivery?.onLinkLog = null;
+    _chat?.log.flush();
     session.setInboundPersister(null);
   }
 
@@ -105,7 +119,9 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
         onRadio: true,
       );
 
-  /// Chat's contact as the radio wants it in ADD_UPDATE_CONTACT.
+  /// Chat's contact as the radio wants it in ADD_UPDATE_CONTACT. A contact with no route goes out as 0xFF ("unknown"),
+  /// never 0 ("direct, zero hops"). ContactManager only ever passes the radio's own copy (an edit) or a new contact with no
+  /// route, so a route in here is always the one the radio itself holds.
   static r.RadioContact toRadioContact(Contact c) => r.RadioContact(
         publicKeyHex: c.publicKey,
         type: c.type.code,
@@ -165,10 +181,11 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
         throw const RadioNotConnected();
       case r.SendFailure.radioBusy:
         throw RadioBusy(res.detail ?? 'radio busy');
+      case r.SendFailure.tooLong:
+        throw RadioRejected(res.detail ?? 'the message is too long');
       case r.SendFailure.noSuchChannel:
       case r.SendFailure.noSuchContact:
         throw RadioTargetMissing(res.detail ?? 'not on the radio');
-      case r.SendFailure.tooLong:
       case r.SendFailure.unsupported:
       case r.SendFailure.radioError:
       case null:
@@ -176,44 +193,53 @@ class RadioSessionChatAdapter implements OutboundMessageSink {
     }
   }
 
+  /// CMD_SEND_TXT_MSG and nothing else (round 3 rules 4 and 5). Build 76 did three more things here, all removed: it wrote
+  /// the contact to the radio first when the phone believed it was missing, it sent RESET_PATH before any try the PHONE
+  /// classed as a flood (wiping routes the radio had learned), and it re-added and resent on "not a contact". The radio's
+  /// answer is passed on as what it is.
   @override
   Future<SendReceipt> sendDirect(
-      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) async {
-    final cm = _contacts;
-    // The radio can only send to a contact it holds (it keeps the shared secret and the route). The phone is the master, so
-    // put the contact back first when the radio let it go.
-    if (cm != null) await _ensureOnRadio(cm, contactPublicKey);
-    if (forceFlood) {
-      // The radio floods when its saved route is unknown: drop it (RESET_PATH) instead of rewriting the whole contact.
-      try {
-        await session.resetContactPath(contactPublicKey);
-      } catch (_) {
-        // sending still works, just by the old route
-      }
-    }
-    var res = await session.sendContactMessage(contactPublicKey, text, attempt: attempt, timestamp: timestamp);
-    if (res.failure == r.SendFailure.noSuchContact && cm != null) {
-      // The radio lost the contact between our check and the send: once more, with a forced re-add.
-      await _ensureOnRadio(cm, contactPublicKey, force: true);
-      res = await session.sendContactMessage(contactPublicKey, text, attempt: attempt, timestamp: timestamp);
-    }
+      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt}) async {
+    final res = await session.sendContactMessage(contactPublicKey, text, attempt: attempt, timestamp: timestamp);
     if (res.status == r.SendStatus.failed) _throw(res);
-    // `queued` = the radio did not answer in time and may still send. Retrying with the same timestamp is safe (receivers dedupe).
-    if (res.status == r.SendStatus.queued) throw RadioBusy(res.detail ?? 'no answer from the radio');
-    return SendReceipt(flood: res.flood ?? true, expectedAck: res.expectedAck ?? 0, estTimeoutMs: res.estTimeoutMs ?? 5000);
+    // `queued` = the radio did not answer the command in time: its reply was lost or late, and it may have sent the packet.
+    if (res.status == r.SendStatus.queued) throw RadioNoAnswer(res.detail ?? 'no answer from the radio');
+    // Direct or flood, the confirmation code and the estimated wait are the radio's own words (rule 11). A reply without
+    // them (a firmware that answers differently) is told as it is: flood unknown counts as flood, no estimate as none.
+    return SendReceipt(flood: res.flood ?? true, expectedAck: res.expectedAck ?? 0, estTimeoutMs: res.estTimeoutMs ?? 0);
   }
 
-  Future<void> _ensureOnRadio(ContactManager cm, String key, {bool force = false}) async {
+  /// The one RESET_PATH of a message (after its direct tries, or before try 1 when the person chose flood).
+  @override
+  Future<bool> resetPath({required String radioId, required String contactPublicKey}) async {
     try {
-      await cm.ensureOnRadio(key, force: force);
-    } on RadioUnavailable {
+      final ok = await session.resetContactPath(contactPublicKey);
+      if (ok) _contacts?.noteRadioPathReset(contactPublicKey); // the phone's mirror follows the radio
+      return ok;
+    } on TimeoutException {
+      throw const RadioNoAnswer('the radio did not answer the reset');
+    } on StateError {
+      throw const RadioNotConnected();
+    }
+  }
+
+  /// The radio said "not a contact" to a send: the person is sending to someone their radio does not hold, so the contact
+  /// is put on the radio as a new one (ContactManager.ensureOnRadio: read first, route unknown, no eviction).
+  @override
+  Future<void> addContactToRadio({required String radioId, required String contactPublicKey}) async {
+    final cm = _contacts;
+    if (cm == null) throw const RadioTargetMissing('this contact is not on the radio');
+    try {
+      await cm.ensureOnRadio(contactPublicKey, force: true);
+    } on RadioUnavailable catch (e) {
+      if (e.reason.contains('timeout')) throw const RadioNoAnswer('the radio is slow to answer');
       throw const RadioNotConnected();
     } on ContactTableFull {
       throw const RadioContactsFull();
     } on ArgumentError {
       throw const RadioTargetMissing('this contact is no longer known');
     } on TimeoutException {
-      throw const RadioBusy('the radio is slow to answer');
+      throw const RadioNoAnswer('the radio is slow to answer');
     } on StateError {
       throw const RadioNotConnected();
     }
@@ -328,7 +354,17 @@ class SessionContactPort implements ContactRadioPort {
   }
 
   @override
-  Future<ContactPolicy> getPolicy() => session.getContactPolicy();
+  bool get deliveryInFlight {
+    final s = session;
+    return s is r.DeliveryLink && (s as r.DeliveryLink).awaitingConfirmation;
+  }
+
+  @override
+  Future<ContactPolicy> getPolicy({bool fresh = true}) {
+    final s = session;
+    if (!fresh && s is r.DeliveryLink) return (s as r.DeliveryLink).cachedContactPolicy();
+    return session.getContactPolicy();
+  }
   @override
   Future<void> setPolicy(ContactPolicy policy) => session.setContactPolicy(policy);
 }

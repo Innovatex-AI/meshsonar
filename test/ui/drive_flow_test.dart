@@ -159,7 +159,7 @@ void main() {
     // Drives tab shows the unsynced count and the error banner.
     await openDrivesTab(tester);
     await tester.pumpAndSettle();
-    expect(find.text('2 not synced'), findsOneWidget);
+    expect(find.text('Not uploaded yet'), findsOneWidget);
     expect(find.byKey(const Key('sync-error')), findsOneWidget);
     await drain(tester);
   });

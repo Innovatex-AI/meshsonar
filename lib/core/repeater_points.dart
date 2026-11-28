@@ -8,6 +8,7 @@
 //
 // Age bands match the website (wt-netreps src/lib/network-repeaters.ts `AGE_BANDS`/`ageBand`): last advert within
 // 24 h = 0, 7 days = 1, 30 days = 2, older or never reported = 3.
+import 'time_format.dart' as tf;
 import 'dart:typed_data';
 
 /// One repeater or room server as the map needs it.
@@ -50,23 +51,11 @@ int advertAgeBand(DateTime? lastSeen, DateTime now) {
 /// Labels for the age bands, in band order (the legend).
 const List<String> kAdvertAgeBandLabels = ['Advert in the last 24 h', 'Last 7 days', 'Last 30 days', 'Older'];
 
-/// "Last advert 3 h ago (2026-10-24)" (website `advertText`), or "No advert time reported".
+/// "Last advert 3 h ago (Oct 24, 2026)", or "No advert time reported". Build 77: the one time formatter (core/time_format.dart):
+/// the day is the person's own (local by default, or UTC by the setting), no longer an unlabelled UTC date.
 String advertText(DateTime? lastSeen, DateTime now, {String verb = 'Last advert'}) {
   if (lastSeen == null) return 'No advert time reported';
-  var s = now.difference(lastSeen).inMilliseconds / 1000.0;
-  if (s < 0) s = 0;
-  final String ago;
-  if (s < 3600) {
-    final m = (s / 60).round();
-    ago = '${m < 1 ? 1 : m} min ago';
-  } else if (s < 86400) {
-    ago = '${(s / 3600).round()} h ago';
-  } else {
-    ago = '${(s / 86400).round()} days ago';
-  }
-  final u = lastSeen.toUtc();
-  final day = '${u.year.toString().padLeft(4, '0')}-${u.month.toString().padLeft(2, '0')}-${u.day.toString().padLeft(2, '0')}';
-  return '$verb $ago ($day)';
+  return '$verb ${tf.relativeTime(lastSeen, now: now)} (${tf.dateOnly(lastSeen)})';
 }
 
 final RegExp _hexKey = RegExp(r'^[0-9a-f]{2,64}$');

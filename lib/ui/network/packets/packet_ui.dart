@@ -74,10 +74,25 @@ String byteValueText(Object? v) {
   return '$v';
 }
 
-/// "4.5 dB", or "no reading".
-String snrText(double? v) => v == null ? 'no reading' : '${v == v.truncateToDouble() ? v.toStringAsFixed(0) : v.toString()} dB';
+/// "4.5 dB", or "no reading". Two decimals at most, trailing zeros trimmed (11.8, 1.75, 10): the server's numbers
+/// are 32-bit floats, which print as "11.800000190734863" when left alone.
+String snrText(double? v) => v == null ? 'no reading' : '${trimDecimals(v)} dB';
 
-/// "12s", "5m", "3h", "2d" ago.
+/// A number with at most [places] decimals and no trailing zeros: 11.8, 1.75, 10, -6.8.
+String trimDecimals(double v, {int places = 2}) {
+  var s = v.toStringAsFixed(places);
+  if (s.contains('.')) s = s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  return s == '-0' ? '0' : s;
+}
+
+/// Joins the parts of a one-line row summary with " · " so that a separator never starts a line: each dot is tied
+/// to the part before it with a no-break space, and a line can only break after a dot (Round 2 N-V5).
+String dotJoin(Iterable<String> parts) => parts.where((p) => p.isNotEmpty).join('\u00A0· ');
+
+/// What a list says when the server marks its data not ready and gives no sentence of its own (Round 2 W7).
+const String stillCountingText = 'Some of this is still being counted.';
+
+/// "12s", "5m", "3h", "2d": a compact age for the right-hand column of a list row (no "ago").
 String ageText(DateTime at, DateTime now) {
   final s = now.difference(at).inSeconds;
   if (s < 5) return 'now';

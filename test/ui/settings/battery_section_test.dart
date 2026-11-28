@@ -107,11 +107,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(PowerProfile.chosen.radioPollBackS, 0);
 
-    // A switch knob.
+    // Build 77 (round 5 S6): Drive data upload is shown here, changed in Uploads (one control for one thing).
     await showSetting(tester, 'battery-drive-upload');
+    expect(find.byType(SwitchListTile).evaluate().where((e) => e.widget.key == const Key('battery-drive-upload')), isEmpty);
+    expect(find.text('Change in Uploads.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('battery-drive-upload')));
     await tester.pumpAndSettle();
-    expect(PowerProfile.chosen.uploadDuringDrive, isFalse);
+    expect(find.byKey(const Key('settings-page-uploads')), findsOneWidget, reason: 'the row opens Driving > Uploads');
+    expect(PowerProfile.chosen.uploadDuringDrive, isTrue, reason: 'opening it changes nothing');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('battery-simple-basemap')), findsNothing, reason: 'removed in build 76: a drive never drops the basemap');
 
     // Picking a mode again resets every knob.
@@ -124,38 +129,40 @@ void main() {
     expect(tester.widget<SegmentedButton<BatteryMode>>(find.byKey(const Key('battery-mode-selector'))).selected, {BatteryMode.balanced});
   });
 
-  testWidgetsT('Uploads page: "Upload during the drive" says when the battery mode holds uploads until the drive ends', (tester) async {
+  testWidgetsT('Uploads page: Upload "While driving" says when the battery mode holds uploads until the drive ends', (tester) async {
     final h = await _open(tester);
     await h.state.updateSettings(h.state.settings.copyWith(autoSync: true, syncDuringDrive: true));
     await tester.pumpAndSettle();
-    await showSetting(tester, 'sync-during-drive');
+    await showSetting(tester, 'auto-sync');
     expect(find.byKey(const Key('settings-page-uploads')), findsOneWidget);
-    expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).value, isTrue);
+    Set<Object?> picked() => tester.widget<SegmentedButton<Object?>>(find.byKey(const Key('upload-when'))).selected;
+    expect(picked().single.toString(), contains('whileDriving'));
     expect(find.byKey(const Key('sync-during-drive-battery')), findsNothing, reason: 'Balanced uploads during a drive');
-    expect(find.text('Sends new pings while you drive.'), findsOneWidget);
 
-    // Saver holds uploads until the drive ends: the switch still reads On, so the row says why nothing uploads.
+    // Saver holds uploads until the drive ends: the choice still reads While driving, so the row says why nothing uploads
+    // and offers to upload anyway.
     await setBatteryMode(BatteryMode.saver);
     await tester.pumpAndSettle();
     expect(PowerProfile.current.uploadDuringDrive, isFalse);
-    expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).value, isTrue);
     expect(find.byKey(const Key('sync-during-drive-battery')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('sync-during-drive')), matching: find.textContaining('battery mode holds uploads until the drive ends')),
+    expect(find.descendant(of: find.byKey(const Key('auto-sync')), matching: find.textContaining('battery mode holds uploads until the drive ends')),
         findsOneWidget);
-    expect(find.text('Sends new pings while you drive.'), findsNothing);
 
-    // The upload switch off: nothing to explain.
-    await tester.tap(find.byKey(const Key('sync-during-drive')));
+    // When the drive ends: nothing to explain.
+    await tester.tap(find.byKey(const Key('upload-when-atEnd')));
     await tester.pumpAndSettle();
     expect(h.state.settings.syncDuringDrive, isFalse);
+    expect(h.state.settings.autoSync, isTrue);
     expect(find.byKey(const Key('sync-during-drive-battery')), findsNothing);
 
-    // Back on, and the battery mode back to Balanced: the line goes.
-    await tester.tap(find.byKey(const Key('sync-during-drive')));
+    // Back to While driving, then "Upload while driving anyway" sets the battery knob (the mode becomes Custom).
+    await tester.tap(find.byKey(const Key('upload-when-whileDriving')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('sync-during-drive-battery')), findsOneWidget);
-    await setBatteryMode(BatteryMode.balanced);
+    await tester.tap(find.byKey(const Key('upload-while-driving-anyway')));
     await tester.pumpAndSettle();
+    expect(PowerProfile.chosen.uploadDuringDrive, isTrue);
+    expect(PowerProfile.chosen.mode, BatteryMode.custom);
     expect(find.byKey(const Key('sync-during-drive-battery')), findsNothing);
   });
 

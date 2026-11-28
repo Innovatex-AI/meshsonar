@@ -154,7 +154,7 @@ class SendResult {
   /// Contact messages: true when the packet goes out as a flood, false when along a known path.
   final bool? flood;
 
-  /// The DM attempt number (0-3) that was sent.
+  /// The DM try number (0..7) that was given to the radio.
   final int attempt;
 
   const SendResult._(this.status, this.timestamp, {this.failure, this.detail, this.expectedAck, this.estTimeoutMs, this.flood, this.attempt = 0});

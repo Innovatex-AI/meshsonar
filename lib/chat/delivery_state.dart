@@ -4,8 +4,7 @@
 // never reaches Delivered (it caps at Heard). Every state has a glyph AND a word on the conversation screen.
 import 'models.dart';
 
-/// [likely]: no acknowledgement, but the contact replied after it went out (DM delivery fix, Nov 8 2026).
-enum DeliveryStage { queued, sent, heard, delivered, likely, failed }
+enum DeliveryStage { queued, sent, heard, delivered, failed }
 
 /// Which symbol draws the stage (the UI maps these to AppSymbols; kept here so the table is testable without Flutter).
 enum DeliveryGlyph { clock, checkmark, antenna, checkmarkCircleFill, exclamationCircleFill }
@@ -40,7 +39,7 @@ String _seconds(int ms) {
   return s < 10 ? '${s.toStringAsFixed(1)} s' : '${s.round()} s';
 }
 
-/// After this long in Sent the caption admits the mesh is slow.
+/// After this long in Sent the caption shows the try count even on the first try.
 const int slowAfterMs = 20000;
 
 /// A sent channel message that no repeater relayed after this long offers Resend (CR2; repeats normally come back within a
@@ -58,8 +57,8 @@ int? nextDeliveryChangeMs(ChatMessage m) {
   return null;
 }
 
-/// [maxAttempts] is how many tries the outbox makes for this message (3 flood, 5 with a saved route); [nowMs] the clock.
-/// [viaText] is the optional "via 2 repeaters" tail for Delivered.
+/// [maxAttempts] is how many tries this message gets (the "m" of "try n of m": OutboxEntry.maxAttempts, 8 by default);
+/// [nowMs] the clock. [viaText] is the optional "via 2 repeaters" tail for Delivered.
 DeliveryUi deliveryUi(ChatMessage m, {required bool radioConnected, int? maxAttempts, required int nowMs, String? viaText}) {
   final channel = m.convKind == ConvKind.channel;
   switch (m.state) {
@@ -93,14 +92,10 @@ DeliveryUi deliveryUi(ChatMessage m, {required bool radioConnected, int? maxAtte
       final took = m.ackMs == null ? '' : ' · ${_seconds(m.ackMs!)}';
       return DeliveryUi(DeliveryStage.delivered, DeliveryGlyph.checkmarkCircleFill, 'Delivered', 'Delivered${viaText == null ? '' : ' · $viaText'}$took');
     case MessageState.likelyDelivered:
+      // Removed in build 77 (decision D2). Nothing sets this state any more and migration v6 rewrote stored rows; a row
+      // that still has it (an old backup) is shown as what was proved: no confirmation.
       if (channel) return m.repeatsHeard > 0 ? _heard(m) : _sent(m, channel: true, maxAttempts: maxAttempts, nowMs: nowMs);
-      return const DeliveryUi(
-        DeliveryStage.likely,
-        DeliveryGlyph.checkmark,
-        'Probably delivered (they replied)',
-        'No delivery confirmation came back, but they replied after you sent it, so they most likely have it. '
-            'Confirmations travel back over the mesh and can be lost on the way.',
-      );
+      return DeliveryUi(DeliveryStage.failed, DeliveryGlyph.exclamationCircleFill, 'Not delivered', FailReason.noAck.describe());
     case MessageState.failed:
       return DeliveryUi(
         DeliveryStage.failed,
@@ -138,23 +133,15 @@ DeliveryUi _sent(ChatMessage m, {required bool channel, int? maxAttempts, requir
   }
   final tries = m.attempt < 1 ? 1 : m.attempt;
   final of = maxAttempts == null ? '' : ' of $maxAttempts';
-  final lastTry = maxAttempts != null && tries > 1 && tries >= maxAttempts;
+  // Plain words first: the try count shows from the second try on, or when the first has been out a while. Whether a try
+  // went direct or by flood is the radio's word and is shown in the message details, not guessed here.
   final slow = tries > 1 || nowMs - m.tsLocalMs > slowAfterMs;
-  if (lastTry) {
-    return DeliveryUi(
-      DeliveryStage.sent,
-      DeliveryGlyph.checkmark,
-      'Waiting for confirmation (last try, wider search)',
-      'Sent. Waiting for their radio to confirm (try $tries$of, searching wider).',
-      pending: true,
-    );
-  }
   if (slow) {
     return DeliveryUi(
       DeliveryStage.sent,
       DeliveryGlyph.checkmark,
       'Waiting for confirmation (try $tries$of)',
-      'Sent. Waiting for their radio to confirm (try $tries$of). The mesh is slow; confirmations can take a minute.',
+      'Sent. Waiting for their radio to confirm (try $tries$of).',
       pending: true,
     );
   }

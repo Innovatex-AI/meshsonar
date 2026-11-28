@@ -602,7 +602,11 @@ void main() {
           expect(h.rx(1, 'Sam: hello there'), isFalse);
           expect(h.rx(1, 'Sam: MT1 hi'), isFalse);
           expect(h.rx(1, 'Sam: MT2 @$code'), isFalse);
-          expect(h.rx(9, 'Sam: MT1 @$code'), isFalse, reason: 'not a group');
+          // Round 3 C-U2: a position update in a channel that is not a group is taken out of chat (one collapsed line).
+          expect(h.rx(9, 'Sam: MT1 @$code'), isTrue, reason: 'not a group: taken out of chat (C-U2)');
+          expect(h.s.strayShares(9).single.name, 'Sam');
+          expect(h.rx(9, 'Sam: MT1 !$code Gate'), isFalse, reason: 'not a group: a meet-up pin stays chat');
+          expect(h.s.state.group(9), isNull);
           expect(h.rx(1, 'Bob: $code'), isFalse, reason: 'typed stays chat');
           expect(h.rx(1, 'Tim: #TEL:F9GYxM6HYvyAkAI'), isTrue);
           expect(h.rx(1, 'Me: MT1 @$code'), isTrue);
@@ -640,7 +644,8 @@ void main() {
           final code = PlusCode.encode(40, -83);
           expect(tap.onChannelText(ev('Sam', 'MT1 @$code')), TapVerdict.consume);
           expect(tap.onChannelText(ev('Sam', 'hi all')), TapVerdict.pass);
-          expect(tap.onChannelText(ev('Sam', 'MT1 @$code', ch: 7)), TapVerdict.pass);
+          expect(tap.onChannelText(ev('Sam', 'MT1 @$code', ch: 7)), TapVerdict.consume, reason: 'not a group: Round 3 C-U2');
+          expect(tap.onChannelText(ev('Sam', 'hi all', ch: 7)), TapVerdict.pass);
           expect(tap.onChannelText(ev(null, 'MT1 @$code')), TapVerdict.consume);
           final old = h.now.subtract(const Duration(hours: 1));
           tap.onChannelText(ev('Ann', 'MT1 @$code', senderTs: old.millisecondsSinceEpoch ~/ 1000));

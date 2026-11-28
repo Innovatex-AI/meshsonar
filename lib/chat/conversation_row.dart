@@ -15,7 +15,7 @@ enum RowKind { person, repeater, sensor, room, publicChannel, hashtagChannel, pr
 
 /// The delivery state of the last message when it is the person's own (glyphs: plan 4.2 table). Channels never reach
 /// [delivered] (they have no receipts).
-enum RowDelivery { none, queued, sent, heard, delivered, likely, failed }
+enum RowDelivery { none, queued, sent, heard, delivered, failed }
 
 /// The last message of a conversation, as far as the list cares.
 class LastMessageInfo {
@@ -99,7 +99,8 @@ RowDelivery deliveryFor(LastMessageInfo? last, {required bool isChannel}) {
       // Channels have no delivery receipts: the most they can show is Heard.
       return isChannel ? RowDelivery.heard : RowDelivery.delivered;
     case MessageState.likelyDelivered:
-      return isChannel ? RowDelivery.sent : RowDelivery.likely;
+      // Removed in build 77 (decision D2): never set any more; an old row is shown as what was proved.
+      return isChannel ? RowDelivery.sent : RowDelivery.failed;
     case MessageState.failed:
       return RowDelivery.failed;
     case MessageState.received:

@@ -18,6 +18,7 @@ import 'package:meshsonar/ui/claims/claim_widgets.dart';
 import 'package:meshsonar/ui/claims/my_radios_screen.dart';
 import 'package:meshsonar/ui/map/layers/repeater_map_source.dart' show RepeaterPoint, RepeaterPointSource, kNetworkLayerId;
 import 'package:meshsonar/ui/map/sheets/repeater_sheet.dart';
+import 'package:meshsonar/ui/settings/account_section.dart' show CreateKeyScreen;
 import 'package:meshsonar/radio/protocol.dart' show RepeaterStatus;
 
 import 'fakes.dart';
@@ -213,11 +214,19 @@ void main() {
       expect(tester.widget<ListTile>(find.byKey(const Key('my-radios'))).onTap, isNull);
     });
 
-    testWidgets('no key: asks for a driver key', (tester) async {
+    testWidgets('no key: one note and one "Create my key" button, not three rows that each say it (build 77)', (tester) async {
       await open(tester, key: false);
       await openSettingsTab(tester);
-      await showSetting(tester, 'my-radios');
-      expect(find.textContaining('Needs a driver key'), findsNWidgets(3));
+      await showSetting(tester, 'claims-need-key');
+      expect(find.byKey(const Key('claims-need-key')), findsOneWidget);
+      expect(find.textContaining('needs a driver key'), findsOneWidget);
+      expect(find.textContaining('Needs a driver key'), findsNothing);
+      for (final k in ['my-radios', 'claim-my-radio', 'claim-repeater']) {
+        expect(find.byKey(Key(k)), findsNothing, reason: '$k is folded into the note');
+      }
+      await tester.tap(find.byKey(const Key('claims-create-key')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CreateKeyScreen), findsOneWidget);
     });
 
     testWidgets('capability + approved key: rows open the screens; Claim my radio needs a connected radio', (tester) async {

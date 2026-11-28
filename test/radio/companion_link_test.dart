@@ -23,7 +23,7 @@ void main() {
 
   tearDown(() => link.close());
 
-  test('start: APP_START, DEVICE_QUERY, SET_DEVICE_TIME; SelfInfo from the radio', () async {
+  test('start: DEVICE_QUERY (version 3) first, then APP_START, then SET_DEVICE_TIME; SelfInfo from the radio', () async {
     final self = await link.start();
     expect(self.name, 'MeshSonar Sim');
     expect(self.publicKey, toHex(radio.publicKey));
@@ -35,7 +35,10 @@ void main() {
     expect(self.radio.txDbm, 22);
     expect(self.firmware, 'v1.18.0-sim');
     expect(link.firmwareVerCode, 9);
-    expect(radio.sentFrames.take(3).map((f) => f[0]).toList(), [Cmd.appStart, Cmd.deviceQuery, Cmd.setDeviceTime]);
+    expect(radio.sentFrames.take(3).map((f) => f[0]).toList(), [Cmd.deviceQuery, Cmd.appStart, Cmd.setDeviceTime],
+        reason: 'the order of the official clients (meshcore.js onConnected)');
+    expect(radio.sentFrames.first, [Cmd.deviceQuery, 3]);
+    expect(link.radioClockAheadSecs, 0, reason: 'the radio took the phone time');
   });
 
   test('ensureChannel installs #wardriving in the first empty slot with sha256 key, then finds it', () async {

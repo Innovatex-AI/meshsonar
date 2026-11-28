@@ -92,9 +92,10 @@ void main() {
     expect(isEnabled(tester, find.byKey(const Key('antenna-save'))), isFalse, reason: 'no mount, no height yet');
     expect(h.state.needsAntennaSetup, isTrue);
 
-    // Dismissed without saving: Start drive stays disabled with the hint; the hint reopens the sheet.
+    // Build 77 (round 5 decision 4): dismissed without saving, Start drive is still enabled (it records "Don't know");
+    // the hint reopens the sheet.
     await closeSheet(tester);
-    expect(startEnabled(tester), isFalse);
+    expect(startEnabled(tester), isTrue);
     await openDrivePanel(tester); // the hint and the antenna chip live in the Medium panel
     expect(find.text('Set up this radio\'s antenna'), findsWidgets);
     await h.state.startDrive();
@@ -196,7 +197,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(sheet, findsOneWidget);
     await closeSheet(tester);
-    expect(startEnabled(tester), isFalse);
+    expect(startEnabled(tester), isTrue, reason: 'build 77 decision 4: Start never waits for the antenna');
     await drain(tester);
   });
 

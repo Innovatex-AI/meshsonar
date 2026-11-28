@@ -12,8 +12,9 @@ import 'claim_radio.dart';
 import 'command_queue.dart';
 import 'remote_request_queue.dart';
 import 'companion_link.dart';
-import 'crypto.dart' show toHex;
+import 'crypto.dart' show fromHex, sha256, toHex;
 import 'inbound.dart';
+import 'link_log.dart';
 import 'ping_gate.dart';
 import 'protocol.dart';
 import 'radio_api.dart';
@@ -25,7 +26,7 @@ import 'tools/radio_tools.dart';
 import 'tools/trace_tool.dart' show TraceStore;
 import 'tx_arbiter.dart';
 
-class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSource {
+class LinkRadioSession implements RadioSession, DeliveryLink, RepeaterAdminRadio, RadioStatsSource {
   /// The link this session owns.
   final CompanionLink link;
   final DateTime Function() _clock;
@@ -50,8 +51,10 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
         arbiter = arbiter ?? TxArbiter(clock: clock),
         _self = info,
         _state = link.isConnected ? LinkState.connected : LinkState.disconnected {
+    // Build 77 (round 3, "Removed: the stats probe"): the arbiter no longer asks the radio GET_STATS before a ping while
+    // chat is in use. That read put a reply frame through the radio's 4-frame Bluetooth queue next to a delivery
+    // confirmation. A ping still waits out the gap after a user message (TxPolicy.userSendGap).
     this.arbiter
-      ..queueProbe = _probeQueue
       ..airParams = _airParams
       ..senderNameBytes = _nameBytes;
     final mc = _mc;
@@ -102,8 +105,6 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
 
   // ---------------------------------------------------------------- arbiter inputs
 
-  Future<int?> _probeQueue() async => (await _mc?.coreStats())?.queueLen;
-
   RadioAirParams? _airParams() {
     final r = selfInfo?.radio;
     if (r == null || r.sf == null || r.bwKhz == null) return null;
@@ -119,6 +120,23 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
   bool get chatActive => arbiter.chatActive;
   @override
   set chatActive(bool value) => arbiter.chatActive = value;
+
+  // ---------------------------------------------------------------- DeliveryLink
+
+  @override
+  set onLinkLog(void Function(LinkLogEntry entry)? sink) => _mc?.onLog = sink;
+
+  @override
+  int? get radioClockAheadSecs => _mc?.radioClockAheadSecs;
+
+  @override
+  bool get awaitingConfirmation => _mc?.awaitingConfirmation ?? false;
+
+  @override
+  Future<ContactPolicy> cachedContactPolicy() => _need().getContactPolicy(fresh: false);
+
+  @override
+  int get strayFrames => _mc?.strayFrames ?? 0;
 
   // ---------------------------------------------------------------- inbound
 
@@ -178,7 +196,9 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
       return switch (f.code) {
         ErrCode.notFound => SendResult.failed(channel ? SendFailure.noSuchChannel : SendFailure.noSuchContact,
             detail: channel ? 'no such channel, or the radio was busy' : 'the radio does not have this contact', timestamp: ts, attempt: attempt),
-        ErrCode.tableFull => SendResult.failed(SendFailure.radioBusy, detail: 'the radio\'s send queue is full', timestamp: ts, attempt: attempt),
+        // CMD_SEND_TXT_MSG answers TABLE_FULL when sendMessage failed: no free packet, or the text is too long for this
+        // try (MyMesh.cpp 1157-1158). Busy, worth a short retry.
+        ErrCode.tableFull => SendResult.failed(SendFailure.radioBusy, detail: 'the radio has no free packet (busy)', timestamp: ts, attempt: attempt),
         ErrCode.unsupportedCmd => SendResult.failed(SendFailure.unsupported, detail: 'this firmware does not take that', timestamp: ts, attempt: attempt),
         _ => SendResult.failed(SendFailure.radioError, detail: 'radio error ${f.code}', timestamp: ts, attempt: attempt),
       };
@@ -230,25 +250,41 @@ class LinkRadioSession implements RadioSession, RepeaterAdminRadio, RadioStatsSo
     }
     final bytes = utf8.encode(text).length;
     if (bytes == 0) return const SendResult.failed(SendFailure.tooLong, detail: 'empty message');
-    if (bytes > maxDirectTextBytes) return SendResult.failed(SendFailure.tooLong, detail: '$bytes bytes; one message holds $maxDirectTextBytes');
+    if (attempt < 0 || attempt > maxDmWireAttempt) {
+      return SendResult.failed(SendFailure.radioError, detail: 'try number $attempt is outside 0..$maxDmWireAttempt', attempt: attempt);
+    }
+    // 160 bytes, 158 from the fifth try on (the radio appends the try number to the packet then).
+    final limit = maxDmTextBytesFor(attempt);
+    if (bytes > limit) return SendResult.failed(SendFailure.tooLong, detail: '$bytes bytes; try ${attempt + 1} holds $limit', attempt: attempt);
     chatActive = true;
     arbiter.admitUserSend(arbiter.estimateDirectMs(bytes));
+    // The code the confirmation will carry is known before the radio answers: remember whose it is now, so a confirmation
+    // is credited to the contact even when the SENT reply is lost.
+    final self = selfPublicKey;
+    if (timestamp != null && self != null && self.length == 64) {
+      _rememberAck(expectedDmAck(sha256, timestamp: timestamp, attempt: attempt, text: text, senderPublicKey: fromHex(self)), key);
+    }
     try {
+      // The try number goes through untouched (0..7): see encodeSendTxt.
       final (f, ts) = await mc.sendContactFrame(key, text, attempt: attempt, timestamp: timestamp, priority: CommandPriority.user, scope: scope);
       if (f is SentFrame) {
-        if (f.tag != 0) {
-          _acks[f.tag] = key;
-          while (_acks.length > _ackTable) {
-            _acks.remove(_acks.keys.first);
-          }
-        }
-        return SendResult.accepted(ts, expectedAck: f.tag, estTimeoutMs: f.estTimeoutMs, flood: f.flood, attempt: attempt & 3);
+        if (f.tag != 0) _rememberAck(f.tag, key);
+        return SendResult.accepted(ts, expectedAck: f.tag, estTimeoutMs: f.estTimeoutMs, flood: f.flood, attempt: attempt);
       }
-      return _failureOf(f, ts: ts, attempt: attempt & 3);
+      return _failureOf(f, ts: ts, attempt: attempt);
     } on TimeoutException {
-      return SendResult.queued(timestamp ?? mc.lastAttemptTimestamp, detail: 'the radio did not confirm; it may still send', attempt: attempt & 3);
+      return SendResult.queued(timestamp ?? mc.lastAttemptTimestamp, detail: 'the radio did not answer; it may still have sent it', attempt: attempt);
+    } on FrameTooLongForLink catch (e) {
+      return SendResult.failed(SendFailure.tooLong, detail: 'the Bluetooth link carries ${e.maxBytes} bytes per write; this message needs ${e.frameBytes}', attempt: attempt);
     } on StateError {
       return const SendResult.failed(SendFailure.notConnected, detail: 'the radio disconnected');
+    }
+  }
+
+  void _rememberAck(int code, String key) {
+    _acks[code] = key;
+    while (_acks.length > _ackTable * 2) {
+      _acks.remove(_acks.keys.first);
     }
   }
 

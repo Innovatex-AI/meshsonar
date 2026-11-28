@@ -20,6 +20,7 @@ import 'privacy_zones.dart';
 import 'repeater_reach.dart';
 import 'region_lookup.dart';
 import 'server_url.dart';
+import 'time_format.dart';
 import 'units.dart';
 
 export 'mqtt_contract.dart';
@@ -801,6 +802,9 @@ class Settings {
   /// Per-quantity exceptions to [units] (distance, speed, height, temperature, pressure); empty = all follow it.
   final UnitOverrides unitOverrides;
 
+  /// Which zone times are shown in: the phone's own (default) or UTC. See lib/core/time_format.dart.
+  final TimeZonePreference timeZone;
+
   /// Share packet headers and radio metrics (never message content) to build the live packet feed. On by default;
   /// this is the opt-out. See lib/core/telemetry.dart.
   final bool telemetryEnabled;
@@ -890,6 +894,7 @@ class Settings {
     this.regionLast,
     this.units = UnitsPreference.auto,
     this.unitOverrides = const UnitOverrides(),
+    this.timeZone = TimeZonePreference.phone,
     this.telemetryEnabled = true,
     this.telemetryRegionOnly = false,
     this.mapRepeaterLabels = true,
@@ -927,6 +932,7 @@ class Settings {
     String? regionLast,
     UnitsPreference? units,
     UnitOverrides? unitOverrides,
+    TimeZonePreference? timeZone,
     bool? telemetryEnabled,
     bool? telemetryRegionOnly,
     bool? mapRepeaterLabels,
@@ -963,6 +969,7 @@ class Settings {
         regionLast: regionLast ?? this.regionLast,
         units: units ?? this.units,
         unitOverrides: unitOverrides ?? this.unitOverrides,
+        timeZone: timeZone ?? this.timeZone,
         telemetryEnabled: telemetryEnabled ?? this.telemetryEnabled,
         telemetryRegionOnly: telemetryRegionOnly ?? this.telemetryRegionOnly,
         mapRepeaterLabels: mapRepeaterLabels ?? this.mapRepeaterLabels,
@@ -1000,6 +1007,7 @@ class Settings {
         if (regionLast != null) 'region_last': regionLast,
         if (units != UnitsPreference.auto) 'units': units.name,
         if (!unitOverrides.isEmpty) 'unit_overrides': unitOverrides.toJson(),
+        if (timeZone != TimeZonePreference.phone) 'time_zone': timeZone.name,
         if (!telemetryEnabled) 'telemetry_enabled': false,
         if (telemetryRegionOnly) 'telemetry_location': 'region',
         if (!mapRepeaterLabels) 'map_repeater_labels': false,
@@ -1038,6 +1046,7 @@ class Settings {
         regionLast: _str(j['region_last']),
         units: UnitsPreference.parse(j['units']),
         unitOverrides: UnitOverrides.fromJson(j['unit_overrides']),
+        timeZone: TimeZonePreference.parse(j['time_zone']),
         telemetryEnabled: j['telemetry_enabled'] is bool ? j['telemetry_enabled'] as bool : true,
         telemetryRegionOnly: j['telemetry_location'] == 'region',
         // `home_observer` / `home_antenna` (the Home observer, removed in 0.38) are ignored on read and not written again.

@@ -263,8 +263,9 @@ sequenceDiagram
 Step by step:
 
 1. **Connect.** `AppState.connect()` asks the chosen `RadioScanner` for a `ByteTransport`, wraps it in
-   `services.linkFactory` (a `MeshCoreCompanionLink`), and calls `link.start()`: APP_START → DEVICE_QUERY →
-   SET_DEVICE_TIME. That returns `SelfInfo` (public key, name, radio params, firmware). The connect timeout is 25 s
+   `services.linkFactory` (a `MeshCoreCompanionLink`), and calls `link.start()`: DEVICE_QUERY (protocol version 3) → APP_START →
+   SET_DEVICE_TIME (build 77, the official order; a refused clock set is read and logged). Each reply is matched to its
+   command by reply code; a late or stray frame is discarded (docs/PROTOCOL.md section 16). That returns `SelfInfo` (public key, name, radio params, firmware). The connect timeout is 25 s
    and the start timeout is 20 s.
 2. **Start drive.** `AppState.startDrive()` checks location permission, then builds a `DriveSession`. The session gets
    a new UUID, `started_at` in UTC, the channel and antenna from settings, and radio and companion details from

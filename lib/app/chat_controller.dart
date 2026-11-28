@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import '../chat/channel_admin.dart';
 import '../chat/conversation_row.dart';
 import '../chat/chat_service.dart';
+import '../chat/delivery_settings.dart';
 import '../chat/events.dart';
 import '../chat/models.dart';
 import '../chat/radio_bridge.dart';
@@ -20,18 +21,32 @@ import '../radio/tx_arbiter.dart';
 
 /// The sink ChatService sends through. It exists before any radio does: messages sent offline wait in the outbox and go
 /// when a session binds. Swapping the adapter is the only thing a reconnect changes.
-class SwitchableSink implements OutboundMessageSink {
+class SwitchableSink implements OutboundMessageSink, DeliveryRadioControl {
   RadioSessionChatAdapter? adapter;
+
+  @override
+  Future<bool> resetPath({required String radioId, required String contactPublicKey}) {
+    final a = adapter;
+    if (a == null) throw const RadioNotConnected();
+    return a.resetPath(radioId: radioId, contactPublicKey: contactPublicKey);
+  }
+
+  @override
+  Future<void> addContactToRadio({required String radioId, required String contactPublicKey}) {
+    final a = adapter;
+    if (a == null) throw const RadioNotConnected();
+    return a.addContactToRadio(radioId: radioId, contactPublicKey: contactPublicKey);
+  }
 
   @override
   bool get canSend => adapter?.canSend ?? false;
 
   @override
   Future<SendReceipt> sendDirect(
-      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) {
+      {required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt}) {
     final a = adapter;
     if (a == null) throw const RadioNotConnected();
-    return a.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt, forceFlood: forceFlood);
+    return a.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt);
   }
 
   @override
@@ -188,6 +203,30 @@ class ChatController extends ChangeNotifier {
     }
   }
 
+  // ------------------------------------------------------------------ delivery (build 77, round 3)
+
+  /// Direct tries 1-4, flood tries 0-4, flood fallback on/off. Setting it saves it and tells listeners.
+  DeliverySettings get deliverySettings => service.deliverySettings;
+  set deliverySettings(DeliverySettings v) {
+    service.deliverySettings = v;
+    _changed();
+  }
+
+  /// The message log as text to share (no message text, no secrets): one message's lines with [messageId], else the
+  /// newest lines. For a failed message's details and Settings > Storage & diagnostics.
+  String exportMessageLog({String? messageId, String Function(int ms)? formatTime, List<String> header = const []}) =>
+      service.exportMessageLog(messageId: messageId, formatTime: formatTime, header: header);
+
+  /// The thread should show "They need to add you as a contact before they can receive this" (they have never confirmed
+  /// a message from us).
+  bool needsToAddYou(String convKey) {
+    final id = _radioId;
+    return id != null && service.needsToAddYou(id, convKey);
+  }
+
+  /// "Your radio's contact list is full" (the radio refused a contact; nothing is removed to make room).
+  bool get radioContactListFull => service.radioContactListFull;
+
   /// Pull to refresh: drain the radio's offline queue now and re-read its channel slots.
   Future<void> refreshFromRadio() async {
     final s = _session;
@@ -203,8 +242,8 @@ class ChatController extends ChangeNotifier {
 
   // ------------------------------------------------------------------ sending
 
-  /// Queues [text] in [convKey]. Never throws; the composer shows [SendAttempt.error]. [forceFlood]: long-press Send >
-  /// "Send by flood" on a direct message.
+  /// Queues [text] in [convKey]. Never throws; the composer shows [SendAttempt.error]. [forceFlood]: long-press Send,
+  /// flood chosen for this one direct message (one reset path, then the normal send).
   SendAttempt send(String convKey, String text, {bool forceFlood = false}) {
     final id = _radioId;
     if (id == null) {

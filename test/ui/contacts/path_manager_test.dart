@@ -1,10 +1,9 @@
-// Chat WP7: the Route screen (modes, find / test / reset, Advanced) and the Choose-repeaters page with the set-path write flag.
+// Chat WP7: the Route screen (find / test / reset, Advanced). Build 77: no route modes, no Undo of a reset and no
+// "Choose repeaters yourself" (the radio alone holds the route, as in the official app).
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshsonar/app/app_flags.dart';
 import 'package:meshsonar/chat/db/misc_repositories.dart' show PathHistoryEntry;
 import 'package:meshsonar/chat/models.dart' hide fromHex;
 import 'package:meshsonar/radio/crypto.dart';
@@ -12,7 +11,6 @@ import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/radio/tools/radio_tools.dart';
 import 'package:meshsonar/radio/tools/tool_frames.dart';
 import 'package:meshsonar/ui/contacts/path_manager_screen.dart';
-import 'package:meshsonar/ui/contacts/route_picker_page.dart';
 import 'package:meshsonar/ui/design/hop_chain.dart';
 import 'package:meshsonar/ui/theme.dart';
 import 'package:meshsonar/ui/tools/ping_result_sheet.dart' show showPingOptions;
@@ -48,11 +46,11 @@ void main() {
 
   Contact c(String k) => rig.store.contacts.get(radioA, k)!;
 
-  Future<void> pumpRoute(WidgetTester tester, String key, {bool routeWrite = false, Brightness b = Brightness.light}) async {
+  Future<void> pumpRoute(WidgetTester tester, String key, {Brightness b = Brightness.light}) async {
     setScreen(tester);
     await tester.pumpWidget(MaterialApp(
       theme: meshSonarTheme(b),
-      home: PathManagerScreen(manager: rig.chat.contacts, publicKey: key, changes: rig.controller, tools: tools, routeWrite: routeWrite),
+      home: PathManagerScreen(manager: rig.chat.contacts, publicKey: key, changes: rig.controller, tools: tools),
     ));
     await tester.pumpAndSettle();
   }
@@ -64,8 +62,7 @@ void main() {
   }
 
   group('the screen', () {
-    testWidgetsT('shipped default: the set-path write is hidden', (tester) async {
-      expect(AppFlags.routeWriteVerified, isFalse);
+    testWidgetsT('no "Choose repeaters yourself": Advanced shows the hash size, never a route editor', (tester) async {
       await withRoute();
       await pumpRoute(tester, keyN(1));
       await tester.tap(find.byKey(const Key('route-advanced')));
@@ -74,64 +71,46 @@ void main() {
       expect(find.byKey(const Key('adv-hash')), findsOneWidget);
     });
 
-    testWidgetsT('route card, three modes with their sentences, Automatic ticked', (tester) async {
+    testWidgetsT('route card and the one sentence; no route modes (build 77)', (tester) async {
       await withRoute();
       await pumpRoute(tester, keyN(1));
       expect(find.text('Route to Maya'), findsOneWidget);
       expect(find.byKey(const Key('route-chain')), findsOneWidget);
-      expect(find.text('Automatic'), findsOneWidget);
-      expect(find.text('Keep this route'), findsOneWidget);
-      expect(find.text('Always search'), findsOneWidget);
-      expect(find.text('Learns the best route; searches again if it breaks.'), findsOneWidget);
-      expect(find.text('Always uses this route, even if it fails.'), findsOneWidget);
-      expect(find.text('Sends to everyone nearby. Slower, uses more airtime.'), findsOneWidget);
       expect(find.byKey(const Key('route-caption')), findsOneWidget);
+      for (final gone in ['Automatic', 'Keep this route', 'Always search']) {
+        expect(find.text(gone), findsNothing, reason: gone);
+      }
+      for (final k in ['mode-auto', 'mode-fixed', 'mode-flood']) {
+        expect(find.byKey(Key(k)), findsNothing, reason: k);
+      }
+      expect(find.textContaining('Your radio picks the route'), findsOneWidget);
     });
 
-    testWidgetsT('Keep this route is disabled with the reason when no route is known', (tester) async {
-      rig.port.radioAdd(radioContact(1, name: 'Maya'));
-      rig.chat.contacts.attach(rig.port);
-      await rig.chat.contacts.syncNow();
-      await pumpRoute(tester, keyN(1));
-      expect(find.text('No route learned yet. Find a route first.'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('mode-fixed')));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).pathMode, PathMode.auto);
-    });
-
-    testWidgetsT('choosing Keep this route pins the route; Always search and Automatic switch back', (tester) async {
-      await withRoute();
-      await pumpRoute(tester, keyN(1));
-      await tester.tap(find.byKey(const Key('mode-fixed')));
-      await tester.pumpAndSettle();
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).pathMode, PathMode.fixed);
-      expect(c(keyN(1)).pinnedPath, '01');
-      await tester.tap(find.byKey(const Key('mode-flood')));
-      await tester.pumpAndSettle();
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).pathMode, PathMode.flood);
-      expect(c(keyN(1)).pinnedPath, isNull);
-      await tester.tap(find.byKey(const Key('mode-auto')));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).pathMode, PathMode.auto);
-    });
-
-    testWidgetsT('Reset route: the route is gone at once, the toast says so and Undo brings it back', (tester) async {
+    testWidgetsT('Reset route: the route is gone at once and the toast says what happens next; there is no Undo', (tester) async {
       await withRoute();
       await pumpRoute(tester, keyN(1));
       await tester.tap(find.byKey(const Key('route-reset')));
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       expect(c(keyN(1)).hasPath, isFalse);
-      expect(find.text('Route cleared. The next message searches again.'), findsOneWidget);
+      expect(rig.port.resets, [keyN(1)]);
+      expect(find.text('Route cleared. The next message goes to everyone nearby and your radio learns a new route.'), findsOneWidget);
       expect(find.text('No route yet'), findsOneWidget);
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).hasPath, isTrue);
+      expect(find.text('Undo'), findsNothing, reason: 'the app never writes a route back to the radio');
     });
 
-    testWidgetsT('Find a route now: result card with the route, Use this route to Automatic', (tester) async {
+    testWidgetsT('Reset route is inert with no route', (tester) async {
+      rig.port.radioAdd(radioContact(1, name: 'Maya'));
+      rig.chat.contacts.attach(rig.port);
+      await rig.chat.contacts.syncNow();
+      await pumpRoute(tester, keyN(1));
+      expect(find.text('No route saved'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('route-reset')));
+      await tester.pumpAndSettle();
+      expect(rig.port.resets, isEmpty);
+    });
+
+    testWidgetsT('Find a route now: result card with the route; nothing to save, it goes into the history', (tester) async {
       await withRoute();
       fake.onSend = (f) {
         expect(f[0], 52);
@@ -146,14 +125,10 @@ void main() {
       expect(find.byKey(const Key('found-card')), findsOneWidget);
       expect(find.textContaining('Found a route'), findsOneWidget);
       expect(c(keyN(1)).lastPingOk, isTrue);
-      await tester.ensureVisible(find.byKey(const Key('found-use')));
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('found-use')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('use-auto')));
-      await tester.pumpAndSettle();
-      expect(c(keyN(1)).pathMode, PathMode.auto);
+      expect(find.byKey(const Key('found-note')), findsOneWidget);
+      expect(find.byKey(const Key('found-use')), findsNothing, reason: 'no route is pinned or written by the app');
       expect(rig.store.pathHistory.list(keyN(1)).first.kind, 'discovered');
+      expect(rig.port.uploads, isEmpty);
     });
 
     testWidgetsT('Find a route now with no reply says so in words', (tester) async {
@@ -247,105 +222,4 @@ void main() {
     });
   });
 
-  group('Choose repeaters yourself (write flag forced ON in this test only)', () {
-    Future<void> openPicker(WidgetTester tester) async {
-      await tester.tap(find.byKey(const Key('route-advanced')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('adv-choose')));
-      await tester.pumpAndSettle();
-    }
-
-    Future<void> setup(WidgetTester tester) async {
-      rig.port.radioAdd(radioContact(1, name: 'Maya'));
-      rig.chat.contacts.attach(rig.port);
-      await rig.chat.contacts.syncNow();
-      rig.chat.contacts.routeWriteEnabled = () => true;
-      rig.store.contacts.upsert(repeater('a1', 'Ridge', lat: 39.1, lon: -84.1));
-      rig.store.contacts.upsert(repeater('a1ff', 'Hill'));
-      rig.store.contacts.upsert(repeater('c3', 'Far'));
-      await pumpRoute(tester, keyN(1), routeWrite: true);
-    }
-
-    testWidgetsT('the row is there, picks append, the cap line follows the hash size', (tester) async {
-      await setup(tester);
-      await openPicker(tester);
-      expect(find.text('At most 63 repeaters with 1-byte hashes.'), findsOneWidget);
-      await tester.tap(find.byKey(Key('pick-${hashKey('c3').substring(0, 8)}')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('chip-0')), findsOneWidget);
-      expect(find.text('c3'), findsWidgets);
-      await tester.tap(find.text('2 bytes'));
-      await tester.pumpAndSettle();
-      expect(find.text('At most 32 repeaters with 2-byte hashes.'), findsOneWidget);
-      expect(find.byKey(const Key('chip-0')), findsOneWidget, reason: 'the chain still fits, so it is kept');
-    });
-
-    testWidgetsT('two repeaters sharing a1 show the warning; 2-byte hashes clear it', (tester) async {
-      await setup(tester);
-      await openPicker(tester);
-      await tester.tap(find.byKey(Key('pick-${hashKey('a1').substring(0, 8)}')));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('share a1'), findsOneWidget);
-      expect(find.text('2 repeaters share a1; the radio can\'t tell them apart.'), findsOneWidget);
-      await tester.tap(find.text('2 bytes'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('share'), findsNothing);
-    });
-
-    testWidgetsT('typed hashes: errors in words, then the chain; Save without testing writes and keeps the route', (tester) async {
-      await setup(tester);
-      await openPicker(tester);
-      await tester.enterText(find.byKey(const Key('picker-text')), 'zz');
-      await tester.tap(find.byKey(const Key('picker-text-apply')));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('not a hash'), findsOneWidget);
-      await tester.enterText(find.byKey(const Key('picker-text')), 'c3,a1');
-      await tester.tap(find.byKey(const Key('picker-text-apply')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('chip-1')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('picker-save')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('picker-save-untested')), findsNothing);
-      expect(rig.port.table[keyN(1)]!.outPath, [0xc3, 0xa1]);
-      expect(rig.port.table[keyN(1)]!.outPathLen, 2);
-      expect(c(keyN(1)).pathMode, PathMode.fixed);
-      expect(c(keyN(1)).pinnedPath, 'c3,a1');
-    });
-
-    testWidgetsT('Test route before Save: a chain that answers enables a plain Save', (tester) async {
-      await setup(tester);
-      fake.onSend = (f) {
-        expect(f[0], 36);
-        final tag = ByteData.sublistView(f).getUint32(1, Endian.little);
-        Timer(const Duration(milliseconds: 50), () => fake.push(encodeTraceDataPush(tag, f.sublist(10), [6.0], 4.0, hashSize: 1)));
-        return const SentFrame(flood: false, tag: 1, estTimeoutMs: 500);
-      };
-      await openPicker(tester);
-      await tester.tap(find.byKey(Key('pick-${hashKey('c3').substring(0, 8)}')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('picker-test')));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Works'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('picker-save')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('picker-save-untested')), findsNothing);
-      expect(rig.port.table[keyN(1)]!.outPath, [0xc3]);
-    });
-
-    testWidgetsT('write refused by the radio: the page stays, nothing is pinned', (tester) async {
-      await setup(tester);
-      rig.port.failUpload = StateError('x');
-      await openPicker(tester);
-      await tester.tap(find.byKey(Key('pick-${hashKey('c3').substring(0, 8)}')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('picker-save')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('picker-save')), findsOneWidget);
-      expect(c(keyN(1)).pathMode, PathMode.auto);
-    });
-  });
-
-  test('hop cap words', () => expect(hopCapText(3), 'At most 21 repeaters with 3-byte hashes.'));
 }

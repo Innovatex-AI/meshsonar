@@ -10,9 +10,11 @@ import 'dart:math' as math;
 
 import 'api.dart' show WeatherSnapshot;
 import 'drive_report_rf.dart';
+import 'drive_stats.dart' show DriveVerdict, signalWord;
 import 'drive_weather_export.dart';
 import 'heard.dart';
 import 'model.dart';
+import 'time_format.dart' show utcStamp;
 import 'units.dart';
 
 export 'drive_report_rf.dart';
@@ -136,6 +138,9 @@ class DriveReport {
   });
 
   int? get heardPercent => txPings == 0 ? null : (100 * heardPings / txPings).round();
+
+  /// How the drive went in one line, the same as the drive card and the detail header (Round 5 D-1).
+  DriveVerdict get verdict => DriveVerdict.of(pings: pings, txPings: txPings, heard: heardPings, pingSnr: [for (final p in snrSeries) p.snr]);
   int get gridsMapped => cells.length;
   int get gridsWithCoverage => cells.where((c) => c.heard > 0).length;
   int get newGrids => cells.where((c) => c.isNew).length;
@@ -334,8 +339,11 @@ class DriveReport {
 
     String db(double v) => v.toStringAsFixed(1);
     final fmtDur = duration ?? dur;
+    // Exported reports stay UTC whatever the time setting, and say so (Round 2 N-U8).
     final b = StringBuffer()
       ..writeln(title ?? 'MeshSonar drive report')
+      ..writeln(verdict.line)
+      ..writeln('Started ${utcStamp(session.startedAt)}. Times in this report are UTC.')
       ..writeln('${dist(distanceM)} in ${fmtDur(this.duration)}');
     if (avgSpeedMps != null) {
       b.writeln('Avg ${units.speed(avgSpeedMps!)}'
@@ -346,7 +354,7 @@ class DriveReport {
       ..writeln('$gridsMapped grid cells mapped ($gridsWithCoverage with coverage, $newGrids new)')
       ..writeln('${repeaters.length} repeaters heard (${newRepeaters.length} new)');
     if (battery != null) b.writeln(battery);
-    if (bestSnr != null) b.writeln('Best SNR ${db(bestSnr!)} dB');
+    if (bestSnr != null) b.writeln('Best signal: ${signalWord(bestSnr!)} (${db(bestSnr!)} dB)');
     final f = farthest;
     if (f != null) b.writeln('Farthest: ${f.label} at ${dist(f.farthestM!)}');
     if (repeaters.isNotEmpty) {
@@ -362,11 +370,12 @@ class DriveReport {
       b.writeln('Noise floor median ${db(x.noiseMedian!)} dBm (${db(x.noiseMin!)} to ${db(x.noiseMax!)}, '
           '${x.noiseSeries.length} readings)');
     }
-    if (x.rssiSeries.isNotEmpty) b.writeln('Reply RSSI median ${db(x.rssiMedian!)} dBm, strongest ${db(x.rssiBest!)} dBm');
+    if (x.rssiSeries.isNotEmpty) b.writeln('Reply strength (RSSI): median ${db(x.rssiMedian!)} dBm, strongest ${db(x.rssiBest!)} dBm');
     if (x.txPowerChanges.isNotEmpty) {
       b.writeln(x.txPowerConstant
-          ? 'TX power ${db(x.txPowerChanges.first.$2)} dBm throughout'
-          : 'TX power changed ${x.txPowerChanges.length - 1} times: ${x.txPowerChanges.map((c) => db(c.$2)).join(' → ')} dBm');
+          ? 'Transmit power: ${txPowerText(x.txPowerChanges.first.$2)}, unchanged'
+          : 'Transmit power changed ${x.txPowerChanges.length - 1} time${x.txPowerChanges.length == 2 ? '' : 's'}: '
+              '${x.txPowerChanges.map((c) => txPowerText(c.$2)).join(' → ')}');
     }
     if (x.hasDistanceData) {
       b.writeln('Direct-link SNR by distance:');
@@ -411,3 +420,6 @@ String speedBandLabel(SpeedBand b, Units units) {
   if (b.toMps == null) return '${units.speed(b.fromMps)} and faster';
   return '${units.speed(b.fromMps)} to ${units.speed(b.toMps!)}';
 }
+
+/// Transmit power in words: "22 dBm" (whole numbers without a decimal), "21.5 dBm".
+String txPowerText(double dbm) => '${dbm == dbm.roundToDouble() ? dbm.round() : dbm.toStringAsFixed(1)} dBm';

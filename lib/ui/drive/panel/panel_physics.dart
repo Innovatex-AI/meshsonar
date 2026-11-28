@@ -19,8 +19,9 @@ const double kPanelDockRowAx = 136;
 const double kCardWidthPad = 380;
 const double kCardWidthLandscape = 300;
 
-/// The reserved GPS / radio strip (plan 4.12), shown above the dock row inside the panel surface.
-const double kPanelStripHeight = 28;
+/// The reserved GPS / radio strip (plan 4.12), shown above the dock row inside the panel surface. 44 pt since build 77
+/// (Round 1 F6, F8: a full 44 pt tap target, and room for a sentence on two lines); it was 28.
+const double kPanelStripHeight = 44;
 
 /// A release faster than this (pt/s) moves one detent in its direction; slower releases project 0.15 s ahead.
 const double kFlingVelocity = 700;

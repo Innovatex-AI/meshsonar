@@ -86,7 +86,7 @@ class BarPainter extends CustomPainter {
       }
     }
     if (c.refLine != null) hi = math.max(hi, c.refLine!);
-    final ticks = niceTicks(c.base, hi == c.base ? c.base + 1 : hi);
+    final ticks = niceTicks(c.base, hi == c.base ? c.base + 1 : hi, minStep: minTickStepFor(c.yLabel));
     final lo = c.base;
     final top0 = ticks.isEmpty ? hi : math.max(hi, ticks.last);
     final range = top0 - lo <= 0 ? 1.0 : top0 - lo;

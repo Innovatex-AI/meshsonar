@@ -30,6 +30,7 @@ import '../region/analyze_panel.dart';
 import '../region/region_panels.dart';
 import '../region/regions_screen.dart';
 import 'analytics/analytics_section.dart';
+import 'analytics/my_repeaters_panel.dart';
 import 'channels/channels_section.dart';
 import 'live/live_map_view.dart';
 import 'network_header.dart';
@@ -111,12 +112,16 @@ class _NetworkSectionStripState extends State<NetworkSectionStrip> {
     });
   }
 
+  /// The edge where more names wait: the arrow sits on a solid plate of the background ([_edgePlate] wide) and the
+  /// names fade out before they reach it, so the arrow is never drawn over a word (Round 2 N-V2).
+  static const double _edgePlate = 20, _edgeFade = 18;
+
   Widget _fade(Color surface, {required bool left}) => Positioned(
         left: left ? 0 : null,
         right: left ? null : 0,
         top: 0,
         bottom: 1,
-        width: 28,
+        width: _edgePlate + _edgeFade,
         child: IgnorePointer(
           child: DecoratedBox(
             key: Key(left ? 'network-sections-more-left' : 'network-sections-more-right'),
@@ -124,12 +129,13 @@ class _NetworkSectionStripState extends State<NetworkSectionStrip> {
               gradient: LinearGradient(
                 begin: left ? Alignment.centerLeft : Alignment.centerRight,
                 end: left ? Alignment.centerRight : Alignment.centerLeft,
-                colors: [surface, surface.withValues(alpha: 0)],
+                colors: [surface, surface, surface.withValues(alpha: 0)],
+                stops: const [0, _edgePlate / (_edgePlate + _edgeFade), 1],
               ),
             ),
             child: Align(
               alignment: left ? Alignment.centerLeft : Alignment.centerRight,
-              child: Icon(left ? Icons.chevron_left : Icons.chevron_right, size: 16),
+              child: SizedBox(width: _edgePlate, child: Icon(left ? Icons.chevron_left : Icons.chevron_right, size: 16)),
             ),
           ),
         ),
@@ -253,7 +259,9 @@ class NetworkSectionBody extends StatelessWidget {
     switch (section) {
       case NetworkSection.live:
       case NetworkSection.regions: // hub only; a region shows Live in its place
-        return NetworkLiveMap(key: ValueKey('network-live-map-${mapRequest?.packetHash}'), region: r, request: mapRequest);
+        // A new packet, or another reception of the same one ("Replay on map"), is a new map.
+        return NetworkLiveMap(
+            key: ValueKey('network-live-map-${mapRequest?.packetHash}${mapRequest?.observationId == null ? '' : '-${mapRequest!.observationId}'}'), region: r, request: mapRequest);
       case NetworkSection.packets:
         return KeyedSubtree(
             key: const Key('network-packets-list'),
@@ -288,11 +296,19 @@ List<AnalyticsNativeRow> regionAnalyticsRows(RegionIndexEntry r, {required Strin
         about: 'What changed and what needs attention in this region',
         builder: (_) => AnalyzePanel(key: const Key('network-findings'), baseUrl: r.url, regionSlug: r.slug, regionName: r.name, timezone: timezone),
       ),
+      // The app's one Overview (Round 2 N-U10): the website's Overview row is gone and its link opens this.
       AnalyticsNativeRow(
         slug: analyticsRegionOverviewSlug,
-        label: 'Region overview',
-        about: 'Repeaters, observers, packets and drives at a glance',
+        label: 'Overview',
+        about: 'Packets, observers, repeaters and signal at a glance',
         builder: (_) => KeyedSubtree(key: const Key('network-region-overview'), child: buildOverviewPanel(r.url, r.slug)),
+      ),
+      // Native since build 77 (Round 2 W6): the person's own starred and claimed repeaters.
+      AnalyticsNativeRow(
+        slug: analyticsMyRepeatersSlug,
+        label: 'My Repeaters',
+        about: 'The repeaters you starred or claimed in the app',
+        builder: (_) => KeyedSubtree(key: const Key('network-my-repeaters'), child: MyRepeatersPanel(baseUrl: r.url, regionSlug: r.slug)),
       ),
     ];
 

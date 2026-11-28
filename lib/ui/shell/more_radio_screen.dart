@@ -1,7 +1,7 @@
 // More > Radio (build 71): the radio's own network, which was the Chat tab's Radio segment: the radio card, nodes heard
 // nearby, and the repeaters, rooms and sensors in its contact book with Trace, Discover, Rx log and Adverts (the chat
-// services' own list, ChatTabProvider.networkSliver: nothing in it changed). Under it: Radio settings and region
-// preset (the read-only comparison that was More > Radio), Radio setup, Noise floor and Telemetry.
+// services' own list, ChatTabProvider.networkSliver: nothing in it changed). Above it: Set up my radio and My radio's
+// settings (the read-only comparison with the region's preset).
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -44,23 +44,16 @@ class _MoreRadioScreenState extends State<MoreRadioScreen> {
         builder: (context, _) {
           final p = _provider;
           // Build 76: what people change (name, position, frequency) and the region check sit at the TOP, above the
-          // list of repeaters (they were under it, a long scroll away). The two expert tools stay at the bottom.
+          // list of repeaters (they were under it, a long scroll away). Build 77 (round 5 M3): no "More tools" group at
+          // the bottom; Noise floor and Telemetry are under Tools on the radio card and in Device settings.
           final setup = <Widget>[
             MoreRow(MoreItem.radioSetup, Icons.tune, 'Set up my radio', 'Name, position, power, frequency', onOpen: widget.onOpen),
-            MoreRow(MoreItem.radioSettings, Icons.fact_check_outlined, 'Check my radio\'s settings',
+            MoreRow(MoreItem.radioSettings, Icons.fact_check_outlined, 'My radio\'s settings',
                 s.connected ? 'Does it match this region?' : 'Connect a radio to check it',
                 onOpen: widget.onOpen),
             const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
           ];
-          final tools = <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
-              child: Semantics(header: true, child: Text('More tools', style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary))),
-            ),
-            MoreRow(MoreItem.noiseFloor, Icons.show_chart, 'Noise floor', 'How quiet the channel is at your radio', onOpen: widget.onOpen),
-            MoreRow(MoreItem.telemetry, Icons.thermostat, 'Telemetry', 'Battery and sensor readings from a node', onOpen: widget.onOpen),
-            const SizedBox(height: Gap.xl),
-          ];
+          const tools = <Widget>[SizedBox(height: Gap.xl)];
           if (p == null) {
             // No chat services yet (no radio has connected): say so, and keep the settings and tools reachable.
             return ListView(key: const Key('more-radio-list'), children: [

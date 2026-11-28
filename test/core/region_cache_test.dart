@@ -36,7 +36,7 @@ void main() {
     expect(r!.offline, isTrue);
     expect(r.body, 'x');
     expect(r.fetchedAt, t);
-    expect(asOfLabel(r.fetchedAt, now, offline: true), 'Offline - as of 5h ago');
+    expect(asOfLabel(r.fetchedAt, now, offline: true), 'Offline - as of 5 h ago');
   });
 
   test('failure with nothing cached returns null', () async {
@@ -60,8 +60,8 @@ void main() {
   test('labels', () {
     final t = DateTime.utc(2026, 10, 22, 12);
     expect(asOfLabel(t, t, offline: false), 'Updated just now');
-    expect(asOfLabel(t, t.add(const Duration(minutes: 5)), offline: false), 'Updated 5m ago');
-    expect(asOfLabel(t, t.add(const Duration(days: 3)), offline: true), 'Offline - as of 3d ago');
+    expect(asOfLabel(t, t.add(const Duration(minutes: 5)), offline: false), 'Updated 5 min ago');
+    expect(asOfLabel(t, t.add(const Duration(days: 3)), offline: true), 'Offline - as of 3 d ago');
   });
 
   test('codecs round-trip', () {

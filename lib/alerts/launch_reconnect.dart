@@ -1,9 +1,11 @@
 // LaunchReconnect: after the system closed the app (jetsam) and it started again, or when it comes back to the front with
 // the link gone, connect to the starred saved radio (saved_radios_store.dart), without the person doing anything.
 //
-//  * Settings > Radio > Auto-connect ([mode]) decides when: Always = at launch and on every return to the front (default);
-//    At launch only = the launch retries, nothing on a return; Off = never by itself. The Reconnect button (reason 'button')
-//    is the person asking, so it runs in every mode. Mid-drive reconnect is AppState's own loop and is not affected.
+//  * Settings > Radio > Auto-connect ([mode]) decides when: On = at launch and on every return to the front (default);
+//    Off = never by itself. The Reconnect button (reason 'button') is the person asking, so it runs in every mode.
+//    Mid-drive reconnect is AppState's own loop and is not affected.
+//  * Build 77 (round 5 R1): a radio connected any other way (by hand, from the connect screen) ends the "Could not reach"
+//    state at once ([radioConnected]), and the person can [dismiss] it.
 //  * Starts within about a second of launch; tries with growing waits (1, 3, 6, 10, 15, 20, 30, 30 s: about two minutes)
 //    then stops and says so. The person can always press Reconnect.
 //  * Does nothing when no radio is saved, when the person disconnected or handed the radio over on purpose (the store holds
@@ -141,6 +143,22 @@ class LaunchReconnect extends ChangeNotifier {
     }
     _set(LaunchReconnectState.gaveUp);
     log?.add('reconnect', 'gave up after $_attempt tries');
+  }
+
+  /// A radio is connected (by this loop, by hand, by the drive's own reconnect): nothing is left to say. A "Could not
+  /// reach" line goes at once; a loop still waiting ends at its next check.
+  void radioConnected() {
+    if (_state == LaunchReconnectState.gaveUp) {
+      log?.add('reconnect', 'cleared: a radio is connected');
+      _set(LaunchReconnectState.idle);
+    }
+  }
+
+  /// The person closed the "Could not reach" line. Reconnect stays one tap away on the Drive tab and in More > Radio.
+  void dismiss() {
+    if (_state != LaunchReconnectState.gaveUp) return;
+    log?.add('reconnect', 'dismissed');
+    _set(LaunchReconnectState.idle);
   }
 
   /// The person did something that decides it (disconnected, picked another radio): stop.

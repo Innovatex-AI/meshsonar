@@ -140,7 +140,8 @@ Future<List<String>> _deadEnds(WidgetTester tester, AppState s, {Map<String?, vo
   await closeSettingsPage(tester);
   layout('first level');
   final first = _anchors(tester);
-  for (final e in settingsEntries.where((e) => e.page == null && e.isAvailable(s))) {
+  // A row that moved out of Settings (build 77: Show the intro again is in More > Help) has no row here by design.
+  for (final e in settingsEntries.where((e) => e.page == null && e.elsewhere == null && e.isAvailable(s))) {
     _checkRow(e, first, problems);
   }
   at[null]?.call();
@@ -203,7 +204,10 @@ void main() {
           await _deadEnds(tester, h.state, at: {
             'storage-items': () {
               expect(find.textContaining('needs a driver key'), findsOneWidget, reason: 'repeater names');
-              expect(find.textContaining('Nothing to remove: there are no drives on this phone.'), findsOneWidget);
+              expect(find.textContaining('Nothing to remove.'), findsWidgets);
+              // Build 77 (round 5 S8): the drives row says it once, not three times.
+              expect(find.textContaining('never removed here'), findsNothing);
+              expect(find.textContaining('Only fully uploaded drives can be removed here.'), findsNothing);
             },
           }),
           isEmpty);
@@ -221,10 +225,7 @@ void main() {
           await _deadEnds(tester, h.state, at: {
             null: () => expect(find.textContaining(notSending), findsNWidgets(2), reason: 'Auto-ping and Minimum distance'),
             'driving-advanced': () => expect(find.textContaining(notSending), findsOneWidget, reason: 'Listen window'),
-            'uploads': () {
-              expect(find.textContaining('Turn that on first'), findsOneWidget);
-              expect(find.textContaining('Turn them on first'), findsOneWidget);
-            },
+            'uploads': () => expect(find.textContaining('Only used while Upload is "While driving"'), findsOneWidget),
           }),
           isEmpty);
     });
@@ -236,7 +237,7 @@ void main() {
       await _open(tester, h);
       expect(
           await _deadEnds(tester, h.state, at: {
-            'uploads': () => expect(find.textContaining('Turn it on to choose the interval'), findsOneWidget),
+            'uploads': () => expect(find.textContaining('Choose it to set the interval'), findsOneWidget),
           }),
           isEmpty);
     });
@@ -253,9 +254,11 @@ void main() {
       expect(
           await _deadEnds(tester, h.state, at: {
             null: () {
-              expect(find.textContaining('Locked while driving: stop the drive to change it.'), findsNWidgets(2), reason: 'channel and Send pings');
+              expect(find.textContaining('Locked while driving: stop the drive to change it.'), findsOneWidget, reason: 'Send pings');
               expect(find.textContaining('Locked while this radio is on a drive'), findsOneWidget);
             },
+            'driving-advanced': () =>
+                expect(find.textContaining('Locked while driving: stop the drive to change it.'), findsOneWidget, reason: 'the channel (build 77: on Ping details)'),
           }),
           isEmpty);
       await h.state.stopDrive();
@@ -271,7 +274,7 @@ void main() {
     });
 
     test('information rows are only the read-only status rows', () {
-      expect(settingsEntries.where((e) => e.info).map((e) => e.id), unorderedEquals(['site-region', 'site-radio-preset', 'last-upload', 'ping-message', 'ping-airtime', 'wardrive-counters', 'observer-status', 'diagnostics-power-counters']));
+      expect(settingsEntries.where((e) => e.info).map((e) => e.id), unorderedEquals(['site-region', 'last-upload', 'ping-message', 'ping-airtime', 'wardrive-counters', 'observer-status', 'diagnostics-power-counters']));
     });
   });
 
@@ -291,10 +294,10 @@ void main() {
       'radio-tab-link',
       'antenna-none',
       'diagnostics-log',
+      'message-log',
       'report-problem',
       'about',
       'terms-of-service-link',
-      'show-intro',
       'key-website',
     ]) {
       // A row on a page (unit-distance, privacy-what-shared) is reached through its page; showSetting opens it.
@@ -371,7 +374,7 @@ void main() {
     testWidgetsT('Search from far down the list goes back to the field and focuses it', (tester) async {
       useTallScreen(tester);
       await _open(tester, Harness()..approveKey());
-      await showSetting(tester, 'show-intro', step: 400);
+      await showSetting(tester, 'terms-of-service-link', step: 400);
       expect(find.byKey(const Key('settings-search')).hitTestable(), findsNothing);
       await tester.tap(find.byKey(const Key('settings-search-action')));
       await tester.pumpAndSettle();

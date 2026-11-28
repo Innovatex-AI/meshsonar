@@ -22,7 +22,7 @@ class LeaderboardView extends StatelessWidget {
       return const EmptyState(
         icon: Icons.emoji_events_outlined,
         title: 'No one on the leaderboard yet',
-        body: 'Drivers show up here after they turn the leaderboard on and drive. Turn yours on in Settings.',
+        body: 'Drivers show up here after they turn the leaderboard on and drive.',
       );
     }
     return Column(

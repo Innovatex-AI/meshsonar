@@ -1,9 +1,14 @@
 // First-run intro: four short pages, skippable, shown once. Build 76: the radio page is second (one tap to Connect),
 // every page is two short sentences, and the tabs page is a list.
+// Build 77 (redesign round 5 O1, O3, O4): on a first run "What MeshSonar collects" is the last page and is answered before
+// the intro closes; Connect radio, Try a demo, Skip and Get started all lead to it, and the intro then closes the way the
+// person chose. The status bar is light on the dark intro in both themes. Page 2's button says Next.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/build_flags.dart';
 import '../shell/shell_controller.dart' show AppTab;
+import '../telemetry_sheet.dart' show CollectionDisclosure;
 import 'illustrations.dart';
 
 /// What the person chose on the last pages, so the app can take them there.
@@ -14,7 +19,10 @@ class OnboardingScreen extends StatefulWidget {
 
   /// Reopened from More > How it works: skip/finish just closes it, and the connect and simulator buttons are left out.
   final bool replay;
-  const OnboardingScreen({super.key, required this.onFinish, this.replay = false});
+
+  /// End with the "What MeshSonar collects" page (a first run on a phone that has not answered it). Never on a replay.
+  final bool withDisclosure;
+  const OnboardingScreen({super.key, required this.onFinish, this.replay = false, this.withDisclosure = false});
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
@@ -22,7 +30,16 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pages = PageController();
   int _page = 0;
-  static const _count = 4;
+
+  /// Where the intro leads once the disclosure page is answered.
+  OnboardingExit _exit = OnboardingExit.done;
+
+  bool get _disclose => widget.withDisclosure && !widget.replay;
+  int get _count => _disclose ? 5 : 4;
+
+  /// The disclosure page's index (when there is one).
+  int get _disclosurePage => 4;
+  bool get _onDisclosure => _disclose && _page == _disclosurePage;
 
   @override
   void dispose() {
@@ -38,6 +55,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
+  /// Connect radio, Try a demo and Skip: straight out, or first to the disclosure page, then out that way.
+  void _leave(OnboardingExit exit) {
+    if (!_disclose) {
+      widget.onFinish(exit);
+      return;
+    }
+    _exit = exit;
+    _pages.animateToPage(_disclosurePage, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
+  }
+
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context);
@@ -45,7 +72,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       colorScheme: base.colorScheme.copyWith(primary: Brand.glow, onPrimary: Brand.deep),
       textTheme: base.textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
     );
-    return Theme(
+    // Light clock and status icons on the dark teal, also in the light theme (round 5 O3).
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Theme(
       data: theme,
       child: Scaffold(
         key: const Key('onboarding'),
@@ -63,12 +93,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               children: [
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton(
-                    key: const Key('onboarding-skip'),
-                    onPressed: () => widget.onFinish(OnboardingExit.done),
-                    style: TextButton.styleFrom(foregroundColor: Colors.white70, minimumSize: const Size(64, 48)),
-                    child: const Text('Skip', style: TextStyle(fontSize: 16)),
-                  ),
+                  // The disclosure page is answered with its own two buttons; nothing skips it.
+                  child: _onDisclosure
+                      ? const SizedBox(height: 48)
+                      : TextButton(
+                          key: const Key('onboarding-skip'),
+                          onPressed: () => _leave(OnboardingExit.done),
+                          style: TextButton.styleFrom(foregroundColor: Colors.white70, minimumSize: const Size(64, 48)),
+                          child: const Text('Skip', style: TextStyle(fontSize: 16)),
+                        ),
                 ),
                 Expanded(
                   child: PageView(
@@ -96,7 +129,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           FilledButton.icon(
                             key: const Key('onboarding-connect'),
                             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                            onPressed: () => widget.onFinish(OnboardingExit.connectRadio),
+                            onPressed: () => _leave(OnboardingExit.connectRadio),
                             icon: const Icon(Icons.bluetooth_searching),
                             label: const Text('Connect radio'),
                           ),
@@ -106,7 +139,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             style: OutlinedButton.styleFrom(
                                 minimumSize: const Size.fromHeight(48),
                                 foregroundColor: Colors.white, side: const BorderSide(color: Colors.white38)),
-                            onPressed: () => widget.onFinish(OnboardingExit.simulator),
+                            onPressed: () => _leave(OnboardingExit.simulator),
                             icon: const Icon(Icons.science),
                             label: const Text('No radio? Try a demo'),
                           ),
@@ -127,6 +160,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         body: 'No account, no password. Your drives are saved on this phone and added to the shared '
                             'coverage map. Your phone asks for Location when you start your first drive.',
                       ),
+                      if (_disclose)
+                        Padding(
+                          key: const Key('onboarding-page-collects'),
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                          child: Theme(
+                            data: base,
+                            child: Material(
+                              color: base.colorScheme.surface,
+                              borderRadius: BorderRadius.circular(20),
+                              clipBehavior: Clip.antiAlias,
+                              child: CollectionDisclosure(onDone: () => widget.onFinish(_exit)),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -152,7 +199,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       Expanded(
                         child: Align(
                         alignment: Alignment.centerRight,
-                        child: FilledButton(
+                        child: _onDisclosure ? const SizedBox(height: 52) : FilledButton(
                         key: const Key('onboarding-next'),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
@@ -160,7 +207,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           minimumSize: const Size(140, 52),
                         ),
                         onPressed: _next,
-                        child: FittedBox(fit: BoxFit.scaleDown, child: Text(_page == _count - 1 ? 'Get started' : (_page == 1 && !widget.replay ? 'Later' : 'Next'))),
+                        // "Next" on page 2 too (it said "Later", which read as leaving; Skip is there for that).
+                        child: FittedBox(fit: BoxFit.scaleDown, child: Text(_page == _count - 1 ? 'Get started' : 'Next')),
                       ))),
                     ],
                   ),
@@ -170,6 +218,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

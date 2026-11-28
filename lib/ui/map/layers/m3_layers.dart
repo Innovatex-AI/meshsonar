@@ -49,7 +49,7 @@ CellLayerData redundancyLayerData(List<RedundancyCell> cells, MapDefinition d, H
 }
 
 /// The marker opacity of an estimate, the sprite spec for it and the symbol theme: shared with the legend key.
-RepeaterSpriteSpec estimateSpriteSpec(RepeaterEstimate e, RepeaterFreshness f) => RepeaterSpriteSpec(f, e.role == 'room', SpriteVariant.badgeLarge);
+RepeaterSpriteSpec estimateSpriteSpec(RepeaterEstimate e, RepeaterFreshness f) => RepeaterSpriteSpec(f, e.role == 'room', SpriteVariant.badgeLarge, estimated: true);
 
 class EstimatedRepeaterLayer extends StatelessWidget {
   final List<RepeaterEstimate> estimates;

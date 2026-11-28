@@ -22,6 +22,7 @@ VALUES ('m1', 'r1', 'dm', 'd:aaaaaaaaaaaa', 'in', 1, 1000, 'hello', 'received', 
 
 /// The newest schema version: v3's checks must hold for every later version too.
 final int latest = chatMigrations.last.version;
+final allMigrations = chatMigrations;
 
 void main() {
   test('chatMigrations includes v3 and later versions build on it', () {
@@ -54,13 +55,20 @@ void main() {
 
   test('force_flood backfills path_mode: flood for 1, auto for 0', () {
     final raw = v2Fixture();
+    migrateDatabase(raw, chatMigrations.sublist(0, 3));
+    Map<Object?, Object?> modes() => {for (final r in raw.select('SELECT name, path_mode FROM contacts')) r['name']: r['path_mode']};
+    expect(modes(), {'Maya': 'flood', 'Alex': 'auto'});
+    // Build 77 (migration v6) removed route modes: every contact goes back to the one behaviour there is.
     migrateDatabase(raw, chatMigrations);
-    final m = {for (final r in raw.select('SELECT name, path_mode FROM contacts')) r['name']: r['path_mode']};
-    expect(m, {'Maya': 'flood', 'Alex': 'auto'});
+    expect(modes(), {'Maya': 'auto', 'Alex': 'auto'});
+    expect(raw.select('SELECT sum(force_flood) f FROM contacts').first['f'], 0);
   });
 
   test('running v3 again changes nothing and does not undo a later route choice', () {
     final raw = v2Fixture();
+    // Up to v3 only: this is about v3 being safe to run twice (v6 later clears route modes on purpose).
+    final chatMigrations = allMigrations.sublist(0, 3);
+    const latest = 3;
     migrateDatabase(raw, chatMigrations);
     raw.execute("UPDATE contacts SET path_mode = 'fixed', pinned_path = 'aabb' WHERE name = 'Maya'");
     final before = raw.select("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").map((r) => r['sql']).toList();
@@ -91,8 +99,9 @@ void main() {
     expect(objects(raw, 'table').contains('path_history'), isFalse);
     expect(objects(raw, 'index').contains('conversations_last'), isFalse);
     // then the real migration succeeds from there
-    expect(migrateDatabase(raw, chatMigrations), latest);
+    expect(migrateDatabase(raw, chatMigrations.sublist(0, 3)), 3);
     expect(raw.select("SELECT path_mode FROM contacts WHERE name = 'Maya'").first['path_mode'], 'flood');
+    expect(migrateDatabase(raw, chatMigrations), latest);
   });
 
   test('a fresh database opens at the latest version through ChatDatabase', () {

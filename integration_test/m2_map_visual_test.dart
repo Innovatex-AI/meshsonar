@@ -8,6 +8,7 @@
 // Frames: the Drive map on Chart (follows the theme), its credit line and Credits sheet, zoomed in to street level, the Light
 // and Dark styles, and a small map (Plan > Where to drive) with its own credit. Each frame also checks the credit text names
 // our tiles (or OpenFreeMap) and never a bare OSM server line.
+import 'dart:async';
 import 'dart:io' show HttpClient, Platform;
 
 import 'package:flutter/material.dart';
@@ -16,9 +17,10 @@ import 'package:integration_test/integration_test.dart';
 import 'package:meshsonar/core/startup_location.dart';
 import 'package:meshsonar/main.dart' as app;
 import 'package:meshsonar/ui/app.dart' show AppScope;
+import 'package:meshsonar/ui/settings/privacy_zones_screen.dart';
 import 'package:meshsonar/ui/map/basemap_layer.dart' show BasemapLayer;
 
-import 'drive_visual_test.dart' show dismiss, frame, goTab, pickColumbus, step, tapKey, toMapTab, zoomOut;
+import 'drive_visual_test.dart' show dismiss, frame, pickColumbus, step, tapKey, toMapTab, zoomOut;
 import 'screens.dart';
 
 final String _appearance = Platform.environment['VT_APPEARANCE'] ?? const String.fromEnvironment('VT_APPEARANCE', defaultValue: 'light');
@@ -42,8 +44,10 @@ void checkCredit(String where, {String key = 'map-attribution-text'}) {
   final f = find.byKey(Key(key));
   if (f.evaluate().isEmpty) throw StateError('$where: no credit ($key)');
   final text = (f.evaluate().first.widget as Text).data ?? '';
-  if (!(text.contains('Protomaps') || text.contains('OpenFreeMap') || text.contains('OpenTopoMap'))) {
-    throw StateError('$where: credit "$text" does not name the basemap source');
+  // Build 77 (round 1 decision 5, Andy 2026-11-27): the line is "© OpenStreetMap (i)" (Satellite: the imagery credit);
+  // Protomaps / OpenFreeMap / OpenTopoMap are named in the credits sheet the (i) opens.
+  if (!(text.contains('OpenStreetMap') || text.contains('Esri') || text.contains('USGS'))) {
+    throw StateError('$where: credit "$text" names neither OpenStreetMap nor the imagery source');
   }
   // ignore: avoid_print
   print('CREDIT $where "$text"');
@@ -142,24 +146,23 @@ void main() {
       await setStyle('chart');
     });
     await step('small-map', () async {
-      await goTab(t, 'Plan', 'planner');
-      // The Where-to-drive card is the Planner's fourth mode.
-      await t.tap(find.byKey(const Key('planner-mode-whereToDrive')));
-      await pumpFor(t, const Duration(seconds: 1));
-      final card = find.byKey(const Key('plan-drive-next-map'));
-      for (var i = 0; i < 12 && card.evaluate().isEmpty; i++) {
-        await pumpFor(t, const Duration(seconds: 2));
-      }
-      if (card.evaluate().isEmpty) throw StateError('no Where to drive map on the Plan tab');
-      await t.ensureVisible(card);
+      // Build 77: the Plan tab's Where to drive has no small map any more (round 4 P-V3); Privacy zones is a small map.
+      final nav = Navigator.of(t.element(find.byType(Scaffold).first));
+      unawaited(nav.push(MaterialPageRoute<void>(builder: (_) => const PrivacyZonesScreen())));
+      await pumpFor(t, const Duration(seconds: 2));
+      final card = find.byKey(const Key('privacy-zones-screen'));
+      if (card.evaluate().isEmpty) throw StateError('Privacy zones did not open');
       await pumpFor(t, const Duration(seconds: 8));
       final credit = find.descendant(of: card, matching: find.byKey(const Key('mini-map-credit')));
       if (credit.evaluate().isEmpty) throw StateError('the small map has no credit');
-      final text = (find.descendant(of: credit, matching: find.byType(Text)).evaluate().first.widget as Text).data ?? '';
-      if (!text.contains('Protomaps') && !text.contains('OpenFreeMap')) throw StateError('small map credit "$text"');
+      final text = find.descendant(of: credit, matching: find.byType(Text)).evaluate().map((e) => (e.widget as Text).data ?? '').join(' ');
+      // Round 1 decision 5: the credit is "© OpenStreetMap (i)"; Protomaps / OpenFreeMap are named in the credits sheet.
+      if (!text.contains('OpenStreetMap')) throw StateError('small map credit "$text"');
       // ignore: avoid_print
       print('CREDIT small-map "$text"');
       await m2frame(t, 'm2-06-small-map');
+      nav.pop();
+      await pumpFor(t, const Duration(seconds: 1));
     });
 
     for (final f in _frames) {

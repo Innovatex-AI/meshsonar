@@ -62,8 +62,15 @@ void main() {
     h.store.ctx.markSamplesSent('d2', [sampleKey(DriveSample(ts: t0, src: SampleSource.phone, battPct: 60))]);
   }
 
-  /// Text inside one category's switch row (every row shows its own destination line).
+  /// Text inside one category's switch row.
   Finder inTile(String key, String text) => find.descendant(of: find.byKey(Key(key)), matching: find.textContaining(text));
+
+  /// Build 77 (Round 5 S8): What is shared says where drive data goes ONCE, at the top of the page; the rows are one line
+  /// each and do not repeat it.
+  void saidOnceAtTop(String key, String text) {
+    expect(find.descendant(of: find.byKey(const Key('settings-page-help')), matching: find.textContaining(text), matchRoot: true), findsOneWidget);
+    expect(inTile(key, text), findsNothing, reason: 'Round 5 S8: the row does not repeat the destination line');
+  }
 
   /// Drives whose context never reached any server.
   void seedUnsent(Harness h) {
@@ -82,27 +89,27 @@ void main() {
     testWidgetsT('unknown server: saved on this phone only until the app can check', (tester) async {
       await open(tester);
       await showSetting(tester, 'collect-motion-toggle');
-      expect(inTile('collect-motion-toggle', 'Saved on this phone only until the app can check'), findsOneWidget);
+      saidOnceAtTop('collect-motion-toggle', 'Saved on this phone only until the app can check');
     });
 
     testWidgetsT('a server that does not accept v1.2: saved on this phone only, this server does not accept it yet',
         (tester) async {
       await open(tester, caps: _v1);
       await showSetting(tester, 'collect-barometer-toggle');
-      expect(inTile('collect-barometer-toggle', 'Saved on this phone only: this server does not accept it yet.'), findsOneWidget);
+      saidOnceAtTop('collect-barometer-toggle', 'Saved on this phone only: this server does not accept it yet.');
     });
 
     testWidgetsT('a server that accepts v1.2: uploaded with your drive', (tester) async {
       await open(tester, caps: _v12);
       await showSetting(tester, 'collect-radio_health-toggle');
-      expect(inTile('collect-radio_health-toggle', 'Uploaded with your drive.'), findsOneWidget);
+      saidOnceAtTop('collect-radio_health-toggle', 'Uploaded with your drive.');
       expect(inTile('collect-radio_health-toggle', 'this server does not accept it yet'), findsNothing);
     });
 
     testWidgetsT('without an approved key the upload is conditional, said plainly', (tester) async {
       await open(tester, caps: _v12, key: false);
       await showSetting(tester, 'collect-device-toggle');
-      expect(inTile('collect-device-toggle', 'Uploaded with your drive once your driver key is ready'), findsOneWidget);
+      saidOnceAtTop('collect-device-toggle', 'Uploaded with your drive once your driver key is ready');
     });
 
     testWidgetsT('weather is live only when the server looks it up and accepts v1.2', (tester) async {

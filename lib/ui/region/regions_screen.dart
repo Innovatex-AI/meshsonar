@@ -11,6 +11,7 @@ import 'dart:collection';
 
 import 'package:flutter/material.dart';
 
+import '../../core/time_format.dart' show timeOfDay;
 import '../../core/region_lookup.dart';
 import '../../core/region_search.dart';
 import '../../core/region_stats_api.dart';
@@ -419,7 +420,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Tap a region to view it. Numbers as of ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_figuresAsOf!.toLocal()))}.',
+                      'Tap a region to view it. Numbers as of ${timeOfDay(_figuresAsOf)}.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),

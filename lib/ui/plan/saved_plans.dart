@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../core/plan/plan_controller.dart';
 import '../../core/plan/plan_model.dart';
 import '../../core/plan/saved_plans.dart';
+import '../../core/time_format.dart' show calendarDay, dateOnly, timeOfDay;
 import '../design/app_surfaces.dart';
 import '../design/app_symbols.dart';
 import '../design/sheet_detents.dart' show formSheetDetents;
@@ -309,7 +310,7 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
                 minTileHeight: Hit.min + 8,
                 leading: AppSymbolIcon(p.id == _currentId ? AppSymbols.checkmarkCircleFill : AppSymbols.map, color: p.id == _currentId ? t.colorScheme.primary : null),
                 title: Text(p.name),
-                subtitle: Text('${p.nodeCount} ${p.nodeCount == 1 ? 'node' : 'nodes'} · saved ${savedWhen(p.updatedAt, widget.saved.clock())}${p.id == _currentId ? ' · open now' : ''}'),
+                subtitle: Text('${p.nodeCount} ${p.nodeCount == 1 ? 'spot' : 'spots'} · saved ${savedWhen(p.updatedAt, widget.saved.clock())}${p.id == _currentId ? ' · open now' : ''}'),
                 onTap: () => Navigator.of(context).pop(SavedPlansChoice.open(p.id)),
                 trailing: IconButton(
                   key: Key('saved-plan-more-${p.id}'),
@@ -326,13 +327,10 @@ class _SavedPlansSheetState extends State<SavedPlansSheet> {
   }
 }
 
-String _two(int v) => v.toString().padLeft(2, '0');
-/// "today 14:05", "yesterday 09:12" or "2026-11-20" (build 76: the full date and time on every row was hard to scan).
+/// "today 2:05 PM", "yesterday 9:12 AM" or "Nov 20, 2026" (build 76: the full date and time on every row was hard to
+/// scan). Through the app's one formatter, so the Local / UTC setting applies (build 77).
 String savedWhen(DateTime t, DateTime now) {
-  final l = t.toLocal(), n = now.toLocal();
-  final days = DateTime(n.year, n.month, n.day).difference(DateTime(l.year, l.month, l.day)).inDays;
-  final hm = '${_two(l.hour)}:${_two(l.minute)}';
-  if (days == 0) return 'today $hm';
-  if (days == 1) return 'yesterday $hm';
-  return '${l.year}-${_two(l.month)}-${_two(l.day)}';
+  final day = calendarDay(t, now: now);
+  if (day == 'Today' || day == 'Yesterday') return '${day.toLowerCase()} ${timeOfDay(t)}';
+  return dateOnly(t);
 }

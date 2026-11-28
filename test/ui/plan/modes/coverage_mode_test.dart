@@ -65,6 +65,12 @@ void main() {
     expect(find.textContaining('Already covered today'), findsOneWidget);
     expect(find.textContaining('New area not covered today'), findsOneWidget);
     expect(find.textContaining('Longest link (Estimate)'), findsOneWidget);
+    // Round 4 P-U4: plain words first; the antenna line is its height, power and gain are with the numbers; bands without dB.
+    expect(tester.widget<PlanFact>(find.byKey(const Key('coverage-antenna'))).value, endsWith('above ground'));
+    expect(find.byKey(const Key('coverage-power')), findsOneWidget);
+    expect(find.textContaining('dB margin)'), findsNothing);
+    expect(find.text('Fringe'), findsWidgets);
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing, reason: 'the Spot field is the app\'s pick field'); 
     expect(find.textContaining('no census counts'), findsOneWidget, reason: 'people only where census data exists');
     expect(find.byKey(const Key('coverage-union')), findsOneWidget);
     expect(find.byKey(const Key('coverage-legend')), findsOneWidget);
@@ -87,7 +93,7 @@ void main() {
     await settle(tester);
     expect(body.viewForTest!.minSnrDb, 7.5);
     expect(body.viewForTest!.areaKm2, lessThan(base * 0.5));
-    expect(find.textContaining('At +7.5 dB SNR or better'), findsWidgets);
+    expect(find.textContaining('At your "show signal at least" setting'), findsWidgets);
 
     final op = tester.widget<Slider>(find.byKey(const Key('coverage-opacity-slider')));
     op.onChangeEnd!(8); // 90 %
@@ -122,9 +128,9 @@ void main() {
     await settle(tester);
     expect(h.client.planVerifyAsks, hasLength(2));
     expect(body.fieldForTest!.sites, hasLength(2));
-    expect(find.text('All 2 sites together (Estimate)'), findsOneWidget);
-    expect(find.textContaining('Reached by two or more sites'), findsOneWidget);
-    expect(find.textContaining('Added by the planned and installed sites'), findsOneWidget);
+    expect(find.text('All 2 spots together (Estimate)'), findsOneWidget);
+    expect(find.textContaining('Reached by two or more spots'), findsOneWidget);
+    expect(find.textContaining('Added by your planned and installed spots'), findsOneWidget);
     expect(body.viewForTest!.overlapKm2, greaterThan(0));
 
     await tapIn(tester, find.byKey(const Key('coverage-colour-sites')));
@@ -137,11 +143,11 @@ void main() {
     await settle(tester);
     expect(c.nodes, hasLength(2));
     expect(find.byKey(const Key('coverage-spot-result')), findsOneWidget);
-    expect(find.textContaining('2 of 2 repeaters reach this spot'), findsOneWidget);
+    expect(find.textContaining('2 of 2 repeaters reach this place'), findsOneWidget);
     final west = offsetM(_a, 0, -1500);
     await st.longPressForTest(LongPressHit(lat: west.lat, lon: west.lon));
     await settle(tester);
-    expect(find.textContaining('1 of 2 repeaters reach this spot'), findsOneWidget);
+    expect(find.textContaining('1 of 2 repeaters reach this place'), findsOneWidget);
     await drain(tester);
   });
 
@@ -308,7 +314,7 @@ void main() {
       expect(tester.takeException(), isNull);
       // VoiceOver: the section titles are headers, the sliders say what they set.
       final handle = tester.ensureSemantics();
-      expect(find.bySemanticsLabel(RegExp('Minimum SNR')), findsWidgets);
+      expect(find.bySemanticsLabel(RegExp('Show signal at least')), findsWidgets);
       handle.dispose();
       await drain(tester);
     });

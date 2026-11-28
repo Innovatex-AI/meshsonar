@@ -33,6 +33,7 @@ import '../core/driver_account.dart';
 import '../core/driver_summary.dart';
 import '../core/map_links.dart';
 import '../core/repeater_reach.dart';
+import '../core/time_format.dart' show activeTimeZone;
 import '../core/drive_store.dart' show ChunkedExport, TraceStore, closeOrphanedSessions;
 import '../core/heard.dart';
 import '../core/model.dart';
@@ -1722,7 +1723,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
         bwKhz: r?.bwKhz,
         sf: r?.sf,
         cr: r?.cr,
-        antenna: profile == null ? null : antennaToken(profile.mount),
+        antenna: profile == null || profile.isUnknown ? null : antennaToken(profile.mount), // build 77: "Don't know" sends no token
       ),
     );
   }
@@ -2254,7 +2255,8 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _connecting = false;
       _claims?.radioChanged();
       if (radioProofEnabled) radioProof.radioChanged();
-      // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet).
+      // A radio used for the first time is asked once how its antenna is set up (the UI opens the sheet). Build 77 (round 5
+      // decision 4): the question can be swiped away; Start drive no longer waits for it and records "Don't know".
       _antennaPrompt = antennaProfile == null;
       diagnostics.add('Connected to ${kind == RadioKind.simulator ? 'the simulator' : 'radio "${info.name}"'}, '
           'firmware ${info.firmware ?? 'unknown'}');
@@ -3247,6 +3249,9 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   String? get lastSyncMessage => _lastSyncMessage;
   bool _lastSyncFailed = false;
   bool get lastSyncFailed => _lastSyncFailed;
+  // Screenshot tour only: show the "Sync failed" state without running a sync (no key, no request).
+  @visibleForTesting
+  void debugShowSyncFailed() => _syncFailed(friendlyError(TimeoutException('upload timed out'), action: 'Upload'), null);
 
   // The server said "slow down" (429 / 503): no automatic upload until this time. A person pressing Sync still can.
   DateTime? _syncBackoffUntil;
@@ -3306,12 +3311,12 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     if (!hasKey) {
       unawaited(ensureKey()); // normally already done at launch; this catches a phone that was offline then
       _say(_settings.autoKey
-          ? 'Setting up your driver key. Your drives are saved on this phone; try Sync again in a moment.'
-          : 'This phone has no driver key. Create one in Settings before syncing. Your drives are saved on this phone.');
+          ? 'Setting up your driver key. Your drives are saved on this phone; tap Upload again in a moment.'
+          : 'This phone has no driver key. Create one in Settings before uploading. Your drives are saved on this phone.');
       return false;
     }
     if (_settings.keyStatus != DriverKeyStatus.approved) {
-      _say('The server hasn\'t accepted your driver key yet Drives upload once it does; tap Refresh in Settings.');
+      _say('The server hasn\'t accepted your driver key yet. Drives upload once it does; tap Refresh in Settings.');
       return false;
     }
     return true;
@@ -3331,7 +3336,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       return r;
     } catch (e) {
       _logError('Upload of one drive failed', e);
-      _syncFailed(friendlyError(e, action: 'Sync'), e);
+      _syncFailed(friendlyError(e, action: 'Upload'), e);
       return null;
     } finally {
       _syncing.remove(sessionId);
@@ -3350,7 +3355,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       return r;
     } catch (e) {
       _logError('Upload of all drives failed', e);
-      _syncFailed(friendlyError(e, action: 'Sync'), e);
+      _syncFailed(friendlyError(e, action: 'Upload'), e);
       return null;
     } finally {
       _syncing.remove('*');
@@ -3506,6 +3511,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
       _settings = const Settings();
       _notice = 'Settings couldn\'t be read, so defaults are in use.';
     }
+    activeTimeZone = _settings.timeZone; // build 77: one app-wide Time zone setting (lib/core/time_format.dart)
     // 0.5.0: the website moved off Lovable to MeshSonar's own server (same API and database), so a saved retired
     // address is rewritten to https://meshsonar.com and the driver key is kept (see lib/core/server_url.dart).
     final migrated = migratedServerUrl(_settings.serverUrl);
@@ -3633,6 +3639,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     final vaultStore = services.secretStore;
     final dropVaultHost = keyBefore != null && s.driverKey == null && radioProofCapable && vaultStore != null ? Uri.tryParse(_settings.serverUrl)?.host : null;
     _settings = s;
+    activeTimeZone = s.timeZone;
     if (dropVaultHost != null && dropVaultHost.isNotEmpty) unawaited(DriverKeyVault(vaultStore!).delete(dropVaultHost));
     if (_loaded) _applyObserverState(); // sharing switched: the heartbeat and the observer engine follow at once
     if (switchedOff.isNotEmpty) unawaited(_contextCategoriesOff(switchedOff)); // unsent context is stripped, weather erased
@@ -3874,7 +3881,7 @@ class AppState extends ChangeNotifier with _ObserverWiring {
   }
 
   /// Name if known, else the hex prefix.
-  String repeaterLabel(String prefix) => repeaterName(prefix) ?? prefix.toLowerCase();
+  String repeaterLabel(String prefix) => repeaterName(prefix) ?? prefix.toUpperCase();
 
   Future<void> refreshRepeaters({bool quiet = false}) async {
     if (!quiet) unawaited(refreshDirectory(force: true)); // a manual refresh also refetches the public node map

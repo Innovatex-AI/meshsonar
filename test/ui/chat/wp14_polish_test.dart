@@ -1,4 +1,4 @@
-// Chat WP14: the known gaps closed in the polish pass. Route health card, ping options, real RadioCaps, airtime, More > Chat,
+// Chat WP14: the known gaps closed in the polish pass. No route health card since build 77 (D3), ping options, real RadioCaps, airtime, More > Chat,
 // one-time tips, copy and the accessibility switches.
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -8,13 +8,12 @@ import 'package:meshsonar/chat/db/outbox_repository.dart' show DeliveryAttempt;
 import 'package:meshsonar/chat/models.dart';
 import 'package:meshsonar/chat/models.dart' as models show Route;
 import 'package:meshsonar/chat/quick_replies.dart';
-import 'package:meshsonar/chat/route_health.dart';
 import 'package:meshsonar/chat/tip_store.dart';
 import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/core/plan/airtime_calc.dart';
 import 'package:meshsonar/radio/caps.dart';
 import 'package:meshsonar/radio/rx_facts.dart';
-import 'package:meshsonar/ui/chat/chat_settings_screen.dart';
+import 'package:meshsonar/ui/settings/messages_section.dart';
 import 'package:meshsonar/ui/chat/conversation_screen.dart';
 import 'package:meshsonar/ui/chat/message_bubble.dart';
 import 'package:meshsonar/ui/contacts/profile_tiles.dart';
@@ -55,7 +54,7 @@ void main() {
     }
   }
 
-  Contact bobWithRoute({PathMode mode = PathMode.auto, int? learned}) {
+  Contact bobWithRoute({int? learned}) {
     final c = Contact(
       radioId: radioA,
       publicKey: bobKey,
@@ -63,61 +62,25 @@ void main() {
       name: 'Bob',
       outPath: Uint8List.fromList([1, 2]),
       outPathLen: 2,
-      pathMode: mode,
       pathLearnedMs: learned,
     );
     kit.store.contacts.upsert(c);
     return c;
   }
 
-  group('route health', () {
-    test('three failed messages over a saved route: broken', () {
-      final c = bobWithRoute();
-      failedDms(3);
-      expect(routeLooksBroken(kit.store, c), isTrue);
-    });
-
-    test('two failures are not enough; a delivered message in the window clears it', () {
-      final c = bobWithRoute();
-      failedDms(2);
-      expect(routeLooksBroken(kit.store, c), isFalse);
-      kit.store.messages.insert(ChatMessage(
-          id: 'ok', radioId: radioA, convKind: ConvKind.dm, convKey: ConvKey.dm(bobKey), direction: Direction.outgoing, tsSender: 9, tsLocalMs: kit.clockMs + 99000, text: 'ok', state: MessageState.acked, dedupeKey: 'dkok', read: true));
-      failedDms(0);
-      expect(routeLooksBroken(kit.store, c), isFalse);
-    });
-
-    test('searches that never used the route (flood only) do not blame it', () {
-      final c = bobWithRoute();
-      failedDms(3, directTries: 0);
-      expect(routeLooksBroken(kit.store, c), isFalse);
-    });
-
-    test('no saved route, or Always search: nothing to blame', () {
-      failedDms(3);
-      expect(routeLooksBroken(kit.store, Contact(radioId: radioA, publicKey: bobKey, type: ContactType.companion, name: 'Bob')), isFalse);
-      expect(routeLooksBroken(kit.store, bobWithRoute(mode: PathMode.flood)), isFalse);
-    });
-
-    test('a route learned after the failures is a new route', () {
-      failedDms(3);
-      expect(routeLooksBroken(kit.store, bobWithRoute(learned: kit.clockMs + 60000)), isFalse);
-    });
-
-    testWidgets('the conversation shows the card with both actions; Reset route clears the card', (tester) async {
+  group('no route health card (build 77, decision D3)', () {
+    testWidgets('three failed messages over a saved route: no "may be broken" card; the route is left to the radio', (tester) async {
       setSize(tester);
       bobWithRoute();
       failedDms(3);
       await tester.pumpWidget(host(ConversationScreen(controller: kit.controller, convKey: ConvKey.dm(bobKey))));
       await tester.pump();
-      expect(find.byKey(const Key('route-broken-card')), findsOneWidget);
-      expect(find.text('Messages are not getting through'), findsOneWidget);
-      expect(find.byKey(const Key('broken-find')), findsOneWidget);
-      expect(find.byKey(const Key('broken-reset')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('broken-reset')));
-      await tester.pumpAndSettle();
       expect(find.byKey(const Key('route-broken-card')), findsNothing);
-      expect(kit.store.contacts.get(radioA, bobKey)!.hasPath, isFalse);
+      expect(find.text('Messages are not getting through'), findsNothing);
+      expect(find.byKey(const Key('broken-reset')), findsNothing);
+      // What is there instead: Retry all for the failed messages, and the route stays the radio's.
+      expect(find.byKey(const Key('retry-all-banner')), findsOneWidget);
+      expect(kit.store.contacts.get(radioA, bobKey)!.hasPath, isTrue);
       dismissAppToast();
     });
   });
@@ -168,10 +131,10 @@ void main() {
   group('More > Chat', () {
     testWidgets('Return sends is stored, Quick replies shows the count, Haptics switch is there', (tester) async {
       setSize(tester);
-      await tester.pumpWidget(host(ChatSettingsScreen(controller: kit.controller)));
+      await tester.pumpWidget(host(Scaffold(body: ListView(children: [MessagesChatRows(controller: kit.controller)]))));
       await tester.pump();
       expect(find.text('Quick replies'), findsOneWidget);
-      expect(find.text('${defaultQuickReplies.length} saved'), findsOneWidget);
+      expect(find.textContaining('${defaultQuickReplies.length} saved'), findsOneWidget);
       expect(loadReturnSends(kit.store), isFalse);
       await tester.tap(find.byKey(const Key('chat-return-sends')));
       await tester.pump();

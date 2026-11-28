@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../core/heard.dart';
 import '../core/model.dart';
+import '../core/time_format.dart' as tf;
 import '../core/units.dart';
 import 'app.dart' show AppScope;
 import 'repeater_widgets.dart';
@@ -39,7 +40,7 @@ String _result(DrivePing p) {
 /// Plain-text version of a ping (for "Copy as text"). Unmeasured values are left out, never guessed.
 String pingAsText(DrivePing p, RepeaterLookup lookup, [Units units = Units.metric]) {
   final b = StringBuffer()
-    ..writeln('MeshSonar ping ${formatDateTime(p.ts)} (${formatTime(p.ts)})')
+    ..writeln('MeshSonar ping ${tf.dateTime(p.ts, seconds: true, weekday: true)}')
     ..writeln('Result: ${_result(p)}')
     ..writeln('Position: ${_ll(p.lat)}, ${_ll(p.lon)}${p.gpsAccuracyM == null ? '' : ' ±${units.shortLength(p.gpsAccuracyM!)}'}');
   if (p.speedMps != null) b.writeln('Speed: ${units.speed(p.speedMps!)}');
@@ -78,7 +79,10 @@ class PingDetailSheet extends StatelessWidget {
   final RepeaterLookup lookup;
   final ScrollController? scrollController;
   final void Function(String repeaterId)? onRepeaterTap;
-  const PingDetailSheet({super.key, required this.ping, required this.lookup, this.scrollController, this.onRepeaterTap});
+
+  /// True inside a parent that scrolls (the map inspector): the list takes its full height and does not scroll itself.
+  final bool embedded;
+  const PingDetailSheet({super.key, required this.ping, required this.lookup, this.scrollController, this.onRepeaterTap, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +101,10 @@ class PingDetailSheet extends StatelessWidget {
     ];
     return ListView(
       key: const Key('ping-detail'),
-      controller: scrollController,
+      controller: embedded ? null : scrollController,
+      shrinkWrap: embedded,
+      primary: embedded ? false : null,
+      physics: embedded ? const NeverScrollableScrollPhysics() : null,
       padding: const EdgeInsets.only(bottom: Gap.xl),
       children: [
         Padding(
@@ -113,7 +120,7 @@ class PingDetailSheet extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(_result(p), style: t.textTheme.titleLarge),
                 const SizedBox(height: 2),
-                Text(formatDateTime(p.ts).replaceFirst(RegExp(r'\d\d:\d\d$'), formatTime(p.ts)), style: t.textTheme.bodySmall),
+                Text(tf.dateTime(p.ts, seconds: true, weekday: true), style: t.textTheme.bodySmall),
               ]),
             ),
             if (snr != null) SnrPill(snr),
@@ -196,7 +203,8 @@ class _Heading extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
       child: Row(children: [
-        Text(text, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        // Flexible: at the largest text sizes the heading wraps instead of running off the right edge (build 77 AX fix).
+        Flexible(child: Text(text, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
         if (trailing != null) ...[
           const SizedBox(width: Gap.s),
           Text(trailing!, style: t.textTheme.titleSmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),

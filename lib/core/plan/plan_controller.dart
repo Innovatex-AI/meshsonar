@@ -16,7 +16,7 @@ import 'saved_plans.dart';
 class PlanFullException implements Exception {
   const PlanFullException();
   @override
-  String toString() => 'A plan holds at most ${Plan.maxNodes} nodes.';
+  String toString() => 'A plan holds at most ${Plan.maxNodes} spots. Remove one first.';
 }
 
 class PlanController {

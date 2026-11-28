@@ -424,7 +424,7 @@ class _SettingEditorSheetState extends State<SettingEditorSheet> {
           Padding(
             padding: const EdgeInsets.only(top: Gap.xs),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.warning_amber_rounded, size: 18, color: Color(0xFFB26A00)),
+              Icon(Icons.warning_amber_rounded, size: 18, color: MeshSonarColors.of(context).warning),
               const SizedBox(width: 6),
               Expanded(child: Text(w, style: t.textTheme.bodyMedium)),
             ]),

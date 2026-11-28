@@ -104,7 +104,7 @@ class KeyStatusBadge extends StatelessWidget {
     final m = MeshSonarColors.of(context);
     return switch (st) {
       DriverKeyStatus.approved => m.snrStrong,
-      DriverKeyStatus.pending => m.beacon,
+      DriverKeyStatus.pending => m.warning,
       DriverKeyStatus.none => c.outline,
       _ => c.error,
     };

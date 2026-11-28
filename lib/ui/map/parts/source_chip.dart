@@ -55,7 +55,7 @@ class SourceChipState extends State<SourceChip> {
       MapSource.online => (Icons.cloud_done_outlined, 'Online map', mc.textMuted),
       // Build 76: plain words, and the saved map (which works) is not drawn in the warning colour.
       MapSource.cachedOffline => (Icons.sd_storage_outlined, 'Offline: saved map', mc.textMuted),
-      MapSource.none => (Icons.cloud_off_rounded, 'Offline: no map here', mc.beacon),
+      MapSource.none => (Icons.cloud_off_rounded, 'Offline: no map here', mc.warning),
     };
     return MapPill(
       key: _source == MapSource.cachedOffline || _source == MapSource.none ? const Key('map-offline') : const Key('map-source'),

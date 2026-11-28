@@ -17,10 +17,13 @@ class ChartTable {
 }
 
 /// Up to six series colours from the theme (series beyond six reuse them; charts cap their series well before that).
+/// Six different colours, none of them a meaning of its own: no signal-ramp colour (that is signal strength), no amber
+/// (that is a warning) and no second copy of one hue (build 76 had the old amber twice). Teal first, then the repeater
+/// slate and the off-signal packet hues (blue, orchid, violet, stone).
 List<Color> chartPalette(BuildContext context) {
   final c = Theme.of(context).colorScheme;
   final m = MeshSonarColors.of(context);
-  return [c.primary, m.beacon, c.tertiary, m.snrStrong, c.secondary, m.snrWeak];
+  return [c.primary, m.repeater, m.packetType(0), m.packetType(2), m.packetType(6), m.packetType(7)];
 }
 
 /// Axis text style for painters.

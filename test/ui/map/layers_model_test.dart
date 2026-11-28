@@ -41,12 +41,12 @@ void main() {
   }
 
   group('Road', () {
-    test('with variables.basemap Chart and Light are one entry named Road; ids and the other styles are unchanged', () {
+    test('build 77: Road, Light and Dark are three choices whatever variables.basemap says; ids are unchanged', () {
       final d = _minor7();
       expect(d.basemapVariableIds, isNotNull);
       final offered = BaseMapStyle.availableFor(d);
       expect(offered.first, BaseMapStyle.chart);
-      expect(offered, isNot(contains(BaseMapStyle.street)));
+      expect(offered.take(3), [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark], reason: 'a dark-theme user can pick the light road map');
       expect(offered, contains(BaseMapStyle.dark));
       expect(BaseMapStyle.chart.labelIn(d), 'Road');
       expect(BaseMapStyle.dark.labelIn(d), 'Dark');
@@ -55,18 +55,18 @@ void main() {
       expect(BaseMapStyle.street.look, BaseMapStyle.chart.look, reason: 'same tiles, so cache keys are untouched');
     });
 
-    test('a saved Light (street) draws as Road; the saved value is not rewritten', () {
+    test('a saved Light (street) draws as Light; the saved value is not rewritten', () {
       final d = _minor7();
-      expect(BaseMapStyle.effective(BaseMapStyle.parse('street'), d), BaseMapStyle.chart);
+      expect(BaseMapStyle.effective(BaseMapStyle.parse('street'), d), BaseMapStyle.street);
       expect(BaseMapStyle.parse('street'), BaseMapStyle.street);
       expect(BaseMapStyle.effective(BaseMapStyle.dark, d), BaseMapStyle.dark);
     });
 
-    test('without variables.basemap (bundled copy, old server) the list is build 73\'s', () {
+    test('without variables.basemap (bundled copy, old server) the list is the same, and Chart is called Road', () {
       final d = MapDefinition.bundled;
       expect(d.basemapVariableIds, isNull);
       expect(BaseMapStyle.availableFor(d).take(3), [BaseMapStyle.chart, BaseMapStyle.street, BaseMapStyle.dark]);
-      expect([for (final s in BaseMapStyle.availableFor(d)) s.labelIn(d)].take(3), ['Chart', 'Light', 'Dark']);
+      expect([for (final s in BaseMapStyle.availableFor(d)) s.labelIn(d)].take(3), ['Road', 'Light', 'Dark']);
       expect(BaseMapStyle.effective(BaseMapStyle.street, d), BaseMapStyle.street);
     });
   });
@@ -123,18 +123,25 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    testWidgets('Plan: sections in order, This drive and the Activity rows disabled with their reasons, Names under Labels, no Filters', (t) async {
+    Future<void> openNotHere(WidgetTester t) async {
+      await t.tap(find.byKey(const Key('layers-not-here-toggle'), skipOffstage: false));
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('Plan: build 77 sections in order; what the Plan map cannot draw is one "Not on this map" line with the reasons; no Filters', (t) async {
       ActiveMapDefinition.debugSet(_minor7());
       final h = Harness();
       await h.state.init();
       final model = pageModel(h, _prefs());
       await open(t, model, h);
-      const present = ['base', 'coverage', 'network', 'activity', 'mine', 'context', 'labels', 'size', 'palette'];
+      const present = ['base', 'repeaters', 'appearance'];
       final y = [for (final g in present) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy];
-      expect([...y]..sort(), y, reason: 'Basemap, Coverage, Network, Activity, Mine, Context, Labels, Size and colour, Palette');
+      expect([...y]..sort(), y, reason: 'Map style, Repeaters, Appearance (no coverage this server gives, no observers on the Plan map)');
       expect(find.byKey(const Key('layers-group-filters'), skipOffstage: false), findsNothing, reason: 'the Plan map has no pings or timeline to filter');
       expect(find.byKey(const Key('layers-filter'), skipOffstage: false), findsNothing);
-      // Disabled, never hidden, each with its reason.
+      // Never hidden: one line, open for each reason.
+      expect(find.byKey(const Key('layer-live'), skipOffstage: false), findsNothing, reason: 'closed');
+      await openNotHere(t);
       for (final id in ['layer-live', 'layer-path']) {
         final sw = t.widget<Switch>(find.byKey(Key(id), skipOffstage: false));
         expect(sw.onChanged, isNull, reason: id);
@@ -142,10 +149,9 @@ void main() {
       expect(find.textContaining('not drawn in the app yet', skipOffstage: false), findsOneWidget);
       expect(find.byKey(const Key('layer-hexes-status'), skipOffstage: false), findsOneWidget);
       expect(find.text('Your drive is shown on the Drive map.', skipOffstage: false), findsWidgets);
-      expect(find.byKey(const Key('layer-observers-status'), skipOffstage: false), findsOneWidget);
-      // Names is the Labels section's row (the switch key is unchanged) and sits below Context.
-      expect(t.getTopLeft(find.byKey(const Key('layer-labels'), skipOffstage: false)).dy, greaterThan(t.getTopLeft(find.byKey(const Key('layers-group-labels'), skipOffstage: false)).dy));
-      expect(t.getTopLeft(find.byKey(const Key('layer-borders'), skipOffstage: false)).dy, lessThan(t.getTopLeft(find.byKey(const Key('layers-group-labels'), skipOffstage: false)).dy));
+      // Names is under Repeaters (the switch key is unchanged).
+      expect(t.getTopLeft(find.byKey(const Key('layer-labels'), skipOffstage: false)).dy, greaterThan(t.getTopLeft(find.byKey(const Key('layers-group-repeaters'), skipOffstage: false)).dy));
+      expect(t.getTopLeft(find.byKey(const Key('layer-borders'), skipOffstage: false)).dy, greaterThan(t.getTopLeft(find.byKey(const Key('layers-group-appearance'), skipOffstage: false)).dy));
       // A shared layer switches and the choice is remembered under the page.
       expect(model.layerState.isOn(kRosterLayerId), isTrue);
       await t.tap(find.byKey(const Key('layer-region-repeaters')));
@@ -153,36 +159,37 @@ void main() {
       expect(model.layerState.isOn(kRosterLayerId), isFalse);
     });
 
-    testWidgets('Plan: Road, Dark, Topo, Satellite under variables.basemap; Chart and Light are one entry', (t) async {
+    testWidgets('Plan: Road, Light, Dark, Topo, Satellite under variables.basemap', (t) async {
       ActiveMapDefinition.debugSet(_minor7());
       final h = Harness();
       await h.state.init();
       final model = pageModel(h, _prefs());
       await open(t, model, h);
       expect(find.byKey(const Key('base-map-chart'), skipOffstage: false), findsOneWidget);
-      expect(find.byKey(const Key('base-map-street'), skipOffstage: false), findsNothing);
+      expect(find.byKey(const Key('base-map-street'), skipOffstage: false), findsOneWidget);
       expect(find.text('Road', skipOffstage: false), findsOneWidget);
       expect(find.text('Chart', skipOffstage: false), findsNothing);
-      expect(find.text('Light', skipOffstage: false), findsNothing);
+      expect(find.text('Light', skipOffstage: false), findsOneWidget);
       await t.tap(find.byKey(const Key('base-map-dark')));
       await t.pumpAndSettle();
       expect(h.state.settings.baseMapStyle, 'dark');
       expect(model.baseStyle, BaseMapStyle.dark);
     });
 
-    testWidgets('Drive: the same order with Activity and Mine, Live and Path disabled, This drive under Mine, Filters shows its count', (t) async {
+    testWidgets('Drive: the same order with My drive and Filters (with its count); Live and Path are in "Not on this map"', (t) async {
       ActiveMapDefinition.debugSet(_minor7());
       final h = Harness();
       await h.state.init();
       final model = DriveMapModel(h.state, prefs: _prefs());
       addTearDown(model.dispose);
       await open(t, model, h);
-      const present = ['base', 'coverage', 'network', 'activity', 'mine', 'context', 'labels', 'filters', 'size', 'palette'];
+      const present = ['base', 'coverage', 'drive', 'repeaters', 'people', 'appearance', 'filters'];
       final y = [for (final g in present) t.getTopLeft(find.byKey(Key('layers-group-$g'), skipOffstage: false)).dy];
       expect([...y]..sort(), y);
-      final mine = t.getTopLeft(find.byKey(const Key('layers-group-mine'), skipOffstage: false)).dy;
+      final mine = t.getTopLeft(find.byKey(const Key('layers-group-drive'), skipOffstage: false)).dy;
       expect(t.getTopLeft(find.byKey(const Key('layer-hexes'), skipOffstage: false)).dy, greaterThan(mine));
       expect(t.getTopLeft(find.byKey(const Key('layer-pings'), skipOffstage: false)).dy, greaterThan(mine));
+      await openNotHere(t);
       for (final id in ['layer-live', 'layer-path']) {
         final sw = t.widget<Switch>(find.byKey(Key(id), skipOffstage: false));
         expect(sw.onChanged, isNull, reason: id);
@@ -193,12 +200,12 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('FILTERS · 2', skipOffstage: false), findsOneWidget);
       expect(find.byKey(const Key('layers-filter'), skipOffstage: false), findsOneWidget);
-      // The old Chart / Light pair is Road.
-      expect(find.byKey(const Key('base-map-street'), skipOffstage: false), findsNothing);
+      // Build 77: Road (was Chart) and Light are both offered.
+      expect(find.byKey(const Key('base-map-street'), skipOffstage: false), findsOneWidget);
       expect(find.text('Road', skipOffstage: false), findsOneWidget);
     });
 
-    testWidgets('fallback: without variables.basemap the picker is build 73\'s (Chart, Light, Dark) and the groups are the bundled ones', (t) async {
+    testWidgets('fallback: without variables.basemap the picker is Road, Light, Dark and the groups are the bundled ones', (t) async {
       final h = Harness();
       await h.state.init();
       final model = DriveMapModel(h.state, prefs: _prefs());
@@ -208,11 +215,11 @@ void main() {
       for (final id in ['chart', 'street', 'dark']) {
         expect(find.byKey(Key('base-map-$id'), skipOffstage: false), findsOneWidget, reason: id);
       }
-      expect(find.text('Chart', skipOffstage: false), findsOneWidget);
+      expect(find.text('Chart', skipOffstage: false), findsNothing);
       expect(find.text('Light', skipOffstage: false), findsOneWidget);
-      expect(find.text('Road', skipOffstage: false), findsNothing);
-      for (final g in ['activity', 'mine']) {
-        expect(find.byKey(Key('layers-group-$g'), skipOffstage: false), findsNothing, reason: 'the bundled definition has no $g group');
+      expect(find.text('Road', skipOffstage: false), findsOneWidget);
+      for (final g in ['activity', 'mine', 'network', 'context']) {
+        expect(find.byKey(Key('layers-group-$g'), skipOffstage: false), findsNothing, reason: 'build 77: the app\'s own sections, not the definition groups');
       }
       expect(find.byKey(const Key('layer-live'), skipOffstage: false), findsNothing);
       expect(find.text('FILTERS', skipOffstage: false), findsOneWidget);

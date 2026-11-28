@@ -7,6 +7,10 @@
 // open the section for code that asks). Radio (more_radio_screen.dart) holds what was Chat > Radio plus Radio settings,
 // Radio setup, Noise floor and Telemetry. Help (more_help_screen.dart) holds How it works, Method, Colour legend,
 // Report a problem, My reports and the Privacy policy.
+//
+// Build 77 (redesign round 5 M1, decision 2): seven rows. Chat settings moved into Settings > Messages (MoreItem.chat
+// opens it there) and Devices and keys is in Settings > Account only (MoreItem.devices still opens the page). Help holds
+// Map legend and the Terms of service; More > Radio no longer has its own "More tools" group.
 
 import 'package:flutter/material.dart';
 
@@ -20,6 +24,7 @@ import '../radio/radio_screen.dart';
 import '../radios/observer_join_screen.dart';
 import '../radios/radio_setup/radio_setup_screen.dart';
 import '../sessions_screen.dart';
+import '../settings/drives_section.dart' show uploadSetupNote;
 import '../settings_screen.dart';
 import '../tools/adverts_screen.dart';
 import '../tools/discover_screen.dart';
@@ -31,7 +36,6 @@ import '../tools/noise_screen.dart';
 import '../tools/rx_log_screen.dart';
 import '../tools/telemetry_screen.dart';
 import '../tools/trace_screen.dart';
-import '../chat/chat_settings_screen.dart';
 import 'more_help_screen.dart';
 import 'more_radio_screen.dart';
 
@@ -92,7 +96,7 @@ class _MoreTabState extends State<MoreTab> {
         MoreItem.observers => const PersonObserversScreen(),
         MoreItem.myReports => const ReportsHistoryScreen(),
         MoreItem.leaderboard => const LeaderboardScreen(),
-        MoreItem.chat => const ChatSettingsScreen(),
+        MoreItem.chat => const SettingsScreen(initialSection: 'notifications'), // Settings > Messages since build 77
         MoreItem.observer => const SettingsScreen(initialSection: 'observer'),
         MoreItem.legend || MoreItem.howItWorks => const SizedBox.shrink(),
       };
@@ -178,17 +182,16 @@ class MoreList extends StatelessWidget {
           children: [
             // Build 76: what people open most first (drives, the radio, settings), then the rest; every line is short
             // enough for one row at 375 pt. The Radio row says which radio is connected.
-            row(MoreItem.drives, Icons.list_alt, 'Drives', 'Your saved drives and reports'),
+            // A phone whose driver key could not be made yet (no network at first launch) says so here (round 5 O5).
+            row(MoreItem.drives, Icons.list_alt, 'Drives', uploadSetupNote(s) ?? 'Your saved drives and reports'),
             row(MoreItem.radio, Icons.settings_input_antenna, 'Radio', s.connected ? '${s.connectionLabel} · connected' : 'Not connected'),
-            row(MoreItem.settings, Icons.settings, 'Settings', 'Pings, alerts, privacy, maps, storage'),
-            row(MoreItem.chat, Icons.chat_bubble_outline, 'Chat settings', 'Quick replies, Return key, haptics'),
+            row(MoreItem.settings, Icons.settings, 'Settings', 'Pings, messages, privacy, maps, storage'),
             const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
-            row(MoreItem.devices, Icons.key_outlined, 'Devices and keys', 'Your key, other phones, MeshMapper'),
             if (s.radioProofCapable) row(MoreItem.observers, Icons.cell_tower, 'Observers', 'Your observers and radios'),
             row(MoreItem.leaderboard, Icons.emoji_events_outlined, 'Leaderboard', 'Top drivers, here or everywhere'),
             row(MoreItem.observerJoin, Icons.visibility_outlined, observerJoinTitle, 'Make your repeater report in. Free'),
             const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
-            row(MoreItem.help, Icons.help_outline, 'Help', 'How it works, colours, report a problem'),
+            row(MoreItem.help, Icons.help_outline, 'Help', 'How it works, map legend, report a problem'),
             ListTile(
               key: const Key('more-about'),
               minVerticalPadding: Gap.s,

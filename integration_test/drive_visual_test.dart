@@ -148,6 +148,69 @@ Future<void> dismiss(WidgetTester t) async {
   }
 }
 
+/// Taps [key] inside the scroll view under [scopeKey] (a panel's lazy list), scrolling that list, not the first one on the
+/// screen, until the row is built. Build 77: the Layers panel's "Map guide" and the Drive panel's Medium rows sit below the fold
+/// at large text, and [tapKey]'s scroll of the first vertical list moved another list. False (and a MISSING line) when absent.
+Future<bool> tapIn(WidgetTester t, String scopeKey, String key, {Duration wait = const Duration(seconds: 1)}) async {
+  final target = find.byKey(Key(key));
+  final scope = find.byKey(Key(scopeKey));
+  if (target.evaluate().isEmpty && scope.evaluate().isNotEmpty) {
+    final lists = t
+        .stateList<ScrollableState>(find.descendant(of: scope, matching: find.byType(Scrollable), matchRoot: true))
+        .where((s) => s.position.axis == Axis.vertical)
+        .toList();
+    for (final sc in lists) {
+      sc.position.jumpTo(sc.position.minScrollExtent);
+      await t.pump(const Duration(milliseconds: 100));
+      for (var i = 0; i < 30 && target.evaluate().isEmpty && sc.position.pixels < sc.position.maxScrollExtent; i++) {
+        sc.position.jumpTo(math.min(sc.position.pixels + 150, sc.position.maxScrollExtent));
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      if (target.evaluate().isNotEmpty) break;
+    }
+  }
+  if (target.evaluate().isEmpty) {
+    // ignore: avoid_print
+    print('MISSING $key');
+    return false;
+  }
+  try {
+    await t.ensureVisible(target.first);
+  } catch (_) {}
+  await pumpFor(t, const Duration(milliseconds: 300));
+  await t.tap(target.first, warnIfMissed: false);
+  await pumpFor(t, wait);
+  return true;
+}
+
+/// Closes the route that holds [key] (a sheet or a pushed page), on whichever navigator it was pushed.
+Future<void> closeRouteOf(WidgetTester t, String key) async {
+  final f = find.byKey(Key(key));
+  if (f.evaluate().isEmpty) return;
+  await Navigator.of(t.element(f.first)).maybePop();
+  await pumpFor(t, const Duration(seconds: 1));
+}
+
+/// Build 77 Drive panel: Medium holds the Antenna, Ping settings and Ping log rows. Drags the panel up from the Dock (the same
+/// drag 09-driving-medium uses) until the Medium list is built.
+Future<void> openMedium(WidgetTester t) async {
+  for (var i = 0; i < 3 && find.byKey(const Key('drive-panel-medium')).evaluate().isEmpty; i++) {
+    final grab = find.byKey(const Key('drive-panel-grabber'));
+    if (grab.evaluate().isEmpty) throw StateError('no drive-panel-grabber to open Medium');
+    await t.drag(grab.first, const Offset(0, -300), warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+  }
+  if (find.byKey(const Key('drive-panel-medium')).evaluate().isEmpty) throw StateError('the Drive panel did not open to Medium');
+}
+
+/// Back to the Dock from Medium (a fling down, as panel_detents_test does).
+Future<void> closeMedium(WidgetTester t) async {
+  for (var i = 0; i < 3 && find.byKey(const Key('drive-panel-medium')).evaluate().isNotEmpty; i++) {
+    await t.fling(find.byKey(const Key('drive-panel-header')).first, const Offset(0, 400), 1500, warnIfMissed: false);
+    await pumpFor(t, const Duration(seconds: 1));
+  }
+}
+
 Future<void> step(String n, Future<void> Function() f) async {
   try {
     await f();
@@ -422,11 +485,29 @@ void main() {
     await step('layers+guide', () async {
       if (await tapKey(t, ['drive-map-layers'])) {
         await frame(t, '05-layers');
-        if (await tapKey(t, ['layers-legend'], wait: const Duration(seconds: 2))) {
-          await frame(t, '21-guide');
-          await dismiss(t);
+        // Build 77: the Layers panel's "Map guide" row ('layers-legend', section More) is near the end of the panel's own list;
+        // scroll that list to it. NOTE when it is not there: the guide is then opened from the Legend panel's "Map guide".
+        var guide = false;
+        if (await tapIn(t, 'map-panel-drive.layers', 'layers-legend', wait: const Duration(seconds: 2))) {
+          guide = await waitFor(t, find.byKey(const Key('legend-sheet')), timeout: const Duration(seconds: 5));
+          if (guide) {
+            await frame(t, '21-guide');
+            await closeRouteOf(t, 'legend-sheet');
+          }
         }
         await dismiss(t);
+        if (!guide) {
+          // ignore: avoid_print
+          print('NOTE 21-guide via the Legend panel (legend-card-toggle > legend-open-guide)');
+          if (!await tapKey(t, ['legend-card-toggle'], wait: const Duration(seconds: 2))) throw StateError('no legend chip');
+          if (!await tapIn(t, 'map-panel-drive.legend', 'legend-open-guide', wait: const Duration(seconds: 2))) {
+            throw StateError('Legend panel has no Map guide button');
+          }
+          if (!await waitFor(t, find.byKey(const Key('legend-sheet')), timeout: const Duration(seconds: 5))) throw StateError('Map guide did not open');
+          await frame(t, '21-guide');
+          await closeRouteOf(t, 'legend-sheet');
+          await dismiss(t);
+        }
       }
     });
     // ---- connected idle
@@ -443,12 +524,19 @@ void main() {
     });
 
     await step('antenna', () async {
-      if (await tapKey(t, ['antenna-chip'], wait: const Duration(seconds: 2))) {
-        if (!await waitFor(t, find.byKey(const Key('antenna-sheet')), timeout: const Duration(seconds: 8))) {
-          throw StateError('antenna sheet did not open');
+      // Build 77 (round 5 decision 4): the Antenna row lives in the Drive panel's Medium list (the Dock says "Antenna not set ·
+      // tap to set" only for a radio never set up; this run seeds a profile, so the row is the way in).
+      await openMedium(t);
+      try {
+        if (await tapIn(t, 'drive-panel-medium', 'antenna-chip', wait: const Duration(seconds: 2))) {
+          if (!await waitFor(t, find.byKey(const Key('antenna-sheet')), timeout: const Duration(seconds: 8))) {
+            throw StateError('antenna sheet did not open');
+          }
+          await frame(t, '26-antenna-sheet');
+          await closeRouteOf(t, 'antenna-sheet');
         }
-        await frame(t, '26-antenna-sheet');
-        await dismiss(t);
+      } finally {
+        await closeMedium(t);
       }
     });
 
@@ -574,11 +662,27 @@ void main() {
     });
 
     await step('drive-sheets', () async {
-      if (await tapKey(t, ['heard-toggle'])) await frame(t, '10-heard-list');
-      await tapKey(t, ['heard-toggle'], quiet: true);
-      if (await tapKey(t, ['ping-settings-chip'])) {
-        await frame(t, '11-ping-settings');
-        await dismiss(t);
+      // NOTE 10-heard-list: the heard box ('heard-toggle') was removed in build 70. Its job, the list of what was heard, is the
+      // Ping log (Medium's "Ping log" row, 'open-log'): every ping of this drive with the repeaters that heard it.
+      // ignore: avoid_print
+      print('NOTE 10-heard-list via Medium > Ping log (open-log); the heard box is gone since build 70');
+      await openMedium(t);
+      try {
+        if (await tapIn(t, 'drive-panel-medium', 'open-log', wait: const Duration(seconds: 2))) {
+          if (!await waitFor(t, find.byKey(const Key('ping-log')), timeout: const Duration(seconds: 8))) throw StateError('ping log did not open');
+          await frame(t, '10-heard-list');
+          await closeRouteOf(t, 'ping-log');
+        }
+        await openMedium(t);
+        if (await tapIn(t, 'drive-panel-medium', 'ping-settings-chip', wait: const Duration(seconds: 2))) {
+          if (!await waitFor(t, find.byKey(const Key('ping-settings-sheet')), timeout: const Duration(seconds: 8))) {
+            throw StateError('ping settings sheet did not open');
+          }
+          await frame(t, '11-ping-settings');
+          await closeRouteOf(t, 'ping-settings-sheet');
+        }
+      } finally {
+        await closeMedium(t);
       }
     });
     await step('toast', () async {
@@ -611,7 +715,11 @@ void main() {
         accuracyM: 47,
       );
       await pumpFor(t, const Duration(milliseconds: 800));
-      if (find.byKey(const Key('gps-health-line')).evaluate().isEmpty) throw StateError('GPS weak line not shown');
+      // Build 77 (round 1 F6): the one status strip above the Dock says it ('dock-strip-text'); the GPS line is gone.
+      final strip = find.byKey(const Key('dock-strip-text'));
+      if (strip.evaluate().isEmpty) throw StateError('GPS weak strip not shown (no dock-strip-text)');
+      final said = t.widget<Text>(strip.first).data ?? '';
+      if (!said.startsWith('GPS signal weak')) throw StateError('the strip says "$said", not the GPS weak message');
       await frame(t, '19-gps-weak');
     });
     await step('offline', () async {
@@ -631,13 +739,32 @@ void main() {
       await pumpFor(t, const Duration(seconds: 3));
     });
     await step('immersive', () async {
-      if (await tapKey(t, ['map-fullscreen'], wait: const Duration(seconds: 4))) {
+      // NOTE 14-immersive: the full-screen map button ('map-fullscreen') was removed in build 70. Immersive is the Drive
+      // panel's lowest detent: a fling down on the panel from the Dock hides the tab bar (panel_detents_test.dart).
+      // ignore: avoid_print
+      print('NOTE 14-immersive via a fling down on drive-panel-header (map-fullscreen is gone since build 70)');
+      await closeMedium(t);
+      Finder tabBar() => find.byKey(const Key('shell-tabs')).hitTestable();
+      for (var i = 0; i < 3 && tabBar().evaluate().isNotEmpty; i++) {
+        await t.fling(find.byKey(const Key('drive-panel-header')).first, const Offset(0, 120), 1500, warnIfMissed: false);
+        await pumpFor(t, const Duration(seconds: 1));
+      }
+      if (tabBar().evaluate().isNotEmpty) throw StateError('Immersive did not hide the tab bar');
+      try {
         await frame(t, '14-immersive');
         if (await tapKey(t, ['drive-map-layers', 'map-layers'])) {
           await frame(t, '15-immersive-layers');
           await dismiss(t);
         }
-        await tapKey(t, ['fullscreen-close']);
+      } finally {
+        // Back to the Dock: a fling up on the panel header.
+        for (var i = 0; i < 3 && tabBar().evaluate().isEmpty; i++) {
+          final h = find.byKey(const Key('drive-panel-header'));
+          if (h.evaluate().isEmpty) break;
+          await t.fling(h.first, const Offset(0, -120), 1500, warnIfMissed: false);
+          await pumpFor(t, const Duration(seconds: 1));
+        }
+        await closeMedium(t);
       }
     });
     await step('stop', () async {

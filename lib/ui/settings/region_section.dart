@@ -1,21 +1,18 @@
-// Settings > Region: which region the app shows, which region the server answers for, and that region's suggested
-// radio preset next to the connected radio's own (information only; the app never writes to the radio).
-import 'package:flutter/material.dart' hide Radio;
+// Settings > Region: which region the app shows, and which region the server answers for.
+import 'package:flutter/material.dart';
 
-import '../../core/api.dart';
-import '../../core/model.dart' show Radio;
 import '../app.dart';
-import '../region/preset_info.dart';
 import '../region/region_switcher.dart';
 import 'settings_kit.dart';
 
-/// Account > Server (advanced): what the server says about its region. Both rows exist only once
-/// `GET /api/cmh/site-config` has answered; a slow or failing fetch leaves them out and nothing else is affected.
+/// Account > Server (advanced): which region the server answers for. The row exists only once
+/// `GET /api/cmh/site-config` has answered; a slow or failing fetch leaves it out and nothing else is affected.
+/// Build 77 (round 5 S6): the radio preset comparison is no longer repeated here; it is in My radio's settings
+/// (lib/ui/radio/radio_screen.dart), with the region's preset, its source and the "no preset" reason.
 List<Widget> serverRegionRows(BuildContext context) {
   final s = AppScope.of(context);
   return [
     if (s.siteConfig != null) const SettingsAnchor(id: 'site-region', child: RegionTile()),
-    if (s.siteConfig != null) const SettingsAnchor(id: 'site-radio-preset', child: RadioPresetTile()),
   ];
 }
 
@@ -40,103 +37,6 @@ class RegionTile extends StatelessWidget {
       ]),
     );
   }
-}
-
-/// This region's suggested MeshCore radio/channel preset, compared against whatever the connected radio is actually
-/// using. Informational only — the app only ever reads RF parameters off the connected hardware; it never writes a
-/// preset to it. Covers every state: no preset configured for the region, a preset with no radio connected, and a
-/// preset shown side by side with the connected radio's own live parameters.
-class RadioPresetTile extends StatelessWidget {
-  const RadioPresetTile({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppScope.of(context);
-    final t = Theme.of(context);
-    final c = t.colorScheme;
-    final preset = s.viewingPreset;
-
-    if (!s.siteConfigIsForViewing) {
-      return const ListTile(
-        key: Key('site-radio-preset'),
-        leading: Icon(Icons.settings_input_antenna_outlined),
-        title: Text('Radio preset'),
-        subtitle: Text('Loading this region\'s preset.'),
-      );
-    }
-    if (preset == null) {
-      final name = s.viewingRegion?.name ?? 'This region';
-      return ListTile(
-        key: const Key('site-radio-preset'),
-        leading: const Icon(Icons.settings_input_antenna_outlined),
-        title: const Text('Radio preset'),
-        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('This region has no suggested preset.'),
-          const SizedBox(height: 6),
-          NoPresetNote(regionName: name, none: s.viewingPresetNone),
-        ]),
-      );
-    }
-    final provenance = presetProvenanceText(preset);
-
-    final radio = s.selfInfo?.radio; // the connected radio's own live RF parameters, or null if none is connected
-    return Padding(
-      key: const Key('site-radio-preset'),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(Icons.settings_input_antenna_outlined, color: c.onSurfaceVariant),
-          const SizedBox(width: 16),
-          Expanded(child: Text('Radio preset', style: t.textTheme.titleMedium)),
-        ]),
-        Padding(
-          padding: const EdgeInsets.only(left: 40, top: 8),
-          child: radio == null
-              ? Column(
-                  key: const Key('site-radio-preset-no-radio'),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${preset.name} (this region)', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    Text(_formatPreset(preset), style: numberStyle(context, size: 16, color: c.primary)),
-                    if (provenance != null) Text(provenance, key: const Key('site-radio-preset-provenance'), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    const SizedBox(height: 6),
-                    Text('No radio connected to compare.', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                  ],
-                )
-              : Column(
-                  key: const Key('site-radio-preset-compare'),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Yours', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    Text(_formatRadio(radio), style: numberStyle(context, size: 16)),
-                    const SizedBox(height: 8),
-                    Text('${preset.name} (this region)', style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                    Text(_formatPreset(preset), style: numberStyle(context, size: 16, color: c.primary)),
-                    if (provenance != null) Text(provenance, key: const Key('site-radio-preset-provenance'), style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-                  ],
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: 40, top: 8),
-          child: Text('Information only. To change your radio, use More > Radio setup.',
-              style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
-        ),
-      ]),
-    );
-  }
-}
-
-/// `freqMHz · bwKHz · SFn · CRn`, matching the fields CMAT's site-config sends.
-String _formatPreset(RadioPreset p) =>
-    '${p.freqMhz.toStringAsFixed(3)} MHz · ${p.bwKhz.toStringAsFixed(1)} kHz · SF${p.sf} · CR${p.cr}';
-
-/// Same shape as [_formatPreset] but for the connected radio's own readings, any of which can be unmeasured (null).
-String _formatRadio(Radio r) {
-  final freq = r.freqMhz == null ? '—' : '${r.freqMhz!.toStringAsFixed(3)} MHz';
-  final bw = r.bwKhz == null ? '—' : '${r.bwKhz!.toStringAsFixed(1)} kHz';
-  final sf = r.sf == null ? '—' : 'SF${r.sf}';
-  final cr = r.cr == null ? '—' : 'CR${r.cr}';
-  return '$freq · $bw · $sf · $cr';
 }
 
 /// Which region the app is viewing; opens the switcher.

@@ -639,7 +639,9 @@ void main() {
         // Even a message that did reach the old channel row is not a group any more: nothing on the map.
         final consumed = andy.svc.onChannelText(MtInboundText(
             channelId: oldId, text: 'Carl: MT1 @${PlusCode.encode(homeLat, homeLon)}', receivedAt: w.now()));
-        expect(consumed, isFalse);
+        // Build 77 (round 3 C-U2): a position update in a channel that is not a group here is taken out of chat (collapsed,
+        // never unread), so it is consumed; what matters is that it puts no one on the map.
+        expect(consumed, isTrue);
         expect(andy.svc.state.groups.expand((x) => x.friends).where((f) => f.name == 'Carl'), isEmpty);
         // And Carl stops seeing Andy: he only gets silence on the old key.
         expect(friendOn(carl, g.key, 'Andy')!.lastHeard.isBefore(w.now().subtract(const Duration(minutes: 5))), isTrue);

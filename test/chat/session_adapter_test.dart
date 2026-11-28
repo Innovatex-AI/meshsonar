@@ -194,13 +194,20 @@ void main() {
   });
 
   test('sendDirect: accepted, queued and failures map to the chat vocabulary', () async {
-    final ok = await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 1, forceFlood: false);
+    final ok = await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 1);
     expect((ok.expectedAck, ok.estTimeoutMs, ok.flood), (77, 4200, true));
     expect(s.sentContacts.single, (bobKey, 'x', 1, 55));
-    expect(s.updated.map((c) => c.publicKeyHex), [bobKey], reason: 'the radio did not have Bob: the phone (master) put him back first');
+    expect(s.updated, isEmpty, reason: 'a send is the send command and nothing else: no contact is written to the radio first');
+    expect(s.resets, isEmpty, reason: 'and no reset path');
 
+    // The radio did not answer the command: its reply was lost, the packet may have gone out. Not "busy".
     s.nextSend = const r.SendResult.queued(55);
-    await expectLater(a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 0, forceFlood: false), throwsA(isA<RadioBusy>()));
+    await expectLater(a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 0), throwsA(isA<RadioNoAnswer>()));
+    // Try numbers above 3 reach the session untouched.
+    s.nextSend = const r.SendResult.accepted(1000, expectedAck: 77, estTimeoutMs: 4200, flood: true);
+    s.sentContacts.clear();
+    await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 7);
+    expect(s.sentContacts.single, (bobKey, 'x', 7, 55));
     for (final (f, matcher) in <(r.SendFailure, Matcher)>[
       (r.SendFailure.notConnected, isA<RadioNotConnected>()),
       (r.SendFailure.radioBusy, isA<RadioBusy>()),
@@ -211,14 +218,31 @@ void main() {
       (r.SendFailure.radioError, isA<RadioRejected>()),
     ]) {
       s.nextSend = r.SendResult.failed(f);
-      await expectLater(a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 0, forceFlood: false), throwsA(matcher), reason: '$f');
+      await expectLater(a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 0), throwsA(matcher), reason: '$f');
     }
   });
 
-  test('forceFlood resets the stored path on the radio first (RESET_PATH, not a rewrite of the contact)', () async {
-    await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 4, forceFlood: true);
-    expect(s.resets, [bobKey]);
+  test('the adapter never resets a path on its own (build 76 did, before every "flood" try)', () async {
+    await a.sendDirect(radioId: radioA, contactPublicKey: bobKey, text: 'x', timestamp: 55, attempt: 4);
+    expect(s.resets, isEmpty);
     expect(s.sentContacts, hasLength(1));
+  });
+
+  test('resetPath is RESET_PATH (not a rewrite of the contact) and the phone\'s mirror of the route follows the radio', () async {
+    h.store.contacts.setPath(radioA, bobKey, Uint8List.fromList([7]), 1);
+    expect(await a.resetPath(radioId: radioA, contactPublicKey: bobKey), isTrue);
+    expect(s.resets, [bobKey]);
+    expect(s.updated, isEmpty);
+    expect(h.store.contacts.get(radioA, bobKey)!.hasPath, isFalse);
+  });
+
+  test('addContactToRadio (after "not a contact"): read first, then written as a NEW contact with route unknown, never the phone\'s route', () async {
+    h.store.contacts.setPath(radioA, bobKey, Uint8List.fromList([7, 8]), 2); // a stale route on the phone
+    await a.addContactToRadio(radioId: radioA, contactPublicKey: bobKey);
+    final w = s.updated.single;
+    expect(w.publicKeyHex, bobKey);
+    expect(w.outPathLen, 0xFF, reason: 'unknown, never "direct" and never the phone\'s copy');
+    expect(w.outPath, isEmpty);
   });
 
   test('sendChannel adopts the timestamp the session used', () async {
@@ -286,8 +310,8 @@ class _Stamping implements OutboundMessageSink {
   @override
   bool get canSend => true;
   @override
-  Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt, required bool forceFlood}) =>
-      inner.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt, forceFlood: forceFlood);
+  Future<SendReceipt> sendDirect({required String radioId, required String contactPublicKey, required String text, required int timestamp, required int attempt}) =>
+      inner.sendDirect(radioId: radioId, contactPublicKey: contactPublicKey, text: text, timestamp: timestamp, attempt: attempt);
   @override
   Future<int> sendChannel({required String radioId, required int slot, required String text, required int timestamp, int priority = CommandPriority.user}) async => ts;
 }

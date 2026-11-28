@@ -393,6 +393,12 @@ class ChatBackup {
           state = MessageState.failed; // never resend someone's old queue on restore
           fail = FailReason.cancelled;
         }
+        if (state == MessageState.likelyDelivered) {
+          // A backup from build 76 or earlier: "Probably delivered (they replied)" is gone (build 77, decision D2). What was
+          // proved is "no confirmation".
+          state = MessageState.failed;
+          fail = FailReason.noAck;
+        }
         final msg = ChatMessage(
           id: newId(),
           radioId: radio,

@@ -146,10 +146,10 @@ void main() {
     final handle = tester.ensureSemantics();
     await open(tester);
     await tester.scrollUntilVisible(find.byKey(const Key('chart-server-distance')), 200, scrollable: _list);
-    expect(find.bySemanticsLabel(RegExp(r'^Distance per week \(km\)\. 3 weeks\. Most: Week of Sep 28, 67 km in 2 drives\.')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Distance per week \(km\)\. 3 weeks\. Most: Week of Sep 28 \(UTC\), 67 km in 2 drives\.')), findsOneWidget);
     expect(find.textContaining('Weeks start on Monday (UTC).'), findsWidgets);
     await tester.scrollUntilVisible(find.byKey(const Key('chart-server-heard')), 200, scrollable: _list);
-    expect(find.bySemanticsLabel(RegExp(r'Best Week of Sep 28, 80% of 1000 pings\. This week 53%\.')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'Best Week of Sep 28 \(UTC\), 80% of 1000 pings\. This week 53%\.')), findsOneWidget);
     final toggle = find.descendant(of: find.byKey(const Key('chart-server-cells-toggle')), matching: find.text('Table'));
     await tester.scrollUntilVisible(find.byKey(const Key('chart-server-cells')), 200, scrollable: _list);
     await tester.ensureVisible(toggle);
@@ -170,12 +170,19 @@ void main() {
     expect(find.textContaining('not stored on this phone'), findsOneWidget);
     expect(find.text('Flagged for review'), findsWidgets);
     expect(find.text('gps-jump'), findsOneWidget);
+    // Dates now name the zone, so the sheet is a little taller: bring Done into view first.
+    await tester.ensureVisible(find.byKey(const Key('progress-server-drive-done')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('progress-server-drive-done')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('progress-server-drive-d-here')), 300, scrollable: _list);
     expect(find.descendant(of: find.byKey(const Key('progress-server-drive-d-here')), matching: find.textContaining('Also on this phone')), findsOneWidget);
     await tester.tap(find.byKey(const Key('progress-server-drive-d-here')));
     await tester.pumpAndSettle();
+    for (var i = 0; i < 100 && find.byKey(const Key('drive-report')).evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
     expect(find.byKey(const Key('drive-report')), findsOneWidget);
   });
 
@@ -273,7 +280,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(_text(tester, 'progress-server-scope'), isNotEmpty);
     expect(find.byKey(const Key('progress-server-offline')), findsOneWidget);
-    expect(find.textContaining('Offline - as of 2h ago'), findsOneWidget);
+    expect(find.textContaining('Offline - as of 2 h ago'), findsOneWidget);
     mode = 'pause';
     h.clockNow = h.clockNow.add(const Duration(hours: 1));
     Navigator.of(tester.element(find.byKey(const Key('progress-screen')))).pop();

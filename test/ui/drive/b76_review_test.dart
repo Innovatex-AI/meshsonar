@@ -76,7 +76,7 @@ void main() {
     await end(tester);
   });
 
-  testWidgets('a radio with no antenna set: the Dock says so in two short lines and a tap opens the antenna sheet', (tester) async {
+  testWidgets('a radio with no antenna set: the Dock says Ready, "Antenna not set" under it, and a tap opens the antenna sheet', (tester) async {
     final h = await pump(tester, const Size(375, 667), connect: true, antenna: false);
     await tester.pumpAndSettle();
     // The first connect opens the sheet by itself: close it, then the Dock line must bring it back.
@@ -85,8 +85,9 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(h.state.needsAntennaSetup, isTrue);
-    expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Set antenna');
-    expect(tester.widget<Text>(find.byKey(const Key('dock-subtitle'))).data, 'Tap to set it up');
+    // Round 5 decision 4: the antenna no longer blocks Start; the Dock still says it is not set and opens the sheet.
+    expect(tester.widget<Text>(find.byKey(const Key('status-line'))).data, 'Ready');
+    expect(tester.widget<Text>(find.byKey(const Key('dock-subtitle'))).data, 'Antenna not set · tap to set');
     await tester.tap(find.byKey(const Key('dock-antenna-setup')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('antenna-sheet')), findsOneWidget);

@@ -3,15 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/ui/map/coverage_map.dart';
+import 'package:meshsonar/ui/map/parts/ping_dots_layer.dart';
 import 'package:meshsonar/ui/theme.dart';
 
 import 'fakes.dart';
 import 'map/repeater_probe.dart';
 
-Color dotColor(WidgetTester tester, String id) {
-  final box = tester.widget<DecoratedBox>(find.byKey(ValueKey('map-ping-$id')));
-  return (box.decoration as BoxDecoration).color!;
-}
+/// The colour the one ping painter (build 77 F12) gave the dot of [id].
+Color dotColor(WidgetTester tester, String id) => PingDotsLayer.debugColorOf(id)!;
 
 Future<void> pumpMap(WidgetTester tester, Widget map, {Brightness b = Brightness.dark}) async {
   await tester.pumpWidget(
@@ -88,7 +87,7 @@ void main() {
       CoverageMap(pings: [silentPing('a')], position: const LatLng(40.126, -82.93), showTiles: true),
       b: Brightness.light,
     );
-    expect(find.text('Protomaps © OpenStreetMap contributors'), findsOneWidget);
+    expect(find.text('© OpenStreetMap'), findsOneWidget, reason: 'decision 5: the short credit; Protomaps is named in the credits sheet');
     expect(find.byKey(const Key('map-recenter')), findsNothing);
     await tester.drag(find.byType(CoverageMap), const Offset(120, 80));
     await tester.pump();

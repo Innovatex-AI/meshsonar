@@ -5,6 +5,8 @@ import 'package:meshsonar/core/api.dart';
 import 'package:meshsonar/core/model.dart';
 import 'package:meshsonar/ui/about_screen.dart';
 
+import 'package:meshsonar/ui/settings_screen.dart' show SettingsScreen;
+
 import 'fakes.dart';
 import 'settings_test_kit.dart';
 
@@ -34,7 +36,7 @@ void main() {
     expect(find.text('No drives yet'), findsOneWidget);
   });
 
-  testWidgets('drives list newest first; sync, export and delete', (tester) async {
+  testWidgets('drives list newest first; upload, share the drive file and delete', (tester) async {
     useTallScreen(tester);
     final h = Harness()..approveKey();
     h.store.seed(sess('old', DateTime.utc(2026, 10, 1, 14), label: 'Polaris loop'),
@@ -56,20 +58,24 @@ void main() {
     expect(find.text('Polaris loop'), findsOneWidget);
     expect(find.text('4 pings'), findsOneWidget);
     expect(find.text('Heard 50%'), findsNWidgets(2));
-    expect(find.text('3 not synced'), findsOneWidget);
-    expect(find.text('All synced'), findsOneWidget);
+    expect(find.text('1 of 4 uploaded'), findsOneWidget);
+    expect(find.text('Uploaded'), findsOneWidget);
 
-    // Sync now
+    // Upload now
     await tester.tap(find.byKey(const ValueKey('sync-new')));
     await tester.pumpAndSettle();
     expect(h.sync.syncedSessions, ['new']);
-    expect(find.text('All synced'), findsNWidgets(2));
+    expect(find.text('Uploaded'), findsNWidgets(2));
     expect(find.text('Uploaded 3 new pings.'), findsOneWidget);
 
-    // Export & share (the progress card above the list puts this button under the sync SnackBar: close it first)
+    // Share > Drive file, from the card's menu (Round 5 D-5, D-6; close the upload toast first)
     dismissAppToast();
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('export-old')));
+    await tester.tap(find.byKey(const ValueKey('menu-old')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('menu-share-old')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('share-drive-file')));
     await tester.pumpAndSettle();
     expect(h.store.exportCount, 1);
     expect(h.shared.single.path, endsWith('drive-old.json'));
@@ -100,17 +106,21 @@ void main() {
     expect(find.textContaining('2 of 2 pings have NOT been uploaded'), findsOneWidget);
   });
 
-  testWidgets('sync without a key explains what to do', (tester) async {
+  testWidgets('without a key: the drive is on this phone only and Check key opens the driver key setting', (tester) async {
     useTallScreen(tester);
     final h = Harness();
     h.store.seed(sess('s', DateTime.utc(2026, 10, 15)), [silentPing('a')]);
     await h.pumpApp(tester);
     await openDrivesTab(tester);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('sync-s')));
+    // Round 5 D-3: no Upload button that could only show a toast.
+    expect(find.byKey(const ValueKey('sync-s')), findsNothing);
+    expect(find.text('On this phone only'), findsOneWidget);
+    expect(find.text('1 ping saved on this phone. Uploads start when your driver key is approved.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('check-key')));
     await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
     expect(h.sync.syncedSessions, isEmpty);
-    expect(find.textContaining('Create one in Settings'), findsOneWidget);
     await drain(tester);
   });
 

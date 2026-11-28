@@ -205,14 +205,15 @@ void main() {
     // Build 76: the two sections became pages one level down (Account > Claimed radios, Sharing & privacy > Observer and
     // MQTT feeds); the old section ids still resolve to them, under the old names for search.
     expect(settingsPage('claims').title, 'Claimed radios');
-    expect(settingsPage('observer').title, 'Observer and MQTT feeds');
+    expect(settingsPage('observer').title, 'Sharing status and other sites'); // build 77 (round 5 S9)
+    expect(settingsPage('observer').was, 'Observer and MQTT feeds');
     expect(settingsSectionAliases['my-radios-section'], ('driver', 'claims', 'Claimed radios'));
     expect(settingsSectionAliases['observer'], ('privacy', 'observer', 'Observer'));
     expect(resolveSettingsTarget('my-radios-section')?.page, 'claims');
     expect(resolveSettingsTarget('observer')?.page, 'observer');
     // One name each, everywhere: no section or page under an older name.
     final titles = [for (final s in settingsSections) s.title, for (final p in settingsPages) p.title];
-    expect(titles.where((t) => t.startsWith('Observer')).length, 1);
+    expect(titles.where((t) => t.startsWith('Observer')).length, 0, reason: 'build 77: the page is "Sharing status and other sites"');
     expect(titles.where((t) => t == 'Claimed radios').length, 1);
     for (final old in ['My radios', 'My radios and claims', 'Home observer']) {
       expect(titles, isNot(contains(old)), reason: old);

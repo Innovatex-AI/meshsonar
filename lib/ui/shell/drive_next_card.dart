@@ -1,9 +1,9 @@
-// Plan tab, "Where to drive next": measured-coverage gaps near the phone, from the network coverage the app already holds
-// (lib/core/drive_next.dart). A small map, a list with distance and direction, and "Navigate" into Apple Maps. Every state
-// says what to do: no location, loading, failed, nothing to find.
-import '../map/map_preview.dart';
+// Plan tab, Where to drive (the Planner's fourth mode): measured-coverage gaps near the phone, from the network coverage
+// the app already holds (lib/core/drive_next.dart). A list with distance and direction and "Navigate" into Apple Maps;
+// tapping a row shows the place on the Planner's big map (build 77, round 4 P-V3: the panel's own small map and its title
+// are gone, the big map already draws the same places). Every state says what to do: no location, loading, failed,
+// nothing to find.
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:h3_flutter/h3_flutter.dart' show H3;
 import 'package:latlong2/latlong.dart';
 
@@ -25,12 +25,6 @@ import '../design/app_surfaces.dart';
 /// The colour the coverage map draws a "No reply" cell in (band 0), so a target dot matches the map and its key.
 Color _noReply(BuildContext context) =>
     CoverageBandColors.of(MeshSonarColors.of(context).palette, Theme.of(context).brightness)[CoverageBand.noReply];
-
-typedef DriveNextMapBuilder = Widget Function(
-  BuildContext context,
-  LatLng me,
-  List<DriveTarget> targets,
-);
 
 // ---------------------------------------------------------------------------------------------------- targets on the Drive map (J4)
 
@@ -66,8 +60,9 @@ bool showTargetsOnDriveMap(BuildContext context, List<MapFocusTarget> targets, {
   return true;
 }
 
-/// "Navigate" and "Show on the Drive map" for one place (a Find-sites result, a planned site). Keys
-/// `drive-target-navigate`, `drive-target-show-map`.
+/// "Navigate" and "Show on the Drive map" for one place (a Find-sites result, a planned spot). Keys
+/// `drive-target-navigate`, `drive-target-show-map`. Both outlined (build 77): amber is for warnings only, and the card's
+/// own main action leads.
 class DriveTargetActions extends StatelessWidget {
   final String name;
   final double lat, lon;
@@ -78,9 +73,9 @@ class DriveTargetActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(spacing: Gap.s, runSpacing: Gap.xs, children: [
-        FilledButton.tonalIcon(
+        OutlinedButton.icon(
           key: const Key('drive-target-navigate'),
-          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
           icon: const Icon(Icons.navigation_outlined, size: 18),
           label: const Text('Navigate'),
           onPressed: () => navigateToPoint(context, lat, lon, label: name),
@@ -96,14 +91,12 @@ class DriveTargetActions extends StatelessWidget {
 }
 
 class DriveNextCard extends StatefulWidget {
-  /// Tests replace the tile map for every card (the Plan tab builds it without arguments).
-  @visibleForTesting
-  static DriveNextMapBuilder? testMap;
+  /// A tap on a place's row (the Planner centres its big map on it). Null: the rows only offer Navigate.
+  final ValueChanged<DriveTarget>? onShow;
 
-  /// Test seam: tiles never load in widget tests.
-  final DriveNextMapBuilder? mapBuilder;
+  /// Test seam: the hex engine.
   final H3? h3;
-  const DriveNextCard({super.key, this.mapBuilder, this.h3});
+  const DriveNextCard({super.key, this.onShow, this.h3});
 
   @override
   State<DriveNextCard> createState() => _DriveNextCardState();
@@ -127,38 +120,8 @@ class _DriveNextCardState extends State<DriveNextCard> {
     }
   }
 
-  Widget _frame(BuildContext context, Widget child) {
-    final t = Theme.of(context);
-    return Card(
-      key: const Key('plan-drive-next'),
-      margin: const EdgeInsets.only(bottom: Gap.m),
-      child: Padding(
-        padding: const EdgeInsets.all(Gap.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.explore_outlined, color: t.colorScheme.primary),
-                const SizedBox(width: Gap.s),
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      'Where to drive next',
-                      style: t.textTheme.titleMedium,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: Gap.xs),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
+  /// The list straight under the Planner's question line: no card, no title of its own (the question says it).
+  Widget _frame(BuildContext context, Widget child) => KeyedSubtree(key: const Key('plan-drive-next'), child: child);
 
   Widget _note(BuildContext context, String text, {Widget? action}) {
     final t = Theme.of(context);
@@ -244,7 +207,6 @@ class _DriveNextCardState extends State<DriveNextCard> {
         ),
       );
     }
-    final m = MeshSonarColors.of(context);
     return _frame(
       context,
       Column(
@@ -252,16 +214,13 @@ class _DriveNextCardState extends State<DriveNextCard> {
         children: [
           Text(
             'Dot: driven, but no repeater answered. Ring: nobody has driven there yet. '
-            'Nearest first, within ${units.distance(15000)}.',
+            'Nearest first, within ${units.distance(15000)}.${widget.onShow == null ? '' : ' Tap a place to see it on the map.'}',
             style: t.textTheme.bodySmall?.copyWith(
               color: t.colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: Gap.s),
-          (widget.mapBuilder ?? DriveNextCard.testMap ?? _defaultMap)(context, me, targets),
-          const SizedBox(height: Gap.xs),
           for (var i = 0; i < targets.length; i++)
-            _row(context, i, targets[i], me, units, m),
+            _row(context, i, targets[i], me, units),
           if (fix.fix.lat != 0 && s.phoneFixNote != null)
             Padding(
               padding: const EdgeInsets.only(top: Gap.xs),
@@ -278,7 +237,6 @@ class _DriveNextCardState extends State<DriveNextCard> {
     DriveTarget x,
     LatLng me,
     Units units,
-    MeshSonarColors m,
   ) {
     final silent = x.kind == DriveTargetKind.silent;
     final dir = compass(
@@ -287,10 +245,12 @@ class _DriveNextCardState extends State<DriveNextCard> {
     final what = silent
         ? 'No reply (${x.pings} ping${x.pings == 1 ? '' : 's'}, no repeater answered)'
         : 'Nobody has driven here yet';
+    final show = widget.onShow;
     return ListTile(
       key: Key('plan-target-$i'),
       contentPadding: EdgeInsets.zero,
       minVerticalPadding: Gap.s,
+      onTap: show == null ? null : () => show(x),
       leading: Icon(
         silent ? Icons.circle : Icons.circle_outlined,
         color: silent ? _noReply(context) : Theme.of(context).colorScheme.primary,
@@ -303,74 +263,6 @@ class _DriveNextCardState extends State<DriveNextCard> {
         icon: const Icon(Icons.navigation_outlined, size: 18),
         label: const Text('Navigate'),
         onPressed: () => navigateToPoint(context, x.lat, x.lon, label: what),
-      ),
-    );
-  }
-
-  Widget _defaultMap(
-    BuildContext context,
-    LatLng me,
-    List<DriveTarget> targets,
-  ) {
-    final cs = Theme.of(context).colorScheme;
-    final pts = [me, for (final x in targets) LatLng(x.lat, x.lon)];
-    return ClipRRect(
-      key: const Key('plan-drive-next-map'),
-      borderRadius: BorderRadius.circular(Corners.small),
-      child: SizedBox(
-        height: 200,
-        child: MapPreview(
-          fit: CameraFit.coordinates(
-            coordinates: pts,
-            padding: const EdgeInsets.all(36),
-            maxZoom: 14,
-          ),
-          coverage: kPreviewCoverage,
-          openAt: me,
-          openZoom: 12,
-          overlays: [
-            MarkerLayer(
-              markers: [
-                for (final x in targets)
-                  Marker(
-                    point: LatLng(x.lat, x.lon),
-                    width: 22,
-                    height: 22,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: x.kind == DriveTargetKind.silent
-                            ? _noReply(context)
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: x.kind == DriveTargetKind.silent
-                              ? Colors.white
-                              : cs.primary,
-                          width: 2.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                Marker(
-                  point: me,
-                  width: 20,
-                  height: 20,
-                  // The app's own you-are-here colour (the live puck's), not a hard-coded blue.
-                  child: DecoratedBox(
-                    key: const Key('plan-drive-next-me'),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: cs.primary,
-                      border: const Border.fromBorderSide(
-                        BorderSide(color: Colors.white, width: 3),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

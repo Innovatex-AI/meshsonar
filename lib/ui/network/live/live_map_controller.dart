@@ -68,6 +68,32 @@ class LiveFilter {
   }
 }
 
+/// [p] cut down to the one reception [observationId]: that observation and the path it heard (its `pathId`, else the first
+/// path). Unknown id: [p] unchanged.
+LiveV2Packet oneReception(LiveV2Packet p, String observationId) {
+  final obs = p.observations.where((o) => o.id == observationId).firstOrNull;
+  if (obs == null) return p;
+  final path = p.paths.where((x) => x.id == obs.pathId).firstOrNull ?? p.paths.firstOrNull;
+  return LiveV2Packet(
+    hash: p.hash,
+    type: p.type,
+    typeName: p.typeName,
+    route: p.route,
+    hashSize: p.hashSize,
+    firstSeen: p.firstSeen,
+    origin: p.origin,
+    channel: p.channel,
+    message: p.message,
+    observations: [obs],
+    paths: [?path],
+    unknownHops: p.unknownHops,
+    settled: p.settled,
+    src: p.src,
+    source: p.source,
+    legacyPositions: p.legacyPositions,
+  );
+}
+
 class LiveMapController extends ChangeNotifier {
   final String baseUrl, regionSlug;
   final NetworkLiveStream stream;
@@ -142,7 +168,33 @@ class LiveMapController extends ChangeNotifier {
 
   // ---- focus ("Show on map")
   LiveV2Packet? focus;
+
+  /// Build 77 (Round 2 N-U1, "Replay on map"): the one reception [focus] was cut down to (its observation id), or null when the
+  /// whole packet is drawn.
+  String? focusObservationId;
+
+  /// The focus is being animated sender -> each hop -> observer (a "Replay on map"); [focusStartMs] is when it started.
+  bool focusAnimating = false;
+  int focusStartMs = 0;
+
   LiveDrawing? get focusDrawing => focus == null ? null : drawLivePacket(focus!, positions);
+
+  /// 0..steps progress of the animated focus (null = drawn whole). Under Reduce Motion the host draws it whole at once.
+  double? get focusProgress {
+    if (!focusAnimating || focus == null) return null;
+    final d = focusDrawing;
+    if (d == null) return null;
+    final steps = math.max(1, d.steps);
+    final prog = (_nowMs - focusStartMs) / hopMs;
+    return prog.clamp(0, steps).toDouble();
+  }
+
+  /// True once an animated focus has reached the observer.
+  bool get focusPlayed {
+    final p = focusProgress;
+    final d = focusDrawing;
+    return p == null || d == null || p >= math.max(1, d.steps);
+  }
 
   // ---- replay
   ReplayClock? _clock;
@@ -291,7 +343,15 @@ class LiveMapController extends ChangeNotifier {
 
   /// Advances the animation and the replay by [dt] of wall time.
   void tick(Duration dt) {
-    if (!_active || _mode == LiveMode.paused) return;
+    if (!_active) return;
+    if (_mode == LiveMode.paused) {
+      // Paused: nothing new is drawn, but a "Replay on map" the person asked for still plays.
+      if (focusMoving) {
+        _nowMs += dt.inMilliseconds;
+        _notify();
+      }
+      return;
+    }
     _nowMs += dt.inMilliseconds;
     final c = _clock;
     if (_mode == LiveMode.replay && c != null) {
@@ -322,7 +382,7 @@ class LiveMapController extends ChangeNotifier {
     return (prog, alpha);
   }
 
-  bool get animating => _anims.isNotEmpty || (_mode == LiveMode.replay && !(_clock?.exhausted ?? true));
+  bool get animating => _anims.isNotEmpty || focusMoving || (_mode == LiveMode.replay && !(_clock?.exhausted ?? true));
 
   // ---- VCR
   void pause() {
@@ -469,13 +529,65 @@ class LiveMapController extends ChangeNotifier {
   // ---- focus
   void showPacket(LiveV2Packet p) {
     focus = p;
+    focusObservationId = null;
+    focusAnimating = false;
     _remember(p);
     _notify();
   }
 
+  /// "Replay on map" (Round 2 N-U1): draws ONLY the copy of [p] heard as observation [observationId] (that observer and the
+  /// path it heard), animated from the sender through each hop to the observer. An unknown id draws the whole packet, animated.
+  void replayReception(LiveV2Packet p, String observationId) {
+    _remember(p);
+    focus = oneReception(p, observationId);
+    focusObservationId = focus!.observations.length == 1 ? focus!.observations.single.id : null;
+    playFocusAgain();
+  }
+
+  /// "Play again": the animated focus starts over from the sender.
+  void playFocusAgain() {
+    if (focus == null) return;
+    focusAnimating = true;
+    focusStartMs = _nowMs;
+    _notify();
+  }
+
+  /// True while the drawn focus is still on its way to the observer (the host's ticker runs for it).
+  bool get focusMoving => focusAnimating && !focusPlayed;
+
   void clearFocus() {
     focus = null;
+    focusObservationId = null;
+    focusAnimating = false;
     _notify();
+  }
+
+  // ---- the latest packets (Round 2 N-U2)
+  /// True once [loadLatest] ran (it runs once per controller).
+  bool latestLoaded = false;
+  bool latestLoading = false;
+
+  /// Live does not open empty: the latest [count] packets of the region, loaded ONCE when the map opens, listed under "Latest
+  /// packets" (not animated). The last ten minutes first; a busy region that fills the page asks the last two minutes instead.
+  Future<void> loadLatest({int count = 20}) async {
+    if (latestLoaded || latestLoading) return;
+    latestLoading = true;
+    _notify();
+    try {
+      final now = clock().toUtc();
+      var page = await api.replay(now.subtract(const Duration(minutes: 10)), to: now, types: _filter.types, limit: 200);
+      if (page.next != null) page = await api.replay(now.subtract(const Duration(minutes: 2)), to: now, types: _filter.types, limit: 200);
+      final newest = [...page.packets]..sort((a, b) => b.firstSeen.compareTo(a.firstSeen));
+      for (final p in newest.take(count)) {
+        _remember(p);
+      }
+    } catch (_) {
+      // Nothing listed yet; the stream fills the feed as before.
+    } finally {
+      latestLoaded = true;
+      latestLoading = false;
+      _notify();
+    }
   }
 
   @override

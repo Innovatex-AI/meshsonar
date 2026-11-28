@@ -312,7 +312,7 @@ class PacketFilter {
       for (final n in nodes) PacketFilterChip('node:$n', 'Node ${short(n)}'),
       if (prefix != null) PacketFilterChip('prefix', 'Hop $prefix'),
       if (hash != null) PacketFilterChip('hash', 'Hash ${short(hash!)}'),
-      for (final c in channels.toList()..sort()) PacketFilterChip('channel:$c', c == 'public' ? 'Public' : (c.startsWith('tag:') ? '#${c.substring(4)}' : 'Channel ${c.substring(4)}')),
+      for (final c in channels.toList()..sort()) PacketFilterChip('channel:$c', c == 'public' ? 'Public' : (c.startsWith('tag:') ? '#${c.substring(4)}' : 'Private channel ID ${c.substring(4)}')),
       if (scope != null) PacketFilterChip('scope', 'Scope $scope'),
       if (source != PacketSourceFilter.all) PacketFilterChip('source', source == PacketSourceFilter.ours ? 'Our observers' : 'Outside feeds'),
       if (hopsMin != null || hopsMax != null)

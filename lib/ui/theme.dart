@@ -1,9 +1,16 @@
 // MeshSonar design system: colours, type, shapes and the map palette.
 //
 // Direction: an in-car instrument, not a web dashboard. Deep "sonar water" navy in dark mode (the default at night),
-// a cool chart-paper grey in light mode, one strong sonar-teal accent, and a warm beacon amber reserved for
-// repeaters, so "you", "your pings" and "the towers" never share a colour. Type is the system font (SF Pro on Apple
+// a cool chart-paper grey in light mode and one strong sonar-teal accent. Type is the system font (SF Pro on Apple
 // platforms; see design/app_type.dart): numbers use tabular figures, big enough to read at arm's length.
+//
+// One meaning per colour (build 77, Round 1 N4 / Round 2 N-V3 / Round 5 S4 and decision 10):
+//   teal            you, and anything selected (chips, segments, tonal buttons, the status strip, the tab bar)
+//   amber           a warning, and nothing else: `MeshSonarColors.warning`
+//   neutral slate   repeaters: `MeshSonarColors.repeater` (no longer amber)
+//   signal ramp     signal strength only (Map Definition bands); percent heard has its own teal scale (`heardStops`)
+// The tokens are on [MeshSonarColors] (values in [ColourLanguage]). `beacon` is the OLD amber, kept only so call sites
+// that have not moved yet still compile: a repeater takes `repeater`, a warning takes `warning`.
 //
 // Screens read the extra colours with `MeshSonarColors.of(context)`.
 import 'dart:io' show Platform;
@@ -141,6 +148,120 @@ const _light = _Palette(
   tileMatrix: _lightTiles,
 );
 
+// ------------------------------------------------------- colour language
+/// The build 77 colour language (Round 1 N4, Round 5 decision 10): the colours that are NOT signal strength and NOT the
+/// teal accent, one meaning each. Read them through [MeshSonarColors] (`MeshSonarColors.of(context).repeater`, ...).
+/// None of these is a Map Definition signal colour (test/lint/no_signal_colours_test.dart) and none is amber except
+/// [warning].
+@immutable
+class ColourLanguage {
+  /// Warnings only (near a limit, stale, degraded, unusual). The one amber in the app. Text-safe on surfaces (4.5:1).
+  final Color warning;
+
+  /// Text or icon on a solid [warning] fill.
+  final Color onWarning;
+
+  /// Repeaters wherever one is drawn as an icon, bar, rank number or chip: a neutral slate, never amber and never the
+  /// accent teal. [onRepeater] is text or a glyph on a solid [repeater] fill. For a soft badge use [repeaterTint].
+  final Color repeater, onRepeater;
+
+  /// The soft fill behind a repeater icon (avatar circle, row badge): [repeater] at low strength, already blended for
+  /// this theme's surface, so it needs no `withValues(alpha:)`.
+  final Color repeaterTint;
+
+  /// "No reply" (a ping nobody answered, a cell with no coverage): a neutral dark slate, so it no longer sits next to
+  /// the red Edge band as a second red. Not a signal band.
+  final Color noReply;
+
+  /// The tapped-repeater / tapped-cell link line: white, drawn over [linkNeutralCasing] so it shows on any base map
+  /// and is never a signal hue (the old line was orange, the Weak band's family).
+  final Color linkNeutral, linkNeutralCasing;
+
+  /// Friend pins (MeshTrack). Magenta, so a friend is never mistaken for your own position (teal). [onFriend] is the
+  /// initials or glyph on the pin. (Close to the TXT_MSG packet orchid by hue; a pin with initials and a packet line
+  /// are told apart by shape.)
+  final Color friend, onFriend;
+
+  /// Percent heard, low (first) to high (last): one teal hue, five steps. Use for heard %, "Best spot", heard per
+  /// week and the hop mix tints. Never the signal ramp. 0 % itself is [noReply].
+  final List<Color> heardStops;
+
+  /// Packet types, moved off the Standard palette's signal hues (no red, orange, amber, yellow or green). Slot order
+  /// is `packetTypeSlot`: ADVERT, GRP_TXT, TXT_MSG, ACK, RESPONSE, TRACE, PATH, REQ. [packetOther] is every other type.
+  /// The colours a user sees today come from the Map Definition's `packetTypes` (shared with the website); these are
+  /// the values that list should carry, and the built-in fallback for it.
+  final List<Color> packetTypes;
+  final Color packetOther;
+
+  const ColourLanguage({
+    required this.warning,
+    required this.onWarning,
+    required this.repeater,
+    required this.onRepeater,
+    required this.repeaterTint,
+    required this.noReply,
+    required this.linkNeutral,
+    required this.linkNeutralCasing,
+    required this.friend,
+    required this.onFriend,
+    required this.heardStops,
+    required this.packetTypes,
+    required this.packetOther,
+  });
+
+  static ColourLanguage of(Brightness b) => b == Brightness.dark ? dark : light;
+
+  static const ColourLanguage dark = ColourLanguage(
+    warning: Color(0xFFFFA14A),
+    onWarning: Color(0xFF2A1700),
+    repeater: Color(0xFFB4C6D0),
+    onRepeater: Color(0xFF0C1E28),
+    repeaterTint: Color(0xFF24394A),
+    noReply: Color(0xFF35425D),
+    linkNeutral: Color(0xFFFFFFFF),
+    linkNeutralCasing: Color(0xD9081219),
+    friend: Color(0xFFFF7AD9),
+    onFriend: Color(0xFF3A0030),
+    heardStops: [Color(0xFF1B5A56), Color(0xFF1F7C75), Color(0xFF27A096), Color(0xFF31C2B4), Color(0xFF3EE0CF)],
+    packetTypes: [
+      Color(0xFF3987E5), // ADVERT    blue
+      Color(0xFF5CC8F0), // GRP_TXT   sky
+      Color(0xFFE08AF0), // TXT_MSG   orchid
+      Color(0xFF9FB3C8), // ACK       slate
+      Color(0xFFD55181), // RESPONSE  pink
+      Color(0xFFE6ECF2), // TRACE     near white
+      Color(0xFF8478F0), // PATH      violet
+      Color(0xFFB9AFA6), // REQ       stone
+    ],
+    packetOther: Color(0xFF8A929B),
+  );
+
+  static const ColourLanguage light = ColourLanguage(
+    warning: Color(0xFFA14B00),
+    onWarning: Color(0xFFFFFFFF),
+    repeater: Color(0xFF3F5663),
+    onRepeater: Color(0xFFFFFFFF),
+    repeaterTint: Color(0xFFDDE5EA),
+    noReply: Color(0xFF0E1B2B),
+    linkNeutral: Color(0xFFFFFFFF),
+    linkNeutralCasing: Color(0xD90C1E28),
+    friend: Color(0xFFB4238F),
+    onFriend: Color(0xFFFFFFFF),
+    heardStops: [Color(0xFFBFE9E2), Color(0xFF86D3C8), Color(0xFF45B3A6), Color(0xFF14948A), Color(0xFF00796E)],
+    packetTypes: [
+      Color(0xFF2A78D6), // ADVERT    blue
+      Color(0xFF0A86B0), // GRP_TXT   sky
+      Color(0xFFA53FC4), // TXT_MSG   orchid
+      Color(0xFF5A6F85), // ACK       slate
+      Color(0xFFD9457F), // RESPONSE  pink
+      Color(0xFF2B3A47), // TRACE     near black
+      Color(0xFF5B49D6), // PATH      violet
+      Color(0xFF625348), // REQ       stone
+    ],
+    packetOther: Color(0xFF6F7780),
+  );
+}
+
 // ------------------------------------------------------- strength palettes
 // The colours that mean "how strong was the signal", per ColourPalette and brightness. They come from the Map Definition
 // (`palettes[].themes[theme]`, served by /api/map/definition, bundled copy = the M1 fixture); no hex is written here.
@@ -200,9 +321,13 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
   /// Which palette these strength colours belong to.
   final ColourPalette palette;
 
-  /// Repeaters ("beacons") everywhere in the app.
+  /// The OLD repeater amber. Build 77: amber means a warning only, so do not use this in new code. A repeater takes
+  /// [repeater]; a warning takes [warning]. Kept, with its old value, until every call site has moved.
   final Color beacon;
   final Color onBeacon;
+
+  /// The build 77 colour language for this theme (see [ColourLanguage]); the getters below are the usual way in.
+  final ColourLanguage language;
 
   /// Your pings' SNR scale for pings that were heard: equally spaced stops from -10 dB (first) to +10 dB (last).
   final List<Color> snrStops;
@@ -237,6 +362,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
     this.palette = ColourPalette.standard,
     required this.beacon,
     required this.onBeacon,
+    required this.language,
     required this.snrStops,
     required this.levelStrong,
     required this.levelGood,
@@ -252,6 +378,42 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
     required this.tileMatrix,
     required this.textMuted,
   });
+
+  /// Warnings only: the one amber in the app. [onWarning] sits on a solid warning fill.
+  Color get warning => language.warning;
+  Color get onWarning => language.onWarning;
+
+  /// Repeaters (icons, bars, rank numbers, chips): neutral slate, not amber. [repeaterTint] is the soft badge fill.
+  Color get repeater => language.repeater;
+  Color get onRepeater => language.onRepeater;
+  Color get repeaterTint => language.repeaterTint;
+
+  /// "No reply" as a neutral dark slate (not the red definition band [silent]).
+  Color get noReply => language.noReply;
+
+  /// The white link line and its dark casing (not the orange definition line [linkLine]).
+  Color get linkNeutral => language.linkNeutral;
+  Color get linkNeutralCasing => language.linkNeutralCasing;
+
+  /// Friend pins: magenta, distinct from your own position (teal).
+  Color get friend => language.friend;
+  Color get onFriend => language.onFriend;
+
+  /// Percent heard, low to high, in one teal hue; see [heardAt].
+  List<Color> get heardStops => language.heardStops;
+
+  /// The percent-heard teal at [fraction] (0 = lowest step, 1 = everything heard). Not a signal colour.
+  Color heardAt(double fraction) {
+    final s = heardStops;
+    final x = (fraction.isNaN ? 0.0 : fraction.clamp(0.0, 1.0)) * (s.length - 1);
+    final i = x.floor().clamp(0, s.length - 2);
+    return Color.lerp(s[i], s[i + 1], x - i)!;
+  }
+
+  /// The packet type colour for palette slot [slot] (`packetTypeSlot`); null or out of range = "Other". Off the signal
+  /// hues, so a packet never reads as good / weak / bad next to coverage.
+  Color packetType(int? slot) =>
+      slot == null || slot < 0 || slot >= language.packetTypes.length ? language.packetOther : language.packetTypes[slot];
 
   /// Weakest, a middle and strongest anchor of the SNR scale (charts and gradients that want three colours).
   Color get snrWeak => snrStops.first;
@@ -273,6 +435,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
     palette: palette,
     beacon: p.beacon,
     onBeacon: p.onBeacon,
+    language: identical(p, _dark) ? ColourLanguage.dark : ColourLanguage.light,
     snrStops: st.stops,
     levelStrong: st.strong,
     levelGood: st.good,
@@ -318,6 +481,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
     palette: palette,
     beacon: beacon ?? this.beacon,
     onBeacon: onBeacon,
+    language: language,
     snrStops: snrStops,
     levelStrong: levelStrong,
     levelGood: levelGood,
@@ -347,6 +511,7 @@ class MeshSonarColors extends ThemeExtension<MeshSonarColors> {
       palette: t < 0.5 ? palette : other.palette,
       beacon: l(beacon, other.beacon),
       onBeacon: l(onBeacon, other.onBeacon),
+      language: t < 0.5 ? language : other.language,
       snrStops: stops(),
       levelStrong: l(levelStrong, other.levelStrong),
       levelGood: l(levelGood, other.levelGood),
@@ -384,10 +549,14 @@ ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.st
     onPrimary: p.onAccent,
     primaryContainer: p.accentContainer,
     onPrimaryContainer: p.onAccentContainer,
-    secondary: p.beacon,
-    onSecondary: p.onBeacon,
-    secondaryContainer: Color.alphaBlend(p.beacon.withValues(alpha: 0.22), p.surface),
-    onSecondaryContainer: p.text,
+    // Build 77 (S4 / N-V3): the secondary container is what Material paints behind every SELECTED control (segments,
+    // filter and choice chips), tonal buttons and the status strip. It used to be a blend of the amber, so selection
+    // read as a warning. It is now the teal container; amber is only `MeshSonarColors.warning`.
+    // `secondary` is the accent too (build 77 lead, after every call site moved): no Material widget paints amber by default.
+    secondary: p.accent,
+    onSecondary: p.onAccent,
+    secondaryContainer: p.accentContainer,
+    onSecondaryContainer: p.onAccentContainer,
     tertiary: mc.snrWeak,
     onTertiary: p.bg,
     error: p.danger,
@@ -503,8 +672,29 @@ ThemeData meshSonarTheme(Brightness b, {ColourPalette palette = ColourPalette.st
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.chip)),
     ),
+    // Selected segment = teal, stated here as well as through the scheme so it cannot drift (S4, D-16).
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? p.accentContainer : null,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith((s) {
+          if (s.contains(WidgetState.disabled)) return null;
+          return s.contains(WidgetState.selected) ? p.onAccentContainer : p.text;
+        }),
+        iconColor: WidgetStateProperty.resolveWith((s) {
+          if (s.contains(WidgetState.disabled)) return null;
+          return s.contains(WidgetState.selected) ? p.onAccentContainer : p.text;
+        }),
+      ),
+    ),
     chipTheme: ChipThemeData(
       backgroundColor: p.surfaceHigh,
+      // Selected chip = teal on every tab (N-V3).
+      selectedColor: p.accentContainer,
+      secondarySelectedColor: p.accentContainer,
+      checkmarkColor: p.onAccentContainer,
+      secondaryLabelStyle: text.labelLarge?.copyWith(color: p.onAccentContainer),
       side: BorderSide(color: p.outlineVariant),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Corners.chip)),
       labelStyle: text.labelLarge,

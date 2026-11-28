@@ -14,6 +14,7 @@ import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
 import 'package:meshsonar/core/plan/plan_repository.dart';
 import 'package:meshsonar/core/plan/saved_plans.dart';
 import 'package:meshsonar/core/plan_contract.dart' show PlanPoint;
+import 'package:meshsonar/core/time_format.dart' show dateOnly, timeOfDay;
 import 'package:meshsonar/ui/plan/plan_share.dart';
 import 'package:meshsonar/ui/plan/planner_screen.dart';
 import 'package:meshsonar/ui/plan/saved_plans.dart';
@@ -50,6 +51,7 @@ class _BrokenRepo implements PlanRepository {
 }
 
 Future<void> openMenu(WidgetTester tester, String key) async {
+  await settle(tester);
   await tapIn(tester, find.byKey(const Key('plan-menu')));
   await settle(tester);
   await tapIn(tester, find.byKey(Key(key)));
@@ -79,9 +81,10 @@ Future<void> reveal(WidgetTester tester, Finder f) async {
 void main() {
   test('build 76: saved-plan times read today / yesterday / a date', () {
     final now = DateTime(2026, 11, 25, 15, 0);
-    expect(savedWhen(DateTime(2026, 11, 25, 9, 5), now), 'today 09:05');
-    expect(savedWhen(DateTime(2026, 11, 24, 23, 59), now), 'yesterday 23:59');
-    expect(savedWhen(DateTime(2026, 11, 20, 8, 0), now), '2026-11-20');
+    // Build 77: through the app's one formatter (lib/core/time_format.dart).
+    expect(savedWhen(DateTime(2026, 11, 25, 9, 5), now), 'today ${timeOfDay(DateTime(2026, 11, 25, 9, 5))}');
+    expect(savedWhen(DateTime(2026, 11, 24, 23, 59), now), 'yesterday ${timeOfDay(DateTime(2026, 11, 24, 23, 59))}');
+    expect(savedWhen(DateTime(2026, 11, 20, 8, 0), now), dateOnly(DateTime(2026, 11, 20, 8, 0)));
   });
 
   tearDown(PlanShareSeams.reset);
@@ -246,7 +249,7 @@ void main() {
       expect(nodes, hasLength(1));
       expect(nodes.single.status, PlanNodeStatus.existing);
       expect(nodes.single.existingKey, isNotNull);
-      expect(find.textContaining('Added 1 node'), findsOneWidget);
+      expect(find.textContaining('Added 1 contact'), findsOneWidget);
       await tester.tap(find.text('Undo'));
       await settle(tester);
       expect(st.controller!.nodes, isEmpty);

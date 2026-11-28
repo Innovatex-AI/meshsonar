@@ -10,9 +10,13 @@
 // [AlertsStripSeat] makes the Drive page end at the top of the strip, so the Drive panel rests on it. Before that the page
 // kept the tab bar's height as bottom padding while the strip took that room away from it: the panel hung a tab bar's height
 // above the strip with the map showing underneath ("the floating panel", iPhone bug report).
+//
+// Build 77 (round 5 R1): the radio row never shows while a radio is connected (connecting by hand used to leave "Not
+// connected" up), and "Not connected" has Dismiss beside Reconnect.
 import 'package:flutter/material.dart';
 
 import '../../alerts/alerts_runtime.dart';
+import '../app.dart' show AppScope;
 import '../drive/radio_link_status.dart';
 import '../theme.dart';
 
@@ -42,7 +46,8 @@ class AlertsStatusStrip extends StatelessWidget {
           builder: (context, _) {
             final rows = <Widget>[];
             final status = reconnect?.statusText;
-            if (radioRow && reconnect != null && status != null) {
+            final connected = AppScope.maybeOf(context)?.connected ?? false;
+            if (radioRow && reconnect != null && status != null && !connected) {
               final active = reconnect.active;
               final link = RadioLinkStatus(active ? RadioLink.reconnecting : RadioLink.notConnected);
               rows.add(_Row(
@@ -53,7 +58,18 @@ class AlertsStatusStrip extends StatelessWidget {
                 semantics: status,
                 action: active
                     ? null
-                    : TextButton(key: const Key('reconnect-now'), style: _actionStyle, onPressed: () => reconnect.run(reason: 'button'), child: const Text('Reconnect')),
+                    : Row(mainAxisSize: MainAxisSize.min, children: [
+                        TextButton(key: const Key('reconnect-now'), style: _actionStyle, onPressed: () => reconnect.run(reason: 'button'), child: const Text('Reconnect')),
+                        // An X, not a second word button: the reason keeps its room on a narrow phone.
+                        IconButton(
+                          key: const Key('reconnect-dismiss'),
+                          tooltip: 'Dismiss',
+                          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                          color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: reconnect.dismiss,
+                        ),
+                      ]),
               ));
             }
             final q = rt.queue.message;

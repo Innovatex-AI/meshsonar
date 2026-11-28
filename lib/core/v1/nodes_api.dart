@@ -62,11 +62,15 @@ String nodeRoleLabel(String r) => switch (r) {
       _ => 'Unknown role',
     };
 
-String nodeStatusLabel(String s) => switch (s) {
+/// A node's status in plain words (Round 2 W4): the same words the server sends as `statusLabel` and the website
+/// shows. [label] is the server's own wording, used when it sent one.
+String nodeStatusLabel(String s, {String? label}) =>
+    label ??
+    switch (s) {
       'active' => 'Active',
-      'degraded' => 'Degraded',
-      'silent' => 'Silent',
-      _ => 'Unknown',
+      'degraded' => 'Heard less often',
+      'silent' => 'Not heard lately',
+      _ => 'Not known',
     };
 
 /// The directory filters (contract 8.3 `GET /v1/nodes`).
@@ -150,6 +154,10 @@ bool _setEq(Set a, Set b) => a.length == b.length && a.containsAll(b);
 /// One directory row (contract 8.3 `NodeRow`). Unknown values are null, never zero.
 class NodeRow {
   final String key, prefix, role, status;
+
+  /// The server's plain words for [status] ("Active", "Heard less often", "Not heard lately"); null from a server
+  /// that does not send them (the app then uses its own words, [nodeStatusWords]).
+  final String? statusLabel;
   final String? name, positionReason;
   final PacketPosition? position;
   final DateTime? lastHeardAt, lastAdvertAt, firstSeen;
@@ -167,6 +175,7 @@ class NodeRow {
     required this.prefix,
     this.role = 'unknown',
     this.status = 'unknown',
+    this.statusLabel,
     this.name,
     this.positionReason,
     this.position,
@@ -200,6 +209,7 @@ class NodeRow {
       name: _s(j['name']),
       role: _s(j['role']) ?? 'unknown',
       status: _s(j['status']) ?? 'unknown',
+      statusLabel: _s(j['statusLabel']),
       position: PacketPosition.tryParse(j['position']),
       positionReason: _s(j['positionReason']),
       lastHeardAt: v1Time(j['lastHeardAt']),
@@ -273,6 +283,9 @@ Map<String, int> _ints(Object? v) => {
 
 class NodeHealth {
   final String status;
+
+  /// The server's plain words for [status]; null from a server that does not send them.
+  final String? statusLabel;
   final DateTime? lastHeardAt;
 
   /// `own_packet`, `relay_unique_prefix`, `relay_likely`.
@@ -286,6 +299,7 @@ class NodeHealth {
   final double? heard24h, heard7d, heard30d;
   const NodeHealth({
     required this.status,
+    this.statusLabel,
     this.lastHeardAt,
     this.lastHeardHow,
     this.offlineAfterH,
@@ -305,6 +319,7 @@ class NodeHealth {
     final u = j['uptime'] is Map ? j['uptime'] as Map : const {};
     return NodeHealth(
       status: _s(j['status']) ?? 'unknown',
+      statusLabel: _s(j['statusLabel']),
       lastHeardAt: v1Time(j['lastHeardAt']),
       lastHeardHow: _s(j['lastHeardHow']),
       offlineAfterH: _d(j['offlineAfterH']),
@@ -828,6 +843,20 @@ class ObserverRow {
   final PacketPosition? position;
   final DateTime? lastSeen;
   final int? packets1h, packets24h, batteryMv;
+
+  /// Distinct nodes this observer heard in the last 24 hours; null when the server does not say.
+  final int? nodesHeard24h;
+
+  /// A phone observer's sub-kind: `mobile`, `fixed` or `unknown`. Null for anything that is not a phone, and from a
+  /// server that does not send it.
+  final String? phoneKind;
+
+  /// True for a station MeshSonar itself runs, false for one an owner runs; null when the server does not say (an
+  /// older server): no badge is shown then.
+  final bool? operatedByMeshsonar;
+
+  /// The server's plain word for [status]; null from a server that does not send it.
+  final String? statusLabel;
   final double? noiseFloorDbm, clockOffsetS, airtimeTxPct1h, airtimeRxPct1h;
   final bool dutyCycleWarn;
   const ObserverRow({
@@ -843,12 +872,19 @@ class ObserverRow {
     this.packets1h,
     this.packets24h,
     this.batteryMv,
+    this.nodesHeard24h,
+    this.phoneKind,
+    this.operatedByMeshsonar,
+    this.statusLabel,
     this.noiseFloorDbm,
     this.clockOffsetS,
     this.airtimeTxPct1h,
     this.airtimeRxPct1h,
     this.dutyCycleWarn = false,
   });
+
+  /// The noise floor when it is a real reading: 0 dBm is how a station says "no reading", never a noise level.
+  double? get noiseReading => noiseFloorDbm == null || noiseFloorDbm!.round() == 0 ? null : noiseFloorDbm;
 
   static ObserverRow? tryParse(Object? j) {
     if (j is! Map || j['id'] is! String) return null;
@@ -866,6 +902,10 @@ class ObserverRow {
       packets1h: _i(j['packets1h']),
       packets24h: _i(j['packets24h']),
       batteryMv: _i(j['batteryMv']),
+      nodesHeard24h: _i(j['nodesHeard24h']),
+      phoneKind: _s(j['phoneKind']),
+      operatedByMeshsonar: j['operatedByMeshsonar'] is bool ? j['operatedByMeshsonar'] as bool : null,
+      statusLabel: _s(j['statusLabel']),
       noiseFloorDbm: _d(j['noiseFloorDbm']),
       clockOffsetS: _d(j['clockOffsetS']),
       airtimeTxPct1h: _d(j['airtimeTxPct1h']),
@@ -898,7 +938,27 @@ class ObserverListPage {
   final DateTime? offlineAsOf;
   final RegionDataStatus? status;
   final Map<String, V1Source> sources;
-  const ObserverListPage({required this.rows, this.next, this.source = NetworkReadSource.v1, this.offlineAsOf, this.status, this.sources = const {}});
+
+  /// When the phone got this answer (for "Updated X ago"); null when unknown.
+  final DateTime? loadedAt;
+  const ObserverListPage({required this.rows, this.next, this.source = NetworkReadSource.v1, this.offlineAsOf, this.status, this.sources = const {}, this.loadedAt});
+}
+
+/// The order of the Observers list (Round 2 N-U4): online, then stale, then offline, and within each the newest
+/// report first; an observer never seen goes last in its group. Favourites are lifted to the top by the screen.
+List<ObserverRow> observersInListOrder(Iterable<ObserverRow> rows) {
+  int rank(String s) => switch (s) { 'online' => 0, 'stale' => 1, 'offline' => 2, _ => 3 };
+  return [...rows]..sort((a, b) {
+      final r = rank(a.status).compareTo(rank(b.status));
+      if (r != 0) return r;
+      final x = a.lastSeen, y = b.lastSeen;
+      if (x == null || y == null) {
+        if (x == null && y == null) return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        return x == null ? 1 : -1;
+      }
+      final t = y.compareTo(x);
+      return t != 0 ? t : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
 }
 
 class ObserverNeighbour {
@@ -977,6 +1037,10 @@ class ObserverSample {
   final int? batteryMv, packetsRx;
   final bool rebooted;
   const ObserverSample(this.at, {this.noiseFloorDbm, this.airtimeTxPct, this.airtimeRxPct, this.errorsPerMin, this.batteryMv, this.packetsRx, this.rebooted = false});
+
+  /// The noise floor when it is a real reading: 0 dBm is how a station says "no reading" (Round 2 N-V4), so it is a
+  /// gap on the chart and "—" in the table, never a point.
+  double? get noiseReading => noiseFloorDbm == null || noiseFloorDbm!.round() == 0 ? null : noiseFloorDbm;
 }
 
 class ObserverMetrics {
@@ -989,7 +1053,7 @@ class ObserverMetrics {
   /// True for the 5-minute series (else hourly or daily).
   bool get fiveMinute => resolution == '5m';
 
-  bool get isEmpty => samples.every((s) => s.noiseFloorDbm == null && s.airtimeTxPct == null && s.airtimeRxPct == null && s.batteryMv == null && s.packetsRx == null);
+  bool get isEmpty => samples.every((s) => s.noiseReading == null && s.airtimeTxPct == null && s.airtimeRxPct == null && s.batteryMv == null && s.packetsRx == null);
 
   factory ObserverMetrics.fromJson(Object? d) {
     final m = _m(d);
@@ -1178,7 +1242,8 @@ class NodesApi {
     try {
       final env = await v1.getPage('observers', ObserverRow.tryParse,
           query: {'kind': kinds.isEmpty ? null : kinds.join(','), 'status': statuses.isEmpty ? null : statuses.join(',')}, cursor: cursor, limit: limit);
-      return ObserverListPage(rows: env.data, next: env.page?.next, offlineAsOf: env.offlineAsOf, status: env.meta.status, sources: env.meta.sources);
+      return ObserverListPage(
+          rows: env.data, next: env.page?.next, offlineAsOf: env.offlineAsOf, status: env.meta.status, sources: env.meta.sources, loadedAt: v1.clock().toUtc());
     } on V1NotLive {
       final (body, asOf) = await _legacyGet('region-observers');
       final o = RegionObservers.fromJson(body);
@@ -1187,7 +1252,7 @@ class NodesApi {
           if ((kinds.isEmpty || kinds.contains(ObserverRow.fromLegacy(r).kind)) && (statuses.isEmpty || statuses.contains(ObserverRow.fromLegacy(r).status)))
             ObserverRow.fromLegacy(r)
       ];
-      return ObserverListPage(rows: rows, source: NetworkReadSource.legacy, offlineAsOf: asOf, status: o.status);
+      return ObserverListPage(rows: rows, source: NetworkReadSource.legacy, offlineAsOf: asOf, status: o.status, loadedAt: v1.clock().toUtc());
     }
   }
 

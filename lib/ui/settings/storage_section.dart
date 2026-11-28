@@ -13,7 +13,7 @@ import '../app.dart';
 import 'settings_index.dart';
 import 'settings_kit.dart';
 
-const String storageHelp = 'Drives not fully uploaded are never removed here.';
+const String storageHelp = 'What MeshSonar keeps on this phone, and what clearing each one costs.';
 
 List<Widget> storageSectionRows(BuildContext context) => const [StorageRows()];
 
@@ -165,7 +165,7 @@ class _StorageRowsState extends State<StorageRows> {
       required String id,
       required IconData icon,
       required String text,
-      required String explain,
+      String? explain,
       Widget? action,
       String? whyNot,
     }) =>
@@ -182,7 +182,7 @@ class _StorageRowsState extends State<StorageRows> {
                   Text(settingsEntry(id).title, style: t.textTheme.titleMedium),
                   const SizedBox(height: 2),
                   Text(text, key: Key('$id-value'), style: t.textTheme.bodyMedium),
-                  Text(explain, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+                  if (explain != null) Text(explain, style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                   if (whyNot != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -228,12 +228,13 @@ class _StorageRowsState extends State<StorageRows> {
         id: 'storage-drives',
         icon: Icons.route_outlined,
         text: drivesText,
-        explain: 'Only fully uploaded drives can be removed here.',
+        // One line under the count (build 77, round 5 S8: it said the same thing three times).
+        explain: split.removable.isNotEmpty ? 'Drives not fully uploaded always stay.' : null,
         whyNot: split.removable.isNotEmpty
             ? null
             : split.total == 0
-                ? 'Nothing to remove: there are no drives on this phone.'
-                : 'Nothing to remove yet: no drive is fully uploaded. Upload them from Drives first.',
+                ? 'Nothing to remove.'
+                : 'Only fully uploaded drives can be removed. Upload them from Drives first.',
         action: clearButton('storage-drives-clear', 'Remove uploaded drives',
             split.removable.isEmpty ? null : () => _removeUploadedDrives(split)),
       ),

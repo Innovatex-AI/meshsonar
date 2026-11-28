@@ -1,10 +1,10 @@
-// Settings > About: version and licences, and the welcome tour again.
+// Settings > About: version and licences, the map legend and the terms. The intro again is in More > Help (build 77: one
+// place; a search for it still finds it there).
 import 'package:flutter/material.dart';
 
 import '../about_screen.dart';
 import '../app.dart';
 import '../map/legend_sheet.dart' show showMapLegend;
-import '../onboarding/onboarding_screen.dart';
 import 'privacy_section.dart' show termsOfServiceRow;
 import 'settings_index.dart';
 import 'settings_kit.dart';
@@ -32,20 +32,6 @@ List<Widget> aboutSectionRows(BuildContext context) {
         subtitle: const Text('What the colours and symbols on the maps mean.'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => showMapLegend(context),
-      ),
-    ),
-    SettingsAnchor(
-      id: 'show-intro',
-      child: ListTile(
-        key: const Key('show-intro'),
-        leading: const Icon(Icons.auto_awesome_outlined),
-        title: Text(settingsEntry('show-intro').title),
-        subtitle: const Text('The intro pages from first launch.'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-          fullscreenDialog: true,
-          builder: (ctx) => OnboardingScreen(replay: true, onFinish: (_) => Navigator.of(ctx).pop()),
-        )),
       ),
     ),
     termsOfServiceRow(context),

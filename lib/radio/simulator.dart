@@ -822,6 +822,8 @@ class SimulatedTransport implements ByteTransport {
         } else {
           _emit(encodeErr(ErrCode.illegalArg));
         }
+      case Cmd.getDeviceTime:
+        _emit(encodeCurrTime(_clockSecs));
       case Cmd.getChannel:
         final i = frame.length > 1 ? frame[1] : 255;
         if (i >= _slots.length) return _emit(encodeErr(ErrCode.notFound));
@@ -1098,13 +1100,15 @@ class SimulatedTransport implements ByteTransport {
     if (c == null) return _emit(encodeErr(ErrCode.notFound));
     if (txt != txtTypePlain && txt != txtTypeCliData && txt != txtTypeCliCommand) return _emit(encodeErr(ErrCode.unsupportedCmd));
     final text = utf8.decode(f.sublist(13), allowMalformed: true);
+    // BaseChatMesh::composeMsgPacket: 160 bytes, 158 once the try number is above 3; too long = MSG_SEND_FAILED = TABLE_FULL.
+    if (txt == txtTypePlain && f.length - 13 > maxDmTextBytesFor(attempt)) return _emit(encodeErr(ErrCode.tableFull));
     final flood = c.outPathLen == 0xFF;
     var ack = 0;
     if (txt == txtTypePlain) {
-      // The tag only has to be stable per (timestamp, attempt & 3, text, sender): attempts N and N+4 collide, like the real hash.
-      final h = sha256([...f.sublist(3, 7), attempt & 3, ...utf8.encode(text), ...publicKey]);
-      ack = ByteData.sublistView(h).getUint32(0, Endian.little);
-      sentDirect.add((contact: toHex(c.key), attempt: attempt & 3, timestamp: ts, text: text));
+      // The real code: SHA-256 over timestamp, attempt & 3, text and the sender's key. Tries N and N+4 share a code; the
+      // packet differs (the radio appends the whole try number above 3). [sentDirect] keeps the try number as given.
+      ack = expectedDmAck(sha256, timestamp: ts, attempt: attempt, text: text, senderPublicKey: publicKey);
+      sentDirect.add((contact: toHex(c.key), attempt: attempt, timestamp: ts, text: text));
     }
     _sent++;
     _txAirMs += _airMsPerPacket;

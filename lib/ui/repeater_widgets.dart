@@ -158,7 +158,7 @@ class EchoTile extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Icon(Icons.cell_tower, size: 20, color: m.known ? mc.beacon : t.colorScheme.onSurfaceVariant),
+              child: Icon(Icons.cell_tower, size: 20, color: m.known ? mc.repeater : t.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(width: Gap.m),
             Expanded(
@@ -244,9 +244,9 @@ class HeardRepeaterTile extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: (stale ? t.colorScheme.onSurfaceVariant : mc.beacon).withValues(alpha: 0.16),
+                  color: stale ? t.colorScheme.onSurfaceVariant.withValues(alpha: 0.16) : mc.repeaterTint,
                 ),
-                child: Icon(Icons.cell_tower, size: 19, color: stale ? t.colorScheme.onSurfaceVariant : mc.beacon),
+                child: Icon(Icons.cell_tower, size: 19, color: stale ? t.colorScheme.onSurfaceVariant : mc.repeater),
               ),
               const SizedBox(width: Gap.m),
               Expanded(

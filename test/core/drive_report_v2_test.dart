@@ -127,8 +127,8 @@ void main() {
     ];
     final met = rep(pings).toText();
     expect(met, contains('Noise floor median -100.0 dBm (-105.0 to -95.0, 3 readings)'));
-    expect(met, contains('TX power 22.0 dBm throughout'));
-    expect(met, contains('Reply RSSI median -80.0 dBm'));
+    expect(met, contains('Transmit power: 22 dBm, unchanged'));
+    expect(met, contains('Reply strength (RSSI): median -80.0 dBm'));
     expect(met, contains('1.0 km to 2.0 km: mean 5.0 dB'));
     expect(met, contains('18 km/h to 54 km/h: 100% of 1 pings'));
     expect(met, contains('GPS accuracy median 6 m, 90% within 8 m'));

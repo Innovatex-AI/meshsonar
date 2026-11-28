@@ -162,7 +162,7 @@ void main() {
       await t.pumpWidget(list(s));
       await settle(t);
       expect(find.text('Public: Kestrel-07: anyone hearing Hilltop this morning?'), findsOneWidget);
-      expect(find.textContaining('4 hops · heard by 2 observers'), findsOneWidget);
+      expect(find.textContaining('4 hops\u00A0· heard by 2 observers'), findsOneWidget, reason: 'a separator never starts a line (N-V5)');
       expect(find.byKey(const ValueKey('packet-row-snr-c4b06ee8fc39b187')), findsOneWidget);
       expect(find.text('1.75 dB'), findsOneWidget);
       expect(s.seen.first.queryParameters['window'], '1h');
@@ -458,11 +458,28 @@ void main() {
       // the first screen: what, when, how far, who heard it
       expect(find.byKey(const Key('packet-detail-title')), findsOneWidget);
       expect(find.text('Hops'), findsOneWidget);
-      expect(find.text('Who heard it (8)'), findsOneWidget);
-      expect(t.getTopLeft(find.text('Who heard it (8)')).dy, lessThan(874), reason: 'on the first screen, no scrolling');
-      expect(find.byWidgetPredicate((w) => w is Container && w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-obs-'), skipOffstage: false), findsNWidgets(packetObserversShown));
-      // a long path is a hop count in the row, not a line of codes
-      expect(find.textContaining('after 9 hops', skipOffstage: false), findsWidgets);
+      // Round 2 N-U1: one row per observer under "Heard N times by M observers"; the first five, then Show all.
+      expect(find.text('Heard 8 times by 8 observers'), findsOneWidget);
+      expect(t.getTopLeft(find.text('Heard 8 times by 8 observers')).dy, lessThan(874), reason: 'on the first screen, no scrolling');
+      bool observerRow(Widget w) =>
+          w is Container && w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-observer-') && !(w.key! as ValueKey<String>).value.startsWith('packet-observer-row-');
+      expect(find.byWidgetPredicate(observerRow, skipOffstage: false), findsNWidgets(packetObserversShown));
+      // A copy's route has every hop, never "after N hops": open one of the extra observers.
+      expect(find.textContaining('after 9 hops', skipOffstage: false), findsNothing);
+      final page = find.descendant(of: find.byKey(const Key('packet-detail-body')), matching: find.byType(Scrollable)).first;
+      await t.scrollUntilVisible(find.byKey(const ValueKey('packet-observer-row-extra-0')), 100, scrollable: page);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('packet-observer-row-extra-0')));
+      await t.pumpAndSettle();
+      final route = find.byKey(const ValueKey('packet-obs-route-x0'));
+      expect(route, findsOneWidget);
+      for (var k = 0; k < 9; k++) {
+        expect(find.descendant(of: route, matching: find.text('a$k · not named')), findsOneWidget, reason: 'hop $k');
+      }
+      expect(find.descendant(of: route, matching: find.text('Extra observer 0')), findsOneWidget, reason: 'the route ends at this observer');
+      await t.tap(find.byKey(const ValueKey('packet-observer-row-extra-0')));
+      await t.pumpAndSettle();
+      expect(route, findsNothing, reason: 'a second tap closes it');
 
       // closed: no hop rows and no byte inspector are built
       final body = find.descendant(of: find.byKey(const Key('packet-detail-body')), matching: find.byType(Scrollable)).first;
@@ -485,11 +502,46 @@ void main() {
       expect(find.byKey(const Key('byte-inspector'), skipOffstage: false), findsOneWidget);
 
       await t.scrollUntilVisible(find.byKey(const Key('packet-obs-all')), -200, scrollable: body);
-      expect(find.text('Show all 8 listed'), findsOneWidget);
+      expect(find.text('Show all 8 observers'), findsOneWidget);
       await t.tap(find.byKey(const Key('packet-obs-all')));
       await t.pumpAndSettle();
-      expect(find.byWidgetPredicate((w) => w is Container && w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-obs-'), skipOffstage: false), findsNWidgets(8));
+      expect(find.byWidgetPredicate(observerRow, skipOffstage: false), findsNWidgets(8));
       expect(t.takeException(), isNull);
+      await t.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('Round 2 N-U3, N-U5, N-U1: tool links next to the data; a private channel has one name; Replay on map passes the copy', (t) async {
+      tall(t);
+      final s = Server();
+      // A trace: "Open in Trace Viewer" under its hops.
+      await open(t, s, '50b835a910da5aac');
+      expect(find.byKey(const Key('packet-open-trace-viewer')), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      // A private channel: "Private channel" in the title, its ID only under "More about this packet"; the region tag
+      // row offers "Who passes this on".
+      await open(t, s, '1c26c203910896f0');
+      final title = t.widget<Text>(find.byKey(const Key('packet-detail-title'))).data!;
+      expect(title, 'Private channel message');
+      expect(find.byKey(const ValueKey('packet-more-Region tag')), findsOneWidget);
+      expect(find.byKey(const ValueKey('packet-more-Channel ID')), findsOneWidget);
+      expect(find.byKey(const Key('packet-scope-audit')), findsOneWidget);
+      expect(find.textContaining('Unknown channel'), findsNothing);
+      // Replay on map: the copy's observation id goes to the Live map's entry (W2-A's openLiveReplay, wired by the lead).
+      final calls = <(String, String)>[];
+      liveReplayOpener = (context, {required packetHash, required observationId}) => calls.add((packetHash, observationId));
+      addTearDown(() => liveReplayOpener = null);
+      await t.pumpWidget(const SizedBox());
+      await open(t, s, 'c4b06ee8fc39b187');
+      final row = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-observer-row-')).first;
+      await t.ensureVisible(row);
+      await t.tap(row);
+      await t.pumpAndSettle();
+      final replay = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('packet-obs-replay-')).first;
+      await t.ensureVisible(replay);
+      await t.tap(replay);
+      expect(calls, hasLength(1));
+      expect(calls.single.$1, 'c4b06ee8fc39b187');
+      expect('packet-obs-replay-${calls.single.$2}', (t.widget(replay).key! as ValueKey<String>).value);
       await t.pumpWidget(const SizedBox());
     });
 

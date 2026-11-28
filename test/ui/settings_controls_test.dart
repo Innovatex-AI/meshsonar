@@ -148,7 +148,7 @@ void main() {
     }
   });
 
-  testWidgets('upload toggles: during-drive needs end-of-drive; the period slider follows', (tester) async {
+  testWidgets('build 77: one Upload choice; the interval is used only while driving; the row says what is set', (tester) async {
     final h = await openSettings(tester);
     // The row that opens Uploads says what is set.
     await show(tester, 'page-uploads');
@@ -156,28 +156,33 @@ void main() {
     await show(tester, 'sync-every-slider');
     expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNotNull);
     expect(valueText(tester, 'sync-every'), 'Every 5 min');
+    expect(find.byType(SwitchListTile).evaluate().where((e) => e.widget.key == const Key('sync-during-drive')), isEmpty,
+        reason: 'the two switches are one choice now');
+    expect(find.text('While driving'), findsOneWidget);
+    expect(find.text('When the drive ends'), findsOneWidget);
+    expect(find.text('Only when I tap Upload'), findsOneWidget);
 
-    // Each control is brought into view before it is tapped (the list ends with the "saved on this phone" footer).
-    await show(tester, 'sync-during-drive');
-    await tester.tap(find.byKey(const Key('sync-during-drive')));
+    await show(tester, 'upload-when-atEnd');
+    await tester.tap(find.byKey(const Key('upload-when-atEnd')));
     await tester.pumpAndSettle();
-    expect(h.settings.saved.syncDuringDrive, isFalse);
+    expect((h.settings.saved.autoSync, h.settings.saved.syncDuringDrive), (true, false));
     expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNull);
+    expect(find.descendant(of: find.byKey(const Key('sync-every')), matching: find.textContaining('Only used while Upload is "While driving"')),
+        findsOneWidget);
 
-    await show(tester, 'sync-during-drive');
-    await tester.tap(find.byKey(const Key('sync-during-drive')));
-    await tester.pumpAndSettle();
-    expect(h.settings.saved.syncDuringDrive, isTrue);
-
-    await show(tester, 'auto-sync');
-    await tester.tap(find.byKey(const Key('auto-sync')));
+    await show(tester, 'upload-when-manual');
+    await tester.tap(find.byKey(const Key('upload-when-manual')));
     await tester.pumpAndSettle();
     expect(h.settings.saved.autoSync, isFalse);
-    expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).onChanged, isNull);
-    expect(tester.widget<SwitchListTile>(find.byKey(const Key('sync-during-drive'))).value, isFalse);
     expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNull);
     await closeSettingsPage(tester);
-    expect(tester.widget<Text>(find.byKey(const Key('page-uploads-caption'))).data, 'Off: upload from Drives.');
+    expect(tester.widget<Text>(find.byKey(const Key('page-uploads-caption'))).data, 'Only when you tap Upload.');
+
+    await show(tester, 'upload-when-whileDriving');
+    await tester.tap(find.byKey(const Key('upload-when-whileDriving')));
+    await tester.pumpAndSettle();
+    expect((h.settings.saved.autoSync, h.settings.saved.syncDuringDrive), (true, true));
+    expect(tester.widget<Slider>(find.byKey(const Key('sync-every-slider'))).onChanged, isNotNull);
   });
 
   testWidgets('last upload line shows time / failure', (tester) async {

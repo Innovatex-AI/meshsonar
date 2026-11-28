@@ -4,7 +4,7 @@
 // (test/ui/settings_search_test.dart fails for an entry without a row). The Privacy and Observer sections keep their
 // entries in their own files (privacySettingsEntries, observerSettingsEntries), spread in here in display order, so the
 // work on those sections never edits this file.
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../app/app_state.dart';
@@ -27,15 +27,16 @@ class SettingsSectionInfo {
 }
 
 /// Display order, top to bottom (phone) / the left pane (wide screens). Build 76: eight sections, in the order a person
-/// meets them (who am I, my radio, driving, how it looks, what leaves the phone, alerts, housekeeping, about). The ids
+/// meets them (who am I, my radio, driving, how it looks, what leaves the phone, messages, housekeeping, about). The ids
 /// are the pre-76 ids of the sections that kept their place; the sections that were merged away are [settingsSectionAliases].
+/// Build 77: "Notifications" is "Messages" (id kept): delivery and the chat rows come first, then the alerts.
 const List<SettingsSectionInfo> settingsSections = [
   SettingsSectionInfo('driver', 'Account', Icons.badge_outlined),
   SettingsSectionInfo('radio', 'Radio', Icons.settings_input_antenna),
   SettingsSectionInfo('wardriving', 'Driving', Icons.directions_car_outlined),
   SettingsSectionInfo('display', 'Map & display', Icons.map_outlined),
   SettingsSectionInfo('privacy', 'Sharing & privacy', Icons.privacy_tip_outlined),
-  SettingsSectionInfo('notifications', 'Notifications', Icons.notifications_outlined),
+  SettingsSectionInfo('notifications', 'Messages', Icons.forum_outlined),
   SettingsSectionInfo('storage', 'Storage & diagnostics', Icons.storage_outlined),
   SettingsSectionInfo('about-section', 'About', Icons.info_outline),
 ];
@@ -51,7 +52,10 @@ class SettingsPageInfo {
   /// One short line under the title when the row has nothing live to say.
   final String summary;
   final bool Function(AppState s)? available;
-  const SettingsPageInfo(this.id, this.section, this.title, this.icon, this.summary, {this.available});
+
+  /// The page's title before build 77, so a search for it still finds the page's rows ("Advanced").
+  final String? was;
+  const SettingsPageInfo(this.id, this.section, this.title, this.icon, this.summary, {this.available, this.was});
 
   bool isAvailable(AppState s) => available?.call(s) ?? true;
 }
@@ -63,14 +67,18 @@ const List<SettingsPageInfo> settingsPages = [
   SettingsPageInfo('account-advanced', 'driver', 'Server (advanced)', Icons.dns_outlined, 'Server URL and what this server says about your region.'),
   SettingsPageInfo('uploads', 'wardriving', 'Uploads', Icons.cloud_upload_outlined, 'When drives go to the server.'),
   SettingsPageInfo('battery', 'wardriving', 'Battery details', Icons.tune, 'What is running now, and each power setting.'),
-  SettingsPageInfo('driving-advanced', 'wardriving', 'Advanced', Icons.science_outlined, 'Listen window, what goes on the air, airtime, this drive.'),
+  SettingsPageInfo('driving-advanced', 'wardriving', 'Ping details', Icons.science_outlined,
+      'Channel, listen window, keep repeaters lit, what goes on the air, airtime, this drive.', was: 'Advanced'),
   SettingsPageInfo('units', 'display', 'Units per quantity', Icons.straighten, 'A different unit for distance, speed, height, temperature or pressure.'),
-  SettingsPageInfo('observer', 'privacy', 'Observer and MQTT feeds', Icons.sensors, 'Status, observer location, feeds to other sites.'),
+  SettingsPageInfo('observer', 'privacy', 'Sharing status and other sites', Icons.sensors, 'Status, observer location, feeds to other sites.',
+      was: 'Observer and MQTT feeds'),
   SettingsPageInfo('sharing', 'privacy', 'What is shared', Icons.fact_check_outlined, 'A switch for each kind of drive data, and the full list.'),
   SettingsPageInfo('meshtrack', 'privacy', 'MeshTrack', Icons.people_alt_outlined, 'Friends on the map: groups, position, rate.',
       available: meshTrackAvailable),
+  SettingsPageInfo('delivery', 'notifications', 'Message delivery', Icons.send_outlined, 'Direct tries, flood tries, flood fallback.'),
   SettingsPageInfo('storage-items', 'storage', 'Storage on this phone', Icons.storage_outlined, 'Drives, saved region data, repeater names.'),
-  SettingsPageInfo('diagnostics-advanced', 'storage', 'Advanced', Icons.science_outlined, 'Bluetooth test, map health overlay, power counters.'),
+  SettingsPageInfo('diagnostics-advanced', 'storage', 'Tester tools', Icons.science_outlined, 'Bluetooth test, map health overlay, power counters.',
+      was: 'Advanced'),
 ];
 
 SettingsPageInfo settingsPage(String id) => settingsPages.firstWhere((p) => p.id == id);
@@ -91,12 +99,17 @@ const Map<String, (String, String?, String)> settingsSectionAliases = {
   'drives': ('wardriving', 'uploads', 'Drives & uploads'),
   'observer': ('privacy', 'observer', 'Observer'),
   'diagnostics': ('storage', null, 'Diagnostics'),
+  'chat': ('notifications', null, 'Chat settings'), // More > Chat settings until build 77
 };
 
 /// Rows that were merged into another row keep their id as a second anchor on it.
 const Map<String, String> settingsEntryAliases = {
   'observer-share': 'telemetry-toggle', // "Share with MeshSonar" was under Privacy and under Observer: one switch now
   'privacy-zones-website': 'privacy-zones', // the website link is on the Privacy zones page
+  // Build 77 (redesign round 5):
+  'site-radio-preset': 'radio-tab', // Server (advanced) no longer repeats the preset comparison of My radio's settings
+  'sync-during-drive': 'auto-sync', // one Upload choice in place of two switches
+  'chat-haptics': 'ui-haptics', // More > Chat's "Vibrate on taps" was the Haptics switch
 };
 
 /// Where a link into Settings lands.
@@ -156,16 +169,24 @@ class SettingsEntry {
   /// A row that only shows information (a status, a read-only comparison) and has nothing to tap by design. Every other
   /// row is actionable, or says why not and how to make it so (SettingsWhyNot).
   final bool info;
+
+  /// A row that moved out of Settings (build 77): where it is now ("More > Help"). A search for it still finds it and the
+  /// result opens that place (SettingsScreen); it has no row and no anchor in Settings.
+  final String? elsewhere;
   const SettingsEntry(this.id, this.section, this.title, this.summary,
-      {this.page, this.was, this.keywords = const [], this.available, this.info = false});
+      {this.page, this.was, this.keywords = const [], this.available, this.info = false, this.elsewhere});
 
   bool isAvailable(AppState s) => (available?.call(s) ?? true) && (page == null || settingsPage(page!).isAvailable(s));
 
   /// "Driving > Battery details": where the row is, for a search result.
-  String get where => page == null ? sectionInfo(section).title : '${sectionInfo(section).title} > ${settingsPage(page!).title}';
+  String get where =>
+      elsewhere ?? (page == null ? sectionInfo(section).title : '${sectionInfo(section).title} > ${settingsPage(page!).title}');
 }
 
 bool _isAndroid(AppState s) => defaultTargetPlatform == TargetPlatform.android;
+
+/// The phone itself has the alert sound and quiet hours on iPhone (lib/alerts/alert_prefs.dart systemSoundAndQuiet).
+bool _appHasSoundAndQuiet(AppState s) => defaultTargetPlatform != TargetPlatform.iOS;
 bool _hasSiteConfig(AppState s) => s.siteConfig != null;
 bool _hasDirectory(AppState s) => s.services.directory != null;
 bool _hasSavedReport(AppState s) => s.savedReport != null;
@@ -174,7 +195,8 @@ const List<SettingsEntry> settingsEntries = [
   // Account & driver key
   SettingsEntry('driver-key', 'driver', 'Driver key',
       'Lets this phone upload drives to the coverage map. Without one, drives stay on this phone.',
-      was: 'Account & driver key', keywords: ['key', 'account', 'create', 'paste', 'callsign', 'email', 'remove key', 'login', 'sign in']),
+      was: 'Account & driver key',
+      keywords: ['key', 'account', 'create', 'paste', 'callsign', 'email', 'remove key', 'login', 'sign in', 'devices', 'devices and keys', 'other phones', 'meshmapper']),
   SettingsEntry('server-url', 'driver', 'Server URL',
       'Where drives upload. Keys belong to the server that issued them, so moving to another server removes yours.',
       page: 'account-advanced', was: 'Account & driver key', keywords: ['server', 'url', 'address', 'host', 'website']),
@@ -184,15 +206,13 @@ const List<SettingsEntry> settingsEntries = [
       was: 'Region', keywords: ['area', 'city', 'columbus', 'dayton', 'switch', 'location']),
   SettingsEntry('site-region', 'driver', 'Connected to', 'The region your server answers for.',
       page: 'account-advanced', was: 'Region', keywords: ['site', 'host', 'server region'], available: _hasSiteConfig, info: true),
-  SettingsEntry('site-radio-preset', 'driver', 'Radio preset',
-      'The region\'s suggested radio settings next to your radio\'s. Information only; nothing is written to the radio.',
-      page: 'account-advanced', was: 'Region', keywords: ['frequency', 'bandwidth', 'spreading factor', 'sf', 'cr', 'mhz', 'preset', 'lora'],
-      available: _hasSiteConfig,
-      info: true),
   // Units & display
   SettingsEntry('units-tile', 'display', 'Units',
       'Distances, speeds, heights, temperature and pressure everywhere in the app. Stored data is unchanged.',
       was: 'Units & display', keywords: ['metric', 'imperial', 'miles', 'feet', 'kilometres', 'km', 'mph', 'auto', 'locale']),
+  SettingsEntry('time-zone', 'display', 'Time zone',
+      'Show times in your phone\'s time or in UTC. Server daily totals, the diagnostics log and exports stay UTC.',
+      was: 'Units & display', keywords: ['utc', 'local', 'clock', 'time', 'timezone', 'gmt']),
   SettingsEntry('unit-distance', 'display', 'Distance',
       'Drive distance, GPS accuracy and minimum distance: km and m, or miles and feet.',
       page: 'units', was: 'Units & display', keywords: ['distance', 'miles', 'km', 'kilometres', 'feet', 'metres', 'mi', 'ft', 'units']),
@@ -210,9 +230,7 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('ui-haptics', 'display', 'Haptics',
       'Small taps when you toggle a switch, pick from a list, send a message or something succeeds or fails.',
       was: 'Units & display', keywords: ['haptic', 'haptics', 'vibration', 'vibrate', 'taps', 'feedback', 'buzz']),
-  SettingsEntry('heard-hold', 'display', 'Heard list hold',
-      'How long a repeater stays bright in the heard list after it was last heard.',
-      was: 'Units & display', keywords: ['heard', 'repeaters', 'list', 'grey', 'stale', 'pings']),
+
   // Map
   SettingsEntry('map-follow-options', 'display', 'Follow and direction',
       'Heading-up or north-up map, re-centre by itself after you move the map, and zoom out a little at highway speed.',
@@ -222,11 +240,13 @@ const List<SettingsEntry> settingsEntries = [
   // Observer: the entries live next to their rows (lib/ui/settings/observer_section.dart).
   ...observerSettingsEntries,
   // Radio
-  SettingsEntry('radio-tab', 'radio', 'Radio details',
+  SettingsEntry('radio-tab', 'radio', 'My radio\'s settings',
       'What the connected radio reports, compared with the region\'s preset. Read-only.',
-      was: 'Radio', keywords: ['radio', 'firmware', 'battery', 'companion', 'preset', 'connect']),
+      was: 'Radio',
+      keywords: ['radio', 'firmware', 'battery', 'companion', 'preset', 'connect', 'radio details', 'check my radio', 'region preset',
+        'radio preset', 'frequency', 'bandwidth', 'spreading factor', 'sf', 'cr', 'mhz', 'lora']),
   SettingsEntry('auto-connect', 'radio', 'Auto-connect',
-      'When MeshSonar connects to your auto-connect radio by itself: always, only at launch, or never.',
+      'On: MeshSonar connects to your auto-connect radio by itself, at launch and when you come back to the app. Off: tap a radio to connect.',
       was: 'Radio', keywords: ['auto connect', 'autoconnect', 'reconnect', 'automatic', 'launch', 'startup', 'bluetooth', 'connect', 'off']),
   SettingsEntry('saved-radios', 'radio', 'Saved radios',
       'Every radio you have connected to: tap to connect, give it a nickname, star the auto-connect radio, or forget it.',
@@ -234,7 +254,7 @@ const List<SettingsEntry> settingsEntries = [
   // Wardriving
   SettingsEntry('channel', 'wardriving', 'Wardrive channel',
       'The channel pings are sent on (default #wardriving). The key comes from the name in lower case.',
-      was: 'Wardriving', keywords: ['channel', 'wardriving', 'hashtag', '#', 'publish', 'message', 'ping channel']),
+      page: 'driving-advanced', was: 'Wardriving', keywords: ['channel', 'wardriving', 'hashtag', '#', 'publish', 'message', 'ping channel']),
   SettingsEntry('send-pings', 'wardriving', 'Send pings to the mesh',
       'On: each ping is sent so repeaters and observers can hear it. Off: listen-only, nothing is transmitted.',
       was: 'Wardriving', keywords: ['listen', 'passive', 'silent', 'no transmit', 'receive only', 'discovery', 'publish', 'message', 'observer', 'transmit']),
@@ -256,6 +276,9 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('ping-feedback', 'wardriving', 'Ping feedback',
       'A haptic tap and an optional sound when a ping finishes: one way for heard, another for heard nothing. Sound is off by default.',
       was: 'Wardriving', keywords: ['sound', 'haptic', 'vibrate', 'vibration', 'beep', 'tone', 'audio', 'tap', 'heard', 'feedback', 'click']),
+  SettingsEntry('heard-hold', 'wardriving', 'Keep repeaters lit',
+      'How long a repeater stays bright in the heard list after it was last heard.',
+      page: 'driving-advanced', was: 'Units & display', keywords: ['heard', 'heard list hold', 'hold', 'repeaters', 'list', 'grey', 'stale', 'pings']),
   SettingsEntry('wardrive-counters', 'wardriving', 'This drive',
       'Pings sent, repeaters that heard them and observers that confirmed them, for the drive in progress.',
       page: 'driving-advanced', was: 'Wardriving', keywords: ['counter', 'observer', 'confirmed', 'heard', 'repeaters', 'hop', 'intake', 'pings sent'], info: true),
@@ -273,12 +296,12 @@ const List<SettingsEntry> settingsEntries = [
       'Prove a repeater is yours with its admin password, through your radio. The password never leaves your phone.',
       page: 'claims', was: 'Claimed radios', keywords: ['claim', 'own', 'repeater', 'admin password', 'login', 'verify', 'observer', 'name', 'code']),
   // Drives & uploads
-  SettingsEntry('auto-sync', 'wardriving', 'Upload at end of drive', 'Sends the drive when you press Stop.',
-      page: 'uploads', was: 'Drives & uploads', keywords: ['upload', 'sync', 'automatic', 'auto sync', 'stop']),
-  SettingsEntry('sync-during-drive', 'wardriving', 'Upload during the drive',
-      'Sends new pings while you drive, so nothing waits for Stop.',
-      page: 'uploads', was: 'Drives & uploads', keywords: ['upload', 'sync', 'live', 'during', 'while driving']),
-  SettingsEntry('sync-every', 'wardriving', 'Upload interval', 'How often pings upload during a drive.',
+  SettingsEntry('auto-sync', 'wardriving', 'Upload',
+      'When drives go to the server: while driving, when the drive ends, or only when you tap Upload.',
+      page: 'uploads', was: 'Drives & uploads',
+      keywords: ['upload', 'sync', 'automatic', 'auto sync', 'stop', 'end of drive', 'during', 'while driving', 'live', 'manual',
+        'upload at end of drive', 'upload during the drive']),
+  SettingsEntry('sync-every', 'wardriving', 'Upload interval', 'How often pings upload while driving.',
       page: 'uploads', was: 'Drives & uploads', keywords: ['upload', 'period', 'minutes', 'every', 'sync']),
   SettingsEntry('last-upload', 'wardriving', 'Last upload', 'When the last upload happened, or why it failed.',
       page: 'uploads', was: 'Drives & uploads', keywords: ['upload', 'status', 'error', 'failed', 'sync'], info: true),
@@ -298,20 +321,41 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('storage-report-draft', 'storage', 'Unsent problem report',
       'A problem report that was not sent yet, kept so nothing you wrote is lost.',
       page: 'storage-items', was: 'Data & storage', keywords: ['report', 'draft', 'discard'], available: _hasSavedReport),
-  // Notifications
+  // Messages (build 77: the Notifications section, with delivery and the chat rows first)
+  SettingsEntry('delivery-direct', 'notifications', 'Direct tries',
+      'How many times a direct message is sent the way your radio knows, 1 to 4.',
+      page: 'delivery', was: 'Notifications', keywords: ['delivery', 'retry', 'retries', 'tries', 'attempts', 'direct', 'route', 'send', 'message']),
+  SettingsEntry('delivery-fallback', 'notifications', 'Flood fallback',
+      'After the direct tries, reset the route and try again by flood.',
+      page: 'delivery', was: 'Notifications', keywords: ['delivery', 'flood', 'fallback', 'reset path', 'route', 'search', 'message']),
+  SettingsEntry('delivery-flood', 'notifications', 'Flood tries',
+      'How many flood tries follow the direct ones, 0 to 4.',
+      page: 'delivery', was: 'Notifications', keywords: ['delivery', 'flood', 'retry', 'retries', 'tries', 'attempts', 'message']),
+  SettingsEntry('delivery-confirm-twice', 'notifications', 'Confirm delivery twice',
+      'A setting of your radio itself, in Set up my radio.',
+      page: 'delivery', was: 'Notifications', keywords: ['ack', 'acks', 'multi ack', 'confirm', 'delivery', 'twice']),
+  SettingsEntry('chat-quick-replies', 'notifications', 'Quick replies',
+      'Short messages you send with one tap in a chat.',
+      was: 'Chat settings', keywords: ['chat', 'quick', 'replies', 'canned', 'templates', 'shortcut', 'message']),
+  SettingsEntry('chat-return-sends', 'notifications', 'Return sends',
+      'With a hardware keyboard, Return sends the message.',
+      was: 'Chat settings', keywords: ['chat', 'keyboard', 'return', 'enter', 'send', 'hardware keyboard']),
+  SettingsEntry('chat-photos-autoload', 'notifications', 'Load photos automatically',
+      'Photos in chats load by themselves. Off: tap a photo to load it.',
+      was: 'Chat settings', keywords: ['chat', 'photo', 'photos', 'image', 'picture', 'download', 'autoload', 'data']),
   SettingsEntry('notif-enabled', 'notifications', 'Message alerts',
       'The master switch for notifications and in-app banners. Messages are still saved when it is off.',
       was: 'Notifications', keywords: ['notifications', 'alerts', 'push', 'badge', 'turn off']),
   SettingsEntry('notif-sound', 'notifications', 'Sound', 'Play the system sound with an alert.',
-      was: 'Notifications', keywords: ['notification sound', 'silent', 'beep', 'ding']),
+      was: 'Notifications', keywords: ['notification sound', 'silent', 'beep', 'ding'], available: _appHasSoundAndQuiet),
   SettingsEntry('notif-vibrate', 'notifications', 'Vibrate', 'Vibrate with an alert (Android).',
       was: 'Notifications', keywords: ['haptic', 'vibration', 'buzz'], available: _isAndroid),
-  SettingsEntry('notif-previews', 'notifications', 'Show message text in alerts',
+  SettingsEntry('notif-previews', 'notifications', 'Message text in alerts',
       'Off by default: alerts say "New message" so a locked screen does not show your chats.',
-      was: 'Notifications', keywords: ['preview', 'lock screen', 'privacy', 'hide text', 'content']),
+      was: 'Notifications', keywords: ['preview', 'lock screen', 'privacy', 'hide text', 'content', 'show message text']),
   SettingsEntry('notif-quiet', 'notifications', 'Quiet hours',
       'Between the hours you pick, alerts arrive without sound.',
-      was: 'Notifications', keywords: ['night', 'sleep', 'do not disturb', 'dnd', 'silent', 'schedule', 'focus']),
+      was: 'Notifications', keywords: ['night', 'sleep', 'do not disturb', 'dnd', 'silent', 'schedule', 'focus'], available: _appHasSoundAndQuiet),
   SettingsEntry('notif-conversations', 'notifications', 'Alerts per conversation',
       'Mute a conversation for a while or for good, or hear only when you are mentioned.',
       was: 'Notifications', keywords: ['mute', 'mentions', 'channel', 'contact', 'unmute']),
@@ -326,12 +370,15 @@ const List<SettingsEntry> settingsEntries = [
   SettingsEntry('diagnostics-log', 'storage', 'Diagnostic log',
       'Recent app events to help explain a problem. Secrets hidden, positions rounded when copied.',
       was: 'Diagnostics', keywords: ['log', 'debug', 'copy', 'events', 'support', 'troubleshoot']),
+  SettingsEntry('message-log', 'storage', 'Message log',
+      'What the phone and the radio said about delivering messages. No message text; secrets hidden when copied; times in UTC.',
+      was: 'Diagnostics', keywords: ['log', 'message', 'delivery', 'debug', 'copy', 'share', 'ack', 'retry', 'support', 'troubleshoot']),
   SettingsEntry('diagnostics-ble', 'storage', 'Background Bluetooth test',
       'A log of the radio link while the app is in the background, closed or restarted, for testing alerts.',
       page: 'diagnostics-advanced', was: 'Diagnostics', keywords: ['bluetooth', 'background', 'alerts', 'notifications', 'test', 'restore', 'suspend', 'log']),
-  SettingsEntry('map-health-overlay', 'storage', 'Map and GPS health overlay',
+  SettingsEntry('map-health-overlay', 'storage', 'Map health overlay',
       'Shows frame times, GPS update rate, camera mode and map source over the map. Samples are saved with each drive either way.',
-      page: 'diagnostics-advanced', was: 'Diagnostics', keywords: ['map', 'gps', 'fps', 'frame', 'jank', 'smooth', 'performance', 'overlay', 'health', 'debug']),
+      page: 'diagnostics-advanced', was: 'Diagnostics', keywords: ['map', 'gps', 'fps', 'frame', 'jank', 'smooth', 'performance', 'overlay', 'health', 'debug', 'advanced']),
   SettingsEntry('diagnostics-power-counters', 'storage', 'Power counters',
       'What used power since the app started: GPS, screen, compass and map minutes, radio commands and uploads per hour.',
       page: 'diagnostics-advanced', was: 'Diagnostics', keywords: ['battery', 'power', 'counters', 'energy', 'drain', 'gps', 'screen on', 'compass', 'ble', 'per hour'],
@@ -344,11 +391,12 @@ const List<SettingsEntry> settingsEntries = [
       was: 'About', keywords: ['version', 'licence', 'license', 'mit', 'credits', 'open source', 'open-meteo', 'attribution']),
   SettingsEntry('map-legend', 'about-section', 'Map legend',
       'What every colour and symbol on the maps means, with real swatches in your colour palette.',
-      was: 'About', keywords: ['legend', 'colours', 'colors', 'key', 'hexagon', 'snr', 'grey', 'no reply', 'link lines', 'help', 'info']),
+      was: 'About', keywords: ['legend', 'colour legend', 'color legend', 'colours', 'colors', 'key', 'hexagon', 'snr', 'grey', 'no reply', 'link lines', 'help', 'info']),
   SettingsEntry('terms-of-service-link', 'about-section', 'Terms of service', 'Use of MeshSonar, photos and chat, reports. On the website.',
       was: 'Privacy & data sharing', keywords: ['terms', 'tos', 'legal', 'rules', 'conditions']),
-  SettingsEntry('show-intro', 'about-section', 'Show the welcome tour', 'The four intro pages from first launch.',
-      was: 'About', keywords: ['intro', 'onboarding', 'tour', 'welcome', 'help']),
+  // Build 77: one name, one place. The Settings row is gone; search still finds it and opens Help.
+  SettingsEntry('show-intro', 'about-section', 'Show the intro again', 'The intro pages from first launch. In More > Help.',
+      was: 'About', keywords: ['intro', 'onboarding', 'tour', 'welcome', 'help', 'show the welcome tour'], elsewhere: 'More > Help'),
 ];
 
 SettingsEntry settingsEntry(String id) {
@@ -370,7 +418,8 @@ List<SettingsEntry> searchSettings(String query, {AppState? state, List<Settings
     if (state != null && !e.isAvailable(state)) continue;
     final title = _norm(e.title);
     final keys = _norm(e.keywords.join(' '));
-    final hay = '$title ${_norm(e.summary)} $keys ${_norm(e.where)} ${_norm(e.was ?? '')}';
+    final pageWas = e.page == null ? '' : _norm(settingsPage(e.page!).was ?? '');
+    final hay = '$title ${_norm(e.summary)} $keys ${_norm(e.where)} ${_norm(e.was ?? '')} $pageWas';
     if (!words.every(hay.contains)) continue;
     final rank = words.every(title.contains) ? 0 : (words.every(keys.contains) ? 1 : 2);
     scored.add((rank, i, e));

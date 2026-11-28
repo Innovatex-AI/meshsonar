@@ -25,7 +25,7 @@ void main() {
 
   group('style identity', () {
     test('every generated style carries an id of its own and the render version', () {
-      expect(basemapStyleJsonByName, hasLength(7));
+      expect(basemapStyleJsonByName, hasLength(9), reason: 'build 77 adds protomaps-data-light / -dark');
       final ids = <String>{};
       for (final e in basemapStyleJsonByName.entries) {
         final j = jsonDecode(e.value) as Map<String, dynamic>;
@@ -59,7 +59,7 @@ void main() {
       expect((s['metadata'] as Map)['version'], '$basemapRenderVersion');
     });
 
-    test('the seven themes the app can draw have seven distinct renderer identities, none of them the old shared one', () {
+    test('every theme the app can draw has its own renderer identity, none of them the old shared one', () {
       final themes = <String, vtr.Theme>{
         for (final dark in [false, true])
           for (final look in BasemapLook.values)
@@ -67,7 +67,8 @@ void main() {
         'ours-labels': basemapTheme(BasemapSource.ours, dark: true, look: BasemapLook.labels),
         for (final dark in [false, true]) 'ofm-$dark': basemapTheme(BasemapSource.openFreeMap, dark: dark),
       };
-      expect(themes, hasLength(7));
+      // Road, Topo, data-first whole; data-first and Topo base and names: 7 looks x 2 themes, the Satellite names, 2 fallbacks.
+      expect(themes, hasLength(17));
       final seen = <String, String>{};
       for (final e in themes.entries) {
         final id = rendererIdentity(e.value);
@@ -85,6 +86,15 @@ void main() {
       expect(rendererIdentity(basemapTheme(BasemapSource.ours, dark: false, look: BasemapLook.labels)), rendererIdentity(basemapTheme(BasemapSource.ours, dark: true, look: BasemapLook.labels)),
           reason: 'one labels style for both themes: the same tiles are correct for both');
       expect(basemapStyleIdentity(basemapStyle(BasemapSource.ours, dark: true)), 'meshsonar-protomaps-dark/v$basemapRenderVersion');
+      expect(basemapStyleIdentity(basemapStyle(BasemapSource.ours, dark: true, look: BasemapLook.dataBase)), 'meshsonar-protomaps-data-dark-base/v$basemapRenderVersion');
+      expect(basemapStyleIdentity(basemapStyle(BasemapSource.ours, dark: false, look: BasemapLook.topoLabels)), 'meshsonar-protomaps-topo-light-labels/v$basemapRenderVersion');
+    });
+
+    test('build 77 bumped the render version: a render build 76 cached (v2) is stale and deleted', () {
+      expect(basemapRenderVersion, greaterThanOrEqualTo(3));
+      expect(BasemapRenderCache.isStaleRender('meshsonar-protomaps-dark-v2-13-2207-3102.png'), isTrue);
+      expect(BasemapRenderCache.isStaleRender('meshsonar-protomaps-labels-v2-13-2207-3102.png'), isTrue);
+      expect(BasemapRenderCache.isStaleRender('meshsonar-protomaps-data-dark-base-v$basemapRenderVersion-13-2207-3102.png'), isFalse);
     });
   });
 

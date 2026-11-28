@@ -51,7 +51,6 @@ class CoverageOptionsBody extends StatelessWidget {
             key: Key('$prefix-${o.id}'),
             label: Text(o.label),
             selected: o.id == selected,
-            visualDensity: VisualDensity.compact,
             onSelected: (_) => onPick(o.id),
           ),
       ],
