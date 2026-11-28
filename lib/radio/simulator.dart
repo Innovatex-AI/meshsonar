@@ -1539,6 +1539,10 @@ class SimulatedTransport implements ByteTransport {
 class SimulatedRadioScanner implements RadioScanner {
   static const device = RadioDevice(id: 'meshsonar-simulator', name: 'MeshSonar Simulator', rssi: -50);
 
+  /// Build 78: the same simulated radio running MeshSonar Firmware (listed second, only with [offerMeshSonar]; the app's
+  /// Connect screen has its own card for it). The stock [device] stays first, so the default Simulator is unchanged.
+  static const meshSonarDevice = RadioDevice(id: 'meshsonar-simulator-msfw', name: 'MeshSonar Simulator (MeshSonar radio)', rssi: -50);
+
   final SimulatedLocationSource? location;
   final int? seed;
   final double timeScale;
@@ -1547,6 +1551,9 @@ class SimulatedRadioScanner implements RadioScanner {
 
   /// The simulated radio runs MeshSonar Firmware ([SimulatedTransport.meshSonar]); off by default.
   final bool meshSonar;
+
+  /// Also list [meshSonarDevice] (after [device]); connecting to it gives a MeshSonar Firmware radio. Off by default.
+  final bool offerMeshSonar;
 
   /// Other nodes advertise and chatter now and then (the app's Simulator; not tests).
   final bool ambientTraffic;
@@ -1579,6 +1586,7 @@ class SimulatedRadioScanner implements RadioScanner {
     this.clock,
     this.firmwareVersion,
     this.meshSonar = false,
+    this.offerMeshSonar = false,
     this.maxContacts = 100,
     this.extraContacts = 0,
     this.autoAddSupported = true,
@@ -1590,19 +1598,20 @@ class SimulatedRadioScanner implements RadioScanner {
   @override
   Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) async* {
     await Future<void>.delayed(Duration(milliseconds: (300 / timeScale).round()));
-    yield const [device];
+    yield offerMeshSonar ? const [device, meshSonarDevice] : const [device];
   }
 
   @override
   Future<ByteTransport> connect(RadioDevice device) async {
-    if (device.id != SimulatedRadioScanner.device.id) throw StateError('unknown simulated device ${device.id}');
+    final ms = offerMeshSonar && device.id == meshSonarDevice.id;
+    if (device.id != SimulatedRadioScanner.device.id && !ms) throw StateError('unknown simulated device ${device.id}');
     final t = SimulatedTransport(
         location: location,
         seed: seed,
         timeScale: timeScale,
         clock: clock,
         firmwareVersion: firmwareVersion,
-        meshSonar: meshSonar,
+        meshSonar: meshSonar || ms,
         maxContacts: maxContacts,
         extraContacts: extraContacts,
         autoAddSupported: autoAddSupported,

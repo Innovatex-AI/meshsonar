@@ -1,13 +1,14 @@
 // More > Radio (build 71): the radio's own network, which was the Chat tab's Radio segment: the radio card, nodes heard
 // nearby, and the repeaters, rooms and sensors in its contact book with Trace, Discover, Rx log and Adverts (the chat
 // services' own list, ChatTabProvider.networkSliver: nothing in it changed). Above it: Set up my radio and My radio's
-// settings (the read-only comparison with the region's preset).
+// settings (the read-only comparison with the region's preset). Build 78: the MeshSonar radio row for a MeshSonar radio.
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../design/tokens.dart';
 import '../drive/drive_controls.dart' show openConnect;
+import '../msradio/ms_radio_page.dart' show MsRadioEntryRow;
 import 'chat_tab_host.dart';
 import 'more_tab.dart' show MoreRow;
 
@@ -51,6 +52,8 @@ class _MoreRadioScreenState extends State<MoreRadioScreen> {
             MoreRow(MoreItem.radioSettings, Icons.fact_check_outlined, 'My radio\'s settings',
                 s.connected ? 'Does it match this region?' : 'Connect a radio to check it',
                 onOpen: widget.onOpen),
+            // Build 78: a MeshSonar Firmware radio only (an empty box for a stock MeshCore radio, and no request anywhere).
+            const MsRadioEntryRow(),
             const Divider(height: Gap.l, indent: Gap.l, endIndent: Gap.l),
           ];
           const tools = <Widget>[SizedBox(height: Gap.xl)];
