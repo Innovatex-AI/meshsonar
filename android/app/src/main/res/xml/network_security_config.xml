@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cleartext (plain HTTP) only for the MeshSonar radio's local app API (lib/core/msradio): the radio cannot hold a
+     certificate. Everything else stays HTTPS-only (the same as Android's default from API 28).
+     LIMIT: a network security config cannot name address RANGES (no 192.168.0.0/16, 10.0.0.0/8 or 172.16.0.0/12), only
+     host names and exact addresses, so it allows cleartext for the radios' mDNS names (*.local) only. A radio reached by
+     a bare IP address (DNS-SD result, typed address) works because the app talks to it with Dart's own HTTP client
+     (dart:io sockets), which does not consult this policy; the platform HTTP stack (WebView, Cronet) would still refuse
+     it. If Flutter ever enforces this policy for dart:io, such a radio must be reached by its .local name. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">local</domain>
+    </domain-config>
+</network-security-config>

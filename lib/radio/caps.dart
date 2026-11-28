@@ -3,7 +3,10 @@
 // capabilities rule out is shown disabled with a reason (or hidden), never tried and failed.
 // Plan: meshsonar-infra/docs/planning/chat-redesign-plan-2026-11-02.md section 5.3. Pure Dart.
 import 'claim_radio.dart' show RemoteLogin;
+import 'meshsonar_fw.dart';
 import 'protocol.dart' show DeviceInfoFrame;
+
+export 'meshsonar_fw.dart' show MeshSonarFw;
 
 /// Firmware version code (DEVICE_INFO byte 1) from which a feature exists.
 abstract final class FwCode {
@@ -41,16 +44,38 @@ class RadioCaps {
   final int? pathHashModeByte;
   final PathDiscoverySupport pathDiscovery;
 
-  const RadioCaps({this.fwCode, this.fwVersion, this.pathHashModeByte, this.pathDiscovery = PathDiscoverySupport.unknown});
+  /// The MeshSonar Firmware identity (lib/radio/meshsonar_fw.dart); null on stock MeshCore radios. Every MeshSonar radio
+  /// feature (the local Wi-Fi API in lib/core/msradio/) is behind [isMeshSonar].
+  final MeshSonarFw? meshSonar;
+
+  const RadioCaps({
+    this.fwCode,
+    this.fwVersion,
+    this.pathHashModeByte,
+    this.pathDiscovery = PathDiscoverySupport.unknown,
+    this.meshSonar,
+  });
 
   /// Unknown radio: nothing newer than the baseline is assumed.
   static const RadioCaps baseline = RadioCaps();
 
-  factory RadioCaps.fromDeviceInfo(DeviceInfoFrame di) =>
-      RadioCaps(fwCode: di.firmwareVerCode, fwVersion: parseFirmwareVersion(di.firmwareVersion), pathHashModeByte: di.pathHashMode);
+  factory RadioCaps.fromDeviceInfo(DeviceInfoFrame di) => RadioCaps(
+        fwCode: di.firmwareVerCode,
+        fwVersion: parseFirmwareVersion(di.firmwareVersion),
+        pathHashModeByte: di.pathHashMode,
+        meshSonar: MeshSonarFw.tryParse(di),
+      );
 
-  RadioCaps copyWith({PathDiscoverySupport? pathDiscovery}) =>
-      RadioCaps(fwCode: fwCode, fwVersion: fwVersion, pathHashModeByte: pathHashModeByte, pathDiscovery: pathDiscovery ?? this.pathDiscovery);
+  RadioCaps copyWith({PathDiscoverySupport? pathDiscovery}) => RadioCaps(
+        fwCode: fwCode,
+        fwVersion: fwVersion,
+        pathHashModeByte: pathHashModeByte,
+        pathDiscovery: pathDiscovery ?? this.pathDiscovery,
+        meshSonar: meshSonar,
+      );
+
+  /// A radio running MeshSonar Firmware (DEVICE_INFO version `...-ms<version>`). False on every stock MeshCore radio.
+  bool get isMeshSonar => meshSonar != null;
 
   bool get hasPathHashMode => (fwCode ?? 0) >= FwCode.pathHashMode;
   bool get hasClientRepeat => (fwCode ?? 0) >= FwCode.clientRepeat;

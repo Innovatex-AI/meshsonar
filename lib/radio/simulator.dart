@@ -11,9 +11,12 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart' as cr;
+
 import '../core/meshtrack/mt_wire.dart' show MtRequest, formatMtParked, formatMtPosition, parseMeshTrack;
 import '../core/meshtrack/plus_code.dart' show PlusCode;
 import '../core/meshtrack/smart_beacon.dart' show MtFix, SmartBeacon, bearingDeg;
+import '../core/msradio/fake_radio_api.dart' show MsTestVector;
 import 'crypto.dart';
 import 'packet.dart';
 import 'protocol.dart';
@@ -22,6 +25,14 @@ import 'tools/lpp.dart';
 import 'tools/tool_frames.dart';
 import 'tools/transport_code.dart';
 import 'radio_api.dart';
+
+/// The DEVICE_INFO firmware string of the simulated MeshSonar radio ([SimulatedTransport.meshSonar]): MeshSonar 0.1.0 on
+/// MeshCore v1.18.0, with the `-sim` suffix kept so drives recorded with it stay Simulator drives (never uploaded:
+/// Companion.simulatorFirmwareSuffix). The MeshSonar pattern is not anchored at the end, so it still reads as 0.1.0.
+const String simMeshSonarFirmware = 'v1.18.0-ms0.1.0-sim';
+
+/// The board name the simulated MeshSonar radio reports.
+const String simMeshSonarBoard = 'Heltec V4 TFT';
 
 // ------------------------------------------------------------------ the drive
 
@@ -487,6 +498,14 @@ class SimulatedTransport implements ByteTransport {
   /// uploaded: Companion.simulatorFirmwareSuffix). Tests that stand in for a real radio pass another string.
   final String firmwareVersion;
 
+  /// Off by default (the stock simulator). On: the radio reports MeshSonar Firmware in DEVICE_INFO
+  /// ([simMeshSonarFirmware], board [simMeshSonarBoard]), its identity is the contract's test-vector Ed25519 key
+  /// (MsTestVector, the same key as FakeMsRadio's default) and it answers CMD_SIGN_START / SIGN_DATA / SIGN_FINISH with
+  /// real signatures, so signed pairing with a FakeMsRadio local API verifies end to end.
+  final bool meshSonar;
+  cr.SimpleKeyPair? _signKey;
+  BytesBuilder? _signData;
+
   /// Received commands, for tests.
   final List<Uint8List> sentFrames = [];
 
@@ -502,7 +521,8 @@ class SimulatedTransport implements ByteTransport {
     this.pathHashSize = 1,
     this.noiseFloorDbm = -112,
     this.nodeName = 'MeshSonar Sim',
-    this.firmwareVersion = 'v1.18.0-sim',
+    String? firmwareVersion,
+    this.meshSonar = false,
     int maxChannels = 8,
     this.offlineQueueSize = 16,
     List<SimulatedContact>? contacts,
@@ -513,11 +533,12 @@ class SimulatedTransport implements ByteTransport {
     this.ambientTraffic = false,
     bool? meshTrackFriends,
   })  : meshTrackFriends = meshTrackFriends ?? ambientTraffic,
+        firmwareVersion = firmwareVersion ?? (meshSonar ? simMeshSonarFirmware : 'v1.18.0-sim'),
         location = location ?? SimulatedLocationSource(timeScale: timeScale, clock: clock),
         repeaters = repeaters ?? defaultSimulatedRepeaters(),
         _rng = math.Random(seed),
         _clock = clock ?? DateTime.now,
-        publicKey = sha256(utf8.encode('meshsonar-sim-companion')),
+        publicKey = meshSonar ? fromHex(MsTestVector.key) : sha256(utf8.encode('meshsonar-sim-companion')),
         _slots = List.generate(maxChannels, (i) => _Slot('', Uint8List(16))) {
     _slots[0] = _Slot('Public', Uint8List.fromList(publicChannelSecret));
     if (this.meshTrackFriends && _slots.length > 1) _slots[1] = _Slot(simulatedFriendsChannelName, Uint8List.fromList(simulatedFriendsChannelKey));
@@ -809,7 +830,7 @@ class SimulatedTransport implements ByteTransport {
           maxContactsHalf: (maxContacts ~/ 2).clamp(1, 255),
           maxChannels: _slots.length,
           buildDate: '1 Oct 2026',
-          manufacturer: 'MeshSonar Simulator',
+          manufacturer: meshSonar ? simMeshSonarBoard : 'MeshSonar Simulator',
           firmwareVersion: firmwareVersion,
           pathHashMode: pathHashSize - 1,
         ));
@@ -1000,6 +1021,22 @@ class SimulatedTransport implements ByteTransport {
         _sf = sf;
         _cr = cr;
         _emit(encodeOk());
+      case Cmd.signStart when meshSonar:
+        _signData = BytesBuilder();
+        _emit(encodeSignStartResponse(8192));
+      case Cmd.signData when meshSonar:
+        final b = _signData;
+        if (b == null) return _emit(encodeErr(ErrCode.badState));
+        if (b.length + frame.length - 1 > 8192) return _emit(encodeErr(ErrCode.tableFull));
+        b.add(frame.sublist(1));
+        _emit(encodeOk());
+      case Cmd.signFinish when meshSonar:
+        final b = _signData;
+        if (b == null) return _emit(encodeErr(ErrCode.badState));
+        _signData = null;
+        final kp = _signKey ??= await cr.Ed25519().newKeyPairFromSeed(MsTestVector.seed);
+        final sig = await cr.Ed25519().sign(b.takeBytes(), keyPair: kp);
+        _emit(encodeSignatureResponse(sig.bytes));
       default:
         _emit(encodeErr(ErrCode.unsupportedCmd));
     }
@@ -1502,11 +1539,21 @@ class SimulatedTransport implements ByteTransport {
 class SimulatedRadioScanner implements RadioScanner {
   static const device = RadioDevice(id: 'meshsonar-simulator', name: 'MeshSonar Simulator', rssi: -50);
 
+  /// Build 78: the same simulated radio running MeshSonar Firmware (listed second, only with [offerMeshSonar]; the app's
+  /// Connect screen has its own card for it). The stock [device] stays first, so the default Simulator is unchanged.
+  static const meshSonarDevice = RadioDevice(id: 'meshsonar-simulator-msfw', name: 'MeshSonar Simulator (MeshSonar radio)', rssi: -50);
+
   final SimulatedLocationSource? location;
   final int? seed;
   final double timeScale;
   final DateTime Function()? clock;
-  final String firmwareVersion;
+  final String? firmwareVersion;
+
+  /// The simulated radio runs MeshSonar Firmware ([SimulatedTransport.meshSonar]); off by default.
+  final bool meshSonar;
+
+  /// Also list [meshSonarDevice] (after [device]); connecting to it gives a MeshSonar Firmware radio. Off by default.
+  final bool offerMeshSonar;
 
   /// Other nodes advertise and chatter now and then (the app's Simulator; not tests).
   final bool ambientTraffic;
@@ -1537,7 +1584,9 @@ class SimulatedRadioScanner implements RadioScanner {
     this.seed,
     this.timeScale = 1.0,
     this.clock,
-    this.firmwareVersion = 'v1.18.0-sim',
+    this.firmwareVersion,
+    this.meshSonar = false,
+    this.offerMeshSonar = false,
     this.maxContacts = 100,
     this.extraContacts = 0,
     this.autoAddSupported = true,
@@ -1549,18 +1598,20 @@ class SimulatedRadioScanner implements RadioScanner {
   @override
   Stream<List<RadioDevice>> scan({Duration timeout = const Duration(seconds: 8)}) async* {
     await Future<void>.delayed(Duration(milliseconds: (300 / timeScale).round()));
-    yield const [device];
+    yield offerMeshSonar ? const [device, meshSonarDevice] : const [device];
   }
 
   @override
   Future<ByteTransport> connect(RadioDevice device) async {
-    if (device.id != SimulatedRadioScanner.device.id) throw StateError('unknown simulated device ${device.id}');
+    final ms = offerMeshSonar && device.id == meshSonarDevice.id;
+    if (device.id != SimulatedRadioScanner.device.id && !ms) throw StateError('unknown simulated device ${device.id}');
     final t = SimulatedTransport(
         location: location,
         seed: seed,
         timeScale: timeScale,
         clock: clock,
         firmwareVersion: firmwareVersion,
+        meshSonar: meshSonar || ms,
         maxContacts: maxContacts,
         extraContacts: extraContacts,
         autoAddSupported: autoAddSupported,

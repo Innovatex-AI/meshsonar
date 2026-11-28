@@ -8,6 +8,7 @@
 //   GET person-devices, POST person-device-rename, POST person-device-remove, POST link-start
 // Parsing is tolerant: a row that cannot be read is skipped. Never a key, a key hint or an email. Pure Dart.
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../radio/crypto.dart' show fromHex;
@@ -34,6 +35,86 @@ String? signableProofText(Uint8List bytes, String pubkeyHex) {
   if (parts.length != 7 || parts[0] != 'meshsonar-login' || parts[1] != 'v1' || parts[3] != 'connect') return null;
   if (parts[4].toLowerCase() != pubkeyHex.toLowerCase()) return null;
   if (!RegExp(r'^[0-9a-f]{32}$').hasMatch(parts[5]) || int.tryParse(parts[6]) == null) return null;
+  return text;
+}
+
+// ---------------------------------------------------------------- MeshSonar radio pairing (local Wi-Fi API)
+// meshsonar-firmware docs/APP-INTEGRATION.md section 3.1. The app makes a 16-byte app nonce, the radio answers with its
+// own nonce, and the app has the radio sign `meshsonar-app-pair:v1:<radio key>:<radio nonce>:<app nonce>` over Bluetooth.
+// The text is built by the app (lib/core/msradio/ms_pairing.dart), never taken from the radio, and this guard is the only
+// way to it: exactly that format, for THIS radio's key, and only with an app nonce this app issued in the last 2 minutes.
+
+/// The purpose prefix of the pairing text the radio signs.
+const String kPairTextPrefix = 'meshsonar-app-pair:v1:';
+
+/// How long an app nonce may be used after the app made it.
+const Duration kAppNonceLifetime = Duration(minutes: 2);
+
+/// The app nonces this app made for MeshSonar radio pairing (`app_nonce` of `pair/start`), with when each was made. A nonce
+/// is good for [lifetime] and for ONE signature: [signablePairText] uses it up.
+class MsAppNonces {
+  final DateTime Function() _clock;
+  final math.Random _random;
+  final Duration lifetime;
+  final Map<String, DateTime> _issued = {};
+
+  MsAppNonces({DateTime Function()? clock, math.Random? random, this.lifetime = kAppNonceLifetime})
+      : _clock = clock ?? DateTime.now,
+        _random = random ?? math.Random.secure();
+
+  /// The registry the app uses (tests make their own).
+  static final MsAppNonces instance = MsAppNonces();
+
+  /// A new nonce: 16 random bytes as 32 lower-case hex characters.
+  String issue() {
+    _prune();
+    final b = List<int>.generate(16, (_) => _random.nextInt(256));
+    final hex = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    _issued[hex] = _clock();
+    return hex;
+  }
+
+  /// True when this app made [nonce] less than [lifetime] ago and it has not been used up.
+  bool isFresh(String nonce) {
+    final at = _issued[nonce];
+    if (at == null) return false;
+    final age = _clock().difference(at);
+    return !age.isNegative && age < lifetime;
+  }
+
+  /// Uses up [nonce]: it can never be signed again.
+  void consume(String nonce) => _issued.remove(nonce);
+
+  void _prune() {
+    final now = _clock();
+    _issued.removeWhere((_, at) => now.difference(at) >= lifetime);
+  }
+}
+
+final RegExp _lowerHex32 = RegExp(r'^[0-9a-f]{32}$');
+final RegExp _lowerHex64 = RegExp(r'^[0-9a-f]{64}$');
+
+/// The guard for MeshSonar radio pairing: returns the text when [bytes] are exactly
+/// `meshsonar-app-pair:v1:<pubkeyHex, 64 lower hex>:<32 lower hex>:<32 lower hex>` and the last field is an app nonce that
+/// [nonces] (default [MsAppNonces.instance]) issued less than 2 minutes ago; null otherwise (nothing may be signed). On
+/// success the app nonce is used up, so each nonce is signed at most once. [signableProofText] is a separate guard and is
+/// unchanged: neither accepts the other's text.
+String? signablePairText(Uint8List bytes, String pubkeyHex, {MsAppNonces? nonces}) {
+  final reg = nonces ?? MsAppNonces.instance;
+  final String text;
+  try {
+    text = utf8.decode(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (!text.startsWith(kPairTextPrefix)) return null;
+  final parts = text.split(':');
+  if (parts.length != 5 || parts[0] != 'meshsonar-app-pair' || parts[1] != 'v1') return null;
+  final key = pubkeyHex.toLowerCase();
+  if (!_lowerHex64.hasMatch(key) || parts[2] != key) return null;
+  if (!_lowerHex32.hasMatch(parts[3]) || !_lowerHex32.hasMatch(parts[4])) return null;
+  if (!reg.isFresh(parts[4])) return null;
+  reg.consume(parts[4]);
   return text;
 }
 

@@ -1105,3 +1105,14 @@ open the failed message > details > message log > export, and send it.
    favourites (nothing was overwritten by MeshSonar connecting).
 10. **Contact list full.** Fill the radio's contact list, add one more in MeshSonar. Expected: "Your radio's contact list
     is full", and no contact has disappeared from the radio.
+
+## 17. MeshSonar radio local API (build 78, `lib/core/msradio/`)
+
+A radio running MeshSonar Firmware is plain MeshCore companion v1.18.0 over Bluetooth; nothing MeshSonar-specific is on the BLE wire. The contract is `meshsonar-firmware/docs/APP-INTEGRATION.md` (it wins on any difference). Summary:
+
+- **Detection:** DEVICE_INFO firmware version `v1.18.0-ms<MeshSonar version>` (regex `^v?(\d+)\.(\d+)(\.\d+)?-ms(\d+\.\d+\.\d+)`, `lib/radio/meshsonar_fw.dart`). `RadioCaps.isMeshSonar` gates every new code path; a stock radio never causes a local-network request. The Simulator's MeshSonar radio reports `v1.18.0-ms0.1.0-sim` so its drives stay marked as simulated.
+- **Transport:** `http://<radio>/api/app/v1/...`, port 80, JSON. Every POST carries `X-MS: 1`; authorised calls `Authorization: Bearer <token>`. Errors `{"error","status"}`: 401 pair again, 403, 409, 410, 423 locked, 429, 503 busy (retried once after 1 s). 4 s per call, one request at a time per radio.
+- **Discovery:** last good address for the radio key, then `meshsonar-<first 8 hex of key>.local`, then DNS-SD `_meshsonar._tcp` matching TXT `pk`, then an address typed by the person. Every address is confirmed with `GET /info` (`key` must equal the Bluetooth key) before use.
+- **Signed pairing:** app nonce -> `POST pair/start` -> verify `radio_sig` (Ed25519 by the Bluetooth key over `meshsonar-app-hello:v1:<key>:<app_nonce>:<nonce>`) -> the app builds `meshsonar-app-pair:v1:<key>:<nonce>:<app_nonce>` itself, the radio signs it over Bluetooth (CMD_SIGN_*) through `signablePairText` -> `POST pair/finish` -> token. Approval fallback: `POST pair/ask` + poll `GET pair/ask?n=`.
+- **Tokens:** `flutter_secure_storage`, keyed by radio key, never logged, redacted in diagnostics; a 401 drops the token.
+- **Privacy:** nothing from the radio API is sent to MeshSonar servers by the app; the radio uploads its own data. The radio's wardrive log is observed packets, never pings.

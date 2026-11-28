@@ -71,6 +71,7 @@ import '../radio/radio_session_impl.dart';
 import '../radio/companion_link.dart' show MeshCoreCompanionLink;
 import '../radio/session.dart' show LinkState;
 import '../radio/session_manager.dart';
+import '../radio/simulator.dart' show SimulatedRadioScanner;
 import '../radio/wardrive_engine.dart' show DefaultWardriveEngine;
 import 'gps_monitor.dart';
 import '../core/privacy_zone_store.dart' show MemoryPrivacyZoneStore;
@@ -2279,13 +2280,15 @@ class AppState extends ChangeNotifier with _ObserverWiring {
     }
   }
 
-  /// Connects to the simulator's single device.
-  Future<bool> connectSimulator() async {
+  /// Connects to the simulator's device (the first one listed: the stock simulated radio). [meshSonar] (build 78) picks the
+  /// simulated MeshSonar Firmware radio instead when the simulator lists it (SimulatedRadioScanner.meshSonarDevice).
+  Future<bool> connectSimulator({bool meshSonar = false}) async {
     if (!simulatorAvailable) return false;
     try {
       final lists = await services.simulatorScanner.scan(timeout: const Duration(seconds: 2)).toList();
       final all = lists.expand((l) => l).toList();
-      final dev = all.isNotEmpty ? all.first : const RadioDevice(id: 'simulator', name: 'MeshSonar Simulator');
+      final ms = meshSonar ? all.where((d) => d.id == SimulatedRadioScanner.meshSonarDevice.id).firstOrNull : null;
+      final dev = ms ?? (all.isNotEmpty ? all.first : const RadioDevice(id: 'simulator', name: 'MeshSonar Simulator'));
       return await connect(dev, RadioKind.simulator);
     } catch (e) {
       _connectError = friendlyError(e, action: 'Starting the simulator');

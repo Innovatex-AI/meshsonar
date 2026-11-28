@@ -105,6 +105,17 @@
 	<string>While you record a drive, MeshSonar keeps placing each ping on the map when the screen is off or another app (like navigation) is in front. iOS shows a blue indicator while it does. Your position is not used in the background when you are not recording a drive, and is never put in the on-air ping. If Share with MeshSonar is on, packets your radio hears in the background are sent to the server tagged only with the roughly 5 km area MeshSonar last knew (or nothing, if you chose Region only).</string>
 	<key>NSMotionUsageDescription</key>
 	<string>MeshSonar reads air pressure from your phone's barometer during a drive, to explain changes in radio range. It is saved with your drive. You can turn it off in Settings &gt; Privacy &amp; data sharing.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MeshSonar talks to your MeshSonar radio on your Wi-Fi.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_meshsonar._tcp</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

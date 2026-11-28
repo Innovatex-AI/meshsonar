@@ -107,3 +107,15 @@ bytes: latitude and longitude as big-endian int32 x 1e7, then battery and forwar
 messages. The message format was read from its source (lib/models/telemetry_message.dart, capability_message.dart) for
 interoperability only. No MeshCore-TEAM code is copied or adapted; the receive-only parser was written from the format.
 Used in: lib/core/meshtrack/interop.dart.
+
+## MeshSonar radio over Wi-Fi (lib/core/msradio/, lib/platform/)
+
+### Dependency note: MeshSonar radio packages
+`bonsoir` 7.x with `bonsoir_platform_interface`, `bonsoir_android`, `bonsoir_darwin`, `bonsoir_linux`, `bonsoir_windows`
+(MIT, Copyright (c) 2019 Hugo Delaunay "Skyost", https://github.com/Skyost/Bonsoir): DNS-SD browse for `_meshsonar._tcp`
+on Bonjour and Android NSD. Used in: lib/platform/ms_service_browser.dart.
+`file_picker` 13.x with `file_picker_platform_interface`, `android_file_picker`, `file_picker_darwin`, `file_picker_linux`,
+`file_picker_web`, `windows_file_picker` (MIT, Copyright (c) 2018 Miguel Ruivo, https://github.com/miguelpruivo/flutter_file_picker):
+picking a map pack, firmware file or Lua app to send to the radio. Used in: lib/platform/file_pick.dart.
+Both are pub dependencies; no code is copied. The radio's local app API itself (meshsonar-firmware
+docs/APP-INTEGRATION.md) is MeshSonar's own and was implemented from that document.

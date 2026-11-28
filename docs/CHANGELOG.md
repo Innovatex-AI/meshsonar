@@ -3,6 +3,14 @@
 All notable changes to MeshSonar. Dates are local (US Eastern). This changelog was reconstructed from the commit
 history (`.git/logs/HEAD`) and the source. Known gaps are tracked in [ROADMAP.md](ROADMAP.md).
 
+## [0.48.0+78] — 2026-11-28 — MeshSonar radio: control MeshSonar Firmware radios from the phone
+
+- **MeshSonar radio page.** When the connected radio runs MeshSonar Firmware (firmware version `v1.18.0-ms<version>`), More > Radio shows a "MeshSonar radio" row with the version and a Paired / Not paired / Not on Wi-Fi chip. The page covers Pairing, Overview, Sharing and wardrive, Log and backlog (save the log to the phone, show GPS points and probes on a map), Map pack, Firmware updates, Lua apps, Radio screen and sounds (incl. PIN lock), Owner link (only while radio proof is offered), RF tools (spectrum scan, signal probe) and Apps paired with this radio. Contract: meshsonar-firmware `docs/APP-INTEGRATION.md`; PROTOCOL section 17.
+- **Signed pairing over Wi-Fi.** The app checks the radio's Ed25519 signature with the Bluetooth key before anything is signed, builds the pairing text itself, and has the radio sign it over Bluetooth through a new guard that accepts only `meshsonar-app-pair:v1` texts with a fresh app nonce. Approval on the radio is the fallback. Tokens are kept in the Keychain per radio, never logged.
+- **Stock radios unchanged.** Nothing new shows, runs or sends with a stock MeshCore radio; no local-network request is made.
+- **Platform:** iOS local network usage text, Bonjour `_meshsonar._tcp`, `NSAllowsLocalNetworking`; Android cleartext for `*.local` only. New packages `bonsoir` and `file_picker` (MIT).
+- **Simulator:** "Simulator with a MeshSonar radio" under Connect radio > No radio yet, with a fake local API that pairs for real.
+
 ## [0.47.0+77] — 2026-11-27 — Whole-app redesign; direct messages delivered the official MeshCore way
 
 - **Direct messages follow the official MeshCore flow, item for item.** Each try passes its try number to the radio untouched, so try 5 is a new packet and is no longer dropped by the mesh as a copy of try 1. Up to 4 tries along the route the radio has, then one route reset, then up to 4 to everyone nearby (Settings > Messages > Message delivery: direct 1-4, flood 0-4, fallback on/off); with no route every try goes to everyone nearby. Each try waits the radio's own estimate x 1.2. A confirmation for ANY try turns the message Delivered, even after Not delivered. Each reply from the radio is matched to its command; a late or stray frame is thrown away. Confirmed Bluetooth writes. No more contact writes on connect (they could overwrite a route the radio learned). Try again sends a new message. A message still retrying shows "try n of m" with Cancel.

@@ -30,3 +30,11 @@ Future<void> shareDriveFiles(List<File> files) async {
     text: 'MeshSonar drive (Drive Format v1), ${files.length} files: each is a complete upload of up to 5,000 pings.',
   ));
 }
+
+/// Build 78: the MeshSonar radio's own log files (`mslog-v1`, binary), saved on this phone: one share sheet, all files.
+Future<void> shareRadioLogFiles(List<File> files) async {
+  await SharePlus.instance.share(ShareParams(
+    files: [for (final f in files) XFile(f.path, mimeType: 'application/octet-stream')],
+    subject: 'MeshSonar radio log',
+  ));
+}

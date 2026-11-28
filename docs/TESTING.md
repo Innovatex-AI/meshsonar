@@ -161,3 +161,22 @@ a scratch copy of v0.2.0, and the relevant tests were run against each. The repo
 
 To repeat a check: copy the repo to a scratch folder (`tar --exclude=./build --exclude=./.git -cf - . | tar -xf - -C
 /tmp/ms`), edit one line there, and run the test file. Don't mutate the working tree.
+
+## MeshSonar radio acceptance tests (build 78, Andy on a real radio)
+
+1. Stock MeshCore radio: connect, chat, wardrive as before; no MeshSonar row; no local network prompt; no request to any local address.
+2. MeshSonar radio over Bluetooth, on the phone's Wi-Fi: More > Radio shows "MeshSonar radio 0.1.0"; Pair over Wi-Fi finishes in under 10 s with no tap on the radio; serial `appapi tokens` lists the app.
+3. Two MeshSonar radios, phone on radio A over Bluetooth: pairing always ends on A; typing B's address says "This is not the radio you are connected to".
+4. Phone off Wi-Fi, or web console Off: "Not on Wi-Fi" within 5 s; Bluetooth chat keeps working.
+5. Ask on the radio with Bluetooth off: Allow pairs, No refuses, a locked radio says locked.
+6. Sharing / wardrive switches change the radio's More > Sharing within 2 s, and back.
+7. Save log to phone gives two files whose sizes match the log; Show on map draws a short drive's GPS points.
+8. Map pack: send `cmh-20261108.msmp`; progress moves; the radio's map shows it after Done.
+9. Firmware: Check shows the offer; Install over Wi-Fi downloads and the radio asks to restart; after restart the page shows the new version and "kept after 1 minute".
+10. Lua apps: load catalog, install, run (opens on the radio), stop, remove.
+11. Settings: timeout, volume, quiet hours show on the radio; Lock now locks; Remove PIN with a wrong PIN says "Wrong PIN".
+12. Owner link: link to another proven radio; radio's More > MeshSonar account shows it; remove it.
+13. Spectrum: a 10 s US scan draws bars and mesh receive continues; Probe now shows a result within 20 s.
+14. `appapi revoke all` on the radio: next call shows "Pair again"; pairing works again.
+15. iPhone Personal Hotspot: discovery and every section work.
+16. Full `flutter test` and `flutter analyze` clean; no test removed.

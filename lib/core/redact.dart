@@ -2,6 +2,9 @@
 // C1, in the same order with the same replacement text, so text the app cleaned is stored unchanged by the server.
 // test/fixtures/redaction-vectors.json is CMAT's canonical vectors file; both sides must give every output and count.
 // Pure Dart: no Flutter imports.
+// MeshSonar radio pairing tokens (lib/core/msradio, 32 hex) are covered by the existing rules, so the rule set stays
+// identical to CMAT's: `Authorization: Bearer <token>` by R3 and `"token":"<token>"` / `token=<token>` by R6
+// (test/core/msradio/ms_redact_test.dart).
 
 /// Count keys, in the order CMAT reports them.
 const List<String> redactionCountKeys = ['driverKey', 'jwt', 'bearer', 'secret', 'mqtt', 'coords'];
