@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../chat/secret_store.dart';
+import '../core/msradio/ms_tokens.dart' show MsSecretKv;
 
 class KeychainSecretStore implements SecretStore {
   static const String _prefix = 'meshsonar.chat.secret.';
@@ -37,4 +38,27 @@ class KeychainSecretStore implements SecretStore {
 
   @override
   Future<void> delete(String ref) => _s.delete(key: '$_prefix$ref');
+}
+
+/// Keychain / Keystore storage for the MeshSonar radio pairing tokens and last good addresses (lib/core/msradio/ms_tokens.dart),
+/// keyed by the radio's public key. Same accessibility as the channel secrets. Values are never logged.
+class KeychainMsSecretKv implements MsSecretKv {
+  static const String _prefix = 'meshsonar.msradio.';
+  final FlutterSecureStorage _s;
+
+  KeychainMsSecretKv({FlutterSecureStorage? storage})
+      : _s = storage ??
+            const FlutterSecureStorage(
+              iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
+              mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock_this_device, usesDataProtectionKeychain: false),
+            );
+
+  @override
+  Future<String?> read(String key) => _s.read(key: '$_prefix$key');
+
+  @override
+  Future<void> write(String key, String value) => _s.write(key: '$_prefix$key', value: value);
+
+  @override
+  Future<void> delete(String key) => _s.delete(key: '$_prefix$key');
 }

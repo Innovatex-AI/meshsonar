@@ -186,9 +186,18 @@ void main() {
       for (final k in ['NSBluetoothAlwaysUsageDescription', 'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSMotionUsageDescription', 'NSCameraUsageDescription', 'NSPhotoLibraryUsageDescription', 'NSPhotoLibraryAddUsageDescription']) {
         expect(plist, contains(k));
       }
-      for (final k in ['NSMicrophoneUsageDescription', 'NSContactsUsageDescription', 'NSUserTrackingUsageDescription', 'NSLocalNetworkUsageDescription']) {
+      for (final k in ['NSMicrophoneUsageDescription', 'NSContactsUsageDescription', 'NSUserTrackingUsageDescription']) {
         expect(plist, isNot(contains(k)), reason: k);
       }
+    });
+
+    test('MeshSonar radio over Wi-Fi (build 78): Local Network string, Bonjour type, plain HTTP to local addresses only', () {
+      final m = RegExp(r'NSLocalNetworkUsageDescription</key>\s*<string>(.*?)</string>', dotAll: true).firstMatch(plist)!.group(1)!;
+      expect(m, 'MeshSonar talks to your MeshSonar radio on your Wi-Fi.');
+      final bonjour = RegExp(r'NSBonjourServices</key>\s*<array>(.*?)</array>', dotAll: true).firstMatch(plist)!.group(1)!;
+      expect(bonjour.trim(), '<string>_meshsonar._tcp</string>');
+      expect(plist, matches(RegExp(r'NSAppTransportSecurity</key>\s*<dict>\s*<key>NSAllowsLocalNetworking</key>\s*<true/>\s*</dict>')));
+      expect(plist, isNot(contains('NSAllowsArbitraryLoads')));
     });
 
     test('the camera string names its two uses: a photo for a chat, and Scan QR code (nothing from a scan is recorded)', () {
