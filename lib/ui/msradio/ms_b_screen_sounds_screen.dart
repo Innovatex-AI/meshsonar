@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/msradio/msradio.dart';
+import '../design/app_surfaces.dart' show AppSheetScaffold, showAppSheet;
 import 'ms_b_common.dart';
 
 /// Plain labels for the radio's event bits (APP-INTEGRATION.md: `event_bits`).
@@ -145,9 +146,11 @@ class _MsBScreenSoundsScreenState extends State<MsBScreenSoundsScreen> {
     await _set((api) => api.setSettings(quietStart: qs, quietEnd: qe));
   }
 
-  /// Asks for a PIN in an obscured field. The text never leaves this dialog except as the return value.
+  /// Asks for a PIN in an obscured field on a sheet. The text never leaves the sheet except as the return value.
   Future<String?> _askPin({required String key, required String title, required String body, required String confirm}) async {
-    return showDialog<String>(context: context, builder: (_) => _PinDialog(dialogKey: key, title: title, body: body, confirmLabel: confirm));
+    return showAppSheet<String>(context,
+        detents: const [0.92],
+        builder: (_, scroll) => _PinSheet(scroll: scroll, sheetKey: key, title: title, body: body, confirmLabel: confirm));
   }
 
   Future<void> _setPin() async {
@@ -330,14 +333,15 @@ class _MsBScreenSoundsScreenState extends State<MsBScreenSoundsScreen> {
   Widget build(BuildContext context) => MsBPage(c: widget.c, id: 'screen', title: 'Radio screen and sounds', onRefresh: _load, builder: _rows);
 }
 
-class _PinDialog extends StatefulWidget {
-  final String dialogKey, title, body, confirmLabel;
-  const _PinDialog({required this.dialogKey, required this.title, required this.body, required this.confirmLabel});
+class _PinSheet extends StatefulWidget {
+  final ScrollController scroll;
+  final String sheetKey, title, body, confirmLabel;
+  const _PinSheet({required this.scroll, required this.sheetKey, required this.title, required this.body, required this.confirmLabel});
   @override
-  State<_PinDialog> createState() => _PinDialogState();
+  State<_PinSheet> createState() => _PinSheetState();
 }
 
-class _PinDialogState extends State<_PinDialog> {
+class _PinSheetState extends State<_PinSheet> {
   final _pin = TextEditingController();
   String? _problem;
 
@@ -358,31 +362,38 @@ class _PinDialogState extends State<_PinDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        key: Key('msb-pin-dialog-${widget.dialogKey}'),
-        title: Text(widget.title),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(widget.body),
-            const SizedBox(height: 12),
-            TextField(
-              key: const Key('msb-pin-field'),
-              controller: _pin,
-              autofocus: true,
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false,
-              keyboardType: TextInputType.number,
-              autofillHints: const <String>[],
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8)],
-              decoration: InputDecoration(labelText: 'PIN', errorText: _problem, border: const OutlineInputBorder()),
-              onSubmitted: (_) => _ok(),
-            ),
-          ]),
+  Widget build(BuildContext context) => AppSheetScaffold(
+        key: Key('msb-pin-dialog-${widget.sheetKey}'),
+        controller: widget.scroll,
+        title: widget.title,
+        primaryAction: FilledButton(
+          key: const Key('msb-pin-ok'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: _ok,
+          child: Text(widget.confirmLabel),
         ),
-        actions: [
-          TextButton(key: const Key('msb-pin-cancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(key: const Key('msb-pin-ok'), onPressed: _ok, child: Text(widget.confirmLabel)),
+        secondaryAction: TextButton(
+          key: const Key('msb-pin-cancel'),
+          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        children: [
+          Text(widget.body),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('msb-pin-field'),
+            controller: _pin,
+            autofocus: true,
+            obscureText: true,
+            enableSuggestions: false,
+            autocorrect: false,
+            keyboardType: TextInputType.number,
+            autofillHints: const <String>[],
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8)],
+            decoration: InputDecoration(labelText: 'PIN', errorText: _problem, border: const OutlineInputBorder()),
+            onSubmitted: (_) => _ok(),
+          ),
         ],
       );
 }

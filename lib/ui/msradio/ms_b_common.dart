@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_foreground.dart';
 import '../../core/msradio/msradio.dart';
 import '../../platform/file_pick.dart';
+import '../design/app_surfaces.dart' show showAppAlert;
 import '../design/tokens.dart';
 import '../tools/tool_kit.dart' show NoteCard, NoteKind;
 
@@ -188,28 +189,18 @@ class MsBSwitchRow extends StatelessWidget {
       );
 }
 
-/// Asks before an action that cannot be taken back. True when the person confirmed.
+/// Asks before an action that cannot be taken back (the app's alert: Cupertino on Apple platforms). True when confirmed.
 Future<bool> msBConfirm(BuildContext context,
     {required String key, required String title, required String body, required String confirmLabel, bool destructive = false}) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) {
-      final cs = Theme.of(ctx).colorScheme;
-      return AlertDialog(
-        key: Key('msb-confirm-$key'),
-        title: Text(title),
-        content: SingleChildScrollView(child: Text(body)),
-        actions: [
-          TextButton(key: Key('msb-confirm-$key-cancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            key: Key('msb-confirm-$key-ok'),
-            style: destructive ? TextButton.styleFrom(foregroundColor: cs.error) : null,
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(confirmLabel),
-          ),
-        ],
-      );
-    },
+  final ok = await showAppAlert(
+    context,
+    title: title,
+    message: body,
+    confirmLabel: confirmLabel,
+    destructive: destructive,
+    dialogKey: Key('msb-confirm-$key'),
+    confirmKey: Key('msb-confirm-$key-ok'),
+    cancelKey: Key('msb-confirm-$key-cancel'),
   );
   return ok == true;
 }

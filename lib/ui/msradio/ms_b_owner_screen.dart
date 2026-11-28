@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../core/msradio/msradio.dart';
 import '../../core/node_claim.dart';
 import '../app.dart' show AppScope;
+import '../design/app_surfaces.dart' show AppSheetScaffold, showAppSheet;
 import 'ms_b_common.dart';
 
 /// A radio of the person the radio can be linked to.
@@ -111,39 +112,29 @@ class _MsBOwnerScreenState extends State<MsBOwnerScreen> {
 
   Future<void> _link() async {
     final radios = _radios(context);
-    final picked = await showModalBottomSheet<MsBKnownRadio>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        final t = Theme.of(ctx);
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.8),
-            child: ListView(key: const Key('msb-owner-pick'), shrinkWrap: true, padding: const EdgeInsets.only(bottom: 16), children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text('Which of your radios is the owner?', style: t.textTheme.titleMedium),
-              ),
-              if (radios.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: NoteCard('MeshSonar does not know any of your radios yet. Prove your own radio first: connect it and claim it '
-                      'under More > Claimed radios.', key: Key('msb-owner-none')),
-                ),
-              for (final r in radios)
-                ListTile(
-                  key: Key('msb-owner-radio-${r.key.substring(0, 8)}'),
-                  minTileHeight: 48,
-                  leading: const Icon(Icons.settings_input_antenna),
-                  title: Text(r.label),
-                  subtitle: r.detail == null ? null : Text(r.detail!),
-                  onTap: () => Navigator.pop(ctx, r),
-                ),
-            ]),
-          ),
-        );
-      },
+    final picked = await showAppSheet<MsBKnownRadio>(
+      context,
+      detents: const [0.6, 0.92],
+      builder: (ctx, scroll) => AppSheetScaffold(
+        key: const Key('msb-owner-pick'),
+        controller: scroll,
+        title: 'Which of your radios is the owner?',
+        children: [
+          if (radios.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: NoteCard('MeshSonar does not know any of your radios yet. Prove your own radio first: connect it and claim it '
+                  'under More > Claimed radios.', key: Key('msb-owner-none')),
+            ),
+          for (final r in radios)
+            InsetRow(
+              key: Key('msb-owner-radio-${r.key.substring(0, 8)}'),
+              title: r.label,
+              subtitle: r.detail,
+              onTap: () => Navigator.pop(ctx, r),
+            ),
+        ],
+      ),
     );
     if (picked == null || !mounted) return;
     await _act((api) => api.setOwner(ownerKey: picked.key, name: picked.label), 'Linked to ${picked.label}.');
@@ -192,7 +183,7 @@ class _MsBOwnerScreenState extends State<MsBOwnerScreen> {
             style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
             onPressed: _acting ? null : _link,
             icon: const Icon(Icons.link),
-            label: Text(o.linked ? 'Link to another of my radios' : 'Link to my MeshSonar account'),
+            label: Text(o.linked ? 'Link to another radio you claimed' : 'Link to my MeshSonar account'),
           ),
           if (o.linked)
             OutlinedButton(
