@@ -1110,12 +1110,10 @@ class _CoverageMapState extends State<CoverageMap> {
         title: 'Coverage summary',
         summary: _linkBusy ? 'Loading…' : (_linkError ?? coverageSummaryLine(_summaryInfo)),
         busy: _linkBusy,
-        body: SingleChildScrollView(
-          child: CoverageSummarySheet(
-            info: _summaryInfo,
-            meta: cv2?.meta ?? CoverageMeta.fallback,
-            onZoomIn: cv2 == null ? null : () => _zoomIntoSummary(cv2, v2.lat, v2.lon),
-          ),
+        body: CoverageSummarySheet(
+          info: _summaryInfo,
+          meta: cv2?.meta ?? CoverageMeta.fallback,
+          onZoomIn: cv2 == null ? null : () => _zoomIntoSummary(cv2, v2.lat, v2.lon),
         ),
         onClose: _clearLinks,
         bottomSafe: _panelInset == 0,
@@ -1133,14 +1131,12 @@ class _CoverageMapState extends State<CoverageMap> {
             ? 'Loading…'
             : (_linkError ?? coverageCellSummary(info, meta, mine: mine, unplaced: _linkUnplaced)),
         busy: _linkBusy,
-        body: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CoverageCellSheet(info: info, meta: meta, mine: mine, h3: v2.h3, repeaterName: (k) => _placeRepeater(k)?.name),
-              if (!_linkBusy && _linkError == null && (set?.ends.isNotEmpty ?? false)) CellRepeaterList(ends: set!.ends),
-            ],
-          ),
+        body: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CoverageCellSheet(info: info, meta: meta, mine: mine, h3: v2.h3, repeaterName: (k) => _placeRepeater(k)?.name),
+            if (!_linkBusy && _linkError == null && (set?.ends.isNotEmpty ?? false)) CellRepeaterList(ends: set!.ends),
+          ],
         ),
         onFit: !_linkBusy && (set?.ends.isNotEmpty ?? false) ? _fitLinks : null,
         onClose: _clearLinks,
@@ -1162,7 +1158,8 @@ class _CoverageMapState extends State<CoverageMap> {
         title: 'Ping at ${tf.timeOfDay(ping.ts)}',
         summary: summary,
         busy: false,
-        body: PingDetailSheet(ping: ping, lookup: lookup, scrollController: _pingScroll),
+        body: PingDetailSheet(ping: ping, lookup: lookup, embedded: true),
+        scrollController: _pingScroll,
         onFit: n > 0 ? _fitLinks : null,
         onClose: _clearLinks,
         bottomSafe: _panelInset == 0,
@@ -1174,29 +1171,25 @@ class _CoverageMapState extends State<CoverageMap> {
     final units = AppScope.unitsOf(context);
     final Widget body;
     if (p != null) {
+      body = RepeaterInspectorBody(
+        showReach: _linkId != null && !_linkBusy,
+        totals: _reachTotals,
+        cells: set?.ends.length ?? 0,
+        distance: (km) => units.distance(km * 1000),
+        details: RepeaterSheet(
+          point: p,
+          dismissOnOpen: false,
+          scrollable: false,
+          ctx: RepeaterSheetContext(position: here, openRegionPage: widget.openRepeaterPage, units: units),
+        ),
+      );
+    } else {
       body = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_linkId != null && !_linkBusy)
-            RepeaterReachStats(totals: _reachTotals, cells: set?.ends.length ?? 0, distance: (km) => units.distance(km * 1000)),
-          Flexible(
-            child: RepeaterSheet(
-              point: p,
-              dismissOnOpen: false,
-              ctx: RepeaterSheetContext(position: here, openRegionPage: widget.openRepeaterPage, units: units),
-            ),
-          ),
+          CellSheet(cell: cell!),
+          if (_linkId != null && !_linkBusy && _linkError == null) CellRepeaterList(ends: set?.ends ?? const []),
         ],
-      );
-    } else {
-      body = SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CellSheet(cell: cell!),
-            if (_linkId != null && !_linkBusy && _linkError == null) CellRepeaterList(ends: set?.ends ?? const []),
-          ],
-        ),
       );
     }
     return MapInfoPanel(

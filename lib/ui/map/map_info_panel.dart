@@ -26,6 +26,9 @@ class MapInfoPanel extends StatelessWidget {
 
   /// False when the panel sits on top of another panel that already clears the tab bar and the home indicator.
   final bool bottomSafe;
+
+  /// The controller of the panel's one scroll view (the summary, the Fit button and [body] scroll together).
+  final ScrollController? scrollController;
   const MapInfoPanel({
     super.key,
     required this.title,
@@ -36,6 +39,7 @@ class MapInfoPanel extends StatelessWidget {
     this.onFit,
     this.badge,
     this.bottomSafe = true,
+    this.scrollController,
   });
 
   @override
@@ -65,7 +69,12 @@ class MapInfoPanel extends StatelessWidget {
       headerKey: const Key('info-panel-header'),
       bodyKey: const Key('info-panel-body'),
       closeKey: const Key('link-clear'),
-      child: Column(
+      // One scroll view for everything under the header (build 77): at the largest text sizes the summary, the Fit button
+      // and the figures are taller than the room above the Drive dock, and a fixed part above a scrolling body overflowed
+      // (AX3, iPhone 18 Pro: 224 px). [body] must not scroll itself; at normal sizes it all fits and nothing moves.
+      child: SingleChildScrollView(
+        controller: scrollController,
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -83,11 +92,34 @@ class MapInfoPanel extends StatelessWidget {
                 label: const Text('Show all links on the map'),
               ),
             ),
-          Flexible(child: body),
+          body,
         ],
+        ),
       ),
     );
   }
+}
+
+/// The inspector body for a tapped repeater: what every driver's data says about it, then its own details. Does not scroll
+/// itself ([MapInfoPanel] scrolls it).
+class RepeaterInspectorBody extends StatelessWidget {
+  /// Null while the reach figures are not asked for or still loading: only the repeater's own details show.
+  final ReachTotals? totals;
+  final bool showReach;
+  final int cells;
+  final String Function(double km) distance;
+  final Widget details;
+  const RepeaterInspectorBody({super.key, required this.showReach, required this.totals, required this.cells, required this.distance, required this.details});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showReach) RepeaterReachStats(totals: totals, cells: cells, distance: distance),
+          details,
+        ],
+      );
 }
 
 /// The transient panel id of the map inspector.
