@@ -191,25 +191,30 @@ void main() {
   });
 
   group('MeshSonar radio page', () {
-    testWidgets('lists builder A\'s sections in order; before pairing only Pairing opens', (tester) async {
+    testWidgets('lists the sections in order; Owner link only with radio proof; before pairing only Pairing opens', (tester) async {
       final rig = Rig();
       final c = rig.make();
       await settle(tester, c.connect());
+      // no AppScope: the server's radio proof is not offered, so no Owner link row
       await pumpHome(tester, MsRadioPage(controller: c));
       expect(find.byKey(const Key('ms-radio-name')), findsOneWidget);
       expect(find.text('KE4BFI Mobile'), findsOneWidget);
       expect(find.text('Not paired'), findsOneWidget);
-      final keys = ['pairing', 'overview', 'sharing', 'log', 'pairedApps'];
-      final ys = <double>[];
+      final keys = ['pairing', 'overview', 'sharing', 'log', 'mapPack', 'firmware', 'luaApps', 'screenSounds', 'rfTools', 'pairedApps'];
+      final list = find.byType(Scrollable).first;
       for (final k in keys) {
         final f = find.byKey(Key('ms-section-$k'));
-        await tester.scrollUntilVisible(f, 100, scrollable: find.byType(Scrollable).first);
+        await tester.scrollUntilVisible(f, 100, scrollable: list);
         expect(f, findsOneWidget);
-        ys.add(tester.getTopLeft(f).dy);
+        expect(find.descendant(of: f, matching: find.text('Pair first')), k == 'pairing' ? findsNothing : findsOneWidget, reason: k);
+        // the row above it is the one before it in MsSection order
+        final i = keys.indexOf(k);
+        if (i > 0) {
+          final prev = find.byKey(Key('ms-section-${keys[i - 1]}'));
+          if (prev.evaluate().isNotEmpty) expect(tester.getTopLeft(prev).dy, lessThan(tester.getTopLeft(f).dy), reason: k);
+        }
       }
-      // builder B's sections are not built on this branch: no rows
-      expect(find.byKey(const Key('ms-section-mapPack')), findsNothing);
-      expect(find.text('Pair first'), findsNWidgets(4));
+      expect(find.byKey(const Key('ms-section-owner')), findsNothing);
       await tester.scrollUntilVisible(find.byKey(const Key('ms-section-overview')), -100, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.byKey(const Key('ms-section-overview')));
       await tester.pumpAndSettle();

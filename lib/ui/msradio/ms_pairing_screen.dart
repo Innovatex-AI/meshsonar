@@ -34,8 +34,8 @@ class _MsPairingScreenState extends State<MsPairingScreen> {
     if (c.state.step == MsLinkStep.idle) unawaited(c.connect());
   }
 
-  Future<void> _pair({required bool approval}) async {
-    await showMsPairingSheet(context, c, approval: approval);
+  Future<void> _pair({required bool askRadio}) async {
+    await showMsPairingSheet(context, c, askRadio: askRadio);
     if (mounted) setState(() {});
   }
 
@@ -107,11 +107,11 @@ class _MsPairingScreenState extends State<MsPairingScreen> {
                 icon: Icons.wifi_rounded,
                 primary: !st.paired,
                 busy: _busy,
-                onPressed: looking ? null : () => _pair(approval: false)),
+                onPressed: looking ? null : () => _pair(askRadio: false)),
             const MsNote('One tap, nothing to press on the radio. The radio and this phone need the same Wi-Fi, and the '
                 'radio must be connected over Bluetooth.'),
             MsButton('Ask on the radio',
-                key: const Key('ms-pair-ask'), icon: Icons.touch_app_outlined, busy: _busy, onPressed: looking ? null : () => _pair(approval: true)),
+                key: const Key('ms-pair-ask'), icon: Icons.touch_app_outlined, busy: _busy, onPressed: looking ? null : () => _pair(askRadio: true)),
             const MsNote('Works without Bluetooth: the radio asks on its screen, and you tap Allow there.'),
             MsButton('Enter address', key: const Key('ms-enter-address'), icon: Icons.edit_outlined, busy: _busy, onPressed: _enterAddress),
             const MsNote('If the phone cannot find the radio, type the address shown on the radio\'s Wi-Fi screen.'),
@@ -173,15 +173,15 @@ class _AddressSheetState extends State<_AddressSheet> {
 }
 
 // ------------------------------------------------------------------------------------------------ the pairing sheet
-/// Runs one pairing ([approval]: "Ask on the radio"; else signed) in a sheet; returns the end state.
-Future<MsPairState?> showMsPairingSheet(BuildContext context, MsRadioController c, {required bool approval}) => showAppSheet<MsPairState>(
+/// Runs one pairing ([askRadio]: "Ask on the radio"; else signed) in a sheet; returns the end state.
+Future<MsPairState?> showMsPairingSheet(BuildContext context, MsRadioController c, {required bool askRadio}) => showAppSheet<MsPairState>(
       context,
       detents: const [0.7, 0.92],
-      builder: (ctx, sc) => MsPairingSheet(c: c, approval: approval, controller: sc),
+      builder: (ctx, sc) => MsPairingSheet(c: c, askRadio: askRadio, controller: sc),
     );
 
 /// The steps the sheet lists, in order.
-List<(String, Set<MsPairStep>)> msPairSteps({required bool approval}) => approval
+List<(String, Set<MsPairStep>)> msPairSteps({required bool askRadio}) => askRadio
     ? const [
         ('Finding the radio on Wi-Fi', {MsPairStep.idle, MsPairStep.finding}),
         ('Asking the radio', {MsPairStep.asking}),
@@ -224,9 +224,9 @@ String _endDefault(MsPairStep s) => switch (s) {
 
 class MsPairingSheet extends StatefulWidget {
   final MsRadioController c;
-  final bool approval;
+  final bool askRadio;
   final ScrollController controller;
-  const MsPairingSheet({super.key, required this.c, required this.approval, required this.controller});
+  const MsPairingSheet({super.key, required this.c, required this.askRadio, required this.controller});
 
   @override
   State<MsPairingSheet> createState() => _MsPairingSheetState();
@@ -248,7 +248,7 @@ class _MsPairingSheetState extends State<MsPairingSheet> {
 
   void _start() {
     final c = widget.c;
-    final run = widget.approval ? c.pairByApproval() : c.pairSigned();
+    final run = widget.askRadio ? c.pairByApproval() : c.pairSigned();
     // the controller makes the flow synchronously when the call starts
     final f = _flow = c.pairing;
     _sub?.cancel();
@@ -272,7 +272,7 @@ class _MsPairingSheetState extends State<MsPairingSheet> {
   }
 
   void _note(MsPairState s) {
-    final steps = msPairSteps(approval: widget.approval);
+    final steps = msPairSteps(askRadio: widget.askRadio);
     for (var i = 0; i < steps.length; i++) {
       if (steps[i].$2.contains(s.step) && i > _reached) _reached = i;
     }
@@ -290,13 +290,13 @@ class _MsPairingSheetState extends State<MsPairingSheet> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final s = _state;
-    final steps = msPairSteps(approval: widget.approval);
+    final steps = msPairSteps(askRadio: widget.askRadio);
     final done = s.finished;
     final ok = s.paired;
     return AppSheetScaffold(
       key: const Key('ms-pairing-sheet'),
       controller: widget.controller,
-      title: widget.approval ? 'Ask on the radio' : 'Pair over Wi-Fi',
+      title: widget.askRadio ? 'Ask on the radio' : 'Pair over Wi-Fi',
       primaryAction: done
           ? FilledButton(
               key: const Key('ms-pairing-done'),

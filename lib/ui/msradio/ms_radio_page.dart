@@ -10,12 +10,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/msradio/msradio.dart';
-import '../app.dart' show AppScope;
 import '../design/tokens.dart';
 import '../radio/inset_list.dart';
 import 'ms_common.dart';
 import 'ms_radio_host.dart';
 import 'ms_sections.dart';
+import 'ms_sections_b.dart' show msBOwnerAvailable;
 
 /// The plain title of each section on the page.
 String msSectionTitle(MsSection s) => switch (s) {
@@ -138,9 +138,8 @@ class _MsRadioPageState extends State<MsRadioPage> {
           final t = Theme.of(context);
           final name = st.info?.name;
           final rows = <Widget>[];
-          // Owner link only when the server offers radio proof (capabilities.radioProof; brief C.9). After the merge this
-          // is builder B's msBOwnerAvailable(context), which reads the same AppState.radioProofOffered.
-          final ownerOffered = AppScope.maybeOf(context)?.radioProofOffered ?? false;
+          // Owner link only when the server offers radio proof (capabilities.radioProof; brief C.9).
+          final ownerOffered = msBOwnerAvailable(context);
           for (final s in MsSection.values) {
             if (s == MsSection.owner && !ownerOffered) continue;
             final screen = msSectionScreen(s, c);
