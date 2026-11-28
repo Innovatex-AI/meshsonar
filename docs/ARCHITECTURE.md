@@ -446,6 +446,13 @@ views are its drill-in pages) and one editor sheet for every change
 Tests run the whole stack against `test/support/repeater_admin_fake.dart` (a fake companion and repeater that reproduce the measured
 behaviour: silence, the replay rule, loss, caps, prefix matching, the blank-password re-admit, rate limits).
 
+### MeshSonar radio (`lib/core/msradio/`, `lib/ui/msradio/`, build 78)
+- Layers: detection in `lib/radio/meshsonar_fw.dart` and `RadioCaps.meshSonar`; pure-Dart API client (`ms_api.dart`, serial queue, typed errors), models, discovery, pairing state machine, token store and `MsRadioController` in `lib/core/msradio/`; Bonjour browsing (`bonsoir`) and file picking (`file_picker`) behind seams in `lib/platform/ms_service_browser.dart` and `lib/platform/file_pick.dart`; screens in `lib/ui/msradio/`.
+- `MsRadioController.forCaps` returns null on a stock radio, so nothing below it can run.
+- Tokens live in the Keychain / Keystore via `flutter_secure_storage`, one per radio key; the last good address per key is cached for discovery.
+- The Wi-Fi side never touches the Bluetooth companion link except for the one CMD_SIGN_* exchange during signed pairing, guarded by `signablePairText` (only an app-issued nonce younger than 2 minutes, used once).
+- iOS: `NSLocalNetworkUsageDescription`, `NSBonjourServices` `_meshsonar._tcp`, `NSAllowsLocalNetworking`. Android: cleartext allowed only for `*.local` in `network_security_config.xml`.
+
 ## 6. Every file in `lib/`
 
 | File | Layer | Role |
