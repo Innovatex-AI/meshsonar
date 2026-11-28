@@ -154,9 +154,9 @@ class _SharingBodyState extends State<_SharingBody> {
         ],
       ),
       InsetGroup(header: 'Uplink', rows: [
-        InsetRow(title: 'State', value: u.state ?? '—', chevron: false),
-        InsetRow(title: 'Heard', value: '${msCount(l?.heard)} · ${msCount(l?.heardHour)} last hour', chevron: false),
-        InsetRow(title: 'Sent', value: '${msCount(l?.sent)} · ${msCount(l?.sentHour)} last hour', chevron: false),
+        MsValueRow('State', u.state ?? '—'),
+        MsValueRow('Heard', '${msCount(l?.heard)} · ${msCount(l?.heardHour)} last hour'),
+        MsValueRow('Sent', '${msCount(l?.sent)} · ${msCount(l?.sentHour)} last hour'),
       ]),
       Padding(
         padding: const EdgeInsets.fromLTRB(Layout.screenMargin + Gap.xs, 0, Layout.screenMargin + Gap.xs, Gap.l),

@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -13,6 +14,7 @@ import 'package:meshsonar/radio/caps.dart';
 import 'package:meshsonar/radio/protocol.dart';
 import 'package:meshsonar/ui/app.dart' show AppScope;
 import 'package:meshsonar/ui/design/app_surfaces.dart' show dismissAppToast;
+import 'package:meshsonar/ui/msradio/ms_common.dart' show MsValueRow;
 import 'package:meshsonar/ui/msradio/ms_log_screen.dart';
 import 'package:meshsonar/ui/msradio/ms_overview_screen.dart';
 import 'package:meshsonar/ui/msradio/ms_paired_apps_screen.dart';
@@ -468,6 +470,54 @@ void main() {
       expect(await settle(tester, MsTokenStore(rig.secrets).read(rig.radio.keyHex)), isNull);
       dismissAppToast();
       await tester.pump(const Duration(seconds: 6));
+    });
+  });
+
+  group('normal text on a 402-wide phone: nothing squeezed into a narrow column', () {
+    const wide = Size(402, 874);
+    /// The rendered text of [f] is one line high.
+    void oneLine(WidgetTester tester, Finder f) {
+      final p = tester.renderObject<RenderParagraph>(f);
+      final tp = TextPainter(text: p.text, textDirection: TextDirection.ltr, textScaler: p.textScaler)..layout();
+      expect(p.size.height, closeTo(tp.height, 1), reason: '${p.text.toPlainText()} wraps');
+    }
+
+    for (final b in Brightness.values) {
+      testWidgets('paired apps: "MeshSonar iOS" on one line, Remove under it (${b.name})', (tester) async {
+        final rig = Rig();
+        final c = await rig.paired(tester);
+        await pumpHome(tester, MsPairedAppsScreen(c), size: wide, brightness: b);
+        oneLine(tester, find.byKey(const Key('ms-token-name-0')));
+        expect(find.text('MeshSonar iOS'), findsOneWidget);
+        expect(tester.getTopLeft(find.byKey(const Key('ms-revoke-0'))).dy, greaterThan(tester.getBottomLeft(find.byKey(const Key('ms-token-name-0'))).dy));
+        expect(tester.getSize(find.byKey(const Key('ms-token-0'))).width, greaterThan(300));
+      });
+    }
+
+    testWidgets('overview: the clock value is beside its label on one line, or under it at full width', (tester) async {
+      final rig = Rig();
+      final c = await rig.paired(tester);
+      await pumpHome(tester, MsOverviewScreen(c), size: wide, brightness: Brightness.dark);
+      final clock = find.textContaining('(from GPS)');
+      expect(clock, findsOneWidget);
+      final label = find.text('Clock');
+      final beside = (tester.getCenter(clock).dy - tester.getCenter(label).dy).abs() < 2;
+      if (beside) {
+        oneLine(tester, clock);
+      } else {
+        // the test font is much wider than the phone's: here the value goes under the label, starting at its left edge
+        expect(tester.getTopLeft(clock).dy, greaterThanOrEqualTo(tester.getBottomLeft(label).dy - 1));
+        expect(tester.getTopLeft(clock).dx, closeTo(tester.getTopLeft(label).dx, 1));
+        expect(tester.renderObject<RenderParagraph>(clock).size.width, greaterThan(300));
+      }
+    });
+
+    testWidgets('a value that does not fit goes under its label, whole words', (tester) async {
+      await pumpHome(tester, const Scaffold(body: Column(children: [MsValueRow('A long label here', 'a value that is much too long to sit beside it')])), size: const Size(320, 600));
+      final label = find.text('A long label here'), value = find.text('a value that is much too long to sit beside it');
+      expect(tester.getTopLeft(value).dy, greaterThan(tester.getBottomLeft(label).dy - 1));
+      oneLine(tester, label);
+      expect(tester.takeException(), isNull);
     });
   });
 

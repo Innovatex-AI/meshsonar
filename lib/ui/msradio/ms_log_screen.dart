@@ -112,17 +112,17 @@ class _LogBodyState extends State<_LogBody> {
     return MsBody(listKey: const Key('ms-log-list'), children: [
       if (widget.live.refreshError != null) MsBanner('Not updated: ${widget.live.refreshError}'),
       InsetGroup(header: 'Backlog', rows: [
-        InsetRow(title: 'Waiting to upload', value: msCount(l?.pending), chevron: false),
-        InsetRow(title: 'Sent from backlog', value: msCount(l?.backlogSent), chevron: false),
-        InsetRow(title: 'Oldest waiting', value: l?.backlogMaxS == null || (l?.pending ?? 0) == 0 ? '—' : msDuration(l!.backlogMaxS), chevron: false),
-        InsetRow(title: 'Dropped', value: msCount(l?.dropped), chevron: false),
+        MsValueRow('Waiting to upload', msCount(l?.pending)),
+        MsValueRow('Sent from backlog', msCount(l?.backlogSent)),
+        MsValueRow('Oldest waiting', l?.backlogMaxS == null || (l?.pending ?? 0) == 0 ? '—' : msDuration(l!.backlogMaxS)),
+        MsValueRow('Dropped', msCount(l?.dropped)),
       ]),
       InsetGroup(header: 'Log', rows: [
-        InsetRow(title: 'Logged', value: msCount(l?.logged), chevron: false),
-        InsetRow(title: 'GPS points', value: msCount(l?.gpsPoints), chevron: false),
-        InsetRow(title: 'Log size', value: msBytes(l?.logBytes), chevron: false),
+        MsValueRow('Logged', msCount(l?.logged)),
+        MsValueRow('GPS points', msCount(l?.gpsPoints)),
+        MsValueRow('Log size', msBytes(l?.logBytes)),
         if (d.spiffsUsed != null && d.spiffsTotal != null)
-          InsetRow(title: 'Radio storage', value: '${msBytes(d.spiffsUsed)} of ${msBytes(d.spiffsTotal)} used', chevron: false),
+          MsValueRow('Radio storage', '${msBytes(d.spiffsUsed)} of ${msBytes(d.spiffsTotal)} used'),
       ]),
       if (n > 0)
         Padding(
@@ -144,13 +144,8 @@ class _LogBodyState extends State<_LogBody> {
         ),
       InsetGroup(header: 'Files', rows: [
         for (final f in d.files)
-          InsetRow(
-            key: Key('ms-log-file-${f.which.name}'),
-            title: f.which == MsLogWhich.old ? 'Older log' : 'Current log',
-            subtitle: f.path.isEmpty ? null : f.path,
-            value: msBytes(f.size),
-            chevron: false,
-          ),
+          MsValueRow(f.which == MsLogWhich.old ? 'Older log' : 'Current log', msBytes(f.size),
+              key: Key('ms-log-file-${f.which.name}'), subtitle: f.path.isEmpty ? null : f.path),
       ]),
       if (_saving != null) MsNote(_saving!),
       MsButton('Save log to phone',

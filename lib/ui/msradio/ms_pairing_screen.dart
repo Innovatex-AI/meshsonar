@@ -91,11 +91,11 @@ class _MsPairingScreenState extends State<MsPairingScreen> {
                 'firmware updates and more. The app and the radio prove to each other that the radio on Wi-Fi is the one '
                 'connected over Bluetooth. Nothing about the Bluetooth link changes.'),
             InsetGroup(header: 'This radio', rows: [
-              InsetRow(title: 'State', value: st.chip, chevron: false),
-              InsetRow(title: 'Name', value: (info?.name?.isNotEmpty ?? false) ? info!.name! : '—', chevron: false),
-              InsetRow(title: 'Key', value: msKeyPrefix(c.radioKey), chevron: false),
-              InsetRow(title: 'Address', value: info?.ip ?? st.address ?? '—', chevron: false),
-              InsetRow(title: 'Host', value: info?.host ?? 'meshsonar-${c.radioKey.substring(0, 8)}.local', chevron: false),
+              MsValueRow('State', st.chip),
+              MsValueRow('Name', (info?.name?.isNotEmpty ?? false) ? info!.name! : '—'),
+              MsValueRow('Key', msKeyPrefix(c.radioKey)),
+              MsValueRow('Address', info?.ip ?? st.address ?? '—'),
+              MsValueRow('Host', info?.host ?? 'meshsonar-${c.radioKey.substring(0, 8)}.local'),
             ]),
             if (st.step == MsLinkStep.notOnWifi || st.step == MsLinkStep.wrongRadio) MsNotReady(c),
             if (st.paired)

@@ -89,29 +89,38 @@ class _AppsBodyState extends State<_AppsBody> {
           child: Material(
             color: t.colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(Corners.chip),
-            child: ListTile(
+            // Text first, full width; Remove under it (a trailing button squeezed the name into a narrow column).
+            child: Padding(
               key: Key('ms-token-${e.i}'),
-              minVerticalPadding: Gap.s,
-              title: Wrap(spacing: Gap.s, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                Text(e.app),
-                if (e.me)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: 2),
-                    decoration: BoxDecoration(color: t.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(999)),
-                    child: Text('This app', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onPrimaryContainer)),
-                  ),
+              padding: const EdgeInsets.fromLTRB(Layout.screenMargin, Gap.s + 2, Layout.screenMargin, Gap.xs),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Wrap(spacing: Gap.s, runSpacing: Gap.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  Text(e.app, key: Key('ms-token-name-${e.i}'), style: t.textTheme.bodyLarge),
+                  if (e.me)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: Gap.s, vertical: 2),
+                      decoration: BoxDecoration(color: t.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(999)),
+                      child: Text('This app', style: t.textTheme.labelSmall?.copyWith(color: t.colorScheme.onPrimaryContainer)),
+                    ),
+                ]),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    _via(e.via),
+                    if (e.created != null) 'Since ${tf.dateOnly(e.created)}',
+                    if (e.seenS != null) 'Last seen ${msDuration(e.seenS)} ago',
+                  ].join('\n'),
+                  style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                ),
+                TextButton.icon(
+                  key: Key('ms-revoke-${e.i}'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: t.colorScheme.error, minimumSize: Size(Hit.of(context), Hit.of(context)), padding: const EdgeInsets.symmetric(horizontal: 0)),
+                  onPressed: _busy ? null : () => _revoke(e),
+                  icon: const Icon(Icons.remove_circle_outline, size: 20),
+                  label: Text('Remove', semanticsLabel: 'Remove ${e.app}'),
+                ),
               ]),
-              subtitle: Text([
-                _via(e.via),
-                if (e.created != null) 'Since ${tf.dateOnly(e.created)}',
-                if (e.seenS != null) 'Last seen ${msDuration(e.seenS)} ago',
-              ].join('\n')),
-              trailing: TextButton(
-                key: Key('ms-revoke-${e.i}'),
-                style: TextButton.styleFrom(foregroundColor: t.colorScheme.error, minimumSize: Size(Hit.of(context), Hit.of(context))),
-                onPressed: _busy ? null : () => _revoke(e),
-                child: const Text('Remove'),
-              ),
             ),
           ),
         ),

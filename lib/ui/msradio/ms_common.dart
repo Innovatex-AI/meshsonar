@@ -375,3 +375,55 @@ class MsBanner extends StatelessWidget {
     );
   }
 }
+
+// ------------------------------------------------------------------------------------------------ value row
+/// A label and its value in an [InsetGroup] (lib/ui/radio/inset_list.dart). The value sits beside the label when both
+/// fit on one line and goes under the label when they do not (large text, long values), so neither is squeezed into a
+/// narrow column; lines break only between words.
+class MsValueRow extends StatelessWidget {
+  final String title;
+  final String value;
+  final String? subtitle;
+  const MsValueRow(this.title, this.value, {super.key, this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final c = t.colorScheme;
+    final titleStyle = t.textTheme.bodyLarge?.copyWith(color: c.onSurface);
+    final valueStyle = t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant);
+    return Semantics(
+      container: true,
+      label: '$title, $value',
+      excludeSemantics: true,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: Hit.of(context)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s + 2),
+          child: LayoutBuilder(builder: (context, box) {
+            final scaler = MediaQuery.textScalerOf(context);
+            double width(String s, TextStyle? st) =>
+                (TextPainter(text: TextSpan(text: s, style: st), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)..layout()).width;
+            final side = width(title, titleStyle) + Gap.m + width(value, valueStyle) <= box.maxWidth;
+            final label = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(title, style: titleStyle),
+              if (subtitle != null) Text(subtitle!, style: t.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+            ]);
+            if (side) {
+              return Row(children: [
+                Expanded(child: label),
+                const SizedBox(width: Gap.m),
+                Text(value, style: valueStyle, textAlign: TextAlign.end),
+              ]);
+            }
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              label,
+              const SizedBox(height: 2),
+              Text(value, style: valueStyle),
+            ]);
+          }),
+        ),
+      ),
+    );
+  }
+}
