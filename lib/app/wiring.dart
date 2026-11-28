@@ -103,7 +103,7 @@ Future<AppServices> buildRealServices() async {
     // The proven engine unless Settings > Diagnostics > Background Bluetooth test switches the experiment on (S1).
     bluetoothScanner: SwitchableRadioScanner(
         reactive: BleRadioScanner(), universal: UniversalBleRadioScanner(), useUniversal: () => BleEngineChoice.universal),
-    simulatorScanner: simLocation == null ? const NoRadioScanner() : SimulatedRadioScanner(location: simLocation, ambientTraffic: true),
+    simulatorScanner: simLocation == null ? const NoRadioScanner() : SimulatedRadioScanner(location: simLocation, ambientTraffic: true, offerMeshSonar: true),
     linkFactory: (transport) => MeshCoreCompanionLink(transport),
     // Real GPS, cleaned: parked jitter is held still, poor fixes dropped (lib/core/position_filter.dart).
     location: realLocation,

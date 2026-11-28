@@ -14,6 +14,7 @@ import '../alerts/saved_radios_store.dart';
 import '../app/app_state.dart';
 import '../app/build_flags.dart';
 import '../radio/radio_api.dart';
+import '../radio/simulator.dart' show SimulatedRadioScanner;
 import '../platform/open_url.dart' show openAppSettingsPage;
 import 'app.dart';
 import 'saved_radios_screen.dart';
@@ -166,7 +167,9 @@ class _ConnectScreenState extends State<ConnectScreen> with WidgetsBindingObserv
       _scanning = false;
       _connectingId = d.id;
     });
-    final ok = kind == RadioKind.simulator ? await s.connectSimulator() : await s.connect(d, kind);
+    final ok = kind == RadioKind.simulator
+        ? await s.connectSimulator(meshSonar: d.id == SimulatedRadioScanner.meshSonarDevice.id)
+        : await s.connect(d, kind);
     if (!mounted) return;
     setState(() => _connectingId = null);
     if (ok) Navigator.of(context).pop();
@@ -329,6 +332,23 @@ class _ConnectScreenState extends State<ConnectScreen> with WidgetsBindingObserv
                     enabled: !busy,
                     onTap: () =>
                         _connect(const RadioDevice(id: 'simulator', name: 'MeshSonar Simulator'), RadioKind.simulator),
+                  ),
+                ),
+                // Build 78: the same pretend radio running MeshSonar Firmware (its Wi-Fi side is a fake radio inside the app),
+                // for trying and screenshotting More > Radio > MeshSonar radio. The card above stays the default Simulator.
+                Card(
+                  child: ListTile(
+                    key: const Key('simulator-meshsonar'),
+                    minTileHeight: 72,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: Gap.l, vertical: Gap.xs),
+                    leading: _IconBadge(icon: Icons.wifi_tethering_rounded, color: t.colorScheme.onSurfaceVariant),
+                    title: const Text('Simulator with a MeshSonar radio'),
+                    subtitle: const Text('The pretend radio runs MeshSonar Firmware, with a pretend Wi-Fi side.'),
+                    trailing: _connectingId == SimulatedRadioScanner.meshSonarDevice.id && s.connecting
+                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
+                        : const Icon(Icons.chevron_right_rounded),
+                    enabled: !busy,
+                    onTap: () => _connect(SimulatedRadioScanner.meshSonarDevice, RadioKind.simulator),
                   ),
                 ),
             ],
