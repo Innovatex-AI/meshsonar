@@ -77,9 +77,15 @@ class CellSheet extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            value,
-            style: t.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+          // Flexible with a gap, as the repeater sheet's rows (build 77 AX fix): at the largest text sizes a long value wraps
+          // instead of running off the right edge.
+          const SizedBox(width: Gap.s),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: t.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -102,7 +108,7 @@ class CellSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: Gap.s),
-              Text('Coverage cell', style: t.textTheme.titleLarge),
+              Flexible(child: Text('Coverage cell', style: t.textTheme.titleLarge)),
             ],
           ),
           const SizedBox(height: Gap.s),

@@ -99,7 +99,10 @@ class RepeaterSheet extends StatelessWidget {
 
   /// The sheet's scroll controller, so dragging the content hands off to the sheet.
   final ScrollController? scrollController;
-  const RepeaterSheet({super.key, required this.point, this.ctx = const RepeaterSheetContext(), this.dismissOnOpen = true, this.scrollController});
+
+  /// False inside a parent that scrolls (the map inspector): the sheet is a plain column and does not scroll itself.
+  final bool scrollable;
+  const RepeaterSheet({super.key, required this.point, this.ctx = const RepeaterSheetContext(), this.dismissOnOpen = true, this.scrollController, this.scrollable = true});
 
   @override
   Widget build(BuildContext context) {
@@ -132,9 +135,7 @@ class RepeaterSheet extends StatelessWidget {
     final distance = pos == null ? null : haversineM(pos.latitude, pos.longitude, p.lat, p.lon);
     final seenVerb = p.source == RepeaterPointSource.global ? 'Last advert' : 'Last heard';
     final open = ctx.openRegionPage;
-    return SingleChildScrollView(
-      controller: scrollController,
-      child: Padding(
+    final content = Padding(
         key: const Key('repeater-sheet'),
         padding: const EdgeInsets.fromLTRB(Gap.l, 0, Gap.l, Gap.m),
         child: Column(
@@ -191,8 +192,8 @@ class RepeaterSheet extends StatelessWidget {
             Text(sourceText(p), key: const Key('repeater-sheet-source'), style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
           ],
         ),
-      ),
     );
+    return scrollable ? SingleChildScrollView(controller: scrollController, child: content) : content;
   }
 }
 

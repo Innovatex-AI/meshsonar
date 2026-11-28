@@ -79,7 +79,10 @@ class PingDetailSheet extends StatelessWidget {
   final RepeaterLookup lookup;
   final ScrollController? scrollController;
   final void Function(String repeaterId)? onRepeaterTap;
-  const PingDetailSheet({super.key, required this.ping, required this.lookup, this.scrollController, this.onRepeaterTap});
+
+  /// True inside a parent that scrolls (the map inspector): the list takes its full height and does not scroll itself.
+  final bool embedded;
+  const PingDetailSheet({super.key, required this.ping, required this.lookup, this.scrollController, this.onRepeaterTap, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +101,10 @@ class PingDetailSheet extends StatelessWidget {
     ];
     return ListView(
       key: const Key('ping-detail'),
-      controller: scrollController,
+      controller: embedded ? null : scrollController,
+      shrinkWrap: embedded,
+      primary: embedded ? false : null,
+      physics: embedded ? const NeverScrollableScrollPhysics() : null,
       padding: const EdgeInsets.only(bottom: Gap.xl),
       children: [
         Padding(
@@ -197,7 +203,8 @@ class _Heading extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.l, Gap.l, Gap.l, Gap.xs),
       child: Row(children: [
-        Text(text, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        // Flexible: at the largest text sizes the heading wraps instead of running off the right edge (build 77 AX fix).
+        Flexible(child: Text(text, style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
         if (trailing != null) ...[
           const SizedBox(width: Gap.s),
           Text(trailing!, style: t.textTheme.titleSmall?.copyWith(color: t.colorScheme.onSurfaceVariant)),
