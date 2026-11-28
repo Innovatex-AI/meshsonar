@@ -44,8 +44,10 @@ void checkCredit(String where, {String key = 'map-attribution-text'}) {
   final f = find.byKey(Key(key));
   if (f.evaluate().isEmpty) throw StateError('$where: no credit ($key)');
   final text = (f.evaluate().first.widget as Text).data ?? '';
-  if (!(text.contains('Protomaps') || text.contains('OpenFreeMap') || text.contains('OpenTopoMap'))) {
-    throw StateError('$where: credit "$text" does not name the basemap source');
+  // Build 77 (round 1 decision 5, Andy 2026-11-27): the line is "© OpenStreetMap (i)" (Satellite: the imagery credit);
+  // Protomaps / OpenFreeMap / OpenTopoMap are named in the credits sheet the (i) opens.
+  if (!(text.contains('OpenStreetMap') || text.contains('Esri') || text.contains('USGS'))) {
+    throw StateError('$where: credit "$text" names neither OpenStreetMap nor the imagery source');
   }
   // ignore: avoid_print
   print('CREDIT $where "$text"');
