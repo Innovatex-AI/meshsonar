@@ -167,10 +167,10 @@ class _MsBFirmwareScreenState extends State<MsBFirmwareScreen> {
         groupKey: const Key('msb-fw-offer'),
         footer: f.checkedSAgo == null ? null : 'Checked ${_ago(f.checkedSAgo!)}.',
         rows: [
-          InsetRow(title: 'Version', value: '${f.version ?? 'unknown'}${f.build == null ? '' : ' (build ${f.build})'}', chevron: false),
-          InsetRow(title: 'Size', value: msBBytes(f.size), chevron: false),
-          InsetRow(title: 'Channel', value: f.channel == null ? 'unknown' : (f.channel == 'beta' ? 'Beta' : 'Stable'), chevron: false),
-          if (f.minVersion != null) InsetRow(title: 'Needs at least', value: f.minVersion, chevron: false),
+          MsBValueRow(title: 'Version', value: '${f.version ?? 'unknown'}${f.build == null ? '' : ' (build ${f.build})'}'),
+          MsBValueRow(title: 'Size', value: msBBytes(f.size)),
+          MsBValueRow(title: 'Channel', value: f.channel == null ? 'unknown' : (f.channel == 'beta' ? 'Beta' : 'Stable')),
+          if (f.minVersion != null) MsBValueRow(title: 'Needs at least', value: f.minVersion),
           if (f.notes != null && f.notes!.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -220,9 +220,9 @@ class _MsBFirmwareScreenState extends State<MsBFirmwareScreen> {
       if (_note != null) MsBBlock(child: NoteCard(_note!, key: const Key('msb-fw-note'))),
       if (o != null) ...[
         InsetGroup(header: 'Running now', groupKey: const Key('msb-fw-running'), rows: [
-          InsetRow(title: 'Version', value: o.fw ?? 'unknown', chevron: false),
-          InsetRow(title: 'Board', value: o.board ?? 'unknown', chevron: false),
-          InsetRow(title: 'Slot', value: o.slot ?? 'unknown', chevron: false),
+          MsBValueRow(title: 'Version', value: o.fw ?? 'unknown'),
+          MsBValueRow(title: 'Board', value: o.board ?? 'unknown'),
+          MsBValueRow(title: 'Slot', value: o.slot ?? 'unknown'),
           if (o.lastResult.trim().isNotEmpty) InsetRow(key: const Key('msb-fw-last'), title: 'Last result', subtitle: o.lastResult.trim(), chevron: false),
         ]),
         if (o.pendingVerify)

@@ -224,7 +224,11 @@ class _MsBRfToolsScreenState extends State<MsBRfToolsScreen> {
             for (final band in msBBands(_meshMhz))
               ChoiceChip(
                 key: Key('msb-rf-band-${band.id}'),
-                label: Text(band.id == 'mesh' ? '${band.label} (${_mhz(band.f0)}-${_mhz(band.f1)})' : band.label),
+                // a chip never clips: its label wraps within the screen width (the range is in the line under the pickers)
+                label: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: math.max(80, MediaQuery.sizeOf(context).width - 2 * Layout.screenMargin - 64)),
+                  child: Text(band.label, softWrap: true),
+                ),
                 selected: _band == band.id,
                 onSelected: scanning || busy ? null : (_) => _chooseBand(band.id),
               ),
@@ -358,9 +362,9 @@ class _MsBRfToolsScreenState extends State<MsBRfToolsScreen> {
       header: newest ? 'Newest result${when == null ? '' : ', $when'}' : (when ?? 'Earlier'),
       groupKey: Key('msb-rf-probe-${r.seq ?? r.ms}'),
       rows: [
-        InsetRow(title: 'Answered', value: '${p?.answered ?? 0} node${(p?.answered ?? 0) == 1 ? '' : 's'}', chevron: false),
-        InsetRow(title: 'Best SNR', value: db(r.bestSnr), chevron: false),
-        InsetRow(title: 'Best RSSI', value: r.bestRssi == null ? 'unknown' : '${r.bestRssi} dBm', chevron: false),
+        MsBValueRow(title: 'Answered', value: '${p?.answered ?? 0} node${(p?.answered ?? 0) == 1 ? '' : 's'}'),
+        MsBValueRow(title: 'Best SNR', value: db(r.bestSnr)),
+        MsBValueRow(title: 'Best RSSI', value: r.bestRssi == null ? 'unknown' : '${r.bestRssi} dBm'),
         InsetRow(title: 'Repeater ping', subtitle: ping.trim(), chevron: false),
         for (final n in nodes)
           InsetRow(

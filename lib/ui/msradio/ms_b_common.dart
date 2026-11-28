@@ -170,6 +170,53 @@ class MsBProgress extends StatelessWidget {
       );
 }
 
+/// A label and its value in an inset group. Side by side when both fit on one line each, otherwise the value goes under
+/// the label with the full width, so a value is never squeezed into a narrow column and broken inside a word.
+class MsBValueRow extends StatelessWidget {
+  final String title;
+  final String? value;
+  const MsBValueRow({super.key, required this.title, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final c = t.colorScheme;
+    final ts = t.textTheme.bodyLarge?.copyWith(color: c.onSurface);
+    final vs = t.textTheme.bodyMedium?.copyWith(color: c.onSurfaceVariant);
+    final v = value ?? '';
+    return Semantics(
+      container: true,
+      label: v.isEmpty ? title : '$title, $v',
+      excludeSemantics: true,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: Hit.of(context)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Layout.screenMargin, vertical: Gap.s + 2),
+          child: LayoutBuilder(builder: (context, box) {
+            final scaler = MediaQuery.textScalerOf(context);
+            double width(String s, TextStyle? st) =>
+                (TextPainter(text: TextSpan(text: s, style: st), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)..layout()).width;
+            final fits = v.isEmpty || width(title, ts) + Gap.m + width(v, vs) <= box.maxWidth;
+            final valueText = Text(v, key: const Key('msb-value'), style: vs, textAlign: fits ? TextAlign.end : TextAlign.start);
+            if (fits) {
+              return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                Text(title, style: ts),
+                const SizedBox(width: Gap.m),
+                Expanded(child: valueText),
+              ]);
+            }
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: ts),
+              const SizedBox(height: 2),
+              valueText,
+            ]);
+          }),
+        ),
+      ),
+    );
+  }
+}
+
 /// A switch row in an inset group (the whole row toggles; at least 44 pt).
 class MsBSwitchRow extends StatelessWidget {
   final String title;

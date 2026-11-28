@@ -109,7 +109,7 @@ void main() {
         await msBPump(t, msSectionScreen(MsSection.rfTools, rig.c)!, b: b);
         expect(find.byKey(const Key('msb-rf')), findsOneWidget);
         expect(find.text('US 902-928'), findsOneWidget);
-        expect(find.text('Around the mesh frequency (908.525-912.525)'), findsOneWidget);
+        expect(find.text('Around the mesh frequency'), findsOneWidget);
         expect(find.text('EU 863-870'), findsOneWidget);
         expect(find.byKey(const Key('msb-rf-chart')), findsOneWidget);
         expect(find.text('Scanning: 902 to 928 MHz, 4 sweeps.'), findsOneWidget);

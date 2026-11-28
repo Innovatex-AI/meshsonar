@@ -1,5 +1,6 @@
 // Builder B: Map pack and Firmware screens against the fake radio (fixture JSON from APP-INTEGRATION.md).
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshsonar/core/msradio/msradio.dart';
 import 'package:meshsonar/platform/file_pick.dart';
@@ -231,5 +232,38 @@ void main() {
     expect(rig.c.state.step, MsLinkStep.notPaired);
     expect(find.text('Pair again'), findsOneWidget);
     await msBEnd(t, rig);
+  });
+
+  group('value rows never split a word (402 pt phone)', () {
+    int lines(WidgetTester t, String text) {
+      final rp = t.renderObject<RenderParagraph>(find.text(text));
+      final tp = TextPainter(text: rp.text, textDirection: TextDirection.ltr, textScaler: rp.textScaler)..layout(maxWidth: rp.size.width);
+      return tp.computeLineMetrics().length;
+    }
+
+    // normal text size (the test font draws every glyph as a square, so at 2.0 a 15-letter id cannot fit 338 pt at all)
+    for (final scale in [1.0]) {
+      testWidgets('firmware and map pack values at text scale $scale', (t) async {
+        msBPhone(t, width: 402);
+        final rig = await MsBRig.paired(t);
+        await msBPump(t, MsBFirmwareScreen(c: rig.c), b: Brightness.dark, textScale: scale);
+        expect(lines(t, 'heltec_v4_touch'), 1);
+        expect(lines(t, '0.2.0 (build 12)'), 1);
+        await msBPump(t, MsBMapPackScreen(c: rig.c), b: Brightness.dark, textScale: scale);
+        expect(lines(t, 'Columbus'), 1);
+        expect(lines(t, '8 to 14 (opens at 12)'), 1);
+        await msBEnd(t, rig);
+      });
+    }
+
+    testWidgets('a value that does not fit beside its label goes under it', (t) async {
+      msBPhone(t, width: 402);
+      final rig = await MsBRig.paired(t);
+      await msBPump(t, MsBFirmwareScreen(c: rig.c), textScale: 2.0);
+      final label = t.getRect(find.text('Board'));
+      final value = t.getRect(find.text('heltec_v4_touch'));
+      expect(value.top, greaterThanOrEqualTo(label.bottom));
+      await msBEnd(t, rig);
+    });
   });
 }

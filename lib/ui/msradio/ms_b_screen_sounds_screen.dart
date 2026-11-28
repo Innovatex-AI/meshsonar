@@ -299,8 +299,8 @@ class _MsBScreenSoundsScreenState extends State<MsBScreenSoundsScreen> {
         groupKey: const Key('msb-set-lock'),
         footer: lock.set ? 'Lock now needs the PIN on the radio to unlock it.' : 'Set a PIN to be able to lock the radio\'s screen.',
         rows: [
-          InsetRow(title: 'PIN', value: lock.set ? 'Set' : 'Not set', chevron: false),
-          InsetRow(title: 'Screen', value: lock.locked ? 'Locked' : 'Not locked', chevron: false),
+          MsBValueRow(title: 'PIN', value: lock.set ? 'Set' : 'Not set'),
+          MsBValueRow(title: 'Screen', value: lock.locked ? 'Locked' : 'Not locked'),
         ],
       ),
       MsBButtons([

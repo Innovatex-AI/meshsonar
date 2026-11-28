@@ -134,16 +134,16 @@ class _MsBMapPackScreenState extends State<MsBMapPackScreen> {
             child: NoteCard('There is no map pack on the radio yet. Send one to see streets on the radio\'s map.',
                 key: Key('msb-maps-empty'), title: 'No map pack')));
         out.add(InsetGroup(header: 'Storage', rows: [
-          InsetRow(title: 'Free space', value: m.spaceKb == null ? 'unknown' : msBBytes(m.spaceKb! * 1024), chevron: false),
+          MsBValueRow(title: 'Free space', value: m.spaceKb == null ? 'unknown' : msBBytes(m.spaceKb! * 1024)),
         ]));
       } else {
         final zooms = p.zmin == null || p.zmax == null ? 'unknown' : '${p.zmin} to ${p.zmax}${p.zdef == null ? '' : ' (opens at ${p.zdef})'}';
         out.add(InsetGroup(header: 'Map pack on the radio', groupKey: const Key('msb-maps-pack'), rows: [
-          InsetRow(title: 'Name', value: p.name ?? 'No name', chevron: false),
-          InsetRow(title: 'Zoom levels', value: zooms, chevron: false),
-          InsetRow(title: 'Tiles', value: p.tiles == null ? 'unknown' : '${p.tiles}', chevron: false),
-          InsetRow(title: 'Size', value: msBBytes(p.bytes), chevron: false),
-          InsetRow(title: 'Free space', value: m.spaceKb == null ? 'unknown' : msBBytes(m.spaceKb! * 1024), chevron: false),
+          MsBValueRow(title: 'Name', value: p.name ?? 'No name'),
+          MsBValueRow(title: 'Zoom levels', value: zooms),
+          MsBValueRow(title: 'Tiles', value: p.tiles == null ? 'unknown' : '${p.tiles}'),
+          MsBValueRow(title: 'Size', value: msBBytes(p.bytes)),
+          MsBValueRow(title: 'Free space', value: m.spaceKb == null ? 'unknown' : msBBytes(m.spaceKb! * 1024)),
         ]));
       }
     }

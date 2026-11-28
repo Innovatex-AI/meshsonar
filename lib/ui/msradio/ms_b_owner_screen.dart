@@ -163,9 +163,9 @@ class _MsBOwnerScreenState extends State<MsBOwnerScreen> {
       if (_note != null) MsBBlock(child: NoteCard(_note!, key: const Key('msb-owner-note'), kind: NoteKind.good)),
       if (o != null) ...[
         InsetGroup(header: 'MeshSonar account', groupKey: const Key('msb-owner-state'), rows: [
-          InsetRow(title: 'Linked', value: linkedTo == null ? 'Not linked' : 'Linked to $linkedTo', chevron: false),
-          if (o.linked && o.ownerKey != null) InsetRow(title: 'Owner key', value: o.ownerKey!.substring(0, 8), chevron: false),
-          if (o.share != null) InsetRow(title: 'Sharing with MeshSonar', value: o.share! ? 'On' : 'Off', chevron: false),
+          MsBValueRow(title: 'Linked', value: linkedTo == null ? 'Not linked' : 'Linked to $linkedTo'),
+          if (o.linked && o.ownerKey != null) MsBValueRow(title: 'Owner key', value: o.ownerKey!.substring(0, 8)),
+          if (o.share != null) MsBValueRow(title: 'Sharing with MeshSonar', value: o.share! ? 'On' : 'Off'),
         ]),
         MsBBlock(
           child: Text(
