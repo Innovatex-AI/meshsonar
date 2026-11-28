@@ -38,6 +38,13 @@ void main() {
 
     Future<bool> tapKey(String key, String step) async {
       final f = find.byKey(Key(key));
+      await pumpFor(t, const Duration(seconds: 1));
+      for (var i = 0; i < 12 && f.evaluate().isEmpty; i++) {
+        final sc = find.byType(Scrollable);
+        if (sc.evaluate().isEmpty) break;
+        await t.drag(sc.last, const Offset(0, -300));
+        await pumpFor(t, const Duration(milliseconds: 500));
+      }
       if (!await waitFor(t, f, timeout: const Duration(seconds: 8))) {
         // ignore: avoid_print
         print('STEPFAIL $step: $key not found');
@@ -77,10 +84,11 @@ void main() {
     await shot(t, 'msr-page-paired');
     for (final s in MsSection.values.where((s) => s != MsSection.pairing)) {
       final f = find.byKey(Key('ms-section-${s.name}'));
-      if (f.evaluate().isEmpty) {
-        await t.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).last).catchError((_) {});
+      if (s == MsSection.owner && find.byKey(Key('ms-section-${s.name}')).evaluate().isEmpty) {
+        await t.drag(find.byType(Scrollable).last, const Offset(0, -2000));
+        await pumpFor(t, const Duration(seconds: 1));
+        if (f.evaluate().isEmpty) continue; // hidden while radio proof is off
       }
-      if (f.evaluate().isEmpty) continue; // hidden (Owner link while radio proof is off)
       if (!await tapKey('ms-section-${s.name}', s.name)) continue;
       await pumpFor(t, const Duration(seconds: 2));
       await shot(t, 'msr-${s.name}');
