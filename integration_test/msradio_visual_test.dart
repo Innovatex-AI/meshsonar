@@ -8,6 +8,7 @@ import 'package:meshsonar/main.dart' as app;
 import 'package:meshsonar/ui/app.dart';
 import 'package:meshsonar/ui/msradio/ms_sections.dart';
 
+import 'chat_harness.dart' show closeAntennaSheet;
 import 'screens.dart';
 
 void main() {
@@ -32,10 +33,8 @@ void main() {
     final state = AppScope.of(t.element(find.byType(Scaffold).first));
     expect(await state.connectSimulator(meshSonar: true), isTrue);
     await pumpFor(t, const Duration(seconds: 3));
-    while (find.byType(BottomSheet).evaluate().isNotEmpty) {
-      await t.tapAt(const Offset(2, 2));
-      await pumpFor(t, const Duration(seconds: 1));
-    }
+    await closeAntennaSheet(t);
+    await pumpFor(t, const Duration(seconds: 1));
 
     Future<bool> tapKey(String key, String step) async {
       final f = find.byKey(Key(key));
